@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'https://smart-attendance-api.onrender.com/api';
 
 /**
  * Smart Attendance Pro - API Service

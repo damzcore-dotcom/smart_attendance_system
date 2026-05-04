@@ -17,7 +17,12 @@ const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175'],
+  origin: [
+    'http://localhost:5173', 
+    'http://localhost:5174', 
+    'http://localhost:5175',
+    'https://smart-attendance-system-seven-red.vercel.app'
+  ],
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
@@ -53,8 +58,13 @@ app.use((req, res) => {
   res.status(404).json({ success: false, message: `Route ${req.method} ${req.url} not found` });
 });
 
-app.listen(PORT, () => {
-  console.log(`\n🚀 Smart Attendance Pro API`);
-  console.log(`   Server running on http://localhost:${PORT}`);
-  console.log(`   Health check: http://localhost:${PORT}/api/health\n`);
-});
+// Start server only if not in production/vercel
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`\n🚀 Smart Attendance Pro API`);
+    console.log(`   Server running on http://localhost:${PORT}`);
+    console.log(`   Health check: http://localhost:${PORT}/api/health\n`);
+  });
+}
+
+module.exports = app;
