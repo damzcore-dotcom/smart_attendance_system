@@ -1,0 +1,192 @@
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import { 
+  LayoutDashboard, 
+  Users, 
+  CalendarCheck, 
+  Settings, 
+  LogOut, 
+  Bell, 
+  Search,
+  Menu,
+  X,
+  Edit3,
+  Loader2,
+  UserCircle
+} from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { authAPI } from '../../services/api';
+
+const AdminLayout = () => {
+  const [isSidebarOpen, setSidebarOpen] = useState(true);
+  const [isNotificationsOpen, setNotificationsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const notifications = [
+    { id: 1, title: 'New Face Enrollment', desc: 'Robert Brown submitted new face data', time: '5m ago' },
+    { id: 2, title: 'Geofence Alert', desc: 'Employee EMP042 checked in outside radius', time: '12m ago' },
+    { id: 3, title: 'System Update', desc: 'Biometric engine updated to v2.4', time: '1h ago' },
+  ];
+
+  const menuItems = [
+    { name: 'Dashboard', path: '/admin', icon: LayoutDashboard },
+    { name: 'Employees', path: '/admin/employees', icon: Users },
+    { name: 'Users', path: '/admin/users', icon: UserCircle },
+    { name: 'Attendance', path: '/admin/attendance', icon: CalendarCheck },
+    { name: 'Corrections', path: '/admin/corrections', icon: Edit3 },
+    { name: 'Settings', path: '/admin/settings', icon: Settings },
+  ];
+
+  const { data: userData } = useQuery({
+    queryKey: ['me'],
+    queryFn: () => authAPI.getMe(),
+  });
+
+  const user = userData?.data || authAPI.getStoredUser() || { name: 'Admin', role: 'Super Admin' };
+
+  const handleLogout = () => {
+    authAPI.logout();
+    navigate('/login');
+  };
+
+  return (
+    <div className="flex h-screen bg-slate-50">
+      {/* Sidebar */}
+      <aside 
+        className={`${
+          isSidebarOpen ? 'w-64' : 'w-20'
+        } bg-white border-r border-slate-200 transition-all duration-300 flex flex-col z-30`}
+      >
+        <div className="p-6 flex items-center gap-3">
+          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shrink-0">
+            <span className="text-white font-bold text-sm">S</span>
+          </div>
+          {isSidebarOpen && (
+            <span className="font-bold text-lg text-slate-800 truncate">Smart Attend</span>
+          )}
+        </div>
+
+        <nav className="flex-1 px-4 space-y-2 mt-4">
+          {menuItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = location.pathname === item.path;
+            return (
+              <Link
+                key={item.name}
+                to={item.path}
+                className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 group ${
+                  isActive 
+                    ? 'bg-primary text-white shadow-md shadow-primary/20' 
+                    : 'text-slate-500 hover:bg-slate-100'
+                }`}
+              >
+                <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-white' : 'group-hover:text-primary'}`} />
+                {isSidebarOpen && <span className="font-medium">{item.name}</span>}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="p-4 border-t border-slate-100">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-red-500 hover:bg-red-50 transition-all duration-200"
+          >
+            <LogOut className="w-5 h-5 shrink-0" />
+            {isSidebarOpen && <span className="font-medium">Logout</span>}
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        {/* Top Nav */}
+        <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-8 z-20">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setSidebarOpen(!isSidebarOpen)}
+              className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors"
+            >
+              {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+            <div className="relative hidden md:block group">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors" />
+              <input 
+                type="text" 
+                placeholder="Search anything..." 
+                className="bg-slate-50 border border-slate-100 rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 w-64 focus:w-80 transition-all"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              {searchQuery && (
+                <button 
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <button 
+                onClick={() => setNotificationsOpen(!isNotificationsOpen)}
+                className={`p-2 rounded-lg transition-colors relative ${isNotificationsOpen ? 'bg-primary/10 text-primary' : 'hover:bg-slate-100 text-slate-500'}`}
+              >
+                <Bell className="w-5 h-5" />
+                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+              </button>
+
+              {isNotificationsOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setNotificationsOpen(false)}></div>
+                  <div className="absolute right-0 mt-3 w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200 origin-top-right">
+                    <div className="p-4 border-b border-slate-50 flex justify-between items-center">
+                      <span className="font-bold text-slate-800">Notifications</span>
+                      <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">3 NEW</span>
+                    </div>
+                    <div className="max-h-[400px] overflow-y-auto">
+                      {notifications.map((n) => (
+                        <div key={n.id} className="p-4 hover:bg-slate-50 transition-colors cursor-pointer border-b border-slate-50 last:border-0">
+                          <p className="text-sm font-bold text-slate-800 mb-0.5">{n.title}</p>
+                          <p className="text-xs text-slate-500 leading-relaxed mb-1">{n.desc}</p>
+                          <p className="text-[10px] text-slate-400 font-medium">{n.time}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <button className="w-full py-3 text-xs font-bold text-primary hover:bg-primary/5 transition-colors">
+                      View All Notifications
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+            
+            <div className="h-8 w-[1px] bg-slate-200 mx-2"></div>
+            
+            <div className="flex items-center gap-3 group cursor-pointer p-1.5 hover:bg-slate-50 rounded-xl transition-colors">
+              <div className="text-right hidden sm:block">
+                <p className="text-sm font-bold text-slate-800">{user.name}</p>
+                <p className="text-xs text-slate-500">{user.role}</p>
+              </div>
+              <div className="w-10 h-10 bg-slate-200 rounded-full border-2 border-white shadow-sm overflow-hidden group-hover:ring-2 group-hover:ring-primary/20 transition-all">
+                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user.name}`} alt="avatar" />
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Page Content */}
+        <main className="flex-1 overflow-y-auto p-8">
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  );
+};
+
+export default AdminLayout;

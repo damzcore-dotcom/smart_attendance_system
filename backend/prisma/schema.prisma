@@ -1,0 +1,175 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ──────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  EMPLOYEE
+}
+
+enum EmpStatus {
+  ACTIVE
+  ON_LEAVE
+  TERMINATED
+}
+
+enum FaceStatus {
+  ENROLLED
+  PENDING
+}
+
+enum AttStatus {
+  PRESENT
+  LATE
+  ABSENT
+}
+
+enum ReqStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ─── Models ─────────────────────────────────────────
+
+model User {
+  id           Int       @id @default(autoincrement())
+  username     String    @unique
+  password     String
+  role         Role      @default(EMPLOYEE)
+  employeeId   Int?      @unique
+  employee     Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  refreshToken String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Employee {
+  id            Int        @id @default(autoincrement())
+  employeeCode  String     @unique
+  name          String
+  email         String     @unique
+  phone         String?
+  position      String?
+  division      String?
+  locationId    String?
+  idNumber      String?
+  cardNo        String?
+  verifyCode    String?
+  grade             String?
+  section           String?
+  employmentStatus  String?
+  contractDuration  String?
+  joinDate          DateTime?
+  contractEnd       DateTime?
+  faceId            String?
+  facePhoto         String?
+  faceDescriptor    Json?
+  bpjsTk            String?
+  bpjsKesehatan     String?
+  npwp              String?
+  ptkpStatus        String?
+  kkNumber          String?
+  birthDate         DateTime?
+  birthPlace        String?
+  address           String?
+  education         String?
+  major             String?
+  religion          String?
+  numberOfChildren  Int?
+  fatherName        String?
+  motherName        String?
+  spouseName        String?
+  emergencyContact  String?
+  notes             String?
+  status        EmpStatus  @default(ACTIVE)
+  faceStatus    FaceStatus @default(PENDING)
+  departmentId  Int
+  department    Department @relation(fields: [departmentId], references: [id])
+  shiftId       Int?
+  shift         Shift?     @relation(fields: [shiftId], references: [id])
+  attendance    Attendance[]
+  corrections   CorrectionRequest[]
+  notifications Notification[]
+  user          User?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+model Department {
+  id        Int        @id @default(autoincrement())
+  name      String     @unique
+  employees Employee[]
+}
+
+model Shift {
+  id          Int        @id @default(autoincrement())
+  name        String
+  startTime   String     // "08:00"
+  endTime     String     // "17:00"
+  breakStart  String?    // "12:00"
+  breakEnd    String?    // "13:00"
+  gracePeriod Int        @default(15)
+  employees   Employee[]
+}
+
+model Attendance {
+  id          Int       @id @default(autoincrement())
+  employeeId  Int
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date        DateTime  @db.Date
+  checkIn     DateTime?
+  checkOut    DateTime?
+  status      AttStatus @default(ABSENT)
+  lateMinutes Int       @default(0)
+  mode        String    @default("Credentials")
+  notes       String?
+  createdAt   DateTime  @default(now())
+
+  @@unique([employeeId, date])
+}
+
+model Location {
+  id      Int    @id @default(autoincrement())
+  name    String
+  address String?
+  lat     Float
+  lng     Float
+  radius  Int    @default(100)
+}
+
+model CorrectionRequest {
+  id         Int       @id @default(autoincrement())
+  employeeId Int
+  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date       DateTime  @db.Date
+  type       String    // "In" or "Out"
+  time       String
+  reason     String
+  status     ReqStatus @default(PENDING)
+  reviewNote String?
+  createdAt  DateTime  @default(now())
+}
+
+model Settings {
+  id    Int    @id @default(autoincrement())
+  key   String @unique
+  value String
+}
+
+model Notification {
+  id         Int      @id @default(autoincrement())
+  employeeId Int
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  title      String
+  message    String
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+}

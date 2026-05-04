@@ -1,0 +1,57 @@
+const jwt = require('jsonwebtoken');
+
+/**
+ * Verify JWT access token
+ */
+const verifyToken = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ success: false, message: 'Access token required' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({ success: false, message: 'Token expired', code: 'TOKEN_EXPIRED' });
+    }
+    return res.status(403).json({ success: false, message: 'Invalid token' });
+  }
+};
+
+/**
+ * Require ADMIN role
+ */
+const requireAdmin = (req, res, next) => {
+  if (req.user.role !== 'ADMIN') {
+    return res.status(403).json({ success: false, message: 'Admin access required' });
+  }
+  next();
+};
+
+/**
+ * Generate access token (15 minutes)
+ */
+const generateAccessToken = (user) => {
+  return jwt.sign(
+    { id: user.id, username: user.username, role: user.role, employeeId: user.employeeId },
+    process.env.JWT_SECRET,
+    { expiresIn: '15m' }
+  );
+};
+
+/**
+ * Generate refresh token (7 days)
+ */
+const generateRefreshToken = (user) => {
+  return jwt.sign(
+    { id: user.id, username: user.username },
+    process.env.JWT_REFRESH_SECRET,
+    { expiresIn: '7d' }
+  );
+};
+
+module.exports = { verifyToken, requireAdmin, generateAccessToken, generateRefreshToken };
