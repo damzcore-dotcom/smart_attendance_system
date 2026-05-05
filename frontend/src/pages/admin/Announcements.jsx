@@ -223,96 +223,98 @@ const Announcements = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-10 space-y-8">
-              <div className="grid grid-cols-2 gap-8">
-                <div className="col-span-2">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 ml-1">Announcement Title</label>
+            <form onSubmit={handleSubmit} className="p-8 space-y-6">
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 px-1">Announcement Title</label>
                   <input 
                     type="text" 
                     required
                     value={formData.title}
                     onChange={(e) => setFormData({...formData, title: e.target.value})}
                     placeholder="e.g., Annual Company Gathering 2026"
-                    className="w-full bg-white border-2 border-slate-100 rounded-[1.25rem] px-6 py-4 focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all font-bold text-slate-800 placeholder:text-slate-300"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-3.5 focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all font-bold text-slate-800 placeholder:text-slate-300"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-[10px] font-black text-primary uppercase tracking-[0.2em] mb-3 ml-1">Category</label>
-                  <div className="relative">
-                    <Tag className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-primary/40" />
-                    <select 
-                      value={formData.type}
-                      onChange={(e) => setFormData({...formData, type: e.target.value})}
-                      className="w-full bg-white border-2 border-slate-100 rounded-[1.25rem] pl-14 pr-6 py-4 focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary appearance-none transition-all font-bold text-slate-700 cursor-pointer"
-                    >
-                      <option value="General">General News</option>
-                      <option value="Urgent">Urgent Notice</option>
-                      <option value="Holiday">Holiday Announcement</option>
-                    </select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 px-1">Category</label>
+                    <div className="relative">
+                      <Tag className="absolute left-4 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary/40" />
+                      <select 
+                        value={formData.type}
+                        onChange={(e) => setFormData({...formData, type: e.target.value})}
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-12 pr-4 py-3.5 focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary appearance-none transition-all font-bold text-slate-700 cursor-pointer text-sm"
+                      >
+                        <option value="General">General News</option>
+                        <option value="Urgent">Urgent Notice</option>
+                        <option value="Holiday">Holiday Announcement</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 px-1">Posted By</label>
+                    <div className="relative">
+                      <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300" />
+                      <input 
+                        type="text" 
+                        value={formData.author}
+                        onChange={(e) => setFormData({...formData, author: e.target.value})}
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-12 pr-4 py-3.5 focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all font-bold text-slate-700 text-sm"
+                      />
+                    </div>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 ml-1">Posted By</label>
-                  <div className="relative">
-                    <UserIcon className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                    <input 
-                      type="text" 
-                      value={formData.author}
-                      onChange={(e) => setFormData({...formData, author: e.target.value})}
-                      className="w-full bg-white border-2 border-slate-100 rounded-[1.25rem] pl-14 pr-6 py-4 focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all font-bold text-slate-700"
-                    />
-                  </div>
-                </div>
-
-                <div className="col-span-2">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 ml-1">Detailed Content</label>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 px-1">Detailed Content</label>
                   <textarea 
                     required
-                    rows={5}
+                    rows={4}
                     value={formData.content}
                     onChange={(e) => setFormData({...formData, content: e.target.value})}
                     placeholder="Enter the full details of your announcement..."
-                    className="w-full bg-white border-2 border-slate-100 rounded-[1.25rem] px-6 py-5 focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all font-medium text-slate-700 resize-none leading-relaxed placeholder:text-slate-300"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all font-medium text-slate-700 resize-none leading-relaxed placeholder:text-slate-300 text-sm"
                   />
                 </div>
 
-                <div className="col-span-2 flex items-center gap-4 bg-slate-50/50 p-5 rounded-[1.25rem] border border-slate-100/50">
+                <div className="flex items-center gap-3 bg-slate-50/50 p-4 rounded-2xl border border-slate-100/50">
                   <div className="relative flex items-center cursor-pointer">
                     <input 
                       type="checkbox" 
                       id="isActive"
                       checked={formData.isActive}
                       onChange={(e) => setFormData({...formData, isActive: e.target.checked})}
-                      className="peer h-6 w-6 cursor-pointer appearance-none rounded-lg border-2 border-slate-200 bg-white checked:bg-primary checked:border-primary transition-all"
+                      className="peer h-5 w-5 cursor-pointer appearance-none rounded-lg border border-slate-200 bg-white checked:bg-primary checked:border-primary transition-all"
                     />
-                    <CheckCircle2 className="absolute h-4 w-4 text-white opacity-0 peer-checked:opacity-100 left-1 transition-opacity pointer-events-none" />
+                    <CheckCircle2 className="absolute h-3.5 w-3.5 text-white opacity-0 peer-checked:opacity-100 left-[3px] transition-opacity pointer-events-none" />
                   </div>
-                  <label htmlFor="isActive" className="text-xs font-bold text-slate-600 cursor-pointer select-none">
+                  <label htmlFor="isActive" className="text-[11px] font-bold text-slate-500 cursor-pointer select-none">
                     Publish this announcement immediately to all employees
                   </label>
                 </div>
               </div>
 
-              <div className="flex gap-5 pt-4">
+              <div className="flex gap-4 pt-4">
                 <button 
                   type="button" 
                   onClick={closeModal}
-                  className="flex-1 py-4 rounded-[1.25rem] font-bold bg-slate-100 text-slate-500 hover:bg-slate-200 transition-all active:scale-95"
+                  className="flex-1 py-3.5 rounded-2xl font-bold bg-slate-100 text-slate-500 hover:bg-slate-200 transition-all text-sm"
                 >
                   Discard
                 </button>
                 <button 
                   type="submit" 
                   disabled={createMutation.isPending || updateMutation.isPending}
-                  className="flex-[2] py-4 rounded-[1.25rem] font-black bg-primary text-white shadow-2xl shadow-primary/30 flex items-center justify-center gap-3 hover:bg-primary-dark hover:-translate-y-0.5 transition-all active:scale-95 disabled:opacity-50"
+                  className="flex-[2] py-3.5 rounded-2xl font-black bg-primary text-white shadow-xl shadow-primary/20 flex items-center justify-center gap-2 hover:bg-primary-dark transition-all disabled:opacity-50 text-sm"
                 >
                   {(createMutation.isPending || updateMutation.isPending) ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
                     <>
-                      <Megaphone className="w-5 h-5" />
+                      <Megaphone className="w-4 h-4" />
                       {editingItem ? 'Save Changes' : 'Post Announcement'}
                     </>
                   )}

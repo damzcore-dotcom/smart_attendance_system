@@ -13,7 +13,8 @@ import {
   Loader2,
   UserCircle,
   Megaphone,
-  ScanFace
+  ScanFace,
+  Database
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -40,6 +41,7 @@ const AdminLayout = () => {
     { name: 'Announcements', path: '/admin/announcements', icon: Megaphone, key: 'announcements' },
     { name: 'Face Check', path: '/admin/face-check', icon: ScanFace, key: 'announcements' },
     { name: 'Leave Requests', path: '/admin/leave-requests', icon: CalendarCheck, key: 'leave-requests' },
+    { name: 'Backup', path: '/admin/backup', icon: Database, key: 'backup' },
     { name: 'Corrections', path: '/admin/corrections', icon: Edit3, key: 'corrections' },
     { name: 'Settings', path: '/admin/settings', icon: Settings, key: 'settings' },
   ];

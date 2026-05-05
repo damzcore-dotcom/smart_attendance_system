@@ -149,6 +149,7 @@ const Users = () => {
         { key: 'leave-requests', label: 'Leave Requests' },
         { key: 'corrections', label: 'Corrections' },
         { key: 'announcements', label: 'Announcements' },
+        { key: 'backup', label: 'Database Backup' },
         { key: 'users', label: 'User Management' },
         { key: 'settings', label: 'System Settings' }
       ];

@@ -283,3 +283,9 @@ export const leaveAPI = {
   getByEmployee: (empId) => apiFetch(`/leave/employee/${empId}`),
   review: (id, data) => apiFetch(`/leave/${id}/review`, { method: 'PUT', body: JSON.stringify(data) }),
 };
+
+// ─── Backup API ──────────────────────────────────
+export const backupAPI = {
+  export: () => `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/backup/export`,
+  restore: (backup) => apiFetch('/backup/restore', { method: 'POST', body: JSON.stringify({ backup }) }),
+};

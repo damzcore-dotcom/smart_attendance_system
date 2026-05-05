@@ -8,6 +8,7 @@ import Employees from './pages/admin/Employees';
 import Announcements from './pages/admin/Announcements';
 import AdminFaceCheck from './pages/admin/FaceCheck';
 import AdminLeaveRequests from './pages/admin/LeaveRequests';
+import Backup from './pages/admin/Backup';
 import Attendance from './pages/admin/Attendance';
 import Settings from './pages/admin/Settings';
 import AdminCorrections from './pages/admin/Corrections';
@@ -61,6 +62,7 @@ function App() {
             <Route path="users" element={<PermissionRoute menuKey="users"><Users /></PermissionRoute>} />
             <Route path="attendance" element={<PermissionRoute menuKey="attendance"><Attendance /></PermissionRoute>} />
             <Route path="leave-requests" element={<PermissionRoute menuKey="leave-requests"><AdminLeaveRequests /></PermissionRoute>} />
+            <Route path="backup" element={<PermissionRoute menuKey="backup"><Backup /></PermissionRoute>} />
             <Route path="announcements" element={<PermissionRoute menuKey="announcements"><Announcements /></PermissionRoute>} />
             <Route path="face-check" element={<PermissionRoute menuKey="announcements"><AdminFaceCheck /></PermissionRoute>} />
             <Route path="settings" element={<PermissionRoute menuKey="settings"><Settings /></PermissionRoute>} />
