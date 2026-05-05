@@ -200,13 +200,13 @@ export const attendanceAPI = {
   recalculate: (startDate, endDate) => apiFetch('/attendance/recalculate', { method: 'POST', body: JSON.stringify({ startDate, endDate }) }),
 };
 
-// ─── Dashboard API ───────────────────────────────
-
+// ─── Dashboard API ─────────────────────────────────
 export const dashboardAPI = {
   getStats: () => apiFetch('/dashboard/stats'),
   getWeeklyTrends: () => apiFetch('/dashboard/weekly-trends'),
   getDeptLateness: () => apiFetch('/dashboard/dept-lateness'),
   getRecentLate: () => apiFetch('/dashboard/recent-late'),
+  getAdminNotifications: () => apiFetch('/dashboard/notifications'),
 };
 
 // ─── Settings API ────────────────────────────────

@@ -132,4 +132,72 @@ const getRecentLate = async (req, res) => {
   }
 };
 
-module.exports = { getStats, getWeeklyTrends, getDeptLateness, getRecentLate };
+/**
+ * GET /api/dashboard/notifications
+ */
+const getAdminNotifications = async (req, res) => {
+  try {
+    const notifications = [];
+    let idCounter = 1;
+
+    // 1. Pending Face Enrollments
+    const pendingFaces = await prisma.employee.findMany({
+      where: { faceStatus: 'PENDING' },
+      take: 5,
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    pendingFaces.forEach(emp => {
+      notifications.push({
+        id: idCounter++,
+        title: 'Pending Face Enrollment',
+        desc: `${emp.name} needs face data enrollment`,
+        time: 'Action Required',
+        type: 'warning'
+      });
+    });
+
+    // 2. Pending Leave Requests
+    const pendingLeaves = await prisma.leaveRequest.findMany({
+      where: { status: 'PENDING' },
+      include: { employee: true },
+      take: 5,
+      orderBy: { createdAt: 'desc' }
+    });
+
+    pendingLeaves.forEach(leave => {
+      notifications.push({
+        id: idCounter++,
+        title: 'New Leave Request',
+        desc: `${leave.employee.name} requested ${leave.type}`,
+        time: new Date(leave.createdAt).toLocaleDateString(),
+        type: 'info'
+      });
+    });
+
+    // 3. Pending Corrections
+    const pendingCorrections = await prisma.correctionRequest.findMany({
+      where: { status: 'PENDING' },
+      include: { employee: true },
+      take: 5,
+      orderBy: { createdAt: 'desc' }
+    });
+
+    pendingCorrections.forEach(corr => {
+      notifications.push({
+        id: idCounter++,
+        title: 'Attendance Correction',
+        desc: `${corr.employee.name} requested correction for ${new Date(corr.date).toLocaleDateString()}`,
+        time: new Date(corr.createdAt).toLocaleDateString(),
+        type: 'info'
+      });
+    });
+
+    // Sort by id just to keep them somewhat organized, though they are categorized
+    res.json({ success: true, data: notifications });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getStats, getWeeklyTrends, getDeptLateness, getRecentLate, getAdminNotifications };

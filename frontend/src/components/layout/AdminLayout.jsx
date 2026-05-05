@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { authAPI } from '../../services/api';
+import { authAPI, dashboardAPI } from '../../services/api';
 
 const AdminLayout = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(true);
@@ -27,29 +27,14 @@ const AdminLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const notifications = [
-    { id: 1, title: 'New Face Enrollment', desc: 'Robert Brown submitted new face data', time: '5m ago' },
-    { id: 2, title: 'Geofence Alert', desc: 'Employee EMP042 checked in outside radius', time: '12m ago' },
-    { id: 3, title: 'System Update', desc: 'Biometric engine updated to v2.4', time: '1h ago' },
-  ];
-
-  const menuItems = [
-    { name: 'Dashboard', path: '/admin', icon: LayoutDashboard, key: 'dashboard' },
-    { name: 'Employees', path: '/admin/employees', icon: Users, key: 'employees' },
-    { name: 'Users', path: '/admin/users', icon: UserCircle, key: 'users' },
-    { name: 'Attendance', path: '/admin/attendance', icon: CalendarCheck, key: 'attendance' },
-    { name: 'Announcements', path: '/admin/announcements', icon: Megaphone, key: 'announcements' },
-    { name: 'Face Check', path: '/admin/face-check', icon: ScanFace, key: 'announcements' },
-    { name: 'Leave Requests', path: '/admin/leave-requests', icon: CalendarCheck, key: 'leave-requests' },
-    { name: 'Backup', path: '/admin/backup', icon: Database, key: 'backup' },
-    { name: 'Corrections', path: '/admin/corrections', icon: Edit3, key: 'corrections' },
-    { name: 'Settings', path: '/admin/settings', icon: Settings, key: 'settings' },
-  ];
-
-  const { data: userData } = useQuery({
-    queryKey: ['me'],
-    queryFn: () => authAPI.getMe(),
+  const { data: notificationsData } = useQuery({
+    queryKey: ['admin-notifications'],
+    queryFn: () => dashboardAPI.getAdminNotifications(),
+    refetchInterval: 60000, // Refresh every minute
   });
+
+  const notifications = notificationsData?.data || [];
+  const unreadCount = notifications.length;
 
   const user = userData?.data || authAPI.getStoredUser() || { name: 'Admin', role: 'ADMIN' };
 
@@ -179,7 +164,9 @@ const AdminLayout = () => {
                 className={`p-2 rounded-lg transition-colors relative ${isNotificationsOpen ? 'bg-primary/10 text-primary' : 'hover:bg-slate-100 text-slate-500'}`}
               >
                 <Bell className="w-5 h-5" />
-                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+                {unreadCount > 0 && (
+                  <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+                )}
               </button>
 
               {isNotificationsOpen && (
@@ -188,16 +175,25 @@ const AdminLayout = () => {
                   <div className="absolute right-0 mt-3 w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200 origin-top-right">
                     <div className="p-4 border-b border-slate-50 flex justify-between items-center">
                       <span className="font-bold text-slate-800">Notifications</span>
-                      <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">3 NEW</span>
+                      {unreadCount > 0 && (
+                        <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">{unreadCount} NEW</span>
+                      )}
                     </div>
                     <div className="max-h-[400px] overflow-y-auto">
-                      {notifications.map((n) => (
-                        <div key={n.id} className="p-4 hover:bg-slate-50 transition-colors cursor-pointer border-b border-slate-50 last:border-0">
-                          <p className="text-sm font-bold text-slate-800 mb-0.5">{n.title}</p>
-                          <p className="text-xs text-slate-500 leading-relaxed mb-1">{n.desc}</p>
-                          <p className="text-[10px] text-slate-400 font-medium">{n.time}</p>
+                      {notifications.length > 0 ? (
+                        notifications.map((n) => (
+                          <div key={n.id} className="p-4 hover:bg-slate-50 transition-colors cursor-pointer border-b border-slate-50 last:border-0 relative">
+                            {n.type === 'warning' && <div className="absolute left-0 top-0 bottom-0 w-1 bg-amber-500"></div>}
+                            <p className="text-sm font-bold text-slate-800 mb-0.5">{n.title}</p>
+                            <p className="text-xs text-slate-500 leading-relaxed mb-1">{n.desc}</p>
+                            <p className="text-[10px] text-slate-400 font-medium">{n.time}</p>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="p-6 text-center text-sm text-slate-500 font-medium">
+                          No new notifications
                         </div>
-                      ))}
+                      )}
                     </div>
                     <button className="w-full py-3 text-xs font-bold text-primary hover:bg-primary/5 transition-colors">
                       View All Notifications
