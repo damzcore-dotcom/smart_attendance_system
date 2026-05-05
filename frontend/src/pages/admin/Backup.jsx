@@ -18,17 +18,31 @@ const Backup = () => {
   const [restoreStatus, setRestoreStatus] = useState(null);
   const user = authAPI.getStoredUser();
 
-  const handleExport = () => {
-    const url = backupAPI.export();
-    const link = document.createElement('a');
-    link.href = url;
-    // Add token if needed (though browser will handle if same-origin)
-    // For simplicity, we assume the user is logged in and browser sends cookies or we use a signed URL
-    // Here we just trigger the download
-    link.setAttribute('download', `smart_attendance_backup_${new Date().toISOString().split('T')[0]}.json`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleExport = async () => {
+    try {
+      // Show loading state if needed (optional)
+      const data = await backupAPI.export();
+      
+      // Convert the JSON object to a string
+      const jsonString = JSON.stringify(data, null, 2);
+      
+      // Create a Blob from the JSON string
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      // Create temporary download link
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `smart_attendance_backup_${new Date().toISOString().split('T')[0]}.json`);
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(`Export failed: ${err.message}`);
+    }
   };
 
   const handleRestore = async (e) => {

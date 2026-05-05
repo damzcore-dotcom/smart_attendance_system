@@ -286,6 +286,6 @@ export const leaveAPI = {
 
 // ─── Backup API ──────────────────────────────────
 export const backupAPI = {
-  export: () => `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/backup/export`,
+  export: () => apiFetch('/backup/export'),
   restore: (backup) => apiFetch('/backup/restore', { method: 'POST', body: JSON.stringify({ backup }) }),
 };
