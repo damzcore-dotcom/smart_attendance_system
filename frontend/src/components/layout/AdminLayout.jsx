@@ -27,6 +27,24 @@ const AdminLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const menuItems = [
+    { name: 'Dashboard', path: '/admin', icon: LayoutDashboard, key: 'dashboard' },
+    { name: 'Employees', path: '/admin/employees', icon: Users, key: 'employees' },
+    { name: 'Users', path: '/admin/users', icon: UserCircle, key: 'users' },
+    { name: 'Attendance', path: '/admin/attendance', icon: CalendarCheck, key: 'attendance' },
+    { name: 'Announcements', path: '/admin/announcements', icon: Megaphone, key: 'announcements' },
+    { name: 'Face Check', path: '/admin/face-check', icon: ScanFace, key: 'announcements' },
+    { name: 'Leave Requests', path: '/admin/leave-requests', icon: CalendarCheck, key: 'leave-requests' },
+    { name: 'Backup', path: '/admin/backup', icon: Database, key: 'backup' },
+    { name: 'Corrections', path: '/admin/corrections', icon: Edit3, key: 'corrections' },
+    { name: 'Settings', path: '/admin/settings', icon: Settings, key: 'settings' },
+  ];
+
+  const { data: userData } = useQuery({
+    queryKey: ['me'],
+    queryFn: () => authAPI.getMe(),
+  });
+
   const { data: notificationsData } = useQuery({
     queryKey: ['admin-notifications'],
     queryFn: () => dashboardAPI.getAdminNotifications(),
