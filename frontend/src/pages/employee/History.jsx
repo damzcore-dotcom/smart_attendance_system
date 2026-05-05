@@ -6,10 +6,13 @@ import {
   XCircle, 
   Clock,
   Calendar as CalendarIcon,
-  Loader2
+  Loader2,
+  AlertCircle,
+  MessageSquare,
+  History as HistoryIcon
 } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import { authAPI, attendanceAPI } from '../../services/api';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { authAPI, attendanceAPI, correctionAPI } from '../../services/api';
 
 const History = () => {
   const user = authAPI.getStoredUser();
@@ -27,6 +30,45 @@ const History = () => {
   });
 
   const historyList = historyData?.data || [];
+  
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedDay, setSelectedDay] = useState(null);
+  const [formData, setFormData] = useState({
+    type: 'IN',
+    requestedTime: '',
+    reason: ''
+  });
+
+  const queryClient = useQueryClient();
+
+  const correctionMutation = useMutation({
+    mutationFn: (data) => correctionAPI.create(data),
+    onSuccess: () => {
+      alert('Correction request submitted successfully!');
+      setIsModalOpen(false);
+      setFormData({ type: 'IN', requestedTime: '', reason: '' });
+      queryClient.invalidateQueries(['attendance-history']);
+    },
+    onError: (err) => alert(`Error: ${err.message}`),
+  });
+
+  const handleDayClick = (item) => {
+    if (item.status === 'Holiday') return;
+    setSelectedDay(item);
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const payload = {
+      employeeId: empId,
+      date: `${year}-${String(month).padStart(2, '0')}-${String(selectedDay.day).padStart(2, '0')}`,
+      type: formData.type,
+      requestedTime: formData.requestedTime,
+      reason: formData.reason
+    };
+    correctionMutation.mutate(payload);
+  };
   
   const stats = historyList.reduce((acc, curr) => {
     if (curr.status === 'Present') acc.present++;
@@ -86,7 +128,13 @@ const History = () => {
         ) : historyList.length === 0 ? (
           <p className="text-center text-slate-400 py-10">No records found for this month.</p>
         ) : historyList.map((item, idx) => (
-          <div key={idx} className="card p-4 flex items-center gap-4 group active:scale-[0.98] transition-transform">
+          <div 
+            key={idx} 
+            onClick={() => handleDayClick(item)}
+            className={`card p-4 flex items-center gap-4 group active:scale-[0.98] transition-all cursor-pointer hover:border-primary/30 ${
+              item.status === 'Absent' ? 'border-red-100 bg-red-50/10' : ''
+            }`}
+          >
             <div className={`w-14 h-14 rounded-2xl flex flex-col items-center justify-center shrink-0 ${
               item.status === 'Holiday' ? 'bg-slate-50 text-slate-400' : 
               item.status === 'Absent' ? 'bg-red-50 text-red-500' :
@@ -132,6 +180,97 @@ const History = () => {
       <button className="w-full py-4 bg-white border border-slate-200 text-slate-500 rounded-2xl font-bold text-sm">
         Load More History
       </button>
+
+      {/* Correction Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}></div>
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-sm relative z-10 overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+            <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-amber-100 rounded-2xl flex items-center justify-center text-amber-600">
+                  <HistoryIcon className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-800 text-sm">Request Correction</h3>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Date: {selectedDay?.day} {monthName}</p>
+                </div>
+              </div>
+              <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+                <XCircle className="w-5 h-5 text-slate-300" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleSubmit} className="p-8 space-y-5">
+              <div className="grid grid-cols-2 gap-4">
+                <button 
+                  type="button"
+                  onClick={() => setFormData({...formData, type: 'IN'})}
+                  className={`py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border-2 transition-all ${
+                    formData.type === 'IN' ? 'bg-primary border-primary text-white shadow-lg shadow-primary/20' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'
+                  }`}
+                >
+                  Check In
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setFormData({...formData, type: 'OUT'})}
+                  className={`py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border-2 transition-all ${
+                    formData.type === 'OUT' ? 'bg-primary border-primary text-white shadow-lg shadow-primary/20' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'
+                  }`}
+                >
+                  Check Out
+                </button>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Requested Time</label>
+                <div className="relative">
+                  <Clock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
+                  <input 
+                    type="time"
+                    required
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-12 pr-4 py-3.5 text-sm font-bold text-slate-700 focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all"
+                    value={formData.requestedTime}
+                    onChange={(e) => setFormData({...formData, requestedTime: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Reason / Note</label>
+                <div className="relative">
+                  <MessageSquare className="absolute left-4 top-4 w-4 h-4 text-slate-300" />
+                  <textarea 
+                    required
+                    placeholder="e.g., GPS issue, forgot to scan..."
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-12 pr-4 py-3.5 text-xs font-medium text-slate-600 focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all min-h-[100px] resize-none"
+                    value={formData.reason}
+                    onChange={(e) => setFormData({...formData, reason: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 flex gap-3">
+                <button 
+                  type="button" 
+                  onClick={() => setIsModalOpen(false)}
+                  className="flex-1 py-4 text-sm font-black text-slate-400 hover:bg-slate-50 rounded-2xl transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  disabled={correctionMutation.isPending}
+                  className="flex-[2] py-4 bg-primary text-white text-sm font-black rounded-2xl shadow-xl shadow-primary/20 hover:bg-primary-dark transition-all disabled:opacity-50"
+                >
+                  {correctionMutation.isPending ? 'Sending...' : 'Submit Request'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

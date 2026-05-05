@@ -9,8 +9,12 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Calendar,
-  Loader2
+  Loader2,
+  FileText
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { 
   AreaChart, 
   Area, 
@@ -24,7 +28,7 @@ import {
   Cell
 } from 'recharts';
 import { useQuery } from '@tanstack/react-query';
-import { dashboardAPI } from '../../services/api';
+import { dashboardAPI, employeeAPI, attendanceAPI } from '../../services/api';
 
 // Static fallback or helper components removed from global scope to avoid confusion with dynamic data
 
@@ -77,6 +81,87 @@ const AdminDashboard = () => {
   const lateByDept = deptData?.data || [];
   const recentLate = recentLateData?.data || [];
 
+  const navigate = useNavigate();
+
+  const handleDownloadReport = async () => {
+    try {
+      const [employeesRes, attendanceRes] = await Promise.all([
+        employeeAPI.getAll({ limit: 10000 }),
+        attendanceAPI.getAll({ period: 'Today' })
+      ]);
+      
+      const employees = employeesRes?.data || [];
+      const attendance = attendanceRes?.data || [];
+      
+      const doc = new jsPDF();
+      
+      // Page 1: Summary
+      doc.setFontSize(22);
+      doc.setTextColor(0, 108, 73); 
+      doc.text('Smart HR - Dashboard Report', 14, 25);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 32);
+      
+      doc.setFontSize(14);
+      doc.setTextColor(0, 0, 0);
+      doc.text('1. System Summary', 14, 45);
+      
+      const statsTableData = [
+        ['Total Employees', stats.totalEmployees],
+        ['Present Today', stats.presentToday],
+        ['Late Arrivals Today', stats.lateArrivals],
+        ['Average Late Time', stats.avgLateTime]
+      ];
+      
+      autoTable(doc, {
+        startY: 50,
+        head: [['Metric', 'Value']],
+        body: statsTableData,
+        theme: 'grid',
+        headStyles: { fillColor: [0, 108, 73] }
+      });
+      
+      // Page 2: Employee List
+      doc.addPage();
+      doc.setFontSize(16);
+      doc.setTextColor(0, 108, 73);
+      doc.text('2. Employee Master List', 14, 20);
+      
+      const empRows = employees.map(e => [e.id || '-', e.name || '-', e.dept || '-', e.division || '-', e.position || '-', e.employmentStatus || '-']);
+      autoTable(doc, {
+        startY: 25,
+        head: [['Code', 'Name', 'Dept', 'Division', 'Position', 'Status']],
+        body: empRows,
+        theme: 'striped',
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [0, 108, 73] }
+      });
+      
+      // Page 3: Attendance Logs
+      doc.addPage();
+      doc.setFontSize(16);
+      doc.setTextColor(0, 108, 73);
+      doc.text("3. Today's Attendance Log", 14, 20);
+      
+      const attRows = attendance.map(a => [a.name || '-', a.dept || '-', a.checkIn || '-', a.checkOut || '-', a.status || '-', a.lateMinutes + 'm']);
+      autoTable(doc, {
+        startY: 25,
+        head: [['Name', 'Dept', 'In', 'Out', 'Status', 'Late']],
+        body: attRows,
+        theme: 'grid',
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [0, 108, 73] }
+      });
+      
+      doc.save(`Comprehensive_HR_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (error) {
+      console.error('Report generation failed:', error);
+      alert(`Report failed: ${error.message}`);
+    }
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-end">
@@ -86,13 +171,14 @@ const AdminDashboard = () => {
         </div>
         <div className="flex gap-3">
           <button 
-            onClick={() => alert('Downloading report...')}
-            className="bg-white border border-slate-200 text-slate-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors"
+            onClick={handleDownloadReport}
+            className="bg-white border border-slate-200 text-slate-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors flex items-center gap-2"
           >
+            <FileText className="w-4 h-4" />
             Download Report
           </button>
           <button 
-            onClick={() => alert('Opening Shift Management...')}
+            onClick={() => navigate('/admin/settings', { state: { tab: 'Shifts' } })}
             className="btn-primary text-sm font-medium"
           >
             Manage Shifts

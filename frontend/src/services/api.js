@@ -56,7 +56,15 @@ const apiFetch = async (endpoint, options = {}) => {
     }
   }
 
-  const data = await res.json();
+  const contentType = res.headers.get('content-type');
+  let data;
+  if (contentType && contentType.includes('application/json')) {
+    data = await res.json();
+  } else {
+    const text = await res.text();
+    throw new Error(text || `Server returned ${res.status}`);
+  }
+
   if (!res.ok) throw new Error(data.message || 'API Error');
   return data;
 };
@@ -95,10 +103,10 @@ export const authAPI = {
     return data;
   },
 
-  verifyFace: async (imageSrc) => {
+  verifyFace: async (descriptor) => {
     const data = await apiFetch('/auth/verify-face', {
       method: 'POST',
-      body: JSON.stringify({ image: imageSrc }),
+      body: JSON.stringify({ descriptor }),
     });
     setTokens(data.accessToken, data.refreshToken);
     setStoredUser(data.user);
@@ -150,14 +158,11 @@ export const employeeAPI = {
     });
     return await res.json();
   },
-  getMasterOptions: async () => {
-    const token = localStorage.getItem('accessToken');
-    const res = await fetch('/api/employees/master-options', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    const data = await res.json();
-    return data;
-  }
+  getMasterOptions: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return apiFetch(`/employees/master-options${q ? `?${q}` : ''}`);
+  },
+  batchUpdateShift: (data) => apiFetch('/employees/batch-shift', { method: 'PUT', body: JSON.stringify(data) }),
 };
 
 // ─── Attendance API ──────────────────────────────
@@ -167,13 +172,32 @@ export const attendanceAPI = {
     const q = new URLSearchParams(params).toString();
     return apiFetch(`/attendance${q ? `?${q}` : ''}`);
   },
-  checkIn: (employeeId, mode) => apiFetch('/attendance/check-in', { method: 'POST', body: JSON.stringify({ employeeId, mode }) }),
+  checkIn: (employeeId, mode, lat, lng, accuracy, timestamp) => apiFetch('/attendance/check-in', { method: 'POST', body: JSON.stringify({ employeeId, mode, lat, lng, accuracy, timestamp }) }),
   checkOut: (employeeId) => apiFetch('/attendance/check-out', { method: 'POST', body: JSON.stringify({ employeeId }) }),
   getSummary: () => apiFetch('/attendance/summary'),
   getHistory: (empId, params = {}) => {
     const q = new URLSearchParams(params).toString();
     return apiFetch(`/attendance/history/${empId}${q ? `?${q}` : ''}`);
   },
+  recalculate: (startDate, endDate) => apiFetch('/attendance/recalculate', { method: 'POST', body: JSON.stringify({ startDate, endDate }) }),
+  getMasterOptions: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return apiFetch(`/attendance/master-options${q ? `?${q}` : ''}`);
+  },
+  importExcel: async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const token = localStorage.getItem('accessToken');
+    const res = await fetch(`/api/attendance/import`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Import failed');
+    return data;
+  },
+  recalculate: (startDate, endDate) => apiFetch('/attendance/recalculate', { method: 'POST', body: JSON.stringify({ startDate, endDate }) }),
 };
 
 // ─── Dashboard API ───────────────────────────────
@@ -194,14 +218,22 @@ export const settingsAPI = {
   createLocation: (data) => apiFetch('/settings/locations', { method: 'POST', body: JSON.stringify(data) }),
   updateLocation: (id, data) => apiFetch(`/settings/locations/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteLocation: (id) => apiFetch(`/settings/locations/${id}`, { method: 'DELETE' }),
+  getShifts: () => apiFetch('/shifts'),
+  createShift: (data) => apiFetch('/shifts', { method: 'POST', body: JSON.stringify(data) }),
+  updateShift: (id, data) => apiFetch(`/shifts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteShift: (id) => apiFetch(`/shifts/${id}`, { method: 'DELETE' }),
 };
 
 // ─── Users API ───────────────────────────────────
 
 export const userAPI = {
   getAll: () => apiFetch('/users'),
+  create: (data) => apiFetch('/users', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => apiFetch(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  updateBiometrics: (id, data) => apiFetch(`/users/${id}/biometrics`, { method: 'PUT', body: JSON.stringify(data) }),
   remove: (id) => apiFetch(`/users/${id}`, { method: 'DELETE' }),
+  getPermissions: (id) => apiFetch(`/users/${id}/permissions`),
+  updatePermissions: (id, permissions) => apiFetch(`/users/${id}/permissions`, { method: 'PUT', body: JSON.stringify({ permissions }) }),
 };
 
 // ─── Correction API ──────────────────────────────
@@ -228,4 +260,26 @@ export const scheduleAPI = {
 export const notificationAPI = {
   getByEmployee: (empId) => apiFetch(`/notifications/${empId}`),
   markAsRead: (id) => apiFetch(`/notifications/${id}/read`, { method: 'PUT' }),
+};
+
+// ─── Announcement API ────────────────────────────
+export const announcementAPI = {
+  getAll: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return apiFetch(`/announcements${q ? `?${q}` : ''}`);
+  },
+  create: (data) => apiFetch('/announcements', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id, data) => apiFetch(`/announcements/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  remove: (id) => apiFetch(`/announcements/${id}`, { method: 'DELETE' }),
+};
+
+// ─── Leave API ───────────────────────────────────
+export const leaveAPI = {
+  create: (data) => apiFetch('/leave', { method: 'POST', body: JSON.stringify(data) }),
+  getAll: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return apiFetch(`/leave${q ? `?${q}` : ''}`);
+  },
+  getByEmployee: (empId) => apiFetch(`/leave/employee/${empId}`),
+  review: (id, data) => apiFetch(`/leave/${id}/review`, { method: 'PUT', body: JSON.stringify(data) }),
 };

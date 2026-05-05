@@ -1,21 +1,41 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogIn, ShieldCheck, Fingerprint, Camera, X, Loader2, ScanFace } from 'lucide-react';
+import { LogIn, ShieldCheck, Fingerprint, Camera, X, Loader2, ScanFace, CheckCircle2, AlertCircle } from 'lucide-react';
 import Webcam from 'react-webcam';
+import * as faceapi from '@vladmandic/face-api';
 import { authAPI } from '../services/api';
 
 const Login = () => {
-  const [loginMode, setLoginMode] = useState('credentials'); // 'credentials' or 'face'
-  const [role, setRole] = useState('admin');
+  const [loginMode, setLoginMode] = useState('credentials');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [error, setError] = useState(null);
+  const [scanStatus, setScanStatus] = useState('ready'); // ready, detecting, verifying, success, error
   
   const webcamRef = useRef(null);
   const navigate = useNavigate();
+  const [modelsLoaded, setModelsLoaded] = useState(false);
+
+  // Load models on mount
+  useEffect(() => {
+    const loadModels = async () => {
+      const MODEL_URL = 'https://vladmandic.github.io/face-api/model/';
+      try {
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+        ]);
+        setModelsLoaded(true);
+      } catch (err) {
+        console.error('Failed to load face models', err);
+      }
+    };
+    loadModels();
+  }, []);
 
   const handleCredentialLogin = async (e) => {
     e.preventDefault();
@@ -23,7 +43,7 @@ const Login = () => {
     setIsLoggingIn(true);
     try {
       const result = await authAPI.login(username, password);
-      if (result.user.role === 'ADMIN') {
+      if (result.user.role === 'ADMIN' || result.user.role === 'SUPER_ADMIN') {
         navigate('/admin');
       } else {
         navigate('/employee');
@@ -35,261 +55,440 @@ const Login = () => {
   };
 
   const capture = useCallback(async () => {
-    if (!webcamRef.current) return;
+    if (!webcamRef.current || !modelsLoaded) return;
     
     const imageSrc = webcamRef.current.getScreenshot();
     if (imageSrc) {
-      setIsVerifying(true);
+      setScanStatus('detecting');
       setError(null);
       try {
-        const result = await authAPI.verifyFace(imageSrc);
-        if (result.success) {
-          if (result.user.role === 'ADMIN') {
-            navigate('/admin');
+        const img = await new Promise((resolve, reject) => {
+          const image = new Image();
+          image.src = imageSrc;
+          image.onload = () => resolve(image);
+          image.onerror = () => reject(new Error('Failed to load captured image'));
+        });
+
+        // Detect face and get descriptor
+        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+          .withFaceLandmarks()
+          .withFaceDescriptor();
+        
+        if (detection) {
+          setScanStatus('verifying');
+          const descriptorArray = Array.from(detection.descriptor);
+          console.log('Face detected, descriptor length:', descriptorArray.length);
+          const result = await authAPI.verifyFace(descriptorArray);
+          
+          if (result.success) {
+            setScanStatus('success');
+            setTimeout(() => {
+              if (result.user.role === 'ADMIN' || result.user.role === 'SUPER_ADMIN') {
+                navigate('/admin');
+              } else {
+                navigate('/employee');
+              }
+            }, 1200);
           } else {
-            navigate('/employee');
+            setScanStatus('error');
+            setError(result.message || 'Wajah tidak dikenali. Silakan coba lagi.');
           }
         } else {
-          setError('Face not recognized. Please try again.');
-          setIsVerifying(false);
+          setScanStatus('error');
+          setError('Wajah tidak terdeteksi. Pastikan posisi wajah di tengah frame.');
         }
       } catch (err) {
-        setError('Verification failed. Please check your connection.');
-        setIsVerifying(false);
+        console.error('Face verification error:', err);
+        setScanStatus('error');
+        setError(err.message || 'Verifikasi gagal. Silakan coba lagi.');
       }
     } else {
-      setError('Camera not ready. Please wait a moment or check permissions.');
+      setError('Kamera belum siap. Mohon tunggu sebentar.');
     }
-  }, [webcamRef, navigate]);
+  }, [webcamRef, navigate, modelsLoaded]);
+
+  const resetScan = () => {
+    setScanStatus('ready');
+    setError(null);
+  };
+
+  const closeScan = () => {
+    setIsScanning(false);
+    setScanStatus('ready');
+    setError(null);
+  };
+
+  // Status color/ring mapping
+  const getStatusRingColor = () => {
+    switch (scanStatus) {
+      case 'detecting': return 'border-amber-400 shadow-amber-400/30';
+      case 'verifying': return 'border-blue-400 shadow-blue-400/30';
+      case 'success': return 'border-emerald-400 shadow-emerald-400/40';
+      case 'error': return 'border-red-400 shadow-red-400/30';
+      default: return 'border-primary/30 shadow-primary/10';
+    }
+  };
+
+  const getStatusLabel = () => {
+    switch (scanStatus) {
+      case 'detecting': return { text: 'Mendeteksi Wajah...', color: 'text-amber-500', icon: <Loader2 className="w-4 h-4 animate-spin" /> };
+      case 'verifying': return { text: 'Memverifikasi Identitas...', color: 'text-blue-500', icon: <Loader2 className="w-4 h-4 animate-spin" /> };
+      case 'success': return { text: 'Identitas Terverifikasi!', color: 'text-emerald-500', icon: <CheckCircle2 className="w-4 h-4" /> };
+      case 'error': return { text: 'Verifikasi Gagal', color: 'text-red-500', icon: <AlertCircle className="w-4 h-4" /> };
+      default: return { text: 'Siap Untuk Scan', color: 'text-slate-400', icon: <ScanFace className="w-4 h-4" /> };
+    }
+  };
+
+  const statusLabel = getStatusLabel();
+  const isBusy = scanStatus === 'detecting' || scanStatus === 'verifying' || scanStatus === 'success';
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Abstract Background Shapes */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/5 rounded-full blur-3xl animate-pulse" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-primary/10 rounded-full blur-3xl animate-pulse delay-700" />
-
-      <div className="w-full max-w-md z-10">
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-white rounded-3xl shadow-xl border border-slate-100 mb-6 group hover:scale-105 transition-transform duration-300">
-            <Fingerprint className="w-10 h-10 text-primary" />
+      {/* Dynamic Background Elements */}
+      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-primary/5 rounded-full blur-[120px] animate-pulse" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-emerald-500/5 rounded-full blur-[120px] animate-pulse delay-1000" />
+      
+      <div className="w-full max-w-[1000px] bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/50 flex overflow-hidden min-h-[600px] z-10 border border-white">
+        {/* Left Side: Branding/Visual */}
+        <div className="hidden lg:flex lg:w-1/2 bg-slate-900 relative p-12 flex-col justify-between overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-emerald-500/20 mix-blend-overlay" />
+          <div className="absolute top-0 right-0 w-full h-full opacity-20 pointer-events-none">
+            <div className="absolute top-[-20%] right-[-20%] w-[80%] h-[80%] bg-primary rounded-full blur-[100px]" />
           </div>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight mb-2">Smart Attendance Pro</h1>
-          <p className="text-slate-500">Enterprise Biometric Attendance System</p>
-        </div>
-
-        <div className="card glass p-8">
-          {/* Tab Selection */}
-          <div className="flex p-1 bg-slate-100 rounded-xl mb-8">
-            <button
-              onClick={() => setLoginMode('credentials')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${
-                loginMode === 'credentials' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <LogIn className="w-4 h-4" />
-              Credentials
-            </button>
-            <button
-              onClick={() => {
-                setLoginMode('face');
-                setIsScanning(false);
-                setError(null);
-              }}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${
-                loginMode === 'face' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <ScanFace className="w-4 h-4" />
-              Face ID
-            </button>
-          </div>
-
-          {loginMode === 'credentials' ? (
-            <form onSubmit={handleCredentialLogin} className="space-y-6">
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Role Select</label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setRole('admin')}
-                      className={`flex items-center justify-center gap-2 py-3 rounded-xl border-2 transition-all duration-200 ${
-                        role === 'admin' 
-                          ? 'border-primary bg-primary/5 text-primary' 
-                          : 'border-slate-100 bg-white text-slate-500 hover:border-slate-200'
-                      }`}
-                    >
-                      <ShieldCheck className="w-4 h-4" />
-                      <span className="font-semibold text-sm">Admin</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setRole('employee')}
-                      className={`flex items-center justify-center gap-2 py-3 rounded-xl border-2 transition-all duration-200 ${
-                        role === 'employee' 
-                          ? 'border-primary bg-primary/5 text-primary' 
-                          : 'border-slate-100 bg-white text-slate-500 hover:border-slate-200'
-                      }`}
-                    >
-                      <LogIn className="w-4 h-4" />
-                      <span className="font-semibold text-sm">Employee</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Username</label>
-                  <input
-                    type="text"
-                    placeholder="Enter your username"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    required
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Password</label>
-                  <input
-                    type="password"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200"
-                  />
-                </div>
-
-                {error && (
-                  <div className="p-3 bg-red-50 text-red-600 rounded-xl text-sm font-medium text-center">
-                    {error}
-                  </div>
-                )}
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoggingIn}
-                className="w-full btn-primary py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 group disabled:opacity-70"
-              >
-                {isLoggingIn ? (
-                  <><Loader2 className="w-5 h-5 animate-spin" /> Signing In...</>
-                ) : (
-                  <>Sign In <LogIn className="w-5 h-5 group-hover:translate-x-1 transition-transform" /></>
-                )}
-              </button>
-            </form>
-          ) : (
-            <div className="space-y-6 text-center">
-              <div className="p-6 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
-                <div className="w-16 h-16 bg-primary/10 text-primary rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Camera className="w-8 h-8" />
-                </div>
-                <h3 className="font-bold text-slate-800 mb-1">Face Recognition</h3>
-                <p className="text-sm text-slate-500 mb-6">Login automatically by scanning your face.</p>
-                <button
-                  onClick={() => setIsScanning(true)}
-                  className="btn-primary w-full py-3 rounded-xl font-bold"
-                >
-                  Start Scanning
-                </button>
-              </div>
-              <p className="text-xs text-slate-400">
-                Ensure you are in a well-lit environment for better accuracy.
-              </p>
+          
+          <div className="relative z-10">
+            <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center mb-6">
+              <ShieldCheck className="w-6 h-6 text-white" />
             </div>
-          )}
+            <h2 className="text-4xl font-black text-white leading-tight">
+              Enterprise <br />
+              <span className="text-primary-light">Attendance</span> <br />
+              Intelligence.
+            </h2>
+            <p className="text-slate-400 mt-6 max-w-xs leading-relaxed">
+              Secure biometric verification and geofencing enforcement for the modern workforce.
+            </p>
+          </div>
 
-          <div className="text-center mt-6">
-            <a href="#" className="text-sm font-medium text-slate-400 hover:text-primary transition-colors">
-              Forgot password?
-            </a>
+          <div className="relative z-10">
+            <div className="flex gap-4 mb-8">
+              <div className="px-4 py-2 bg-white/5 rounded-full backdrop-blur-md border border-white/10 text-xs font-bold text-white/70 uppercase tracking-widest">
+                v2.4.0 Stable
+              </div>
+              <div className="px-4 py-2 bg-white/5 rounded-full backdrop-blur-md border border-white/10 text-xs font-bold text-white/70 uppercase tracking-widest">
+                Biometric Ready
+              </div>
+            </div>
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em]">
+              &copy; 2026 Smart Attend Pro • Next-Gen HR
+            </p>
           </div>
         </div>
-        
-        <p className="text-center text-slate-400 text-sm mt-8">
-          &copy; 2026 Smart Attendance Pro. All rights reserved.
-        </p>
+
+        {/* Right Side: Login Form */}
+        <div className="w-full lg:w-1/2 p-8 lg:p-16 flex flex-col justify-center bg-white">
+          <div className="max-w-sm mx-auto w-full">
+            <div className="mb-10 lg:hidden">
+              <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center mb-4">
+                <Fingerprint className="w-6 h-6 text-primary" />
+              </div>
+              <h1 className="text-2xl font-bold text-slate-900">Smart Attend Pro</h1>
+            </div>
+
+            <div className="mb-10">
+              <h3 className="text-3xl font-black text-slate-900 tracking-tight">Welcome Back</h3>
+              <p className="text-slate-500 mt-2 font-medium">Please enter your credentials to access the portal.</p>
+            </div>
+
+            {/* Tab Selection */}
+            <div className="flex p-1 bg-slate-50 rounded-2xl mb-8 border border-slate-100">
+              <button
+                onClick={() => setLoginMode('credentials')}
+                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                  loginMode === 'credentials' ? 'bg-white text-primary shadow-lg shadow-slate-200/50' : 'text-slate-400 hover:text-slate-600'
+                }`}
+              >
+                <LogIn className="w-4 h-4" />
+                Credentials
+              </button>
+              <button
+                onClick={() => {
+                  setLoginMode('face');
+                  setIsScanning(false);
+                  setError(null);
+                }}
+                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                  loginMode === 'face' ? 'bg-white text-primary shadow-lg shadow-slate-200/50' : 'text-slate-400 hover:text-slate-600'
+                }`}
+              >
+                <ScanFace className="w-4 h-4" />
+                Face ID
+              </button>
+            </div>
+
+            {loginMode === 'credentials' ? (
+              <form onSubmit={handleCredentialLogin} className="space-y-6">
+                <div className="space-y-5">
+                  <div className="group">
+                    <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2 group-focus-within:text-primary transition-colors">Username</label>
+                    <div className="relative">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                        <LogIn className="w-4 h-4" />
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Enter your username"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        required
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-12 pr-4 py-4 focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all duration-300 font-medium text-slate-700"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="group">
+                    <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2 group-focus-within:text-primary transition-colors">Password</label>
+                    <div className="relative">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                        <ShieldCheck className="w-4 h-4" />
+                      </div>
+                      <input
+                        type="password"
+                        placeholder="••••••••"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-12 pr-4 py-4 focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all duration-300 font-medium text-slate-700"
+                      />
+                    </div>
+                  </div>
+
+                  {error && (
+                    <div className="p-4 bg-red-50 border border-red-100 text-red-600 rounded-2xl text-xs font-bold flex items-center gap-3 animate-in fade-in slide-in-from-top-1">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      {error}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoggingIn}
+                  className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-lg flex items-center justify-center gap-3 group disabled:opacity-70 active:scale-95 transition-all shadow-xl shadow-slate-900/20"
+                >
+                  {isLoggingIn ? (
+                    <><Loader2 className="w-5 h-5 animate-spin" /> Verifying...</>
+                  ) : (
+                    <>Sign In Now <LogIn className="w-5 h-5 group-hover:translate-x-1 transition-transform" /></>
+                  )}
+                </button>
+              </form>
+            ) : (
+              <div className="space-y-6 text-center">
+                <div className="p-10 bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200 group hover:border-primary/50 transition-colors">
+                  <div className="w-20 h-20 bg-primary/10 text-primary rounded-3xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
+                    <Camera className="w-10 h-10" />
+                  </div>
+                  <h3 className="text-xl font-black text-slate-900 mb-2">Biometric Scan</h3>
+                  <p className="text-sm text-slate-500 mb-8 leading-relaxed">Secure access using our next-gen facial recognition technology.</p>
+                  <button
+                    onClick={() => setIsScanning(true)}
+                    className="w-full bg-primary text-white py-4 rounded-2xl font-black shadow-xl shadow-primary/20 active:scale-95 transition-all"
+                  >
+                    Start Scanner
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="text-center mt-10">
+              <button className="text-xs font-black text-slate-400 uppercase tracking-widest hover:text-primary transition-colors">
+                Forgot password?
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Face Scanning Modal */}
+      {/* ─── Professional Face Scanning Modal ─── */}
       {isScanning && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-sm">
-          <div className="w-full max-w-lg bg-white rounded-[2.5rem] overflow-hidden relative shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 face-modal-backdrop">
+          <div className="face-modal-card w-full max-w-md relative">
+            {/* Close Button */}
             <button 
-              onClick={() => setIsScanning(false)}
-              className="absolute top-6 right-6 p-2 bg-black/10 hover:bg-black/20 rounded-full text-slate-800 z-10 transition-colors"
+              onClick={closeScan}
+              className="absolute top-5 right-5 z-20 w-9 h-9 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-sm transition-all duration-200"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
 
-            <div className="p-10 text-center">
-              <h2 className="text-2xl font-bold text-slate-900 mb-2">Face Identity</h2>
-              <p className="text-slate-500 mb-8">Position your face within the frame</p>
-
-              <div className="relative aspect-square max-w-[300px] mx-auto rounded-[3rem] overflow-hidden border-4 border-primary/20 shadow-inner bg-slate-100">
-                {!isVerifying ? (
-                  <Webcam
-                    audio={false}
-                    ref={webcamRef}
-                    screenshotFormat="image/jpeg"
-                    className="w-full h-full object-cover"
-                    videoConstraints={{ facingMode: "user" }}
-                  />
-                ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center bg-slate-50">
-                    <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
-                    <p className="text-primary font-bold animate-pulse">Verifying Identity...</p>
-                  </div>
-                )}
-                
-                {/* Scanner Frame Overlay */}
-                {!isVerifying && (
-                  <div className="absolute inset-0 border-[20px] border-slate-900/10 pointer-events-none">
-                    <div className="absolute inset-0 border-2 border-primary/50 animate-pulse rounded-[2rem]" />
-                    <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-primary/50 shadow-[0_0_15px_rgba(0,108,73,0.5)] animate-scan-y" />
-                  </div>
-                )}
+            {/* Header */}
+            <div className="text-center pt-8 pb-4 px-8">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-sm mb-4">
+                <ScanFace className="w-6 h-6 text-white" />
               </div>
+              <h2 className="text-xl font-bold text-white mb-1">Verifikasi Wajah</h2>
+              <p className="text-sm text-white/60">Posisikan wajah Anda di dalam frame</p>
+            </div>
 
-              {error && (
-                <div className="mt-6 p-4 bg-red-50 text-red-600 rounded-2xl text-sm font-medium flex items-center justify-center gap-2">
-                  <X className="w-4 h-4 shrink-0" />
-                  {error}
+            {/* Camera Area */}
+            <div className="px-8 pb-4">
+              <div className="relative mx-auto" style={{ maxWidth: '280px' }}>
+                {/* Animated outer ring */}
+                <div className={`absolute -inset-3 rounded-[2rem] border-2 transition-all duration-700 ${getStatusRingColor()} ${isBusy ? 'face-ring-pulse' : ''}`} />
+                
+                {/* Corner Brackets */}
+                <div className="absolute -inset-1 z-10 pointer-events-none">
+                  <div className="absolute top-0 left-0 w-8 h-8 border-t-3 border-l-3 border-white/70 rounded-tl-xl" />
+                  <div className="absolute top-0 right-0 w-8 h-8 border-t-3 border-r-3 border-white/70 rounded-tr-xl" />
+                  <div className="absolute bottom-0 left-0 w-8 h-8 border-b-3 border-l-3 border-white/70 rounded-bl-xl" />
+                  <div className="absolute bottom-0 right-0 w-8 h-8 border-b-3 border-r-3 border-white/70 rounded-br-xl" />
                 </div>
-              )}
 
-              <div className="mt-10 flex gap-4">
+                {/* Camera Feed */}
+                <div className="aspect-square rounded-2xl overflow-hidden bg-slate-900 relative">
+                  {scanStatus !== 'success' ? (
+                    <Webcam
+                      audio={false}
+                      ref={webcamRef}
+                      screenshotFormat="image/jpeg"
+                      className="w-full h-full object-cover"
+                      videoConstraints={{ facingMode: "user", width: 480, height: 480 }}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-emerald-600 to-emerald-800">
+                      <CheckCircle2 className="w-16 h-16 text-white mb-3 face-success-pop" />
+                      <p className="text-white font-bold text-lg">Berhasil!</p>
+                      <p className="text-white/70 text-sm">Mengalihkan...</p>
+                    </div>
+                  )}
+                  
+                  {/* Scanning line overlay */}
+                  {scanStatus === 'ready' && (
+                    <div className="absolute inset-0 pointer-events-none">
+                      <div className="face-scan-line" />
+                    </div>
+                  )}
+
+                  {/* Detecting overlay */}
+                  {scanStatus === 'detecting' && (
+                    <div className="absolute inset-0 bg-amber-500/10 pointer-events-none flex items-center justify-center">
+                      <div className="face-detect-ring" />
+                    </div>
+                  )}
+
+                  {/* Verifying overlay */}
+                  {scanStatus === 'verifying' && (
+                    <div className="absolute inset-0 bg-blue-500/10 pointer-events-none flex items-center justify-center">
+                      <div className="face-verify-spinner" />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Status Indicator */}
+            <div className="px-8 py-3">
+              <div className={`flex items-center justify-center gap-2 text-sm font-semibold ${statusLabel.color}`}>
+                {statusLabel.icon}
+                <span>{statusLabel.text}</span>
+              </div>
+            </div>
+
+            {/* Error Message */}
+            {error && (
+              <div className="mx-8 mb-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+                <p className="text-red-300 text-sm text-center font-medium">{error}</p>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="px-8 pb-8 pt-3 flex gap-3">
+              <button
+                onClick={closeScan}
+                className="flex-1 px-5 py-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-white font-semibold text-sm backdrop-blur-sm transition-all duration-200"
+              >
+                Batal
+              </button>
+              {scanStatus === 'error' ? (
                 <button
-                  onClick={() => setIsScanning(false)}
-                  className="flex-1 px-6 py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold hover:bg-slate-200 transition-colors"
+                  onClick={resetScan}
+                  className="flex-1 px-5 py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-semibold text-sm transition-all duration-200 shadow-lg shadow-amber-500/25"
                 >
-                  Cancel
+                  Coba Lagi
                 </button>
+              ) : (
                 <button
                   onClick={capture}
-                  disabled={isVerifying}
-                  className="flex-1 px-6 py-4 rounded-2xl btn-primary font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={isBusy || !modelsLoaded}
+                  className="flex-1 px-5 py-3.5 rounded-xl bg-gradient-to-r from-primary to-emerald-500 hover:from-primary-light hover:to-emerald-400 text-white font-semibold text-sm transition-all duration-200 shadow-lg shadow-primary/25 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  Capture & Verify
+                  {!modelsLoaded ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Loading...</>
+                  ) : (
+                    <><ScanFace className="w-4 h-4" /> Capture & Verify</>
+                  )}
                 </button>
-              </div>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* Add scanner animation to styles */}
+      {/* Face Scanner Styles */}
       <style>{`
-        @keyframes scan-y {
-          0%, 100% { top: 10%; }
-          50% { top: 90%; }
+        .face-modal-backdrop {
+          background: linear-gradient(135deg, rgba(15,23,42,0.95), rgba(0,40,30,0.95));
+          backdrop-filter: blur(20px);
+          animation: fadeIn 0.3s ease-out;
         }
-        .animate-scan-y {
-          animation: scan-y 3s ease-in-out infinite;
+        .face-modal-card {
+          background: linear-gradient(145deg, rgba(30,41,59,0.9), rgba(15,23,42,0.95));
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 2rem;
+          box-shadow: 0 25px 60px rgba(0,0,0,0.5), 0 0 80px rgba(0,108,73,0.1);
+          animation: slideUp 0.4s cubic-bezier(0.16,1,0.3,1);
+        }
+        @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
+        @keyframes slideUp { from { opacity:0; transform:translateY(30px) scale(0.97) } to { opacity:1; transform:translateY(0) scale(1) } }
+        
+        .face-scan-line {
           position: absolute;
+          left: 10%; right: 10%;
+          height: 2px;
+          background: linear-gradient(90deg, transparent, rgba(0,108,73,0.8), transparent);
+          box-shadow: 0 0 15px rgba(0,108,73,0.5);
+          animation: scanMove 2.5s ease-in-out infinite;
         }
+        @keyframes scanMove { 0%,100% { top:15% } 50% { top:85% } }
+        
+        .face-ring-pulse { animation: ringPulse 1.5s ease-in-out infinite; }
+        @keyframes ringPulse { 0%,100% { opacity:0.5; transform:scale(1) } 50% { opacity:1; transform:scale(1.02) } }
+        
+        .face-detect-ring {
+          width: 80px; height: 80px;
+          border: 3px solid transparent;
+          border-top-color: rgba(245,158,11,0.8);
+          border-right-color: rgba(245,158,11,0.4);
+          border-radius: 50%;
+          animation: detectSpin 1s linear infinite;
+        }
+        @keyframes detectSpin { to { transform: rotate(360deg) } }
+        
+        .face-verify-spinner {
+          width: 90px; height: 90px;
+          border: 3px solid transparent;
+          border-top-color: rgba(59,130,246,0.8);
+          border-left-color: rgba(59,130,246,0.4);
+          border-radius: 50%;
+          animation: detectSpin 0.8s linear infinite;
+          box-shadow: 0 0 20px rgba(59,130,246,0.2);
+        }
+        
+        .face-success-pop { animation: successPop 0.5s cubic-bezier(0.16,1,0.3,1); }
+        @keyframes successPop { 0% { transform: scale(0); opacity:0 } 60% { transform: scale(1.2) } 100% { transform: scale(1); opacity:1 } }
+        
+        .border-3 { border-width: 3px; }
       `}</style>
     </div>
   );

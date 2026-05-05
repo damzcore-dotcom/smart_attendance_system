@@ -4,7 +4,7 @@ const xlsx = require('xlsx');
 
 const getAll = async (req, res) => {
   try {
-    const { search, dept, section, status, page = 1, limit = 20 } = req.query;
+    const { search, dept, section, position, status, page = 1, limit = 20 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const where = {};
@@ -17,6 +17,7 @@ const getAll = async (req, res) => {
     }
     if (dept && dept !== 'All') where.department = { name: dept };
     if (section && section !== 'All') where.section = section;
+    if (position && position !== 'All') where.position = position;
     if (status && status !== 'All') where.status = status;
 
     const [employees, total] = await Promise.all([
@@ -194,7 +195,8 @@ const importExcel = async (req, res) => {
     const sheetName = workbook.SheetNames[0];
     const rawData = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
-    let employeesProcessed = 0;
+    let employeesImported = 0;
+    let employeesSkipped = 0;
     const totalRows = rawData.length;
 
     for (let i = 0; i < totalRows; i++) {
@@ -205,25 +207,35 @@ const importExcel = async (req, res) => {
       }
 
       // Support both NIK and No. headers
-      const empCode = String(row['NIK'] || row['No.'] || '').trim();
+      const empCode = String(row['NIK'] || row['No.'] || row['Employee ID'] || '').trim();
       const name = String(row['Nama'] || row['Name'] || '').trim();
+      
       if (!empCode || !name) continue;
 
+      // Logic 1: Pengecekan NIK tunggal untuk menghindari duplikasi
       let employee = await prisma.employee.findUnique({ where: { employeeCode: empCode } });
       
+      // Logic 2: Jika sudah ada, ABAIKAN (Skip) sesuai permintaan user
+      if (employee) {
+        employeesSkipped++;
+        continue;
+      }
+
+      // Jika data baru, lanjutkan pendaftaran
       let deptName = String(row['Departemen'] || row['Department'] || 'General').trim();
       let department = await prisma.department.findUnique({ where: { name: deptName } });
       if (!department) department = await prisma.department.create({ data: { name: deptName } });
 
-      const updateData = {
+      const createData = {
+        employeeCode: empCode,
         name,
         departmentId: department.id,
-        grade: String(row['Grade'] || row['Kelamin'] || ''),
+        grade: String(row['Grade'] || ''),
         position: String(row['Jabatan'] || row['Position'] || ''),
         section: String(row['Bagian'] || ''),
-        employmentStatus: String(row['Status Kerja'] || row['Waktu Kerja'] || ''),
-        contractDuration: String(row['Lama Kontrak'] || row['Periode Kontrak'] || ''),
-        faceId: String(row['ID Finger'] || row['Face ID'] || ''),
+        employmentStatus: String(row['Status Kerja'] || ''),
+        contractDuration: String(row['Lama Kontrak'] || ''),
+        faceId: String(row['Face ID'] || ''),
         bpjsTk: String(row['BPJS TK'] || ''),
         bpjsKesehatan: String(row['BPJS Kesehatan'] || ''),
         npwp: String(row['NPWP'] || ''),
@@ -245,32 +257,36 @@ const importExcel = async (req, res) => {
         notes: String(row['Keterangan'] || ''),
       };
       
-      if (row['Tanggal Masuk']) updateData.joinDate = new Date(row['Tanggal Masuk']);
-      if (row['Sisa Tanggal Kontrak']) updateData.contractEnd = new Date(row['Sisa Tanggal Kontrak']);
-      if (row['Tanggal Lahir']) updateData.birthDate = new Date(row['Tanggal Lahir']);
+      if (row['Tanggal Masuk']) createData.joinDate = new Date(row['Tanggal Masuk']);
+      if (row['Sisa Tanggal Kontrak']) createData.contractEnd = new Date(row['Sisa Tanggal Kontrak']);
+      if (row['Tanggal Lahir']) createData.birthDate = new Date(row['Tanggal Lahir']);
 
-      if (!employee) {
-        const hashedPassword = await bcrypt.hash('password123', 10);
-        employee = await prisma.employee.create({
-          data: {
-            ...updateData,
-            employeeCode: empCode,
-          }
-        });
-        await prisma.user.create({
-          data: { username: empCode, password: hashedPassword, role: 'EMPLOYEE', employeeId: employee.id }
-        });
-        employeesProcessed++;
-      } else {
-        await prisma.employee.update({ where: { id: employee.id }, data: updateData });
-      }
+      const hashedPassword = await bcrypt.hash('password123', 10);
+      const newEmployee = await prisma.employee.create({
+        data: createData
+      });
+      
+      await prisma.user.create({
+        data: { username: empCode, password: hashedPassword, role: 'EMPLOYEE', employeeId: newEmployee.id }
+      });
+      
+      employeesImported++;
     }
 
     if (jobId) {
       global.importProgress[jobId] = 100;
-      setTimeout(() => delete global.importProgress[jobId], 10000); // cleanup after 10s
+      setTimeout(() => delete global.importProgress[jobId], 10000);
     }
-    res.json({ success: true, message: `Successfully imported/updated ${employeesProcessed} employees from Master Data.` });
+
+    res.json({ 
+      success: true, 
+      message: `Import selesai: ${employeesImported} karyawan baru ditambahkan, ${employeesSkipped} diabaikan (sudah terdaftar).`,
+      data: {
+        imported: employeesImported,
+        skipped: employeesSkipped,
+        total: totalRows
+      }
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -284,13 +300,19 @@ const getProgress = (req, res) => {
 
 const getMasterOptions = async (req, res) => {
   try {
+    const { dept } = req.query;
+    const where = {};
+    if (dept && dept !== 'All') {
+      where.department = { name: dept };
+    }
+
     const [grades, positions, sections, statuses, durations, departments] = await Promise.all([
-      prisma.employee.findMany({ select: { grade: true }, distinct: ['grade'] }),
-      prisma.employee.findMany({ select: { position: true }, distinct: ['position'] }),
-      prisma.employee.findMany({ select: { section: true }, distinct: ['section'] }),
-      prisma.employee.findMany({ select: { employmentStatus: true }, distinct: ['employmentStatus'] }),
-      prisma.employee.findMany({ select: { contractDuration: true }, distinct: ['contractDuration'] }),
-      prisma.department.findMany({ select: { name: true } })
+      prisma.employee.findMany({ where, select: { grade: true }, distinct: ['grade'] }),
+      prisma.employee.findMany({ where, select: { position: true }, distinct: ['position'] }),
+      prisma.employee.findMany({ where, select: { section: true }, distinct: ['section'] }),
+      prisma.employee.findMany({ where, select: { employmentStatus: true }, distinct: ['employmentStatus'] }),
+      prisma.employee.findMany({ where, select: { contractDuration: true }, distinct: ['contractDuration'] }),
+      prisma.department.findMany({ select: { id: true, name: true } })
     ]);
 
     res.json({
@@ -301,7 +323,7 @@ const getMasterOptions = async (req, res) => {
         sections: sections.map(s => s.section).filter(Boolean),
         employmentStatuses: statuses.map(s => s.employmentStatus).filter(Boolean),
         contractDurations: durations.map(d => d.contractDuration).filter(Boolean),
-        departments: departments.map(d => d.name).filter(Boolean)
+        departments: departments.filter(d => d.name)
       }
     });
   } catch (err) {
@@ -309,4 +331,38 @@ const getMasterOptions = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, create, update, remove, importExcel, getProgress, getMasterOptions };
+/**
+ * PUT /api/employees/batch-shift
+ * Update shift for all employees in a department
+ */
+const batchUpdateShift = async (req, res) => {
+  try {
+    const { departmentId, shiftId } = req.body;
+    
+    if (!shiftId) {
+      return res.status(400).json({ success: false, message: 'Shift is required' });
+    }
+
+    const where = {};
+    if (departmentId && parseInt(departmentId) !== 0) {
+      where.departmentId = parseInt(departmentId);
+    }
+
+    const result = await prisma.employee.updateMany({
+      where,
+      data: { shiftId: parseInt(shiftId) },
+    });
+
+    res.json({ 
+      success: true, 
+      message: departmentId && parseInt(departmentId) !== 0 
+        ? `Updated shift for ${result.count} employees in department`
+        : `Updated shift for all ${result.count} employees across all departments`,
+      data: result 
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getAll, getById, create, update, remove, importExcel, getProgress, getMasterOptions, batchUpdateShift };

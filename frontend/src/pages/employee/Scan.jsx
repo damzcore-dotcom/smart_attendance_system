@@ -16,11 +16,13 @@ const Scan = () => {
   const queryClient = useQueryClient();
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
+  const [coords, setCoords] = useState(null);
+  const [locationError, setLocationError] = useState(null);
   const user = authAPI.getStoredUser();
   const empId = user?.employee?.id;
 
   const mutation = useMutation({
-    mutationFn: (mode) => attendanceAPI.checkIn(empId, mode),
+    mutationFn: (mode) => attendanceAPI.checkIn(empId, mode, coords?.lat, coords?.lng, coords?.accuracy, coords?.timestamp),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['today-attendance'] });
       alert(data.message || 'Face ID verified and Check-in successful!');
@@ -34,16 +36,48 @@ const Scan = () => {
   });
 
   const startScan = () => {
-    setIsScanning(true);
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 5;
-      setScanProgress(progress);
-      if (progress >= 100) {
-        clearInterval(interval);
-        mutation.mutate('Face ID');
-      }
-    }, 100);
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser");
+      return;
+    }
+
+    setLocationError(null);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        // Anti-manipulation: Check for accuracy (must be within 50 meters)
+        const { accuracy, latitude, longitude } = position.coords;
+        if (accuracy > 50) {
+          const msg = `GPS Accuracy low (${Math.round(accuracy)}m). Please move to an open area for a better signal.`;
+          alert(msg);
+          setLocationError(msg);
+          return;
+        }
+
+        setCoords({ lat: latitude, lng: longitude, accuracy, timestamp: position.timestamp });
+        
+        // Start visual scan only after location is acquired
+        setIsScanning(true);
+        let progress = 0;
+        const interval = setInterval(() => {
+          progress += 5;
+          setScanProgress(progress);
+          if (progress >= 100) {
+            clearInterval(interval);
+            mutation.mutate('Face ID');
+          }
+        }, 100);
+      },
+      (error) => {
+        let msg = "Please enable location services to check in.";
+        if (error.code === 1) msg = "Permission denied. Please allow location access in your browser settings.";
+        else if (error.code === 2) msg = "Location unavailable. Please check your GPS signal.";
+        else if (error.code === 3) msg = "Location request timed out.";
+        
+        alert(msg);
+        setLocationError(msg);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
   };
 
   return (

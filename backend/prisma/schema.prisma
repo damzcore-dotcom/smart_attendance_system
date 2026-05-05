@@ -10,6 +10,7 @@ datasource db {
 // ─── Enums ──────────────────────────────────────────
 
 enum Role {
+  SUPER_ADMIN
   ADMIN
   EMPLOYEE
 }
@@ -29,6 +30,10 @@ enum AttStatus {
   PRESENT
   LATE
   ABSENT
+  SAKIT
+  IZIN
+  CUTI
+  HOLIDAY
 }
 
 enum ReqStatus {
@@ -40,15 +45,29 @@ enum ReqStatus {
 // ─── Models ─────────────────────────────────────────
 
 model User {
-  id           Int       @id @default(autoincrement())
-  username     String    @unique
+  id           Int              @id @default(autoincrement())
+  username     String           @unique
   password     String
-  role         Role      @default(EMPLOYEE)
-  employeeId   Int?      @unique
-  employee     Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  role         Role             @default(EMPLOYEE)
+  employeeId   Int?             @unique
+  employee     Employee?        @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  permissions  MenuPermission[]
   refreshToken String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+}
+
+model MenuPermission {
+  id        Int     @id @default(autoincrement())
+  userId    Int
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  menuKey   String  // e.g., "dashboard", "attendance", "employees"
+  canRead   Boolean @default(true)
+  canCreate Boolean @default(false)
+  canUpdate Boolean @default(false)
+  canDelete Boolean @default(false)
+
+  @@unique([userId, menuKey])
 }
 
 model Employee {
@@ -97,6 +116,7 @@ model Employee {
   shift         Shift?     @relation(fields: [shiftId], references: [id])
   attendance    Attendance[]
   corrections   CorrectionRequest[]
+  leaveRequests LeaveRequest[]
   notifications Notification[]
   user          User?
   createdAt     DateTime   @default(now())
@@ -172,4 +192,29 @@ model Notification {
   message    String
   isRead     Boolean  @default(false)
   createdAt  DateTime @default(now())
+}
+
+model LeaveRequest {
+  id         Int       @id @default(autoincrement())
+  employeeId Int
+  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  startDate  DateTime  @db.Date
+  endDate    DateTime  @db.Date
+  type       String    // "Cuti", "Sakit", "Izin"
+  reason     String
+  status     ReqStatus @default(PENDING)
+  reviewNote String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+model Announcement {
+  id        Int      @id @default(autoincrement())
+  title     String
+  content   String
+  type      String   @default("General") // "General", "Urgent", "Holiday"
+  author    String   @default("HR Admin")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

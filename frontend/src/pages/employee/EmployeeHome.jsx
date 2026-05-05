@@ -5,11 +5,15 @@ import {
   ChevronRight,
   CheckCircle2,
   AlertCircle,
-  Loader2
+  Loader2,
+  Camera,
+  Megaphone,
+  User as UserIcon,
+  Tag
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { authAPI, attendanceAPI } from '../../services/api';
+import { authAPI, attendanceAPI, announcementAPI } from '../../services/api';
 
 const EmployeeHome = () => {
   const navigate = useNavigate();
@@ -27,9 +31,34 @@ const EmployeeHome = () => {
     queryFn: () => attendanceAPI.getAll({ period: 'Today', search: user?.employee?.name }),
     enabled: !!user?.employee?.name,
   });
+  
+  const { data: annData } = useQuery({
+    queryKey: ['active-announcements'],
+    queryFn: () => announcementAPI.getAll({ activeOnly: 'true' }),
+  });
+  
+  const announcements = annData?.data || [];
 
   const checkInMutation = useMutation({
-    mutationFn: (mode) => attendanceAPI.checkIn(empId, mode),
+    mutationFn: (mode) => {
+      return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+          return reject(new Error("Geolocation is not supported"));
+        }
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const { latitude, longitude, accuracy } = pos.coords;
+            attendanceAPI.checkIn(empId, mode, latitude, longitude, accuracy, pos.timestamp)
+              .then(resolve)
+              .catch(reject);
+          },
+          (err) => {
+            reject(new Error("Please enable location services to check in."));
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+      });
+    },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['today-attendance'] });
       alert(data.message);
@@ -127,16 +156,25 @@ const EmployeeHome = () => {
       </div>
 
       {/* Action Area */}
-      <div className="fixed bottom-24 left-6 right-6">
+      <div className="pt-4">
         {!todayRecord?.checkIn ? (
-          <button 
-            onClick={() => checkInMutation.mutate('Credentials')}
-            disabled={checkInMutation.isPending}
-            className="w-full bg-primary text-white py-4 rounded-2xl font-bold text-lg shadow-xl shadow-primary/25 active:scale-95 transition-transform flex items-center justify-center gap-3"
-          >
-            {checkInMutation.isPending ? <Loader2 className="animate-spin" /> : 'Check In Now'}
-          </button>
-        ) : !todayRecord?.checkOut || todayRecord?.checkOut === '-- : --' ? (
+          <div className="flex flex-col gap-3 w-full">
+            <button 
+              onClick={() => navigate('/employee/scan')}
+              className="w-full bg-primary text-white py-4 rounded-2xl font-bold text-lg shadow-xl shadow-primary/25 active:scale-95 transition-transform flex items-center justify-center gap-3"
+            >
+              <Camera className="w-5 h-5 text-white/70" />
+              Scan Face ID
+            </button>
+            <button 
+              onClick={() => checkInMutation.mutate('Credentials')}
+              disabled={checkInMutation.isPending}
+              className="w-full bg-white border border-slate-200 text-slate-500 py-3 rounded-xl font-bold text-xs active:scale-95 transition-transform flex items-center justify-center gap-3"
+            >
+              {checkInMutation.isPending ? <Loader2 className="animate-spin w-3 h-3" /> : 'Manual Check In'}
+            </button>
+          </div>
+        ) : (!todayRecord?.checkOut || todayRecord?.checkOut === '-- : --') ? (
           <button 
             onClick={() => checkOutMutation.mutate()}
             disabled={checkOutMutation.isPending}
@@ -161,6 +199,45 @@ const EmployeeHome = () => {
           Request Correction
         </button>
       </div>
+
+      {/* Announcements Section */}
+      {announcements.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center px-2">
+            <h3 className="font-bold text-slate-800 flex items-center gap-2">
+              <Megaphone className="w-4 h-4 text-primary" />
+              Latest Announcements
+            </h3>
+          </div>
+          <div className="flex overflow-x-auto gap-4 pb-2 snap-x hide-scrollbar">
+            {announcements.map((ann) => (
+              <div 
+                key={ann.id} 
+                className={`min-w-[280px] p-5 rounded-[2rem] border snap-start transition-all ${
+                  ann.type === 'Urgent' 
+                    ? 'bg-rose-50 border-rose-100 text-rose-900 shadow-lg shadow-rose-500/10' 
+                    : 'bg-white border-slate-100 text-slate-800 shadow-xl shadow-slate-200/50'
+                }`}
+              >
+                <div className="flex justify-between items-start mb-3">
+                  <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest border ${
+                    ann.type === 'Urgent' ? 'bg-rose-500 text-white border-rose-400' : 'bg-primary/10 text-primary border-primary/20'
+                  }`}>
+                    {ann.type}
+                  </span>
+                  <span className="text-[9px] font-bold opacity-50 uppercase tracking-tighter">
+                    {new Date(ann.createdAt).toLocaleDateString()}
+                  </span>
+                </div>
+                <h4 className="font-black text-sm mb-2 line-clamp-1">{ann.title}</h4>
+                <p className={`text-xs leading-relaxed line-clamp-2 ${ann.type === 'Urgent' ? 'text-rose-700/80' : 'text-slate-500'}`}>
+                  {ann.content}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Today's Schedule */}
       <div>

@@ -1,18 +1,20 @@
 const prisma = require('../prismaClient');
 const { calculateLateness } = require('../utils/lateCalculator');
+const { getDistance } = require('../utils/geo');
+const XLSX = require('xlsx');
 
 /**
  * GET /api/attendance
  */
 const getAll = async (req, res) => {
   try {
-    const { search, dept, date, period } = req.query;
+    const { search, dept, section, position, date, period, startDate, endDate } = req.query;
 
     const where = {};
 
     // Date filtering
     const now = new Date();
-    if (period === 'Today' || (!period && !date)) {
+    if (period === 'Today' || (!period && !date && !startDate)) {
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
@@ -25,6 +27,11 @@ const getAll = async (req, res) => {
     } else if (period === 'This Month') {
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
       where.date = { gte: startOfMonth, lte: now };
+    } else if (period === 'Custom' && startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      where.date = { gte: start, lte: end };
     } else if (date) {
       const d = new Date(date);
       const next = new Date(d);
@@ -32,9 +39,15 @@ const getAll = async (req, res) => {
       where.date = { gte: d, lt: next };
     }
 
-    // Department filter
+    // Organizational filters
     if (dept && dept !== 'All') {
-      where.employee = { department: { name: dept } };
+      where.employee = { ...where.employee, department: { name: dept } };
+    }
+    if (section && section !== 'All') {
+      where.employee = { ...where.employee, section: section };
+    }
+    if (position && position !== 'All') {
+      where.employee = { ...where.employee, position: position };
     }
 
     // Search
@@ -57,6 +70,8 @@ const getAll = async (req, res) => {
         id: r.id,
         name: r.employee.name,
         dept: r.employee.department.name,
+        section: r.employee.section,
+        position: r.employee.position,
         date: r.date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
         checkIn: r.checkIn ? r.checkIn.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-- : --',
         checkOut: r.checkOut ? r.checkOut.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-- : --',
@@ -75,7 +90,7 @@ const getAll = async (req, res) => {
  */
 const checkIn = async (req, res) => {
   try {
-    const { employeeId, mode = 'Credentials' } = req.body;
+    const { employeeId, mode = 'Credentials', lat, lng } = req.body;
 
     const employee = await prisma.employee.findUnique({
       where: { id: employeeId },
@@ -84,6 +99,54 @@ const checkIn = async (req, res) => {
 
     if (!employee) {
       return res.status(404).json({ success: false, message: 'Employee not found' });
+    }
+
+    // Geofencing Check
+    const settings = await prisma.settings.findMany();
+    const isStrict = settings.find(s => s.key === 'strictGeofencing')?.value === 'true';
+
+    if (isStrict) {
+      const { lat, lng, accuracy, timestamp } = req.body;
+
+      if (!lat || !lng) {
+        return res.status(400).json({ success: false, message: 'GPS location is required for check-in' });
+      }
+
+      // 1. Accuracy Check (Max 50m)
+      if (accuracy && accuracy > 50) {
+        return res.status(403).json({ 
+          success: false, 
+          message: `GPS accuracy too low (${Math.round(accuracy)}m). Please turn off mock locations or move to an open area.` 
+        });
+      }
+
+      // 2. Freshness Check (Max 5 minutes old)
+      if (timestamp) {
+        const age = Date.now() - timestamp;
+        if (age > 5 * 60 * 1000) { // 5 minutes
+          return res.status(403).json({ success: false, message: 'GPS location data is stale. Please refresh and try again.' });
+        }
+      }
+
+      const locations = await prisma.location.findMany();
+      let isInside = false;
+      let nearestDist = Infinity;
+
+      for (const loc of locations) {
+        const dist = getDistance(parseFloat(lat), parseFloat(lng), loc.lat, loc.lng);
+        if (dist <= loc.radius) {
+          isInside = true;
+          break;
+        }
+        if (dist < nearestDist) nearestDist = dist;
+      }
+
+      if (!isInside) {
+        return res.status(403).json({ 
+          success: false, 
+          message: `You are outside the office radius (Nearest: ${Math.round(nearestDist)}m away)` 
+        });
+      }
     }
 
     const now = new Date();
@@ -232,4 +295,354 @@ const getHistory = async (req, res) => {
   }
 };
 
-module.exports = { getAll, checkIn, checkOut, getSummary, getHistory };
+/**
+ * POST /api/attendance/import
+ * Import attendance from fingerprint machine Excel
+ * Excel columns: Department, Name, No., Date/Time, Status(C/In|C/Out), Location ID, ID Number, VerifyCode, CardNo
+ */
+const importFromExcel = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No file uploaded' });
+    }
+
+    const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+    if (rows.length < 2) {
+      return res.status(400).json({ success: false, message: 'File is empty or has no data rows' });
+    }
+
+    // Detect column mapping from header row
+    const header = rows[0].map(h => (h || '').toString().trim().toLowerCase());
+    const colMap = {
+      department: header.findIndex(h => h.includes('department')),
+      name: header.findIndex(h => h === 'name'),
+      no: header.findIndex(h => h === 'no.' || h === 'no'),
+      dateTime: header.findIndex(h => h.includes('date') || h.includes('time')),
+      status: header.findIndex(h => h === 'status'),
+      locationId: header.findIndex(h => h.includes('location')),
+      idNumber: header.findIndex(h => h.includes('id number') || h.includes('idnumber')),
+      verifyCode: header.findIndex(h => h.includes('verify')),
+      cardNo: header.findIndex(h => h.includes('card')),
+    };
+
+    if (colMap.dateTime === -1 || colMap.status === -1) {
+      return res.status(400).json({ success: false, message: 'Cannot detect Date/Time or Status column in Excel' });
+    }
+    if (colMap.idNumber === -1 && colMap.name === -1) {
+      return res.status(400).json({ success: false, message: 'Cannot detect ID Number or Name column for employee matching' });
+    }
+
+    // Parse all data rows
+    const dataRows = rows.slice(1).filter(r => r && r.length > 0);
+    
+    // Group by employee+date
+    // Key: employeeCode|date -> { checkIn, checkOut, employeeName, dept }
+    const grouped = {};
+    const unmatchedNames = new Set();
+
+    // Pre-fetch all employees for fast lookup
+    const allEmployees = await prisma.employee.findMany({
+      select: { id: true, employeeCode: true, name: true, shiftId: true, shift: true },
+    });
+    const empByCode = {};
+    const empByName = {};
+    allEmployees.forEach(e => {
+      empByCode[e.employeeCode] = e;
+      empByName[e.name.toLowerCase().trim()] = e;
+    });
+
+    for (const row of dataRows) {
+      const rawDateTime = row[colMap.dateTime];
+      const statusStr = (row[colMap.status] || '').toString().trim().toLowerCase();
+      const idNumber = colMap.idNumber >= 0 ? (row[colMap.idNumber] || '').toString().trim() : '';
+      const empName = colMap.name >= 0 ? (row[colMap.name] || '').toString().trim() : '';
+
+      if (!rawDateTime || (!statusStr.includes('in') && !statusStr.includes('out'))) continue;
+
+      // Parse datetime
+      let dt;
+      if (typeof rawDateTime === 'number') {
+        // Excel serial date
+        dt = new Date(Math.round((rawDateTime - 25569) * 86400 * 1000));
+      } else {
+        dt = new Date(rawDateTime.toString());
+      }
+      if (isNaN(dt.getTime())) continue;
+
+      // Match employee: prefer by employeeCode (idNumber), fallback to name
+      let emp = empByCode[idNumber] || empByName[empName.toLowerCase().trim()] || null;
+      if (!emp) {
+        unmatchedNames.add(empName || idNumber);
+        continue;
+      }
+
+      const dateKey = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+      const groupKey = `${emp.id}|${dateKey}`;
+
+      if (!grouped[groupKey]) {
+        grouped[groupKey] = { employeeId: emp.id, employee: emp, date: dateKey, checkIn: null, checkOut: null };
+      }
+
+      if (statusStr.includes('in')) {
+        // Keep earliest check-in
+        if (!grouped[groupKey].checkIn || dt < grouped[groupKey].checkIn) {
+          grouped[groupKey].checkIn = dt;
+        }
+      } else if (statusStr.includes('out')) {
+        // Keep latest check-out
+        if (!grouped[groupKey].checkOut || dt > grouped[groupKey].checkOut) {
+          grouped[groupKey].checkOut = dt;
+        }
+      }
+    }
+
+    // Upsert attendance records
+    let imported = 0;
+    let updated = 0;
+    let skipped = 0;
+    const errors = [];
+
+    for (const [key, entry] of Object.entries(grouped)) {
+      try {
+        const dateObj = new Date(entry.date + 'T00:00:00');
+        const emp = entry.employee;
+
+        // Calculate lateness if check-in exists
+        let status = 'ABSENT';
+        let lateMinutes = 0;
+        if (entry.checkIn) {
+          const shiftStart = emp.shift?.startTime || '08:00';
+          const gracePeriod = emp.shift?.gracePeriod || 15;
+          const calc = calculateLateness(entry.checkIn, shiftStart, gracePeriod);
+          status = calc.status;
+          lateMinutes = calc.lateMinutes;
+        }
+
+        const existing = await prisma.attendance.findUnique({
+          where: { employeeId_date: { employeeId: entry.employeeId, date: dateObj } },
+        });
+
+        if (existing) {
+          // Update only if imported data has more info
+          const updateData = {};
+          if (entry.checkIn && !existing.checkIn) updateData.checkIn = entry.checkIn;
+          if (entry.checkOut && !existing.checkOut) updateData.checkOut = entry.checkOut;
+          if (entry.checkIn && !existing.checkIn) {
+            updateData.status = status;
+            updateData.lateMinutes = lateMinutes;
+            updateData.mode = 'Fingerprint';
+          }
+          
+          if (Object.keys(updateData).length > 0) {
+            await prisma.attendance.update({ where: { id: existing.id }, data: updateData });
+            updated++;
+          } else {
+            skipped++;
+          }
+        } else {
+          await prisma.attendance.create({
+            data: {
+              employeeId: entry.employeeId,
+              date: dateObj,
+              checkIn: entry.checkIn || null,
+              checkOut: entry.checkOut || null,
+              status,
+              lateMinutes,
+              mode: 'Fingerprint',
+            },
+          });
+          imported++;
+        }
+      } catch (err) {
+        errors.push(`${key}: ${err.message}`);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Import selesai: ${imported} baru, ${updated} diperbarui, ${skipped} dilewati`,
+      data: {
+        totalRows: dataRows.length,
+        groupedRecords: Object.keys(grouped).length,
+        imported,
+        updated,
+        skipped,
+        unmatched: Array.from(unmatchedNames),
+        errors: errors.slice(0, 10),
+      },
+    });
+  } catch (err) {
+    console.error('Import attendance error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * POST /api/attendance/recalculate
+ * Recalculate lateness for a date range based on CURRENT shifts
+ */
+const recalculate = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.body;
+    
+    if (!startDate || !endDate) {
+      return res.status(400).json({ success: false, message: 'Start and End dates are required' });
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+
+    const records = await prisma.attendance.findMany({
+      where: { date: { gte: start, lte: end }, checkIn: { not: null } },
+      include: { employee: { include: { shift: true } } },
+    });
+
+    let updatedCount = 0;
+    for (const record of records) {
+      const shiftStart = record.employee.shift?.startTime || '08:00';
+      const gracePeriod = record.employee.shift?.gracePeriod || 15;
+      
+      const { lateMinutes, status } = calculateLateness(record.checkIn, shiftStart, gracePeriod);
+      
+      // Update if status or lateMinutes changed
+      if (record.status !== status || record.lateMinutes !== lateMinutes) {
+        await prisma.attendance.update({
+          where: { id: record.id },
+          data: { status, lateMinutes }
+        });
+        updatedCount++;
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      message: `Recalculation complete. ${updatedCount} records updated.`,
+      data: { totalChecked: records.length, updated: updatedCount }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * GET /api/attendance/master-options
+ * Get unique organizational options based on existing attendance records in a date range
+ */
+const getMasterOptions = async (req, res) => {
+  try {
+    const { period, date, startDate, endDate, dept } = req.query;
+    const where = {};
+
+    // Date filtering (reuse logic from getAll)
+    const now = new Date();
+    if (period === 'Today' || (!period && !date && !startDate)) {
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      where.date = { gte: today, lt: tomorrow };
+    } else if (period === 'This Week') {
+      const startOfWeek = new Date(now);
+      startOfWeek.setDate(now.getDate() - now.getDay());
+      startOfWeek.setHours(0, 0, 0, 0);
+      where.date = { gte: startOfWeek, lte: now };
+    } else if (period === 'This Month') {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      where.date = { gte: startOfMonth, lte: now };
+    } else if (period === 'Custom' && startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      where.date = { gte: start, lte: end };
+    } else if (date) {
+      const d = new Date(date);
+      const next = new Date(d);
+      next.setDate(next.getDate() + 1);
+      where.date = { gte: d, lt: next };
+    }
+
+    // Optional dept filter for section/position cascading
+    const employeeWhere = {};
+    if (dept && dept !== 'All') {
+      employeeWhere.department = { name: dept };
+    }
+
+    // Get attendance records in range
+    const attendanceRecords = await prisma.attendance.findMany({
+      where: {
+        ...where,
+        employee: employeeWhere
+      },
+      select: {
+        employee: {
+          select: {
+            department: { select: { id: true, name: true } },
+            section: true,
+            position: true
+          }
+        }
+      }
+    });
+
+    // Extract unique values
+    const departments = new Map();
+    const sections = new Set();
+    const positions = new Set();
+
+    attendanceRecords.forEach(r => {
+      if (r.employee.department) {
+        departments.set(r.employee.department.id, r.employee.department.name);
+      }
+      if (r.employee.section) sections.add(r.employee.section);
+      if (r.employee.position) positions.add(r.employee.position);
+    });
+
+    res.json({
+      success: true,
+      data: {
+        departments: Array.from(departments.entries()).map(([id, name]) => ({ id, name })),
+        sections: Array.from(sections).sort(),
+        positions: Array.from(positions).sort(),
+      }
+    });
+  } catch (err) {
+    console.error('Error fetching attendance options:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * POST /api/attendance/manual
+ */
+const createManual = async (req, res) => {
+  try {
+    const { employeeId, date, status, notes } = req.body;
+
+    if (!employeeId || !date || !status) {
+      return res.status(400).json({ success: false, message: 'Employee, date, and status are required' });
+    }
+
+    const employee = await prisma.employee.findUnique({ where: { id: parseInt(employeeId) } });
+    if (!employee) {
+      return res.status(404).json({ success: false, message: 'Employee not found' });
+    }
+
+    const dateObj = new Date(date);
+    dateObj.setHours(0, 0, 0, 0);
+
+    const record = await prisma.attendance.upsert({
+      where: { employeeId_date: { employeeId: parseInt(employeeId), date: dateObj } },
+      update: { status, notes, mode: 'Manual' },
+      create: { employeeId: parseInt(employeeId), date: dateObj, status, notes, mode: 'Manual' },
+    });
+
+    res.json({ success: true, message: 'Attendance record created/updated manually', data: record });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getAll, checkIn, checkOut, getSummary, getHistory, importFromExcel, recalculate, getMasterOptions, createManual };

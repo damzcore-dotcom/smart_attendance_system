@@ -14,13 +14,18 @@
     "@heroicons/react": "^2.2.0",
     "@tanstack/react-query": "^5.100.9",
     "@vladmandic/face-api": "^1.7.15",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.7",
+    "leaflet": "^1.9.4",
     "lucide-react": "^1.14.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
+    "react-leaflet": "^5.0.0",
     "react-router-dom": "^7.14.2",
     "react-select": "^5.10.2",
     "react-webcam": "^7.2.0",
-    "recharts": "^3.8.1"
+    "recharts": "^3.8.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.3.1",

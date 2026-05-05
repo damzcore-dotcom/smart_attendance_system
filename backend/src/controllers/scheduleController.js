@@ -52,4 +52,34 @@ const getEmployeeShift = async (req, res) => {
   }
 };
 
-module.exports = { getAll, create, getEmployeeShift };
+/**
+ * PUT /api/shifts/:id
+ */
+const update = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, startTime, endTime, breakStart, breakEnd, gracePeriod } = req.body;
+    const shift = await prisma.shift.update({
+      where: { id: parseInt(id) },
+      data: { name, startTime, endTime, breakStart, breakEnd, gracePeriod: parseInt(gracePeriod) },
+    });
+    res.json({ success: true, data: shift });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * DELETE /api/shifts/:id
+ */
+const remove = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.shift.delete({ where: { id: parseInt(id) } });
+    res.json({ success: true, message: 'Shift deleted' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getAll, create, getEmployeeShift, update, remove };

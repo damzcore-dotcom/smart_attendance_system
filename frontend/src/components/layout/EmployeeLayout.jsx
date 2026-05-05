@@ -5,6 +5,7 @@ import {
   User, 
   Bell,
   Scan,
+  ShieldCheck,
   Loader2
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -32,8 +33,8 @@ const EmployeeLayout = () => {
   const navItems = [
     { name: 'Home', path: '/employee', icon: Home },
     { name: 'History', path: '/employee/history', icon: History },
-    { name: 'Scan', path: '/employee/scan', icon: Scan, primary: true },
-    { name: 'Inbox', path: '/employee/notifications', icon: Bell, badge: unreadCount },
+    { name: 'Absen', path: '/employee/scan', icon: Scan, primary: true },
+    { name: 'Leave', path: '/employee/leave', icon: ShieldCheck },
     { name: 'Profile', path: '/employee/profile', icon: User },
   ];
 

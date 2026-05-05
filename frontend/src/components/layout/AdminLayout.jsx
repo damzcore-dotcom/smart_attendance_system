@@ -11,7 +11,9 @@ import {
   X,
   Edit3,
   Loader2,
-  UserCircle
+  UserCircle,
+  Megaphone,
+  ScanFace
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -31,12 +33,15 @@ const AdminLayout = () => {
   ];
 
   const menuItems = [
-    { name: 'Dashboard', path: '/admin', icon: LayoutDashboard },
-    { name: 'Employees', path: '/admin/employees', icon: Users },
-    { name: 'Users', path: '/admin/users', icon: UserCircle },
-    { name: 'Attendance', path: '/admin/attendance', icon: CalendarCheck },
-    { name: 'Corrections', path: '/admin/corrections', icon: Edit3 },
-    { name: 'Settings', path: '/admin/settings', icon: Settings },
+    { name: 'Dashboard', path: '/admin', icon: LayoutDashboard, key: 'dashboard' },
+    { name: 'Employees', path: '/admin/employees', icon: Users, key: 'employees' },
+    { name: 'Users', path: '/admin/users', icon: UserCircle, key: 'users' },
+    { name: 'Attendance', path: '/admin/attendance', icon: CalendarCheck, key: 'attendance' },
+    { name: 'Announcements', path: '/admin/announcements', icon: Megaphone, key: 'announcements' },
+    { name: 'Face Check', path: '/admin/face-check', icon: ScanFace, key: 'announcements' },
+    { name: 'Leave Requests', path: '/admin/leave-requests', icon: CalendarCheck, key: 'leave-requests' },
+    { name: 'Corrections', path: '/admin/corrections', icon: Edit3, key: 'corrections' },
+    { name: 'Settings', path: '/admin/settings', icon: Settings, key: 'settings' },
   ];
 
   const { data: userData } = useQuery({
@@ -44,7 +49,17 @@ const AdminLayout = () => {
     queryFn: () => authAPI.getMe(),
   });
 
-  const user = userData?.data || authAPI.getStoredUser() || { name: 'Admin', role: 'Super Admin' };
+  const user = userData?.data || authAPI.getStoredUser() || { name: 'Admin', role: 'ADMIN' };
+
+  const filteredMenuItems = menuItems.filter(item => {
+    if (user.role === 'SUPER_ADMIN' || user.permissions === 'ALL') return true;
+    if (!user.permissions || !Array.isArray(user.permissions)) {
+      // Fallback: If ADMIN but no permissions metadata yet, show all
+      return user.role === 'ADMIN';
+    }
+    const perm = user.permissions.find(p => p.menuKey === item.key);
+    return perm?.canRead;
+  });
 
   const handleLogout = () => {
     authAPI.logout();
@@ -69,7 +84,7 @@ const AdminLayout = () => {
         </div>
 
         <nav className="flex-1 px-4 space-y-2 mt-4">
-          {menuItems.map((item) => {
+          {filteredMenuItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
             return (
@@ -115,18 +130,42 @@ const AdminLayout = () => {
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors" />
               <input 
                 type="text" 
-                placeholder="Search anything..." 
+                placeholder="Search menus..." 
                 className="bg-slate-50 border border-slate-100 rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 w-64 focus:w-80 transition-all"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
               {searchQuery && (
-                <button 
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  <X className="w-3 h-3" />
-                </button>
+                <>
+                  <button 
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                  <div className="absolute left-0 top-full mt-2 w-full bg-white rounded-xl shadow-2xl border border-slate-100 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="p-2">
+                      {filteredMenuItems
+                        .filter(item => item.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                        .map(item => (
+                          <Link
+                            key={item.key}
+                            to={item.path}
+                            onClick={() => setSearchQuery('')}
+                            className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 text-slate-600 hover:text-primary transition-all group"
+                          >
+                            <item.icon className="w-4 h-4 text-slate-400 group-hover:text-primary" />
+                            <span className="text-sm font-medium">{item.name}</span>
+                          </Link>
+                        ))}
+                      {filteredMenuItems.filter(item => item.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
+                        <div className="p-4 text-center text-xs text-slate-400">
+                          No menu items found.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           </div>

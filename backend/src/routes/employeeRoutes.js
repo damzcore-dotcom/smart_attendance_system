@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const { getAll, getById, create, update, remove, importExcel, getProgress, getMasterOptions } = require('../controllers/employeeController');
+const { getAll, getById, create, update, remove, importExcel, getProgress, getMasterOptions, batchUpdateShift } = require('../controllers/employeeController');
 const { verifyToken, requireAdmin } = require('../middleware/auth');
 const multer = require('multer');
 
@@ -12,6 +12,7 @@ router.get('/master-options', getMasterOptions);
 router.post('/import', requireAdmin, upload.single('file'), importExcel);
 
 router.get('/', getAll);
+router.put('/batch-shift', requireAdmin, batchUpdateShift);
 router.get('/:id', getById);
 router.post('/', requireAdmin, create);
 router.put('/:id', requireAdmin, update);

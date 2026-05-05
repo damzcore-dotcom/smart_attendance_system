@@ -23,11 +23,21 @@ const verifyToken = (req, res, next) => {
 };
 
 /**
- * Require ADMIN role
+ * Require ADMIN or SUPER_ADMIN role
  */
 const requireAdmin = (req, res, next) => {
-  if (req.user.role !== 'ADMIN') {
+  if (req.user.role !== 'ADMIN' && req.user.role !== 'SUPER_ADMIN') {
     return res.status(403).json({ success: false, message: 'Admin access required' });
+  }
+  next();
+};
+
+/**
+ * Require SUPER_ADMIN role
+ */
+const requireSuperAdmin = (req, res, next) => {
+  if (req.user.role !== 'SUPER_ADMIN') {
+    return res.status(403).json({ success: false, message: 'Super Admin access required' });
   }
   next();
 };
@@ -54,4 +64,4 @@ const generateRefreshToken = (user) => {
   );
 };
 
-module.exports = { verifyToken, requireAdmin, generateAccessToken, generateRefreshToken };
+module.exports = { verifyToken, requireAdmin, requireSuperAdmin, generateAccessToken, generateRefreshToken };

@@ -16,7 +16,10 @@ const login = async (req, res) => {
 
     const user = await prisma.user.findUnique({
       where: { username },
-      include: { employee: { include: { department: true } } },
+      include: { 
+        employee: { include: { department: true } },
+        permissions: true
+      },
     });
 
     if (!user) {
@@ -45,6 +48,7 @@ const login = async (req, res) => {
         id: user.id,
         username: user.username,
         role: user.role,
+        permissions: user.role === 'SUPER_ADMIN' ? 'ALL' : user.permissions,
         employee: user.employee ? {
           id: user.employee.id,
           name: user.employee.name,
@@ -99,37 +103,83 @@ const refresh = async (req, res) => {
 };
 
 /**
- * POST /api/auth/verify-face (Mock)
+ * Euclidean distance for face descriptors
+ */
+const getDistance = (arr1, arr2) => {
+  return Math.sqrt(arr1.reduce((acc, val, i) => acc + Math.pow(val - arr2[i], 2), 0));
+};
+
+/**
+ * POST /api/auth/verify-face
  */
 const verifyFace = async (req, res) => {
   try {
-    // Mock: In production, this would call a Face Recognition engine
-    // For now, return the latest enrolled employee as matched
+    let { descriptor } = req.body; 
+    
+    // If sent as string, parse it
+    if (typeof descriptor === 'string') {
+      try {
+        descriptor = JSON.parse(descriptor);
+      } catch (e) {
+        return res.status(400).json({ success: false, message: 'Invalid descriptor format' });
+      }
+    }
+    
+    if (!descriptor || !Array.isArray(descriptor) || descriptor.length === 0) {
+      console.error('Verify-face failed: descriptor is not an array', typeof descriptor);
+      return res.status(400).json({ success: false, message: 'Biometric descriptor is required and must be an array' });
+    }
+
+    // Fetch all employees with enrolled faces and valid users
     const employees = await prisma.employee.findMany({
       where: { 
         faceStatus: 'ENROLLED',
+        faceDescriptor: { not: null },
         user: { isNot: null }
       },
-      include: { department: true, user: true },
-      orderBy: { updatedAt: 'desc' },
-      take: 1,
+      include: { 
+        department: true, 
+        user: { include: { permissions: true } } 
+      },
     });
 
     if (employees.length === 0) {
-      return res.status(404).json({ success: false, message: 'No enrolled faces with user accounts found' });
+      return res.status(404).json({ success: false, message: 'No registered face accounts found' });
     }
 
-    // Simulate: pick the latest enrolled one
-    const matched = employees[0];
-    if (!matched.user) {
-      return res.status(404).json({ success: false, message: 'Employee has no user account' });
+    // Match the closest face
+    let bestMatch = null;
+    let minDistance = 1.0; // face-api threshold is usually 0.6
+    const THRESHOLD = 0.6;
+
+    for (const emp of employees) {
+      try {
+        const storedDescriptor = Array.isArray(emp.faceDescriptor) 
+          ? emp.faceDescriptor 
+          : JSON.parse(emp.faceDescriptor);
+        
+        if (!storedDescriptor || !Array.isArray(storedDescriptor)) continue;
+
+        const distance = getDistance(descriptor, storedDescriptor);
+        if (distance < minDistance) {
+          minDistance = distance;
+          bestMatch = emp;
+        }
+      } catch (err) {
+        console.error(`Failed to parse descriptor for employee ${emp.id}:`, err.message);
+        continue;
+      }
     }
 
-    const accessToken = generateAccessToken(matched.user);
-    const refreshToken = generateRefreshToken(matched.user);
+    if (!bestMatch || minDistance > THRESHOLD) {
+      return res.status(401).json({ success: false, message: 'Face not recognized' });
+    }
+
+    const accessToken = generateAccessToken(bestMatch.user);
+    const refreshToken = generateRefreshToken(bestMatch.user);
 
     await prisma.user.update({
-      where: { id: matched.user.id },
+      where: { id: bestMatch.user.id },
       data: { refreshToken },
     });
 
@@ -138,15 +188,16 @@ const verifyFace = async (req, res) => {
       accessToken,
       refreshToken,
       user: {
-        id: matched.user.id,
-        username: matched.user.username,
-        role: matched.user.role,
+        id: bestMatch.user.id,
+        username: bestMatch.user.username,
+        role: bestMatch.user.role,
+        permissions: bestMatch.user.role === 'SUPER_ADMIN' ? 'ALL' : bestMatch.user.permissions,
         employee: {
-          id: matched.id,
-          name: matched.name,
-          employeeCode: matched.employeeCode,
-          department: matched.department.name,
-          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${matched.name}`,
+          id: bestMatch.id,
+          name: bestMatch.name,
+          employeeCode: bestMatch.employeeCode,
+          department: bestMatch.department.name,
+          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${bestMatch.name}`,
         },
       },
     });
@@ -177,7 +228,10 @@ const getMe = async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
-      include: { employee: { include: { department: true, shift: true } } },
+      include: { 
+        employee: { include: { department: true, shift: true } },
+        permissions: true
+      },
     });
 
     if (!user) {
@@ -190,6 +244,7 @@ const getMe = async (req, res) => {
         id: user.id,
         username: user.username,
         role: user.role,
+        permissions: user.role === 'SUPER_ADMIN' ? 'ALL' : user.permissions,
         employee: user.employee ? {
           id: user.employee.id,
           name: user.employee.name,
