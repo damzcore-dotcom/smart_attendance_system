@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const { getAll, checkIn, checkOut, getSummary, getHistory, importFromExcel, recalculate, getMasterOptions } = require('../controllers/attendanceController');
+const { getAll, checkIn, checkOut, getSummary, getHistory, importFromExcel, recalculate, getMasterOptions, createManual } = require('../controllers/attendanceController');
 const { verifyToken, requireAdmin } = require('../middleware/auth');
 const multer = require('multer');
 
