@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { leaveAPI } from '../../services/api';
+import { leaveAPI, employeeAPI } from '../../services/api';
 import { 
   Calendar, 
   Search, 
@@ -20,12 +20,19 @@ const AdminLeaveRequests = () => {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState('PENDING');
   const [searchQuery, setSearchQuery] = useState('');
+  const [deptFilter, setDeptFilter] = useState('All');
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [reviewData, setReviewData] = useState({ status: '', note: '' });
 
+  const { data: optionsData } = useQuery({
+    queryKey: ['employee-master-options'],
+    queryFn: () => employeeAPI.getMasterOptions(),
+  });
+  const departments = optionsData?.data?.departments || [];
+
   const { data: requests, isLoading } = useQuery({
-    queryKey: ['admin-leave-requests', statusFilter, searchQuery],
-    queryFn: () => leaveAPI.getAll({ status: statusFilter, search: searchQuery }),
+    queryKey: ['admin-leave-requests', statusFilter, searchQuery, deptFilter],
+    queryFn: () => leaveAPI.getAll({ status: statusFilter, search: searchQuery, dept: deptFilter }),
   });
 
   const reviewMutation = useMutation({
@@ -77,15 +84,28 @@ const AdminLeaveRequests = () => {
             ))}
           </div>
 
-          <div className="relative w-full max-w-xs">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input 
-              type="text" 
-              placeholder="Search by name..." 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-100 rounded-xl pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <select
+              value={deptFilter}
+              onChange={(e) => setDeptFilter(e.target.value)}
+              className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="All">All Departments</option>
+              {departments.map(d => (
+                <option key={d.id || d.name} value={d.name}>{d.name}</option>
+              ))}
+            </select>
+
+            <div className="relative w-full max-w-xs">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="Search by name..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
           </div>
         </div>
       </div>

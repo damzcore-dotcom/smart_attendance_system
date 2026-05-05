@@ -34,11 +34,16 @@ const create = async (req, res) => {
  */
 const getAll = async (req, res) => {
   try {
-    const { status, search } = req.query;
+    const { status, search, dept } = req.query;
     const where = {};
-    if (status) where.status = status;
-    if (search) {
-      where.employee = { name: { contains: search, mode: 'insensitive' } };
+    if (status && status !== 'All') where.status = status;
+    
+    const employeeFilter = {};
+    if (search) employeeFilter.name = { contains: search, mode: 'insensitive' };
+    if (dept && dept !== 'All') employeeFilter.department = { name: dept };
+    
+    if (Object.keys(employeeFilter).length > 0) {
+      where.employee = employeeFilter;
     }
 
     const requests = await prisma.leaveRequest.findMany({
