@@ -43,8 +43,8 @@ const apiFetch = async (endpoint, options = {}) => {
 
   let res = await fetch(url, { ...options, headers });
 
-  // Auto-refresh on 401
-  if (res.status === 401) {
+  // Auto-refresh on 401, but NOT for login requests
+  if (res.status === 401 && !endpoint.includes('/auth/login')) {
     const refreshed = await refreshAccessToken();
     if (refreshed) {
       headers['Authorization'] = `Bearer ${getAccessToken()}`;

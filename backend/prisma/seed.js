@@ -43,7 +43,7 @@ async function main() {
   const hashedEmpPassword = await bcrypt.hash('password', 10);
 
   await prisma.user.create({
-    data: { username: 'admin', password: hashedPassword, role: 'ADMIN' },
+    data: { username: 'admin', password: hashedPassword, role: 'SUPER_ADMIN' },
   });
 
   for (const emp of employees) {
