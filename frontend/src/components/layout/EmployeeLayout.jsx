@@ -19,8 +19,9 @@ const EmployeeLayout = () => {
     queryFn: () => authAPI.getMe(),
   });
 
-  const user = userData?.data || authAPI.getStoredUser() || { name: 'Employee' };
-  const empId = user?.employee?.id;
+  const user = userData?.user || authAPI.getStoredUser();
+  const employee = user?.employee || {};
+  const empId = employee?.id;
 
   const { data: notificationsData } = useQuery({
     queryKey: ['notifications', empId],
@@ -48,9 +49,9 @@ const EmployeeLayout = () => {
       <header className="h-16 bg-white border-b border-slate-100 flex items-center justify-between px-6 shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-xs">{user.name?.[0] || 'S'}</span>
+            <span className="text-white font-bold text-xs">{employee.name?.[0] || 'U'}</span>
           </div>
-          <span className="font-bold text-slate-800">Hello, {user.name?.split(' ')[0] || 'User'}</span>
+          <span className="font-bold text-slate-800">Hello, {employee.name?.split(' ')[0] || 'User'}</span>
         </div>
         <Link to="/employee/notifications" className="p-2 text-slate-400 relative">
           <Bell className="w-5 h-5" />

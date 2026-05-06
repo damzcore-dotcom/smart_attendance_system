@@ -23,8 +23,8 @@ const Profile = () => {
     queryFn: () => authAPI.getMe(),
   });
 
-  const employee = userData?.data?.employee || {};
-  const userAccount = userData?.data || {};
+  const user = userData?.user || authAPI.getStoredUser();
+  const employee = user?.employee || {};
 
   const handleLogout = () => {
     authAPI.logout();
@@ -32,11 +32,11 @@ const Profile = () => {
   };
 
   const menuItems = [
-    { name: 'Personal Information', icon: User, color: 'blue' },
-    { name: 'Face ID Enrollment', icon: Camera, color: 'emerald' },
-    { name: 'Notifications', icon: Bell, color: 'amber' },
-    { name: 'Privacy & Security', icon: ShieldCheck, color: 'indigo' },
-    { name: 'App Settings', icon: SettingsIcon, color: 'slate' },
+    { name: 'Personal Information', icon: User, color: 'blue', path: '/employee/profile' },
+    { name: 'Face ID Enrollment', icon: Camera, color: 'emerald', path: '/employee/face-check' },
+    { name: 'Notifications', icon: Bell, color: 'amber', path: '/employee/notifications' },
+    { name: 'Privacy & Security', icon: ShieldCheck, color: 'indigo', path: '/employee/profile' },
+    { name: 'App Settings', icon: SettingsIcon, color: 'slate', path: '/employee/profile' },
   ];
 
   if (isLoading) {
@@ -94,7 +94,7 @@ const Profile = () => {
             return (
               <button 
                 key={item.name} 
-                onClick={() => alert(`Opening ${item.name} settings...`)}
+                onClick={() => navigate(item.path)}
                 className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors group"
               >
                 <div className="flex items-center gap-4">

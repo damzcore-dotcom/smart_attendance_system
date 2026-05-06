@@ -13,6 +13,8 @@ import {
   Clock
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { authAPI, userAPI } from '../../services/api';
 
 const FaceCheck = () => {
   const [scanStatus, setScanStatus] = useState('ready'); // ready, detecting, success, error
@@ -23,36 +25,38 @@ const FaceCheck = () => {
   const webcamRef = useRef(null);
   const navigate = useNavigate();
 
+  const queryClient = useQueryClient();
+  const user = authAPI.getStoredUser();
+
   // Update clock every second
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch location with watchPosition for better accuracy over time
+  // Fetch location
   useEffect(() => {
     if (!navigator.geolocation) return;
-
     const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        setCoords({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracy: pos.coords.accuracy
-        });
-      },
-      (err) => {
-        console.error("GPS Error:", err);
-      },
-      { 
-        enableHighAccuracy: true, 
-        timeout: 20000, 
-        maximumAge: 0 
-      }
+      (pos) => setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }),
+      (err) => console.error("GPS Error:", err),
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
     );
-
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
+
+  const saveBiometricsMutation = useMutation({
+    mutationFn: (data) => userAPI.updateBiometrics(user.id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['me'] });
+      alert('Face ID Enrollment Sukses!');
+      navigate('/employee/profile');
+    },
+    onError: (err) => {
+      setError('Gagal menyimpan biometrik: ' + err.message);
+      setScanStatus('error');
+    }
+  });
 
   useEffect(() => {
     const loadModels = async () => {
@@ -88,21 +92,28 @@ const FaceCheck = () => {
         });
 
         const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
-          .withFaceLandmarks();
+          .withFaceLandmarks()
+          .withFaceDescriptor();
         
         if (detection) {
           setScanStatus('success');
-          // No API call, just feedback
+          // Automatically save if successful
+          const descriptor = Array.from(detection.descriptor);
+          saveBiometricsMutation.mutate({
+            facePhoto: imageSrc,
+            faceDescriptor: JSON.stringify(descriptor)
+          });
         } else {
           setScanStatus('error');
           setError('Wajah tidak terdeteksi. Posisikan wajah di tengah frame.');
         }
       } catch (err) {
+        console.error(err);
         setScanStatus('error');
         setError('Gagal mendeteksi wajah. Silakan coba lagi.');
       }
     }
-  }, [modelsLoaded]);
+  }, [modelsLoaded, user.id]);
 
   return (
     <div className="p-6 space-y-6">
