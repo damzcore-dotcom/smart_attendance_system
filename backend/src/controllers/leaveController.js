@@ -114,18 +114,49 @@ const review = async (req, res) => {
     if (status === 'APPROVED') {
       const start = new Date(leave.startDate);
       const end = new Date(leave.endDate);
-      const attStatus = leave.type.toUpperCase(); // CUTI, SAKIT, IZIN
+      // Mapping leave type to database AttStatus enum
+      const statusMap = {
+        'CUTI': 'CUTI',
+        'SAKIT': 'SAKIT',
+        'IZIN': 'IZIN'
+      };
+      const attStatus = statusMap[leave.type.toUpperCase()] || 'IZIN';
 
       let curr = new Date(start);
       while (curr <= end) {
         const dateKey = new Date(curr);
         dateKey.setHours(0, 0, 0, 0);
 
-        await prisma.attendance.upsert({
-          where: { employeeId_date: { employeeId: leave.employeeId, date: dateKey } },
-          update: { status: attStatus, mode: 'Leave System', notes: `Approved ${leave.type}: ${leave.reason}` },
-          create: { employeeId: leave.employeeId, date: dateKey, status: attStatus, mode: 'Leave System', notes: `Approved ${leave.type}: ${leave.reason}` }
+        // More stable find-then-update/create pattern instead of upsert
+        const existingAtt = await prisma.attendance.findUnique({
+          where: { 
+            employeeId_date: { 
+              employeeId: leave.employeeId, 
+              date: dateKey 
+            } 
+          }
         });
+
+        const attData = {
+          status: attStatus,
+          mode: 'Leave System',
+          notes: `Approved ${leave.type}: ${leave.reason}`
+        };
+
+        if (existingAtt) {
+          await prisma.attendance.update({
+            where: { id: existingAtt.id },
+            data: attData
+          });
+        } else {
+          await prisma.attendance.create({
+            data: {
+              ...attData,
+              employeeId: leave.employeeId,
+              date: dateKey
+            }
+          });
+        }
 
         curr.setDate(curr.getDate() + 1);
       }
