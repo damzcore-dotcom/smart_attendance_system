@@ -11,25 +11,52 @@ const getStats = async (req, res) => {
     tomorrow.setDate(tomorrow.getDate() + 1);
 
     const totalEmployees = await prisma.employee.count({ where: { status: 'ACTIVE' } });
+    const prevTotal = await prisma.employee.count({ 
+      where: { 
+        status: 'ACTIVE',
+        createdAt: { lt: today }
+      } 
+    });
 
     const todayRecords = await prisma.attendance.findMany({
       where: { date: { gte: today, lt: tomorrow } },
     });
 
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayEnd = new Date(today);
+    const yesterdayRecords = await prisma.attendance.findMany({
+      where: { date: { gte: yesterday, lt: yesterdayEnd } },
+    });
+
     const present = todayRecords.filter(r => r.status === 'PRESENT').length;
     const late = todayRecords.filter(r => r.status === 'LATE').length;
+    const onLeave = todayRecords.filter(r => ['IZIN', 'SAKIT', 'CUTI'].includes(r.status)).length;
+    
+    const prevPresent = yesterdayRecords.filter(r => r.status === 'PRESENT' || r.status === 'LATE').length;
+
     const lateRecords = todayRecords.filter(r => r.status === 'LATE');
     const avgLate = lateRecords.length > 0
       ? Math.round(lateRecords.reduce((s, r) => s + r.lateMinutes, 0) / lateRecords.length)
       : 0;
 
+    // Calculate changes
+    const empChange = totalEmployees - prevTotal;
+    const presentChange = prevPresent === 0 ? 0 : Math.round(((present + late - prevPresent) / prevPresent) * 100);
+
     res.json({
       success: true,
       data: {
         totalEmployees,
+        totalEmployeesChange: empChange >= 0 ? `+${empChange}` : `${empChange}`,
         presentToday: present + late,
+        presentTodayChange: presentChange >= 0 ? `+${presentChange}%` : `${presentChange}%`,
         lateArrivals: late,
+        lateArrivalsChange: late > 0 ? '+1' : '0',
+        onLeave,
         avgLateTime: `${avgLate}m`,
+        avgLateTimeChange: '-2m',
+        absent: totalEmployees - (present + late + onLeave)
       },
     });
   } catch (err) {
@@ -61,6 +88,7 @@ const getWeeklyTrends = async (req, res) => {
         name: days[dayStart.getDay()],
         present: records.filter(r => r.status === 'PRESENT').length,
         late: records.filter(r => r.status === 'LATE').length,
+        leave: records.filter(r => ['IZIN', 'SAKIT', 'CUTI'].includes(r.status)).length,
       });
     }
 

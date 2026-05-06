@@ -9,15 +9,17 @@ import {
   Loader2,
   AlertCircle,
   MessageSquare,
-  History as HistoryIcon
+  History as HistoryIcon,
+  FileText
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { authAPI, attendanceAPI, correctionAPI } from '../../services/api';
+import { authAPI, attendanceAPI, correctionAPI, leaveAPI } from '../../services/api';
 
 const History = () => {
   const user = authAPI.getStoredUser();
   const empId = user?.employee?.id;
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [activeTab, setActiveTab] = useState('attendance'); // 'attendance' or 'leave'
 
   const month = currentDate.getMonth() + 1;
   const year = currentDate.getFullYear();
@@ -26,10 +28,17 @@ const History = () => {
   const { data: historyData, isLoading } = useQuery({
     queryKey: ['attendance-history', { empId, month, year }],
     queryFn: () => attendanceAPI.getHistory(empId, { month, year }),
-    enabled: !!empId,
+    enabled: !!empId && activeTab === 'attendance',
+  });
+  
+  const { data: leaveData, isLoading: leaveLoading } = useQuery({
+    queryKey: ['leave-history', empId],
+    queryFn: () => leaveAPI.getByEmployee(empId),
+    enabled: !!empId && activeTab === 'leave',
   });
 
   const historyList = historyData?.data || [];
+  const leaveList = leaveData?.data || [];
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedDay, setSelectedDay] = useState(null);
@@ -88,14 +97,40 @@ const History = () => {
   return (
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-center px-2">
-        <h1 className="text-xl font-bold text-slate-800">Attendance History</h1>
-        <button className="p-2 bg-white border border-slate-100 rounded-xl text-slate-500">
-          <CalendarIcon className="w-5 h-5" />
+        <h1 className="text-xl font-bold text-slate-800">History Log</h1>
+        <div className="flex gap-2">
+          {activeTab === 'attendance' && (
+            <button className="p-2 bg-white border border-slate-100 rounded-xl text-slate-500">
+              <CalendarIcon className="w-5 h-5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Tab Switcher */}
+      <div className="flex p-1.5 bg-slate-100/50 rounded-2xl border border-slate-100">
+        <button 
+          onClick={() => setActiveTab('attendance')}
+          className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${
+            activeTab === 'attendance' ? 'bg-white text-primary shadow-sm' : 'text-slate-400 hover:text-slate-600'
+          }`}
+        >
+          Attendance
+        </button>
+        <button 
+          onClick={() => setActiveTab('leave')}
+          className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${
+            activeTab === 'leave' ? 'bg-white text-primary shadow-sm' : 'text-slate-400 hover:text-slate-600'
+          }`}
+        >
+          Leave Requests
         </button>
       </div>
 
-      {/* Month Selector */}
-      <div className="card p-3 flex items-center justify-between">
+      {activeTab === 'attendance' ? (
+        <>
+          {/* Month Selector */}
+          <div className="card p-3 flex items-center justify-between">
         <button onClick={handlePrevMonth} className="p-2 hover:bg-slate-50 rounded-lg text-slate-400">
           <ChevronLeft className="w-5 h-5" />
         </button>
@@ -177,9 +212,73 @@ const History = () => {
         ))}
       </div>
 
-      <button className="w-full py-4 bg-white border border-slate-200 text-slate-500 rounded-2xl font-bold text-sm">
-        Load More History
-      </button>
+          <button className="w-full py-4 bg-white border border-slate-200 text-slate-500 rounded-2xl font-bold text-sm">
+            Load More History
+          </button>
+        </>
+      ) : (
+        <div className="space-y-4">
+          {leaveLoading ? (
+            <div className="flex justify-center py-10"><Loader2 className="animate-spin text-primary" /></div>
+          ) : leaveList.length === 0 ? (
+            <div className="text-center py-16 opacity-50 space-y-4">
+              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto">
+                <AlertCircle className="w-8 h-8 text-slate-300" />
+              </div>
+              <p className="text-slate-500 font-bold text-sm uppercase tracking-wider">No leave records found</p>
+            </div>
+          ) : (
+            leaveList.map((leave, idx) => (
+              <div key={idx} className="card p-6 border-slate-100 hover:border-primary/20 transition-all group">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
+                      leave.type === 'Sakit' ? 'bg-rose-50 text-rose-500' :
+                      leave.type === 'Cuti' ? 'bg-primary/10 text-primary' :
+                      'bg-amber-50 text-amber-500'
+                    }`}>
+                      <FileText className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-800">{leave.type}</h3>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Submitted on {new Date(leave.createdAt).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${
+                    leave.status === 'PENDING' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                    leave.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                    'bg-rose-50 text-rose-600 border border-rose-100'
+                  }`}>
+                    {leave.status}
+                  </span>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-2xl mb-4">
+                  <div>
+                    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">From</p>
+                    <p className="text-xs font-bold text-slate-700">{new Date(leave.startDate).toLocaleDateString()}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">Until</p>
+                    <p className="text-xs font-bold text-slate-700">{new Date(leave.endDate).toLocaleDateString()}</p>
+                  </div>
+                </div>
+
+                {leave.reason && (
+                  <p className="text-xs text-slate-500 italic px-1">"{leave.reason}"</p>
+                )}
+                
+                {leave.reviewNote && (
+                  <div className="mt-4 pt-4 border-t border-slate-100">
+                    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">Reviewer Note</p>
+                    <p className="text-xs text-slate-600">{leave.reviewNote}</p>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
       {/* Correction Modal */}
       {isModalOpen && (
