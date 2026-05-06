@@ -7,7 +7,7 @@ async function main() {
   });
 
   const menus = [
-    'dashboard', 'attendance', 'employees', 'shifts', 'locations', 'corrections', 'users', 'settings'
+    'dashboard', 'attendance', 'employees', 'shifts', 'locations', 'corrections', 'users', 'settings', 'announcements', 'face-check', 'leave-requests', 'backup'
   ];
 
   console.log(`Found ${users.length} admin users. Seeding permissions...`);
