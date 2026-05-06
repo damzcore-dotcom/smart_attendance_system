@@ -24,6 +24,9 @@ app.use(cors({
     'http://localhost:5173', 
     'http://localhost:5174', 
     'http://localhost:5175',
+    'http://192.168.13.190:5173',
+    'http://103.188.170.104:5173',
+    'http://103.188.170.104',
     'https://smart-attendance-system-seven-red.vercel.app'
   ],
   credentials: true,
