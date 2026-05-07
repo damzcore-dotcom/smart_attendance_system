@@ -124,33 +124,44 @@ const EmployeeHome = () => {
       </div>
 
       {/* Lateness Analytics Widget */}
-      <div className="card p-5 bg-gradient-to-br from-white to-slate-50/50">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-amber-500" />
-            Monthly Lateness Summary
-          </h3>
-          <span className="text-[10px] font-bold text-slate-400 uppercase">May 2026</span>
+      <div className="bg-white rounded-[2rem] p-6 shadow-xl shadow-slate-200/50 border border-slate-100">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="font-black text-slate-800 text-lg tracking-tight">Analytics</h3>
+          <span className="text-[10px] font-bold text-slate-400 uppercase">{new Date().toLocaleString('default', { month: 'long', year: 'numeric' })}</span>
         </div>
-        <div className="flex items-end justify-between gap-6">
-          <div className="flex-1 space-y-4">
-            <div>
-              <div className="flex justify-between mb-1.5">
-                <span className="text-xs text-slate-500 font-medium">Late Frequency</span>
-                <span className="text-xs font-bold text-slate-800">3 Days</span>
-              </div>
-              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                <div className="h-full bg-amber-400 rounded-full" style={{ width: '40%' }}></div>
-              </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="flex flex-col">
+            <div className="flex justify-between mb-1.5">
+              <span className="text-xs text-slate-500 font-medium">Late Frequency</span>
+              <span className="text-xs font-bold text-slate-800">{userData?.user?.employee?.stats?.lateFrequency || 0} Days</span>
             </div>
-            <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-              <span className="text-xs text-slate-500 font-medium">Total Late Minutes</span>
-              <span className="text-lg font-black text-amber-600">42 min</span>
+            <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-amber-400 rounded-full" 
+                style={{ width: `${Math.min(((userData?.user?.employee?.stats?.lateFrequency || 0) / 5) * 100, 100)}%` }}
+              ></div>
+            </div>
+            <div className="flex items-center justify-between mt-3">
+              <span className="text-xs text-slate-500 font-medium">Minutes</span>
+              <span className="text-sm font-black text-amber-600">{userData?.user?.employee?.stats?.totalLateMinutes || 0}m</span>
             </div>
           </div>
-          <div className="w-20 h-20 rounded-2xl bg-amber-50 flex flex-col items-center justify-center shrink-0 border border-amber-100">
-            <p className="text-[10px] font-bold text-amber-600 uppercase tracking-tighter">Status</p>
-            <p className="text-xs font-black text-amber-700">Good</p>
+          <div className="border-l border-slate-100 pl-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                <Tag className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Sisa Cuti</p>
+                <p className="text-sm font-black text-slate-800">{userData?.user?.employee?.remainingLeave || 0} Hari</p>
+              </div>
+            </div>
+            <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-primary rounded-full" 
+                style={{ width: `${((userData?.user?.employee?.remainingLeave || 0) / (userData?.user?.employee?.leaveQuota || 12)) * 100}%` }}
+              ></div>
+            </div>
           </div>
         </div>
       </div>
@@ -165,13 +176,6 @@ const EmployeeHome = () => {
             >
               <Camera className="w-5 h-5 text-white/70" />
               Scan Face ID
-            </button>
-            <button 
-              onClick={() => checkInMutation.mutate('Credentials')}
-              disabled={checkInMutation.isPending}
-              className="w-full bg-white border border-slate-200 text-slate-500 py-3 rounded-xl font-bold text-xs active:scale-95 transition-transform flex items-center justify-center gap-3"
-            >
-              {checkInMutation.isPending ? <Loader2 className="animate-spin w-3 h-3" /> : 'Manual Check In'}
             </button>
           </div>
         ) : (!todayRecord?.checkOut || todayRecord?.checkOut === '-- : --') ? (
@@ -268,21 +272,43 @@ const EmployeeHome = () => {
       </div>
 
       {/* Recent History Preview */}
-      <div>
+      <div className="pb-8">
         <h3 className="font-bold text-slate-800 mb-4 px-2">Recent Attendance</h3>
         <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="flex items-center justify-between p-2">
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                <p className="text-sm font-medium text-slate-600">May {i+1}, 2026</p>
+          {userData?.user?.employee?.stats?.recentActivity?.length > 0 ? (
+            userData.user.employee.stats.recentActivity.map((activity) => (
+              <div key={activity.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl">
+                <div className="flex items-center gap-3">
+                  <div className={`w-2 h-2 rounded-full ${
+                    activity.status === 'LATE' ? 'bg-amber-500' : 
+                    activity.status === 'PRESENT' ? 'bg-emerald-500' : 'bg-slate-300'
+                  }`} />
+                  <div>
+                    <p className="text-sm font-bold text-slate-800">
+                      {new Date(activity.date).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </p>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                      IN: {activity.checkIn ? new Date(activity.checkIn).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className={`text-xs font-black ${
+                    activity.status === 'LATE' ? 'text-amber-600' : 'text-emerald-600'
+                  }`}>
+                    {activity.status}
+                  </p>
+                  {activity.lateMinutes > 0 && (
+                    <p className="text-[9px] font-bold text-slate-400">-{activity.lateMinutes}m</p>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-4">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Present</span>
-                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-              </div>
+            ))
+          ) : (
+            <div className="text-center py-6 opacity-40">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">No Recent Attendance</p>
             </div>
-          ))}
+          )}
         </div>
       </div>
     </div>

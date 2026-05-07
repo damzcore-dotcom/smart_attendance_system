@@ -82,9 +82,10 @@ const History = () => {
   const stats = historyList.reduce((acc, curr) => {
     if (curr.status === 'Present') acc.present++;
     else if (curr.status === 'Late') acc.late++;
+    else if (curr.status === 'Mangkir') acc.mangkir++;
     else if (curr.status === 'Absent') acc.absent++;
     return acc;
-  }, { present: 0, late: 0, absent: 0 });
+  }, { present: 0, late: 0, mangkir: 0, absent: 0 });
 
   const handlePrevMonth = () => {
     setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() - 1)));
@@ -141,18 +142,22 @@ const History = () => {
       </div>
 
       {/* Monthly Stats */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="card p-3 bg-emerald-50 border-emerald-100 flex flex-col items-center">
           <span className="text-lg font-black text-emerald-600">{stats.present}</span>
-          <span className="text-[8px] font-bold text-emerald-500 uppercase">Present</span>
+          <span className="text-[8px] font-bold text-emerald-500 uppercase">Hadir</span>
         </div>
         <div className="card p-3 bg-amber-50 border-amber-100 flex flex-col items-center">
           <span className="text-lg font-black text-amber-600">{stats.late}</span>
-          <span className="text-[8px] font-bold text-amber-500 uppercase">Late</span>
+          <span className="text-[8px] font-bold text-amber-500 uppercase">Terlambat</span>
+        </div>
+        <div className="card p-3 bg-orange-50 border-orange-100 flex flex-col items-center">
+          <span className="text-lg font-black text-orange-600">{stats.mangkir}</span>
+          <span className="text-[8px] font-bold text-orange-500 uppercase">Mangkir</span>
         </div>
         <div className="card p-3 bg-red-50 border-red-100 flex flex-col items-center">
           <span className="text-lg font-black text-red-600">{stats.absent}</span>
-          <span className="text-[8px] font-bold text-red-500 uppercase">Absent</span>
+          <span className="text-[8px] font-bold text-red-500 uppercase">Absen</span>
         </div>
       </div>
 
@@ -184,6 +189,7 @@ const History = () => {
                 <span className={`text-[10px] font-bold uppercase tracking-widest ${
                   item.status === 'Present' ? 'text-emerald-500' :
                   item.status === 'Late' ? 'text-amber-500' :
+                  item.status === 'Mangkir' ? 'text-orange-500' :
                   item.status === 'Absent' ? 'text-red-500' :
                   'text-slate-400'
                 }`}>
@@ -191,6 +197,7 @@ const History = () => {
                 </span>
                 {item.status === 'Present' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
                 {item.status === 'Late' && <Clock className="w-3.5 h-3.5 text-amber-500" />}
+                {item.status === 'Mangkir' && <AlertCircle className="w-3.5 h-3.5 text-orange-500" />}
                 {item.status === 'Absent' && <XCircle className="w-3.5 h-3.5 text-red-500" />}
               </div>
               <div className="flex justify-between">

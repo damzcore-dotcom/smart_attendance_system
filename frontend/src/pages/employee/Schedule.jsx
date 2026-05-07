@@ -21,7 +21,7 @@ const Schedule = () => {
     queryFn: () => authAPI.getMe(),
   });
 
-  const shift = userData?.data?.employee?.shift || { name: 'No Shift Assigned', startTime: '--:--', endTime: '--:--' };
+  const shift = userData?.user?.employee?.shift || { name: 'No Shift Assigned', startTime: '--:--', endTime: '--:--', breakStart: '12:00', breakEnd: '13:00', gracePeriod: 15 };
 
   if (isLoading) {
     return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>;
@@ -78,7 +78,9 @@ const Schedule = () => {
           </div>
           <div>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Break Time</p>
-            <p className="text-sm font-bold text-slate-800">12:00 PM - 01:00 PM</p>
+            <p className="text-sm font-bold text-slate-800">
+              {shift.breakStart && shift.breakEnd ? `${shift.breakStart} - ${shift.breakEnd}` : 'Not Specified'}
+            </p>
           </div>
         </div>
 
@@ -88,7 +90,7 @@ const Schedule = () => {
           </div>
           <div>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Grace Period</p>
-            <p className="text-sm font-bold text-slate-800">15 Minutes</p>
+            <p className="text-sm font-bold text-slate-800">{shift.gracePeriod || 0} Minutes</p>
           </div>
         </div>
 
@@ -108,7 +110,8 @@ const Schedule = () => {
         <div>
           <h4 className="text-sm font-bold text-slate-700 mb-1">Shift Policy</h4>
           <p className="text-xs text-slate-500 leading-relaxed">
-            Clocking in after 08:15 AM will be marked as late. Overtime starts after 06:00 PM.
+            Clocking in after {shift.startTime} (with {shift.gracePeriod} min grace) will be marked as late. 
+            Please ensure to check out before leaving.
           </p>
         </div>
       </div>

@@ -59,13 +59,13 @@ const Scan = () => {
         setIsScanning(true);
         let progress = 0;
         const interval = setInterval(() => {
-          progress += 5;
+          progress += 10;
           setScanProgress(progress);
           if (progress >= 100) {
             clearInterval(interval);
             mutation.mutate('Face ID');
           }
-        }, 100);
+        }, 40);
       },
       (error) => {
         let msg = "Please enable location services to check in.";

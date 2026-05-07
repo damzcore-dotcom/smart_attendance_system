@@ -55,6 +55,8 @@ const login = async (req, res) => {
           employeeCode: user.employee.employeeCode,
           department: user.employee.department.name,
           position: user.employee.position,
+          leaveQuota: user.employee.leaveQuota,
+          remainingLeave: user.employee.remainingLeave,
           avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.employee.name}`,
         } : null,
       },
@@ -255,7 +257,31 @@ const getMe = async (req, res) => {
           department: user.employee.department.name,
           shift: user.employee.shift,
           faceStatus: user.employee.faceStatus,
+          leaveQuota: user.employee.leaveQuota,
+          remainingLeave: user.employee.remainingLeave,
           avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.employee.name}`,
+          stats: {
+            lateFrequency: await prisma.attendance.count({
+              where: {
+                employeeId: user.employee.id,
+                status: 'LATE',
+                date: { gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) }
+              }
+            }),
+            totalLateMinutes: (await prisma.attendance.aggregate({
+              _sum: { lateMinutes: true },
+              where: {
+                employeeId: user.employee.id,
+                status: 'LATE',
+                date: { gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) }
+              }
+            }))._sum.lateMinutes || 0,
+            recentActivity: await prisma.attendance.findMany({
+              where: { employeeId: user.employee.id },
+              orderBy: { date: 'desc' },
+              take: 5
+            })
+          }
         } : null,
       },
     });

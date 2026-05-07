@@ -17,10 +17,6 @@ export const usePermission = (menuKey) => {
   }
 
   if (!user.permissions || !Array.isArray(user.permissions)) {
-    // Fallback for old sessions: If ADMIN but no permissions metadata, allow all
-    if (user.role === 'ADMIN') {
-      return { canRead: true, canCreate: true, canUpdate: true, canDelete: true, isLoading: false };
-    }
     return { canRead: false, canCreate: false, canUpdate: false, canDelete: false, isLoading: false };
   }
 

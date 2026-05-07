@@ -3,6 +3,23 @@ const prisma = require('../prismaClient');
 /**
  * GET /api/settings
  */
+/**
+ * GET /api/settings/public
+ */
+const getPublicInfo = async (req, res) => {
+  try {
+    const keys = ['companyName', 'appLogo', 'primaryColor'];
+    const settings = await prisma.settings.findMany({
+      where: { key: { in: keys } }
+    });
+    const obj = {};
+    settings.forEach(s => { obj[s.key] = s.value; });
+    res.json({ success: true, data: obj });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 const getAll = async (req, res) => {
   try {
     const settings = await prisma.settings.findMany();
@@ -78,4 +95,4 @@ const deleteLocation = async (req, res) => {
   }
 };
 
-module.exports = { getAll, update, getLocations, createLocation, updateLocation, deleteLocation };
+module.exports = { getAll, update, getLocations, createLocation, updateLocation, deleteLocation, getPublicInfo };

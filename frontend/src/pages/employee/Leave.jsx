@@ -8,7 +8,8 @@ import {
   Plus,
   ArrowRight,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Tag
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { authAPI, leaveAPI } from '../../services/api';
@@ -22,13 +23,66 @@ const Leave = () => {
     startDate: '',
     endDate: '',
     type: 'Cuti',
-    reason: ''
+    reason: '',
+    medicalAttachment: null
   });
+
+  const compressImage = (file) => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 800;
+          const MAX_HEIGHT = 800;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // Compress to 0.7 quality
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          resolve(dataUrl);
+        };
+      };
+    });
+  };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const compressed = await compressImage(file);
+      setFormData({ ...formData, medicalAttachment: compressed });
+    }
+  };
 
   const { data: requests, isLoading } = useQuery({
     queryKey: ['leave-requests', empId],
     queryFn: () => leaveAPI.getByEmployee(empId),
     enabled: !!empId
+  });
+  
+  const { data: userData } = useQuery({
+    queryKey: ['me'],
+    queryFn: () => authAPI.getMe(),
   });
 
   const leaveMutation = useMutation({
@@ -36,7 +90,7 @@ const Leave = () => {
     onSuccess: () => {
       alert('Leave request submitted successfully!');
       setIsModalOpen(false);
-      setFormData({ startDate: '', endDate: '', type: 'Cuti', reason: '' });
+      setFormData({ startDate: '', endDate: '', type: 'Cuti', reason: '', medicalAttachment: null });
       queryClient.invalidateQueries(['leave-requests']);
     },
     onError: (err) => alert(`Error: ${err.message}`)
@@ -100,26 +154,20 @@ const Leave = () => {
                 {item.status}
               </span>
             </div>
-
-            <div className="flex items-center gap-4 py-3 border-y border-slate-50">
-              <div className="flex flex-col">
-                <span className="text-[9px] text-slate-400 uppercase font-black tracking-widest">From</span>
-                <span className="text-sm font-bold text-slate-700">{new Date(item.startDate).toLocaleDateString()}</span>
+            
+            <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-2xl mb-4">
+              <div>
+                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">From</p>
+                <p className="text-xs font-bold text-slate-700">{new Date(item.startDate).toLocaleDateString()}</p>
               </div>
-              <ArrowRight className="w-4 h-4 text-slate-200 mt-2" />
-              <div className="flex flex-col">
-                <span className="text-[9px] text-slate-400 uppercase font-black tracking-widest">Until</span>
-                <span className="text-sm font-bold text-slate-700">{new Date(item.endDate).toLocaleDateString()}</span>
+              <div className="text-right">
+                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">Until</p>
+                <p className="text-xs font-bold text-slate-700">{new Date(item.endDate).toLocaleDateString()}</p>
               </div>
             </div>
 
-            <p className="text-xs text-slate-500 mt-3 line-clamp-2 italic">"{item.reason}"</p>
-            
-            {item.reviewNote && (
-              <div className="mt-4 p-3 bg-slate-50 rounded-xl flex gap-2">
-                <AlertCircle className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <p className="text-[10px] text-slate-500 font-medium">Admin: {item.reviewNote}</p>
-              </div>
+            {item.reason && (
+              <p className="text-xs text-slate-500 italic px-1 line-clamp-2">"{item.reason}"</p>
             )}
           </div>
         ))}
@@ -189,11 +237,49 @@ const Leave = () => {
                 <textarea 
                   required
                   placeholder="Jelaskan alasan Anda..."
-                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3.5 text-xs font-medium text-slate-600 focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all min-h-[100px] resize-none"
+                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3.5 text-xs font-medium text-slate-600 focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all min-h-[80px] resize-none"
                   value={formData.reason}
                   onChange={(e) => setFormData({...formData, reason: e.target.value})}
                 />
               </div>
+
+              {formData.type === 'Sakit' && (
+                <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Surat Dokter / Resep</label>
+                  <div className="relative group">
+                    <input 
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileChange}
+                      className="hidden"
+                      id="medical-upload"
+                      required={formData.type === 'Sakit'}
+                    />
+                    <label 
+                      htmlFor="medical-upload"
+                      className="flex flex-col items-center justify-center w-full min-h-[120px] bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl cursor-pointer hover:bg-slate-100 hover:border-primary/30 transition-all overflow-hidden"
+                    >
+                      {formData.medicalAttachment ? (
+                        <div className="relative w-full h-full p-2">
+                          <img 
+                            src={formData.medicalAttachment} 
+                            alt="Preview" 
+                            className="w-full h-32 object-cover rounded-xl"
+                          />
+                          <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-xl">
+                            <p className="text-white text-[10px] font-bold">Ganti Foto</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-2 p-4 text-slate-400">
+                          <Plus className="w-6 h-6" />
+                          <p className="text-[10px] font-bold uppercase tracking-widest">Klik untuk Upload</p>
+                        </div>
+                      )}
+                    </label>
+                  </div>
+                </div>
+              )}
 
               <div className="pt-4 flex gap-3">
                 <button 

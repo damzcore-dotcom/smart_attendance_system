@@ -69,25 +69,37 @@ const apiFetch = async (endpoint, options = {}) => {
   return data;
 };
 
+let refreshPromise = null;
+
 const refreshAccessToken = async () => {
+  // If a refresh is already in progress, return the existing promise
+  if (refreshPromise) return refreshPromise;
+
   const refreshToken = getRefreshToken();
   if (!refreshToken) return false;
 
-  try {
-    const res = await fetch(`${API_BASE}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
-    });
+  refreshPromise = (async () => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
 
-    if (!res.ok) return false;
+      if (!res.ok) throw new Error('Refresh failed');
 
-    const data = await res.json();
-    setTokens(data.accessToken, data.refreshToken);
-    return true;
-  } catch {
-    return false;
-  }
+      const data = await res.json();
+      setTokens(data.accessToken, data.refreshToken);
+      return true;
+    } catch (err) {
+      console.error('Session refresh failed:', err.message);
+      return false;
+    } finally {
+      refreshPromise = null; // Reset promise when done
+    }
+  })();
+
+  return refreshPromise;
 };
 
 // ─── Auth API ────────────────────────────────────
@@ -158,6 +170,7 @@ export const employeeAPI = {
     });
     return await res.json();
   },
+  checkNikDuplicate: (nik) => apiFetch(`/employees/check-nik?nik=${nik}`),
   getMasterOptions: (params = {}) => {
     const q = new URLSearchParams(params).toString();
     return apiFetch(`/employees/master-options${q ? `?${q}` : ''}`);
@@ -212,6 +225,7 @@ export const dashboardAPI = {
 // ─── Settings API ────────────────────────────────
 
 export const settingsAPI = {
+  getPublicInfo: () => apiFetch('/settings/public'),
   getAll: () => apiFetch('/settings'),
   update: (data) => apiFetch('/settings', { method: 'PUT', body: JSON.stringify(data) }),
   getLocations: () => apiFetch('/settings/locations'),
@@ -234,6 +248,8 @@ export const userAPI = {
   remove: (id) => apiFetch(`/users/${id}`, { method: 'DELETE' }),
   getPermissions: (id) => apiFetch(`/users/${id}/permissions`),
   updatePermissions: (id, permissions) => apiFetch(`/users/${id}/permissions`, { method: 'PUT', body: JSON.stringify({ permissions }) }),
+  getEmployeeOptions: () => apiFetch('/users/employee-options'),
+  getDepartmentOptions: () => apiFetch('/users/department-options'),
 };
 
 // ─── Correction API ──────────────────────────────
@@ -282,6 +298,8 @@ export const leaveAPI = {
   },
   getByEmployee: (empId) => apiFetch(`/leave/employee/${empId}`),
   review: (id, data) => apiFetch(`/leave/${id}/review`, { method: 'PUT', body: JSON.stringify(data) }),
+  massApply: (data) => apiFetch('/leave/mass', { method: 'POST', body: JSON.stringify(data) }),
+  getMassLeaves: () => apiFetch('/leave/mass'),
 };
 
 // ─── Backup API ──────────────────────────────────
@@ -289,3 +307,54 @@ export const backupAPI = {
   export: () => apiFetch('/backup/export'),
   restore: (backup) => apiFetch('/backup/restore', { method: 'POST', body: JSON.stringify({ backup }) }),
 };
+
+// ─── Manager API ─────────────────────────────────
+export const managerAPI = {
+  getDashboard: () => apiFetch('/manager/dashboard'),
+  getAttendance: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return apiFetch(`/manager/attendance${q ? `?${q}` : ''}`);
+  },
+  getAttendanceOptions: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return apiFetch(`/manager/attendance-options${q ? `?${q}` : ''}`);
+  },
+  getLeaveRequests: () => apiFetch('/manager/leave-requests'),
+  updateLeaveRequest: (id, status, reviewNote) => apiFetch(`/manager/leave-requests/${id}`, { method: 'PUT', body: JSON.stringify({ status, reviewNote }) }),
+};
+
+// ─── Direktur API ─────────────────────────────────
+export const direkturAPI = {
+  getStats: () => apiFetch('/direktur/stats'),
+  getAttendance: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return apiFetch(`/direktur/attendance${q ? `?${q}` : ''}`);
+  },
+  getLeave: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return apiFetch(`/direktur/leave${q ? `?${q}` : ''}`);
+  },
+  getDepartments: () => apiFetch('/direktur/departments'),
+  getAttendanceOptions: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return apiFetch(`/direktur/attendance-options${q ? `?${q}` : ''}`);
+  },
+};
+
+// ─── Default API helper (axios-like interface) ────
+// Used by director pages: api.get('/direktur/...')
+const api = {
+  get: (endpoint, options = {}) => {
+    const { params, ...rest } = options;
+    const q = params ? new URLSearchParams(params).toString() : '';
+    return apiFetch(`${endpoint}${q ? `?${q}` : ''}`, rest).then(data => ({ data }));
+  },
+  post: (endpoint, body, options = {}) =>
+    apiFetch(endpoint, { method: 'POST', body: JSON.stringify(body), ...options }).then(data => ({ data })),
+  put: (endpoint, body, options = {}) =>
+    apiFetch(endpoint, { method: 'PUT', body: JSON.stringify(body), ...options }).then(data => ({ data })),
+  delete: (endpoint, options = {}) =>
+    apiFetch(endpoint, { method: 'DELETE', ...options }).then(data => ({ data })),
+};
+
+export default api;

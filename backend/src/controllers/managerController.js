@@ -1,0 +1,271 @@
+const prisma = require('../prismaClient');
+
+/**
+ * GET /api/manager/dashboard
+ */
+const getDashboard = async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    const access = await prisma.$queryRaw`SELECT * FROM "ManagerAccess" WHERE "userId" = ${user.id}`;
+    const ma = access[0];
+
+    const isAllDepts = ma?.manageAllDepts || false;
+    const deptId = ma?.managedDeptId;
+    
+    if (!isAllDepts && deptId === null && user.role === 'MANAGER') {
+      return res.status(400).json({ success: false, message: 'Account not assigned to any department.' });
+    }
+
+    const today = new Date();
+    const startOfDay = new Date(today.setHours(0, 0, 0, 0));
+    const endOfDay = new Date(today.setHours(23, 59, 59, 999));
+
+    const empWhere = { status: 'ACTIVE' };
+    if (!isAllDepts) empWhere.departmentId = deptId;
+
+    const employees = await prisma.employee.findMany({ where: empWhere });
+    const employeeIds = employees.map(e => e.id);
+
+    const attendance = await prisma.attendance.findMany({
+      where: { employeeId: { in: employeeIds }, date: { gte: startOfDay, lte: endOfDay } },
+      include: { employee: true }
+    });
+
+    const totalEmployees = employeeIds.length;
+    const present = attendance.filter(a => a.status === 'PRESENT' || a.status === 'LATE');
+    const late = attendance.filter(a => a.status === 'LATE');
+    const onLeave = await prisma.leaveRequest.count({
+      where: { employeeId: { in: employeeIds }, status: 'APPROVED', startDate: { lte: endOfDay }, endDate: { gte: startOfDay } }
+    });
+    const absent = totalEmployees - present.length - onLeave;
+
+    const summary = {
+      totalEmployees,
+      present: present.length,
+      late: late.length,
+      leave: onLeave,
+      absent: absent
+    };
+
+    const stats = {
+      totalTeam: summary.totalEmployees,
+      present: summary.present,
+      late: summary.late,
+      leave: summary.leave,
+      absent: summary.absent,
+      attendanceRate: summary.totalEmployees > 0 
+        ? Math.round((summary.present / summary.totalEmployees) * 100) 
+        : 0
+    };
+
+    res.json({
+      success: true,
+      data: {
+        stats: { 
+          totalEmployees: summary.totalEmployees, 
+          present: summary.present, 
+          late: summary.late, 
+          onLeave: summary.leave, 
+          absent: summary.absent 
+        },
+        lateEmployees: late.map(a => ({ name: a.employee.name, employeeCode: a.employee.employeeCode, checkIn: a.checkIn, lateMinutes: a.lateMinutes }))
+      }
+    });
+  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+};
+
+/**
+ * GET /api/manager/attendance-options
+ * New: To support filters in Manager portal
+ */
+const getAttendanceOptions = async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const access = await prisma.$queryRaw`SELECT * FROM "ManagerAccess" WHERE "userId" = ${user.id}`;
+    const ma = access[0];
+    const isAllDepts = ma?.manageAllDepts || false;
+    const deptId = ma?.managedDeptId;
+
+    // Filter departments based on access
+    let departments;
+    if (isAllDepts) {
+      departments = await prisma.department.findMany({ orderBy: { name: 'asc' } });
+    } else {
+      departments = await prisma.department.findMany({ where: { id: deptId } });
+    }
+
+    const sections = [...new Set((await prisma.employee.findMany({ where: isAllDepts ? {} : { departmentId: deptId }, select: { section: true } })).map(e => e.section).filter(Boolean))];
+    const positions = [...new Set((await prisma.employee.findMany({ where: isAllDepts ? {} : { departmentId: deptId }, select: { position: true } })).map(e => e.position).filter(Boolean))];
+
+    res.json({ success: true, data: { departments, sections, positions } });
+  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+};
+
+/**
+ * GET /api/manager/attendance
+ * Updated: Support full filtering and pagination like Director portal
+ */
+const getAttendance = async (req, res) => {
+  try {
+    const { period, startDate, endDate, dept, section, position, status, search, page = 1, limit = 50 } = req.query;
+    
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const access = await prisma.$queryRaw`SELECT * FROM "ManagerAccess" WHERE "userId" = ${user.id}`;
+    const ma = access[0];
+    const isAllDepts = ma?.manageAllDepts || false;
+    const managedDeptId = ma?.managedDeptId;
+
+    let dateRange = {};
+    const now = new Date();
+    if (period === 'today') {
+      dateRange = { gte: new Date(now.setHours(0,0,0,0)), lte: new Date(now.setHours(23,59,59,999)) };
+    } else if (period === 'week') {
+      const start = new Date(now.setDate(now.getDate() - now.getDay()));
+      dateRange = { gte: new Date(start.setHours(0,0,0,0)), lte: new Date() };
+    } else if (period === 'month') {
+      dateRange = { gte: new Date(now.getFullYear(), now.getMonth(), 1), lte: new Date(now.getFullYear(), now.getMonth() + 1, 0) };
+    } else if (period === 'custom' && startDate && endDate) {
+      dateRange = { gte: new Date(startDate), lte: new Date(endDate) };
+    }
+
+    const where = { date: dateRange };
+    const empWhere = {};
+    if (!isAllDepts) {
+      empWhere.departmentId = managedDeptId;
+    } else if (dept) {
+      empWhere.department = { name: dept };
+    }
+
+    if (section) empWhere.section = section;
+    if (position) empWhere.position = position;
+    if (search) {
+      empWhere.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { employeeCode: { contains: search, mode: 'insensitive' } }
+      ];
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    // Logic for Mangkir (Absent) - Find employees with no attendance record
+    if (status === 'Mangkir' || status === 'Absent') {
+      const allEmployees = await prisma.employee.findMany({
+        where: empWhere,
+        include: { department: true }
+      });
+
+      const attendedIds = (await prisma.attendance.findMany({
+        where: { date: dateRange, employee: empWhere },
+        select: { employeeId: true }
+      })).map(a => a.employeeId);
+
+      const mangkirList = allEmployees.filter(e => !attendedIds.includes(e.id));
+      const total = mangkirList.length;
+      const paginated = mangkirList.slice(skip, skip + parseInt(limit));
+
+      const finalData = paginated.map(e => ({
+        id: `mangkir-${e.id}`,
+        date: dateRange.gte || new Date(),
+        nik: e.employeeCode,
+        name: e.name,
+        dept: e.department?.name,
+        section: e.section,
+        position: e.position,
+        checkIn: '-',
+        checkOut: '-',
+        status: 'Mangkir',
+        lateMinutes: 0
+      }));
+
+      return res.json({ success: true, data: finalData, total, totalPages: Math.ceil(total / limit) });
+    }
+
+    where.employee = empWhere;
+    if (status) where.status = status;
+
+    const [records, total] = await Promise.all([
+      prisma.attendance.findMany({
+        where,
+        include: { employee: { include: { department: true } } },
+        orderBy: { date: 'desc' },
+        skip,
+        take: parseInt(limit)
+      }),
+      prisma.attendance.count({ where })
+    ]);
+
+    res.json({
+      success: true,
+      data: records.map(att => ({
+        id: att.id,
+        date: att.date,
+        nik: att.employee.employeeCode,
+        name: att.employee.name,
+        dept: att.employee.department.name,
+        section: att.employee.section,
+        position: att.employee.position,
+        checkIn: att.checkIn,
+        checkOut: att.checkOut,
+        status: att.status,
+        lateMinutes: att.lateMinutes
+      })),
+      total,
+      totalPages: Math.ceil(total / limit)
+    });
+  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+};
+
+/**
+ * GET /api/manager/leave-requests
+ */
+const getLeaveRequests = async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const access = await prisma.$queryRaw`SELECT * FROM "ManagerAccess" WHERE "userId" = ${user.id}`;
+    const ma = access[0];
+    const isAllDepts = ma?.manageAllDepts || false;
+    const deptId = ma?.managedDeptId;
+    
+    const leaveWhere = {};
+    if (!isAllDepts) leaveWhere.employee = { departmentId: deptId };
+
+    const requests = await prisma.leaveRequest.findMany({
+      where: leaveWhere,
+      include: { employee: { include: { department: true } } },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json({
+      success: true,
+      data: requests.map(r => ({ 
+        id: r.id, 
+        nik: r.employee.employeeCode, 
+        name: r.employee.name, 
+        department: r.employee.department.name, 
+        section: r.employee.section || '-',
+        type: r.type, 
+        startDate: r.startDate, 
+        endDate: r.endDate, 
+        reason: r.reason, 
+        status: r.status,
+        medicalAttachment: r.medicalAttachment
+      }))
+    });
+  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+};
+
+const updateLeaveRequest = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, adminNotes } = req.body;
+    const request = await prisma.leaveRequest.update({
+      where: { id: parseInt(id) },
+      data: { status, adminNotes, processedBy: req.user.username, processedAt: new Date() }
+    });
+    res.json({ success: true, message: 'Leave request updated successfully', data: request });
+  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+};
+
+module.exports = { getDashboard, getAttendanceOptions, getAttendance, getLeaveRequests, updateLeaveRequest };

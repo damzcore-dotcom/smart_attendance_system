@@ -37,7 +37,7 @@ const getAll = async (req, res) => {
         id: emp.employeeCode,
         dbId: emp.id,
         name: emp.name,
-        dept: emp.department.name,
+        dept: emp.department?.name || 'No Dept',
         email: emp.email,
         phone: emp.phone,
         position: emp.position,
@@ -72,7 +72,10 @@ const getAll = async (req, res) => {
         emergencyContact: emp.emergencyContact,
         notes: emp.notes,
         status: emp.status === 'ACTIVE' ? 'Active' : emp.status === 'ON_LEAVE' ? 'On Leave' : 'Terminated',
-        shift: emp.shift?.name || 'Unassigned',
+        shift: emp.shift ? { id: emp.shift.id, name: emp.shift.name } : null,
+        shiftId: emp.shiftId,
+        leaveQuota: emp.leaveQuota,
+        remainingLeave: emp.remainingLeave,
       })),
       total,
       page: parseInt(page),
@@ -104,14 +107,26 @@ const create = async (req, res) => {
     let department = await prisma.department.findUnique({ where: { name: dept } });
     if (!department) department = await prisma.department.create({ data: { name: dept } });
 
-    const lastEmp = await prisma.employee.findFirst({ orderBy: { id: 'desc' } });
-    const employeeCode = rest.employeeCode || `EMP${String((lastEmp?.id || 0) + 1).padStart(3, '0')}`;
+    // Auto-generate NIK based on last numeric sequence
+    let employeeCode = rest.employeeCode?.trim();
+    if (!employeeCode) {
+      const allEmployees = await prisma.employee.findMany({ select: { employeeCode: true } });
+      let maxNum = 0;
+      allEmployees.forEach(emp => {
+        const num = parseInt(emp.employeeCode.replace(/\D/g, ''));
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      });
+      // Increment and keep it as a string
+      employeeCode = String(maxNum + 1);
+    }
     const defaultShift = await prisma.shift.findFirst();
 
     // Map string dates if present
     const dataObj = {
       employeeCode, name, email, phone: phone || null, position: position || null,
-      departmentId: department.id, shiftId: defaultShift?.id || null,
+      departmentId: department.id,
+      // Prioritize user-selected shift over system default
+      shiftId: rest.shiftId ? parseInt(rest.shiftId) : (defaultShift?.id || null),
       division: rest.division, locationId: rest.locationId, idNumber: rest.idNumber, cardNo: rest.cardNo,
       verifyCode: rest.verifyCode, grade: rest.grade, section: rest.section, employmentStatus: rest.employmentStatus,
       contractDuration: rest.contractDuration, faceId: rest.faceId, facePhoto: rest.facePhoto, faceDescriptor: rest.faceDescriptor ? JSON.parse(rest.faceDescriptor) : null,
@@ -124,6 +139,8 @@ const create = async (req, res) => {
       joinDate: rest.joinDate ? new Date(rest.joinDate) : null,
       contractEnd: rest.contractEnd ? new Date(rest.contractEnd) : null,
       birthDate: rest.birthDate ? new Date(rest.birthDate) : null,
+      leaveQuota: rest.leaveQuota ? parseInt(rest.leaveQuota) : 12,
+      remainingLeave: rest.remainingLeave ? parseInt(rest.remainingLeave) : 12,
     };
 
     const employee = await prisma.$transaction(async (tx) => {
@@ -155,6 +172,11 @@ const update = async (req, res) => {
     if (data.contractEnd) data.contractEnd = new Date(data.contractEnd);
     if (data.birthDate) data.birthDate = new Date(data.birthDate);
     if (faceDescriptor) data.faceDescriptor = JSON.parse(faceDescriptor);
+    if (data.shiftId) data.shiftId = parseInt(data.shiftId);
+    if (data.leaveQuota !== undefined) data.leaveQuota = parseInt(data.leaveQuota);
+    if (data.remainingLeave !== undefined) data.remainingLeave = parseInt(data.remainingLeave);
+    // Remove read-only fields that shouldn't be updated
+    delete data.employeeCode; delete data.dbId; delete data.id;
 
     if (dept) {
       let department = await prisma.department.findUnique({ where: { name: dept } });
@@ -365,4 +387,16 @@ const batchUpdateShift = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, create, update, remove, importExcel, getProgress, getMasterOptions, batchUpdateShift };
+const checkDuplicate = async (req, res) => {
+  try {
+    const { nik } = req.query;
+    if (!nik) return res.json({ success: true, isDuplicate: false });
+    
+    const count = await prisma.employee.count({ where: { employeeCode: String(nik) } });
+    res.json({ success: true, isDuplicate: count > 0 });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getAll, getById, create, update, remove, importExcel, getProgress, getMasterOptions, batchUpdateShift, checkDuplicate };

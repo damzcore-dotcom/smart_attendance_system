@@ -18,6 +18,16 @@ const Login = () => {
   const webcamRef = useRef(null);
   const navigate = useNavigate();
   const [modelsLoaded, setModelsLoaded] = useState(false);
+  const [publicSettings, setPublicSettings] = useState({ companyName: 'Smart Attend Pro' });
+
+  // Load public settings
+  useEffect(() => {
+    import('../services/api').then(({ settingsAPI }) => {
+      settingsAPI.getPublicInfo().then(res => {
+        if (res.success) setPublicSettings(res.data);
+      }).catch(err => console.error('Failed to load public settings', err));
+    });
+  }, []);
 
   // Load models on mount
   useEffect(() => {
@@ -45,6 +55,10 @@ const Login = () => {
       const result = await authAPI.login(username, password);
       if (result.user.role === 'ADMIN' || result.user.role === 'SUPER_ADMIN') {
         navigate('/admin');
+      } else if (result.user.role === 'MANAGER') {
+        navigate('/manager');
+      } else if (result.user.role === 'DIREKTUR') {
+        navigate('/director');
       } else {
         navigate('/employee');
       }
@@ -85,6 +99,10 @@ const Login = () => {
             setTimeout(() => {
               if (result.user.role === 'ADMIN' || result.user.role === 'SUPER_ADMIN') {
                 navigate('/admin');
+              } else if (result.user.role === 'MANAGER') {
+                navigate('/manager');
+              } else if (result.user.role === 'DIREKTUR') {
+                navigate('/director');
               } else {
                 navigate('/employee');
               }
@@ -119,6 +137,10 @@ const Login = () => {
   };
 
   // Status color/ring mapping
+  const handleForgotPassword = () => {
+    alert("Please contact your HR Department or System Administrator to reset your password.");
+  };
+
   const getStatusRingColor = () => {
     switch (scanStatus) {
       case 'detecting': return 'border-amber-400 shadow-amber-400/30';
@@ -143,13 +165,13 @@ const Login = () => {
   const isBusy = scanStatus === 'detecting' || scanStatus === 'verifying' || scanStatus === 'success';
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-8 relative overflow-hidden font-sans">
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 sm:p-6 md:p-8 relative overflow-x-hidden font-sans">
       {/* Decorative Background Elements */}
-      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-emerald-500/10 rounded-full blur-[120px] animate-pulse" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-500/10 rounded-full blur-[120px] animate-pulse delay-1000" />
+      <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-emerald-500/10 rounded-full blur-[120px] animate-pulse pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-blue-500/10 rounded-full blur-[120px] animate-pulse delay-1000 pointer-events-none" />
       
-      {/* Main Container - Option A Light Theme Style (Single Centered Card) */}
-      <div className="w-full max-w-[500px] bg-white/90 backdrop-blur-2xl rounded-[2.5rem] shadow-[0_20px_80px_-15px_rgba(0,0,0,0.1)] flex flex-col overflow-hidden z-10 border border-white p-8 sm:p-12 relative">
+      {/* Main Container */}
+      <div className="w-full max-w-[460px] bg-white/90 backdrop-blur-2xl rounded-[2.5rem] shadow-[0_20px_80px_-15px_rgba(0,0,0,0.08)] flex flex-col overflow-hidden z-10 border border-white p-6 sm:p-8 md:p-10 relative">
         
         {/* Top Decorative Glow */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80%] h-32 bg-emerald-500/10 blur-[50px] pointer-events-none" />
@@ -157,17 +179,16 @@ const Login = () => {
         <div className="relative z-10 w-full">
           
           {/* Logo */}
-          <div className="mb-10 flex flex-col items-center text-center">
-            <div className="w-16 h-16 bg-emerald-50 rounded-[1.25rem] flex items-center justify-center mb-5 border border-emerald-100 shadow-sm">
-              <ShieldCheck className="w-8 h-8 text-emerald-600" />
+          <div className="mb-8 flex flex-col items-center text-center">
+            <div className="w-14 h-14 bg-emerald-50 rounded-[1.25rem] flex items-center justify-center mb-4 border border-emerald-100 shadow-sm">
+              <ShieldCheck className="w-7 h-7 text-emerald-600" />
             </div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Smart Attend Pro</h1>
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">{publicSettings.companyName}</h1>
           </div>
 
-          {/* Greeting */}
-          <div className="mb-10 text-center">
-            <h3 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">Welcome Back</h3>
-            <p className="text-slate-500 mt-3 font-medium text-sm">Please enter your credentials to access the portal.</p>
+          {/* Greeting - Removed or Minimized */}
+          <div className="mb-6 text-center">
+            <p className="text-slate-500 font-medium text-xs px-4">Please enter your credentials to access the portal.</p>
           </div>
 
           {/* Segmented Control Tabs */}
@@ -250,18 +271,26 @@ const Login = () => {
                 <button
                   type="submit"
                   disabled={isLoggingIn}
-                  className="w-full bg-slate-900 hover:bg-slate-800 text-white py-4 rounded-2xl font-bold text-sm flex items-center justify-center gap-3 group disabled:opacity-70 active:scale-95 transition-all shadow-xl shadow-slate-900/10"
+                  className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 group disabled:opacity-70 active:scale-95 transition-all shadow-xl shadow-slate-900/10"
                 >
                   {isLoggingIn ? (
-                    <><Loader2 className="w-5 h-5 animate-spin" /> Verifying...</>
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Verifying...</>
                   ) : (
-                    <>Sign In Now <LogIn className="w-4 h-4 group-hover:translate-x-1 transition-transform" /></>
+                    <>Sign In <LogIn className="w-3.5 h-3.5" /></>
                   )}
                 </button>
+                <div className="mt-4 flex justify-center">
+                  <button 
+                    type="button" 
+                    onClick={handleForgotPassword}
+                    className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold transition-colors"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
               </div>
             </form>
           ) : (
-            <div className="space-y-6 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="p-8 sm:p-10 bg-slate-50/80 rounded-[2rem] border border-slate-200 group hover:border-emerald-200 hover:bg-emerald-50/50 transition-all duration-500 shadow-sm hover:shadow-md">
                 <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-[1.5rem] flex items-center justify-center mx-auto mb-6 group-hover:scale-110 group-hover:-rotate-3 transition-transform duration-500 shadow-sm border border-emerald-200/50">
                   <ScanFace className="w-10 h-10" />
@@ -275,14 +304,7 @@ const Login = () => {
                   <Camera className="w-4 h-4" /> Start Scanner
                 </button>
               </div>
-            </div>
           )}
-
-          <div className="text-center mt-10">
-            <button className="text-[11px] font-bold text-slate-400 uppercase tracking-widest hover:text-emerald-600 transition-colors">
-              Forgot password?
-            </button>
-          </div>
         </div>
       </div>
 
@@ -308,8 +330,8 @@ const Login = () => {
             </div>
 
             {/* Camera Area */}
-            <div className="px-8 pb-4">
-              <div className="relative mx-auto" style={{ maxWidth: '280px' }}>
+            <div className="px-6 pb-4">
+              <div className="relative mx-auto" style={{ maxWidth: 'min(280px, 70vw)' }}>
                 {/* Animated outer ring */}
                 <div className={`absolute -inset-3 rounded-[2rem] border-2 transition-all duration-700 ${getStatusRingColor()} ${isBusy ? 'face-ring-pulse' : ''}`} />
                 

@@ -29,9 +29,27 @@ function calculateLateness(checkInTime, shiftStartTime, gracePeriodMinutes = 15)
   
   // Calculate minutes late (from original shift start, not grace deadline)
   const diffMs = checkIn.getTime() - shiftStart.getTime();
-  const lateMinutes = Math.ceil(diffMs / (60 * 1000));
+  const rawLateMinutes = Math.ceil(diffMs / (60 * 1000));
   
+  // Round up to nearest 30 minutes (e.g., 1-30m -> 30m, 31-60m -> 60m)
+  const lateMinutes = Math.ceil(rawLateMinutes / 30) * 30;
   return { lateMinutes, status: 'LATE' };
 }
 
-module.exports = { calculateLateness };
+/**
+ * Determine final attendance status based on check-in/out presence
+ * @param {Date|null} checkIn 
+ * @param {Date|null} checkOut 
+ * @param {string} currentStatus - Current status (PRESENT or LATE) from check-in
+ * @returns {string} - ABSENT, MANGKIR, PRESENT, or LATE
+ */
+function resolveStatus(checkIn, checkOut, currentStatus = 'PRESENT') {
+  // If it's explicitly marked as HOLIDAY, CUTI, SAKIT, or IZIN (e.g. from Leave System or Mass Leave)
+  if (['HOLIDAY', 'CUTI', 'SAKIT', 'IZIN'].includes(currentStatus)) return currentStatus;
+  
+  if (!checkIn && !checkOut) return 'ABSENT';
+  if (!checkIn || !checkOut) return 'MANGKIR';
+  return currentStatus; // Either PRESENT or LATE
+}
+
+module.exports = { calculateLateness, resolveStatus };

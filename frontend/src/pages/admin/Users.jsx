@@ -1,8 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { employeeAPI, userAPI } from '../../services/api';
+import { userAPI } from '../../services/api';
 import Webcam from 'react-webcam';
-import * as faceapi from '@vladmandic/face-api';
 import { 
   Search, 
   MoreHorizontal, 
@@ -40,39 +39,33 @@ const Users = () => {
   const [userPermissions, setUserPermissions] = useState([]);
 
   const webcamRef = useRef(null);
+  const faceApiRef = useRef(null);
   const [modelsLoaded, setModelsLoaded] = useState(false);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [faceData, setFaceData] = useState({ photo: '', descriptor: null });
 
-  // Load face-api models
-  useEffect(() => {
-    const loadModels = async () => {
-      const MODEL_URL = 'https://vladmandic.github.io/face-api/model/';
-      try {
-        await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
-        ]);
-        setModelsLoaded(true);
-      } catch (err) {
-        console.error('Failed to load face models', err);
-      }
-    };
-    loadModels();
-  }, []);
-
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['users'],
     queryFn: userAPI.getAll,
   });
 
   const { data: employeesData } = useQuery({
-    queryKey: ['employees-minimal'],
-    queryFn: () => employeeAPI.getAll({ limit: 1000 }),
+    queryKey: ['employee-options-for-user'],
+    queryFn: userAPI.getEmployeeOptions,
+    enabled: isAddModalOpen,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: deptsData } = useQuery({
+    queryKey: ['dept-options-for-user'],
+    queryFn: userAPI.getDepartmentOptions,
+    enabled: isAddModalOpen || isEditModalOpen,
+    staleTime: 5 * 60 * 1000,
   });
 
   const employees = employeesData?.data || [];
+  const departments = deptsData?.data || [];
 
   const createMutation = useMutation({
     mutationFn: userAPI.create,
@@ -126,12 +119,14 @@ const Users = () => {
     onError: (err) => alert(`Error: ${err.message}`),
   });
 
-  const filteredUsers = data?.data?.filter(user => {
-    const matchesSearch = user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.employeeName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesRole = roleFilter === 'ALL' || user.role === roleFilter;
-    return matchesSearch && matchesRole;
-  }) || [];
+  const filteredUsers = useMemo(() => {
+    return data?.data?.filter(user => {
+      const matchesSearch = user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           user.employeeName.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesRole = roleFilter === 'ALL' || user.role === roleFilter;
+      return matchesSearch && matchesRole;
+    }) || [];
+  }, [data?.data, searchTerm, roleFilter]);
 
   const handlePermissionClick = async (user) => {
     setSelectedUser(user);
@@ -180,22 +175,43 @@ const Users = () => {
     setEditModalOpen(true);
   };
 
-  const handleFaceClick = (user) => {
+  const handleFaceClick = async (user) => {
     setSelectedUser(user);
     setFaceData({ photo: '', descriptor: null });
     setFaceModalOpen(true);
+    if (!modelsLoaded && !isLoadingModels) {
+      setIsLoadingModels(true);
+      try {
+        const faceapi = await import('@vladmandic/face-api');
+        const MODEL_URL = 'https://vladmandic.github.io/face-api/model/';
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+        ]);
+        faceApiRef.current = faceapi;
+        setModelsLoaded(true);
+      } catch (err) {
+        console.error('Failed to load face models', err);
+      } finally {
+        setIsLoadingModels(false);
+      }
+    }
   };
 
   const captureFace = async () => {
-    if (!webcamRef.current || !modelsLoaded) return;
+    const faceapi = faceApiRef.current;
+    if (!webcamRef.current || !modelsLoaded || !faceapi) return;
     setIsCapturing(true);
     const imageSrc = webcamRef.current.getScreenshot();
-    
     try {
       const img = new Image();
       img.src = imageSrc;
       img.onload = async () => {
-        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+        const detection = await faceapi
+          .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions())
+          .withFaceLandmarks()
+          .withFaceDescriptor();
         if (detection) {
           setFaceData({ photo: imageSrc, descriptor: Array.from(detection.descriptor) });
           alert('Wajah berhasil dideteksi!');
@@ -225,24 +241,19 @@ const Users = () => {
     }
   };
 
-  const handleUpdateSubmit = (e) => {
-    e.preventDefault();
-    const updateData = { role: editRole };
-    if (newPassword) updateData.password = newPassword;
-    
-    updateMutation.mutate({ id: selectedUser.id, data: updateData });
-  };
-  const handleCreateSubmit = (e) => {
-    e.preventDefault();
-    createMutation.mutate(newUser);
-  };
-
-  const handlePermissionSubmit = (e) => {
-    e.preventDefault();
+  const handlePermissionSubmit = (permissions) => {
     updatePermissionsMutation.mutate({ 
       id: selectedUser.id, 
-      permissions: userPermissions 
+      permissions 
     });
+  };
+
+  const handleCreateSubmit = (userData) => {
+    createMutation.mutate(userData);
+  };
+
+  const handleUpdateSubmit = (updateData) => {
+    updateMutation.mutate({ id: selectedUser.id, data: updateData });
   };
 
   const togglePermission = (menuKey, field) => {
@@ -287,6 +298,8 @@ const Users = () => {
               <option value="ALL">All Roles</option>
               <option value="SUPER_ADMIN">Super Admin</option>
               <option value="ADMIN">Admin</option>
+              <option value="DIREKTUR">Direktur</option>
+              <option value="MANAGER">Manager</option>
               <option value="EMPLOYEE">Employee</option>
             </select>
           </div>
@@ -306,6 +319,16 @@ const Users = () => {
             <tbody className="divide-y divide-slate-50">
               {isLoading ? (
                 <tr><td colSpan="5" className="text-center py-8 text-slate-500">Loading accounts...</td></tr>
+              ) : isError ? (
+                <tr>
+                  <td colSpan="5" className="text-center py-8">
+                    <div className="flex flex-col items-center gap-2 text-red-500">
+                      <AlertCircle className="w-8 h-8" />
+                      <p className="font-bold">Failed to load accounts</p>
+                      <p className="text-xs">{error?.message || 'Please check backend server connection'}</p>
+                    </div>
+                  </td>
+                </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr><td colSpan="5" className="text-center py-8 text-slate-500">No user accounts found.</td></tr>
               ) : filteredUsers.map((user) => (
@@ -323,12 +346,14 @@ const Users = () => {
                   </td>
                   <td className="px-4 py-4">
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                      user.role === 'ADMIN' 
-                        ? 'bg-amber-50 text-amber-600 border border-amber-100' 
-                        : 'bg-blue-50 text-blue-600 border border-blue-100'
+                      user.role === 'SUPER_ADMIN' ? 'bg-purple-50 text-purple-600 border border-purple-100' :
+                      user.role === 'ADMIN' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                      user.role === 'DIREKTUR' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' :
+                      user.role === 'MANAGER' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                      'bg-blue-50 text-blue-600 border border-blue-100'
                     }`}>
-                      {user.role === 'ADMIN' ? <Shield className="w-3 h-3" /> : <User className="w-3 h-3" />}
-                      {user.role}
+                      {user.role === 'SUPER_ADMIN' || user.role === 'ADMIN' ? <Shield className="w-3 h-3" /> : <User className="w-3 h-3" />}
+                      {user.role.replace('_', ' ')}
                     </span>
                   </td>
                   <td className="px-4 py-4 text-sm text-slate-500">{user.dept}</td>
@@ -377,157 +402,24 @@ const Users = () => {
       </div>
 
       {/* Edit Modal */}
-      {isEditModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setEditModalOpen(false)}></div>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md relative z-10 overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-            <div className="p-6 border-b border-slate-50 flex justify-between items-center">
-              <h3 className="font-bold text-slate-800">Account Settings</h3>
-              <button onClick={() => setEditModalOpen(false)} className="p-1 hover:bg-slate-100 rounded-full transition-colors">
-                <X className="w-5 h-5 text-slate-400" />
-              </button>
-            </div>
-            <form onSubmit={handleUpdateSubmit} className="p-6 space-y-4">
-              <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 flex gap-3">
-                <AlertCircle className="w-5 h-5 text-blue-500 shrink-0" />
-                <div className="text-xs text-blue-700 leading-relaxed">
-                  You are editing the account for <strong>{selectedUser?.username}</strong> ({selectedUser?.employeeName}).
-                </div>
-              </div>
+      <EditUserModal 
+        isOpen={isEditModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        user={selectedUser}
+        departments={departments}
+        onSave={handleUpdateSubmit}
+        isPending={updateMutation.isPending}
+      />
 
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1.5 px-1">New Password</label>
-                <div className="relative">
-                  <Key className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input 
-                    type="password" 
-                    placeholder="Enter new password..."
-                    className="w-full bg-slate-50 border border-slate-100 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                  />
-                </div>
-                <p className="text-[10px] text-slate-400 mt-2 px-1">Leave blank to keep current password.</p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1.5 px-1">Role</label>
-                <select 
-                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  value={editRole}
-                  onChange={(e) => setEditRole(e.target.value)}
-                >
-                  <option value="EMPLOYEE">Employee</option>
-                  <option value="ADMIN">Admin</option>
-                  <option value="SUPER_ADMIN">Super Admin</option>
-                </select>
-              </div>
-
-              <div className="pt-4 flex justify-end gap-3">
-                <button 
-                  type="button"
-                  onClick={() => setEditModalOpen(false)}
-                  className="px-6 py-2.5 rounded-xl font-bold text-slate-500 hover:bg-slate-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit"
-                  disabled={updateMutation.isPending}
-                  className="btn-primary px-8 py-2.5 disabled:opacity-70"
-                >
-                  {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
       {/* Add Modal */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setAddModalOpen(false)}></div>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md relative z-10 overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-            <div className="p-6 border-b border-slate-50 flex justify-between items-center">
-              <h3 className="font-bold text-slate-800">Create New Account</h3>
-              <button onClick={() => setAddModalOpen(false)} className="p-1 hover:bg-slate-100 rounded-full transition-colors">
-                <X className="w-5 h-5 text-slate-400" />
-              </button>
-            </div>
-            <form onSubmit={handleCreateSubmit} className="p-6 space-y-4">
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1.5 px-1">Username</label>
-                  <input 
-                    type="text" 
-                    placeholder="Enter username..."
-                    required
-                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    value={newUser.username}
-                    onChange={(e) => setNewUser({...newUser, username: e.target.value})}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1.5 px-1">Password</label>
-                  <input 
-                    type="password" 
-                    placeholder="Enter password..."
-                    required
-                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    value={newUser.password}
-                    onChange={(e) => setNewUser({...newUser, password: e.target.value})}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1.5 px-1">Role</label>
-                  <select 
-                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    value={newUser.role}
-                    onChange={(e) => setNewUser({...newUser, role: e.target.value})}
-                  >
-                    <option value="EMPLOYEE">Employee</option>
-                    <option value="ADMIN">Admin</option>
-                    <option value="SUPER_ADMIN">Super Admin</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1.5 px-1">Link to Employee (Optional)</label>
-                  <select 
-                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    value={newUser.employeeId}
-                    onChange={(e) => setNewUser({...newUser, employeeId: e.target.value})}
-                  >
-                    <option value="">None (Admin Account)</option>
-                    {employees.map(emp => (
-                      <option key={emp.dbId} value={emp.dbId}>{emp.name} ({emp.id})</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="pt-4 flex justify-end gap-3">
-                <button 
-                  type="button"
-                  onClick={() => setAddModalOpen(false)}
-                  className="px-6 py-2.5 rounded-xl font-bold text-slate-500 hover:bg-slate-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit"
-                  disabled={createMutation.isPending}
-                  className="btn-primary px-8 py-2.5 disabled:opacity-70"
-                >
-                  {createMutation.isPending ? 'Creating...' : 'Create Account'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <AddUserModal 
+        isOpen={isAddModalOpen}
+        onClose={() => setAddModalOpen(false)}
+        employees={employees}
+        departments={departments}
+        onSave={handleCreateSubmit}
+        isPending={createMutation.isPending}
+      />
 
       {/* Face Registration Modal */}
       {isFaceModalOpen && (
@@ -552,10 +444,12 @@ const Users = () => {
                 ) : (
                   <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg" className="w-full h-full object-cover" videoConstraints={{ facingMode: "user" }} />
                 )}
-                {!modelsLoaded && !faceData.photo && (
+                {(isLoadingModels || (!modelsLoaded && !faceData.photo)) && (
                   <div className="absolute inset-0 bg-slate-900/80 flex flex-col items-center justify-center text-white p-6">
                     <Loader2 className="w-8 h-8 animate-spin mb-4 text-emerald-400" />
-                    <p className="text-xs font-bold uppercase tracking-widest text-center">Initializing AI Models...</p>
+                    <p className="text-xs font-bold uppercase tracking-widest text-center">
+                      {isLoadingModels ? 'Memuat AI Models (~13MB)...' : 'Initializing AI Models...'}
+                    </p>
                   </div>
                 )}
               </div>
@@ -569,12 +463,14 @@ const Users = () => {
                 </button>
               ) : (
                 <button 
-                  disabled={!modelsLoaded || isCapturing}
+                  disabled={!modelsLoaded || isCapturing || isLoadingModels}
                   onClick={captureFace}
                   className="w-full py-4 rounded-2xl btn-primary font-bold shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-3 disabled:opacity-50"
                 >
-                  {isCapturing ? (
-                    <><Loader2 className="w-5 h-5 animate-spin" /> Detecting Face...</>
+                  {isLoadingModels ? (
+                    <><Loader2 className="w-5 h-5 animate-spin" /> Memuat Model AI...</>
+                  ) : isCapturing ? (
+                    <><Loader2 className="w-5 h-5 animate-spin" /> Mendeteksi Wajah...</>
                   ) : (
                     <><Camera className="w-5 h-5" /> Ambil Foto Wajah</>
                   )}
@@ -601,99 +497,307 @@ const Users = () => {
         </div>
       )}
       {/* Permission Modal */}
-      {isPermissionModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setPermissionModalOpen(false)}></div>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl relative z-10 overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-            <div className="p-6 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
-              <div>
-                <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                  <Shield className="w-5 h-5 text-amber-500" /> Granular Permissions
-                </h3>
-                <p className="text-xs text-slate-400 mt-1">Configure access for: <strong>{selectedUser?.username}</strong></p>
-              </div>
-              <button onClick={() => setPermissionModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
-                <X className="w-5 h-5 text-slate-400" />
-              </button>
-            </div>
-            
-            <div className="p-6">
-              <div className="max-h-[60vh] overflow-auto pr-2 custom-scrollbar">
-                <table className="w-full text-left border-separate border-spacing-y-2">
-                  <thead>
-                    <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">
-                      <th className="pb-2 pl-4">Menu Module</th>
-                      <th className="pb-2 text-center">View</th>
-                      <th className="pb-2 text-center">Create</th>
-                      <th className="pb-2 text-center">Update</th>
-                      <th className="pb-2 text-center">Delete</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {userPermissions.map((perm) => (
-                      <tr key={perm.menuKey} className="bg-slate-50/50 rounded-xl">
-                        <td className="py-3 pl-4 rounded-l-xl">
-                          <span className="text-sm font-bold text-slate-700">{perm.label}</span>
-                        </td>
-                        <td className="py-3 text-center">
-                          <input 
-                            type="checkbox" 
-                            checked={perm.canRead} 
-                            onChange={() => togglePermission(perm.menuKey, 'canRead')}
-                            className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary/20"
-                          />
-                        </td>
-                        <td className="py-3 text-center">
-                          <input 
-                            type="checkbox" 
-                            checked={perm.canCreate} 
-                            onChange={() => togglePermission(perm.menuKey, 'canCreate')}
-                            className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary/20"
-                          />
-                        </td>
-                        <td className="py-3 text-center">
-                          <input 
-                            type="checkbox" 
-                            checked={perm.canUpdate} 
-                            onChange={() => togglePermission(perm.menuKey, 'canUpdate')}
-                            className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary/20"
-                          />
-                        </td>
-                        <td className="py-3 text-center rounded-r-xl">
-                          <input 
-                            type="checkbox" 
-                            checked={perm.canDelete} 
-                            onChange={() => togglePermission(perm.menuKey, 'canDelete')}
-                            className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary/20"
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+      <PermissionModal 
+        isOpen={isPermissionModalOpen}
+        onClose={() => setPermissionModalOpen(false)}
+        user={selectedUser}
+        initialPermissions={userPermissions}
+        onSave={handlePermissionSubmit}
+        isPending={updatePermissionsMutation.isPending}
+      />
+    </div>
+  );
+};
 
-              <div className="mt-8 flex justify-end gap-3">
-                <button 
-                  onClick={() => setPermissionModalOpen(false)}
-                  className="px-6 py-2.5 rounded-xl font-bold text-slate-500 hover:bg-slate-50 transition-colors"
+// --- Sub-components to optimize performance ---
+
+const AddUserModal = ({ isOpen, onClose, employees, departments, onSave, isPending }) => {
+  const [formData, setFormData] = useState({ username: '', password: '', role: 'EMPLOYEE', employeeId: '', managedDeptId: null });
+
+  if (!isOpen) return null;
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSave(formData);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose}></div>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md relative z-10 overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+        <div className="p-6 border-b border-slate-50 flex justify-between items-center">
+          <h3 className="font-bold text-slate-800">Create New Account</h3>
+          <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-full transition-colors">
+            <X className="w-5 h-5 text-slate-400" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1.5 px-1">Username</label>
+              <input 
+                type="text" 
+                placeholder="Enter username..."
+                required
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                value={formData.username}
+                onChange={(e) => setFormData({...formData, username: e.target.value})}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1.5 px-1">Password</label>
+              <input 
+                type="password" 
+                placeholder="Enter password..."
+                required
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                value={formData.password}
+                onChange={(e) => setFormData({...formData, password: e.target.value})}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1.5 px-1">Role</label>
+              <select 
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                value={formData.role}
+                onChange={(e) => setFormData({...formData, role: e.target.value})}
+              >
+                <option value="EMPLOYEE">Employee</option>
+                <option value="MANAGER">Manager</option>
+                <option value="DIREKTUR">Direktur</option>
+                <option value="ADMIN">Admin</option>
+                <option value="SUPER_ADMIN">Super Admin</option>
+              </select>
+            </div>
+            {formData.role === 'MANAGER' ? (
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1.5 px-1">Managed Department</label>
+                <select 
+                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  value={formData.managedDeptId || ''}
+                  onChange={(e) => setFormData({...formData, managedDeptId: e.target.value})}
+                  required
                 >
-                  Cancel
-                </button>
-                <button 
-                  onClick={handlePermissionSubmit}
-                  disabled={updatePermissionsMutation.isPending}
-                  className="btn-primary px-8 py-2.5 shadow-lg shadow-primary/20"
-                >
-                  {updatePermissionsMutation.isPending ? 'Saving...' : 'Apply Permissions'}
-                </button>
+                  <option value="">Select Department...</option>
+                  <option value="0" className="font-bold text-indigo-600">-- ALL DEPARTMENTS --</option>
+                  {departments.map(dept => (
+                    <option key={dept.id} value={dept.id}>{dept.name}</option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-400 mt-2 px-1">Determine which department this manager can view.</p>
               </div>
+            ) : (
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1.5 px-1">Link to Employee (Optional)</label>
+                <select 
+                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  value={formData.employeeId}
+                  onChange={(e) => setFormData({...formData, employeeId: e.target.value})}
+                >
+                  <option value="">None (Admin Account)</option>
+                  {employees.map(emp => (
+                    <option key={emp.id} value={emp.id}>{emp.name} ({emp.employeeCode})</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+          <div className="pt-4 flex justify-end gap-3">
+            <button type="button" onClick={onClose} className="px-6 py-2.5 rounded-xl font-bold text-slate-500 hover:bg-slate-50 transition-colors">
+              Cancel
+            </button>
+            <button type="submit" disabled={isPending} className="btn-primary px-8 py-2.5 disabled:opacity-70">
+              {isPending ? 'Creating...' : 'Create Account'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+const EditUserModal = ({ isOpen, onClose, user, departments, onSave, isPending }) => {
+  const [role, setRole] = useState('EMPLOYEE');
+  const [password, setPassword] = useState('');
+  const [managedDeptId, setManagedDeptId] = useState(null);
+
+  useEffect(() => {
+    if (user) {
+      setRole(user.role);
+      setManagedDeptId(user.managedDeptId);
+    }
+    setPassword('');
+  }, [user, isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const updateData = { role };
+    if (password) updateData.password = password;
+    if (role === 'MANAGER') updateData.managedDeptId = managedDeptId;
+    onSave(updateData);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose}></div>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md relative z-10 overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+        <div className="p-6 border-b border-slate-50 flex justify-between items-center">
+          <h3 className="font-bold text-slate-800">Account Settings</h3>
+          <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-full transition-colors">
+            <X className="w-5 h-5 text-slate-400" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 flex gap-3">
+            <AlertCircle className="w-5 h-5 text-blue-500 shrink-0" />
+            <div className="text-xs text-blue-700 leading-relaxed">
+              You are editing the account for <strong>{user?.username}</strong> ({user?.employeeName}).
             </div>
           </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1.5 px-1">New Password</label>
+            <div className="relative">
+              <Key className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input 
+                type="password" 
+                placeholder="Enter new password..."
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            <p className="text-[10px] text-slate-400 mt-2 px-1">Leave blank to keep current password.</p>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1.5 px-1">Role</label>
+            <select 
+              className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+            >
+              <option value="EMPLOYEE">Employee</option>
+              <option value="MANAGER">Manager</option>
+              <option value="DIREKTUR">Direktur</option>
+              <option value="ADMIN">Admin</option>
+              <option value="SUPER_ADMIN">Super Admin</option>
+            </select>
+          </div>
+          {role === 'MANAGER' && (
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1.5 px-1">Managed Department</label>
+              <select 
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                value={managedDeptId || ''}
+                onChange={(e) => setManagedDeptId(e.target.value)}
+                required
+              >
+                <option value="">Select Department...</option>
+                <option value="0" className="font-bold text-indigo-600">-- ALL DEPARTMENTS --</option>
+                {departments.map(dept => (
+                  <option key={dept.id} value={dept.id}>{dept.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div className="pt-4 flex justify-end gap-3">
+            <button type="button" onClick={onClose} className="px-6 py-2.5 rounded-xl font-bold text-slate-500 hover:bg-slate-50 transition-colors">
+              Cancel
+            </button>
+            <button type="submit" disabled={isPending} className="btn-primary px-8 py-2.5 disabled:opacity-70">
+              {isPending ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+const PermissionModal = ({ isOpen, onClose, user, initialPermissions, onSave, isPending }) => {
+  const [permissions, setPermissions] = useState([]);
+
+  useEffect(() => {
+    setPermissions(initialPermissions);
+  }, [initialPermissions, isOpen]);
+
+  if (!isOpen) return null;
+
+  const togglePermission = (menuKey, field) => {
+    setPermissions(prev => prev.map(p => 
+      p.menuKey === menuKey ? { ...p, [field]: !p[field] } : p
+    ));
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSave(permissions);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose}></div>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl relative z-10 overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+        <div className="p-6 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
+          <div>
+            <h3 className="font-bold text-slate-800 flex items-center gap-2">
+              <Shield className="w-5 h-5 text-amber-500" /> Granular Permissions
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">Configure access for: <strong>{user?.username}</strong></p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+            <X className="w-5 h-5 text-slate-400" />
+          </button>
         </div>
-      )}
+        <div className="p-6">
+          <div className="max-h-[60vh] overflow-auto pr-2 custom-scrollbar">
+            <table className="w-full text-left border-separate border-spacing-y-2">
+              <thead>
+                <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">
+                  <th className="pb-2 pl-4">Menu Module</th>
+                  <th className="pb-2 text-center">View</th>
+                  <th className="pb-2 text-center">Create</th>
+                  <th className="pb-2 text-center">Update</th>
+                  <th className="pb-2 text-center">Delete</th>
+                </tr>
+              </thead>
+              <tbody>
+                {permissions.map((perm) => (
+                  <tr key={perm.menuKey} className="bg-slate-50/50 rounded-xl">
+                    <td className="py-3 pl-4 rounded-l-xl">
+                      <span className="text-sm font-bold text-slate-700">{perm.label}</span>
+                    </td>
+                    <td className="py-3 text-center">
+                      <input type="checkbox" checked={perm.canRead} onChange={() => togglePermission(perm.menuKey, 'canRead')} className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary/20" />
+                    </td>
+                    <td className="py-3 text-center">
+                      <input type="checkbox" checked={perm.canCreate} onChange={() => togglePermission(perm.menuKey, 'canCreate')} className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary/20" />
+                    </td>
+                    <td className="py-3 text-center">
+                      <input type="checkbox" checked={perm.canUpdate} onChange={() => togglePermission(perm.menuKey, 'canUpdate')} className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary/20" />
+                    </td>
+                    <td className="py-3 text-center rounded-r-xl">
+                      <input type="checkbox" checked={perm.canDelete} onChange={() => togglePermission(perm.menuKey, 'canDelete')} className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary/20" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-8 flex justify-end gap-3">
+            <button onClick={onClose} className="px-6 py-2.5 rounded-xl font-bold text-slate-500 hover:bg-slate-50 transition-colors">
+              Cancel
+            </button>
+            <button onClick={handleSubmit} disabled={isPending} className="btn-primary px-8 py-2.5 shadow-lg shadow-primary/20">
+              {isPending ? 'Saving...' : 'Apply Permissions'}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
 
 export default Users;
+

@@ -33,7 +33,7 @@ import { dashboardAPI, employeeAPI, attendanceAPI } from '../../services/api';
 // Static fallback or helper components removed from global scope to avoid confusion with dynamic data
 
 const StatCard = ({ title, value, change, icon: Icon, color }) => (
-  <div className="card relative overflow-hidden group p-8 border border-slate-100/50 hover:border-slate-200 transition-all duration-500 hover:shadow-2xl hover:shadow-slate-200/50 hover:-translate-y-1 bg-white">
+  <div className="card relative overflow-hidden group p-6 border border-slate-100/50 hover:border-slate-200 transition-all duration-500 hover:shadow-2xl hover:shadow-slate-200/50 hover:-translate-y-1 bg-white">
     <div className={`absolute -right-8 -top-8 w-32 h-32 bg-${color.split('-')[0]}-500/10 rounded-full blur-3xl group-hover:bg-${color.split('-')[0]}-500/20 transition-all duration-700`}></div>
     <div className="flex justify-between items-start mb-8 relative z-10">
       <div className={`w-14 h-14 rounded-[1.25rem] bg-${color.split('-')[0]}-50/80 border border-${color.split('-')[0]}-100/50 flex items-center justify-center text-${color} shadow-sm group-hover:scale-110 group-hover:rotate-3 transition-transform duration-500`}>
@@ -166,7 +166,7 @@ const AdminDashboard = () => {
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
       {/* Header Section */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 relative overflow-hidden">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-primary/5 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/3 pointer-events-none"></div>
         <div className="relative z-10">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase tracking-wider rounded-full mb-4 border border-emerald-100/50 shadow-sm">
@@ -203,7 +203,7 @@ const AdminDashboard = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Chart */}
-        <div className="card p-8 lg:col-span-2 border-slate-100/50 shadow-sm relative overflow-hidden">
+        <div className="card p-6 lg:col-span-2 border-slate-100/50 shadow-sm relative overflow-hidden">
           <div className="flex justify-between items-center mb-10 relative z-10">
             <div>
               <h3 className="font-bold text-xl text-slate-800">Weekly Attendance Trends</h3>
@@ -246,7 +246,7 @@ const AdminDashboard = () => {
         </div>
 
         {/* Recent Late Arrivals */}
-        <div className="card p-8 border-slate-100/50 shadow-sm flex flex-col">
+        <div className="card p-6 border-slate-100/50 shadow-sm flex flex-col">
           <div className="flex justify-between items-center mb-8">
             <h3 className="font-bold text-xl text-slate-800">Recent Lates</h3>
             <div className="w-8 h-8 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center">

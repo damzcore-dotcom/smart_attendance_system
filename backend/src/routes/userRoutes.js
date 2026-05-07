@@ -7,6 +7,8 @@ router.use(verifyToken);
 router.use(requireAdmin);
 
 router.get('/', userController.getAll);
+router.get('/employee-options', userController.getEmployeeOptions);
+router.get('/department-options', userController.getDepartmentOptions);
 router.post('/', userController.create);
 router.put('/:id', userController.update);
 router.put('/:id/biometrics', userController.updateBiometrics);

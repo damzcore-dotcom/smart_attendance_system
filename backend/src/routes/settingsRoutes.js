@@ -1,6 +1,8 @@
 const router = require('express').Router();
-const { getAll, update, getLocations, createLocation, updateLocation, deleteLocation } = require('../controllers/settingsController');
+const { getAll, update, getLocations, createLocation, updateLocation, deleteLocation, getPublicInfo } = require('../controllers/settingsController');
 const { verifyToken, requireAdmin } = require('../middleware/auth');
+
+router.get('/public', getPublicInfo);
 
 router.use(verifyToken, requireAdmin);
 

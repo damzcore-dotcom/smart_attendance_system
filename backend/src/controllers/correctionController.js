@@ -1,4 +1,5 @@
 const prisma = require('../prismaClient');
+const { calculateLateness, resolveStatus } = require('../utils/lateCalculator');
 
 /**
  * POST /api/corrections
@@ -72,12 +73,77 @@ const review = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Status must be APPROVED or REJECTED' });
     }
 
-    const correction = await prisma.correctionRequest.update({
-      where: { id: parseInt(req.params.id) },
+    const correctionId = parseInt(req.params.id);
+    const correction = await prisma.correctionRequest.findUnique({
+      where: { id: correctionId },
+    });
+
+    if (!correction) {
+      return res.status(404).json({ success: false, message: 'Correction request not found' });
+    }
+
+    const updatedCorrection = await prisma.correctionRequest.update({
+      where: { id: correctionId },
       data: { status, reviewNote },
     });
 
-    res.json({ success: true, message: `Correction ${status.toLowerCase()}`, data: correction });
+    if (status === 'APPROVED') {
+      const { employeeId, date, type, time } = correction;
+      const today = new Date(date);
+      today.setHours(0, 0, 0, 0);
+
+      const employee = await prisma.employee.findUnique({
+        where: { id: employeeId },
+        include: { shift: true },
+      });
+
+      // Parse correction time (HH:mm)
+      const [h, m] = time.split(':').map(Number);
+      const correctionDateTime = new Date(today);
+      correctionDateTime.setHours(h, m, 0, 0);
+
+      // Find existing attendance
+      const existing = await prisma.attendance.findUnique({
+        where: { employeeId_date: { employeeId, date: today } },
+      });
+
+      const updateData = { mode: 'Manual' };
+      if (type === 'In') {
+        updateData.checkIn = correctionDateTime;
+      } else {
+        updateData.checkOut = correctionDateTime;
+      }
+
+      const finalCheckIn = type === 'In' ? correctionDateTime : existing?.checkIn;
+      const finalCheckOut = type === 'Out' ? correctionDateTime : existing?.checkOut;
+
+      let attStatus = 'PRESENT';
+      let lateMinutes = 0;
+
+      if (finalCheckIn) {
+        const shiftStart = employee.shift?.startTime || '08:00';
+        const gracePeriod = employee.shift?.gracePeriod || 15;
+        const calc = calculateLateness(finalCheckIn, shiftStart, gracePeriod);
+        attStatus = calc.status;
+        lateMinutes = calc.lateMinutes;
+      }
+
+      const finalStatus = resolveStatus(finalCheckIn, finalCheckOut, attStatus);
+
+      await prisma.attendance.upsert({
+        where: { employeeId_date: { employeeId, date: today } },
+        update: { ...updateData, status: finalStatus, lateMinutes },
+        create: { 
+          employeeId, 
+          date: today, 
+          ...updateData, 
+          status: finalStatus, 
+          lateMinutes 
+        },
+      });
+    }
+
+    res.json({ success: true, message: `Correction ${status.toLowerCase()}`, data: updatedCorrection });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

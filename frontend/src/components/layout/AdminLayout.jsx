@@ -33,8 +33,8 @@ const AdminLayout = () => {
     { name: 'Users', path: '/admin/users', icon: UserCircle, key: 'users' },
     { name: 'Attendance', path: '/admin/attendance', icon: CalendarCheck, key: 'attendance' },
     { name: 'Announcements', path: '/admin/announcements', icon: Megaphone, key: 'announcements' },
-    { name: 'Face Check', path: '/admin/face-check', icon: ScanFace, key: 'announcements' },
-    { name: 'Leave Requests', path: '/admin/leave-requests', icon: CalendarCheck, key: 'leave-requests' },
+    { name: 'Face Check', path: '/admin/face-check', icon: ScanFace, key: 'face-check' },
+    { name: 'Cuti & Kalender', path: '/admin/leave-requests', icon: CalendarCheck, key: 'leave-requests' },
     { name: 'Backup', path: '/admin/backup', icon: Database, key: 'backup' },
     { name: 'Corrections', path: '/admin/corrections', icon: Edit3, key: 'corrections' },
     { name: 'Settings', path: '/admin/settings', icon: Settings, key: 'settings' },
@@ -59,8 +59,7 @@ const AdminLayout = () => {
   const filteredMenuItems = menuItems.filter(item => {
     if (user.role === 'SUPER_ADMIN' || user.permissions === 'ALL') return true;
     if (!user.permissions || !Array.isArray(user.permissions)) {
-      // Fallback: If ADMIN but no permissions metadata yet, show all
-      return user.role === 'ADMIN';
+      return false;
     }
     const perm = user.permissions.find(p => p.menuKey === item.key);
     return perm?.canRead;
@@ -77,18 +76,18 @@ const AdminLayout = () => {
       <aside 
         className={`${
           isSidebarOpen ? 'w-64' : 'w-20'
-        } bg-white border-r border-slate-200 transition-all duration-300 flex flex-col z-30`}
+        } bg-white border-r border-slate-200 transition-all duration-300 flex flex-col z-30 shadow-sm`}
       >
         <div className="p-6 flex items-center gap-3">
-          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shrink-0">
-            <span className="text-white font-bold text-sm">S</span>
+          <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center shrink-0 shadow-sm">
+            <span className="text-white font-bold text-lg">S</span>
           </div>
           {isSidebarOpen && (
-            <span className="font-bold text-lg text-slate-800 truncate">Smart Attend</span>
+            <span className="font-bold text-xl text-slate-800 tracking-tight">Smart Attend</span>
           )}
         </div>
 
-        <nav className="flex-1 px-4 space-y-2 mt-4">
+        <nav className="flex-1 px-3 space-y-1.5 mt-2 overflow-y-auto custom-scrollbar">
           {filteredMenuItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
@@ -96,26 +95,26 @@ const AdminLayout = () => {
               <Link
                 key={item.name}
                 to={item.path}
-                className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 group ${
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
                   isActive 
-                    ? 'bg-primary text-white shadow-md shadow-primary/20' 
-                    : 'text-slate-500 hover:bg-slate-100'
+                    ? 'bg-primary text-white shadow-lg shadow-primary/20' 
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-primary'
                 }`}
               >
-                <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-white' : 'group-hover:text-primary'}`} />
-                {isSidebarOpen && <span className="font-medium">{item.name}</span>}
+                <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-white' : 'group-hover:scale-110 transition-transform'}`} />
+                {isSidebarOpen && <span className="font-semibold text-sm">{item.name}</span>}
               </Link>
             );
           })}
         </nav>
 
-        <div className="p-4 border-t border-slate-100">
+        <div className="p-4 border-t border-slate-100 mb-2">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-red-500 hover:bg-red-50 transition-all duration-200"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-500 hover:bg-red-50 hover:gap-4 transition-all duration-300 group"
           >
-            <LogOut className="w-5 h-5 shrink-0" />
-            {isSidebarOpen && <span className="font-medium">Logout</span>}
+            <LogOut className="w-5 h-5 shrink-0 group-hover:rotate-12 transition-transform" />
+            {isSidebarOpen && <span className="font-bold text-sm">Logout System</span>}
           </button>
         </div>
       </aside>

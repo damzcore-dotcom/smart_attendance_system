@@ -64,4 +64,46 @@ const generateRefreshToken = (user) => {
   );
 };
 
-module.exports = { verifyToken, requireAdmin, requireSuperAdmin, generateAccessToken, generateRefreshToken };
+/**
+ * Require MANAGER role (also allows ADMIN, SUPER_ADMIN)
+ */
+const requireManager = (req, res, next) => {
+  if (req.user.role !== 'MANAGER' && req.user.role !== 'ADMIN' && req.user.role !== 'SUPER_ADMIN') {
+    return res.status(403).json({ success: false, message: 'Manager access required' });
+  }
+  next();
+};
+
+/**
+ * Require DIREKTUR role (read-only access to attendance & leave)
+ * Also allows ADMIN and SUPER_ADMIN
+ */
+const requireDirektur = (req, res, next) => {
+  const allowed = ['DIREKTUR', 'ADMIN', 'SUPER_ADMIN'];
+  if (!allowed.includes(req.user.role)) {
+    return res.status(403).json({ success: false, message: 'Direktur access required' });
+  }
+  next();
+};
+
+/**
+ * Require ADMIN, SUPER_ADMIN, or MANAGER role
+ */
+const requireAdminOrManager = (req, res, next) => {
+  const allowed = ['ADMIN', 'SUPER_ADMIN', 'MANAGER'];
+  if (!allowed.includes(req.user.role)) {
+    return res.status(403).json({ success: false, message: 'Access denied' });
+  }
+  next();
+};
+
+module.exports = { 
+  verifyToken, 
+  requireAdmin, 
+  requireSuperAdmin, 
+  requireManager, 
+  requireDirektur, 
+  requireAdminOrManager,
+  generateAccessToken, 
+  generateRefreshToken 
+};

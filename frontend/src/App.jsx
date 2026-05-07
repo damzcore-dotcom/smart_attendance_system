@@ -3,6 +3,14 @@ import { Loader2 } from 'lucide-react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AdminLayout from './components/layout/AdminLayout';
 import EmployeeLayout from './components/layout/EmployeeLayout';
+import ManagerLayout from './components/layout/ManagerLayout';
+import DirectorLayout from './components/layout/DirectorLayout';
+import DirectorDashboard from './pages/director/DirectorDashboard';
+import DirectorAttendance from './pages/director/DirectorAttendance';
+import DirectorLeave from './pages/director/DirectorLeave';
+import ManagerDashboard from './pages/manager/ManagerDashboard';
+import ManagerAttendance from './pages/manager/ManagerAttendance';
+import ManagerLeave from './pages/manager/ManagerLeave';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import Employees from './pages/admin/Employees';
 import Announcements from './pages/admin/Announcements';
@@ -37,12 +45,39 @@ const PermissionRoute = ({ menuKey, children }) => {
   return children;
 };
 
+const DirectorRoute = ({ children }) => {
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  if (user?.role !== 'DIREKTUR' && user?.role !== 'ADMIN' && user?.role !== 'SUPER_ADMIN') {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+};
+
 const EmployeeRoute = ({ children }) => {
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const role = user?.role;
   
   if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
     return <Navigate to="/admin" replace />;
+  } else if (role === 'MANAGER') {
+    return <Navigate to="/manager" replace />;
+  } else if (role === 'DIREKTUR') {
+    return <Navigate to="/director" replace />;
+  }
+  
+  return children;
+};
+
+const ManagerRoute = ({ children }) => {
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const role = user?.role;
+  
+  if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
+    return <Navigate to="/admin" replace />;
+  } else if (role === 'EMPLOYEE') {
+    return <Navigate to="/employee" replace />;
+  } else if (role === 'DIREKTUR') {
+    return <Navigate to="/director" replace />;
   }
   
   return children;
@@ -67,6 +102,20 @@ function App() {
             <Route path="face-check" element={<PermissionRoute menuKey="announcements"><AdminFaceCheck /></PermissionRoute>} />
             <Route path="settings" element={<PermissionRoute menuKey="settings"><Settings /></PermissionRoute>} />
             <Route path="corrections" element={<PermissionRoute menuKey="corrections"><AdminCorrections /></PermissionRoute>} />
+          </Route>
+
+          {/* Director Routes */}
+          <Route path="/director" element={<DirectorRoute><DirectorLayout /></DirectorRoute>}>
+            <Route index element={<DirectorDashboard />} />
+            <Route path="attendance" element={<DirectorAttendance />} />
+            <Route path="leave" element={<DirectorLeave />} />
+          </Route>
+
+          {/* Manager Routes */}
+          <Route path="/manager" element={<ManagerRoute><ManagerLayout /></ManagerRoute>}>
+            <Route index element={<ManagerDashboard />} />
+            <Route path="attendance" element={<ManagerAttendance />} />
+            <Route path="leave" element={<ManagerLeave />} />
           </Route>
 
           {/* Employee Routes */}

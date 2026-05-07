@@ -18,7 +18,8 @@ const create = async (req, res) => {
         startDate: new Date(startDate),
         endDate: new Date(endDate),
         type,
-        reason
+        reason,
+        medicalAttachment: req.body.medicalAttachment || null
       }
     });
 
@@ -110,10 +111,28 @@ const review = async (req, res) => {
       data: { status, reviewNote }
     });
 
-    // AUTO ATTENDANCE LOGIC
+    // AUTO ATTENDANCE LOGIC & QUOTA DEDUCTION
     if (status === 'APPROVED') {
       const start = new Date(leave.startDate);
       const end = new Date(leave.endDate);
+      
+      // Calculate duration in days
+      const diffTime = Math.abs(end - start);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+      // Deduct from quota if type is 'Cuti'
+      if (leave.type === 'Cuti') {
+        const employee = await prisma.employee.findUnique({ where: { id: leave.employeeId } });
+        if (employee.remainingLeave < diffDays) {
+          return res.status(400).json({ success: false, message: `Insufficient leave quota. Remaining: ${employee.remainingLeave} days.` });
+        }
+
+        await prisma.employee.update({
+          where: { id: leave.employeeId },
+          data: { remainingLeave: { decrement: diffDays } }
+        });
+      }
+
       // Mapping leave type to database AttStatus enum
       const statusMap = {
         'CUTI': 'CUTI',
@@ -127,7 +146,6 @@ const review = async (req, res) => {
         const dateKey = new Date(curr);
         dateKey.setHours(0, 0, 0, 0);
 
-        // More stable find-then-update/create pattern instead of upsert
         const existingAtt = await prisma.attendance.findUnique({
           where: { 
             employeeId_date: { 
@@ -177,4 +195,97 @@ const review = async (req, res) => {
   }
 };
 
-module.exports = { create, getAll, getByEmployee, review };
+/**
+ * POST /api/leave/mass
+ * Admin applies leave to all employees (e.g., Eid Leave)
+ */
+const massApply = async (req, res) => {
+  try {
+    const { startDate, endDate, type, reason, deductQuota = false } = req.body;
+
+    if (!startDate || !endDate || !type || !reason) {
+      return res.status(400).json({ success: false, message: 'Start date, end date, type, and reason are required' });
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    // Calculate duration
+    const diffTime = Math.abs(end - start);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+    const employees = await prisma.employee.findMany({ where: { status: 'ACTIVE' } });
+
+    // Transaction for safety
+    await prisma.$transaction(async (tx) => {
+      // 1. Save Mass Leave Event Record
+      await tx.massLeave.create({
+        data: {
+          startDate: start,
+          endDate: end,
+          type,
+          reason
+        }
+      });
+
+      for (const emp of employees) {
+        // 1. Deduct Quota if needed
+        if (deductQuota && type === 'Cuti') {
+          if (emp.remainingLeave >= diffDays) {
+            await tx.employee.update({
+              where: { id: emp.id },
+              data: { remainingLeave: { decrement: diffDays } }
+            });
+          }
+        }
+
+        // 2. Create Attendance Records
+        let curr = new Date(start);
+        while (curr <= end) {
+          const dateKey = new Date(curr);
+          dateKey.setHours(0, 0, 0, 0);
+
+          await tx.attendance.upsert({
+            where: { employeeId_date: { employeeId: emp.id, date: dateKey } },
+            update: {
+              status: type.toUpperCase() === 'CUTI' ? 'CUTI' : 'HOLIDAY',
+              mode: 'Mass Leave',
+              notes: `[Mass Leave] ${reason}`
+            },
+            create: {
+              employeeId: emp.id,
+              date: dateKey,
+              status: type.toUpperCase() === 'CUTI' ? 'CUTI' : 'HOLIDAY',
+              mode: 'Mass Leave',
+              notes: `[Mass Leave] ${reason}`
+            }
+          });
+
+          curr.setDate(curr.getDate() + 1);
+        }
+      }
+    });
+
+    res.json({ success: true, message: `Mass leave applied to ${employees.length} employees.` });
+  } catch (err) {
+    console.error('Mass leave error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * GET /api/leave/mass
+ * Admin lists all mass leave events
+ */
+const getMassLeaves = async (req, res) => {
+  try {
+    const list = await prisma.massLeave.findMany({
+      orderBy: { startDate: 'desc' }
+    });
+    res.json({ success: true, data: list });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { create, getAll, getByEmployee, review, massApply, getMassLeaves };

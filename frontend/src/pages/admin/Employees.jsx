@@ -12,12 +12,14 @@ import {
 import { settingsAPI } from '../../services/api';
 
 const emptyEmployee = { 
+  employeeCode: '',
   name: '', dept: '', division: '', locationId: '', idNumber: '', cardNo: '', verifyCode: 'Face ID', 
   email: '', phone: '', position: '', grade: '', section: '', employmentStatus: '', contractDuration: '', 
   faceId: '', facePhoto: '', faceDescriptor: null, bpjsTk: '', bpjsKesehatan: '', npwp: '', ptkpStatus: '', kkNumber: '', 
   birthPlace: '', address: '', education: '', major: '', religion: '', numberOfChildren: 0, 
   fatherName: '', motherName: '', spouseName: '', emergencyContact: '', notes: '',
-  joinDate: '', contractEnd: '', birthDate: ''
+  joinDate: '', contractEnd: '', birthDate: '',
+  leaveQuota: 12, remainingLeave: 12,
 };
 
 const Employees = () => {
@@ -35,10 +37,14 @@ const Employees = () => {
   const [activeTab, setActiveTab] = useState('basic');
   const [isQuickShiftModalOpen, setQuickShiftModalOpen] = useState(false);
   const [quickShiftForm, setQuickShiftForm] = useState({ departmentId: '', shiftId: '' });
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 25;
   
   const webcamRef = useRef(null);
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [nikError, setNikError] = useState('');
 
   useEffect(() => {
     const loadModels = async () => {
@@ -58,8 +64,9 @@ const Employees = () => {
   }, []);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['employees', { search: searchTerm, dept: deptFilter, section: sectionFilter, position: positionFilter }],
-    queryFn: () => employeeAPI.getAll({ search: searchTerm, dept: deptFilter, section: sectionFilter, position: positionFilter }),
+    queryKey: ['employees', { search: searchTerm, dept: deptFilter, section: sectionFilter, position: positionFilter, page }],
+    queryFn: () => employeeAPI.getAll({ search: searchTerm, dept: deptFilter, section: sectionFilter, position: positionFilter, page, limit: PAGE_SIZE }),
+    keepPreviousData: true,
   });
 
   const { data: optionsData } = useQuery({
@@ -96,6 +103,7 @@ const Employees = () => {
       queryClient.invalidateQueries({ queryKey: ['master-options'] });
       setAddModalOpen(false);
       setNewEmployee(emptyEmployee);
+      setIsCameraActive(false);
       alert('Employee added successfully!');
     },
     onError: (err) => alert(`Error: ${err.message}`)
@@ -115,6 +123,8 @@ const Employees = () => {
   });
 
   const filteredEmployees = data?.data || [];
+  const totalPages = data?.totalPages || 1;
+  const totalEmployees = data?.total || 0;
 
   const handleImport = async (e) => {
     const file = e.target.files[0];
@@ -167,11 +177,33 @@ const Employees = () => {
     setNewEmployee({
       ...emp,
       dbId: emp.dbId,
+      employeeCode: emp.id, // emp.id is employeeCode
+      shiftId: emp.shiftId || '',
       joinDate: emp.joinDate ? new Date(emp.joinDate).toISOString().split('T')[0] : '',
       contractEnd: emp.contractEnd ? new Date(emp.contractEnd).toISOString().split('T')[0] : '',
       birthDate: emp.birthDate ? new Date(emp.birthDate).toISOString().split('T')[0] : '',
+      leaveQuota: emp.leaveQuota ?? 12,
+      remainingLeave: emp.remainingLeave ?? 12,
     });
     setAddModalOpen(true);
+  };
+  
+  const handleNikBlur = async () => {
+    if (!newEmployee.employeeCode || newEmployee.dbId) {
+      setNikError('');
+      return;
+    }
+    
+    try {
+      const res = await employeeAPI.checkNikDuplicate(newEmployee.employeeCode);
+      if (res.isDuplicate) {
+        setNikError('NIK ini sudah terdaftar di sistem. Gunakan NIK lain.');
+      } else {
+        setNikError('');
+      }
+    } catch (err) {
+      console.error('Check NIK failed', err);
+    }
   };
 
   const handleDownloadTemplate = () => {
@@ -281,7 +313,7 @@ const Employees = () => {
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 block">Bagian (Section)</label>
               <select 
                 value={sectionFilter} 
-                onChange={e => setSectionFilter(e.target.value)} 
+                onChange={e => { setSectionFilter(e.target.value); setPositionFilter(''); }} 
                 className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 text-slate-600 font-bold transition-all"
               >
                 <option value="">Semua Bagian</option>
@@ -303,42 +335,44 @@ const Employees = () => {
           </div>
         </div>
 
-        <div className="overflow-auto max-h-[calc(100vh-260px)] pb-4 custom-scrollbar">
-          <table className="w-full text-left whitespace-nowrap min-w-[3000px]">
+        <div className="overflow-auto max-h-[calc(100vh-300px)] pb-4 custom-scrollbar">
+          <table className="w-full text-left whitespace-nowrap min-w-[2600px]">
             <thead className="sticky top-0 z-20 shadow-sm">
-              <tr className="bg-slate-100 text-slate-600 text-xs font-bold uppercase tracking-wider border-y border-slate-200">
-                <th className="px-3 py-3 w-16 text-center sticky left-0 bg-slate-100 z-30 border-r border-slate-200">Aksi</th>
-                <th className="px-3 py-3 w-20 text-center sticky left-16 bg-slate-100 z-30 border-r border-slate-200">NIK</th>
-                <th className="px-3 py-3 w-48 sticky left-36 bg-slate-100 z-30 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Nama</th>
-                <th className="px-3 py-3 bg-slate-100">Face ID</th>
-                <th className="px-3 py-3 bg-slate-100">Shift</th>
-                <th className="px-3 py-3 bg-slate-100">Grade</th>
-                <th className="px-3 py-3 bg-slate-100">Jabatan</th>
-                <th className="px-3 py-3 bg-slate-100">Bagian</th>
-                <th className="px-3 py-3 bg-slate-100">Departemen</th>
-                <th className="px-3 py-3 bg-slate-100">Status Kerja</th>
-                <th className="px-3 py-3 bg-slate-100">Lama Kontrak</th>
-                <th className="px-3 py-3 bg-slate-100">Tgl Masuk</th>
-                <th className="px-3 py-3 bg-slate-100">Sisa Kontrak</th>
-                <th className="px-3 py-3 bg-slate-100">BPJS TK</th>
-                <th className="px-3 py-3 bg-slate-100">BPJS Kes</th>
-                <th className="px-3 py-3 bg-slate-100">NPWP</th>
-                <th className="px-3 py-3 bg-slate-100">Status PTKP</th>
-                <th className="px-3 py-3 bg-slate-100">No KK</th>
-                <th className="px-3 py-3 bg-slate-100">NIK KTP</th>
-                <th className="px-3 py-3 bg-slate-100">Tgl Lahir</th>
-                <th className="px-3 py-3 bg-slate-100">Tempat Lahir</th>
-                <th className="px-3 py-3 bg-slate-100">Alamat</th>
-                <th className="px-3 py-3 bg-slate-100">Pendidikan</th>
-                <th className="px-3 py-3 bg-slate-100">Jurusan</th>
-                <th className="px-3 py-3 bg-slate-100">Agama</th>
-                <th className="px-3 py-3 bg-slate-100">No HP</th>
-                <th className="px-3 py-3 bg-slate-100">Jml Anak</th>
-                <th className="px-3 py-3 bg-slate-100">Nama Ayah</th>
-                <th className="px-3 py-3 bg-slate-100">Nama Ibu</th>
-                <th className="px-3 py-3 bg-slate-100">Nama Suami/Istri</th>
-                <th className="px-3 py-3 bg-slate-100">Kontak Darurat</th>
-                <th className="px-3 py-3 bg-slate-100">Keterangan</th>
+              <tr className="bg-slate-800 text-slate-300 text-[10px] font-black uppercase tracking-widest">
+                <th className="px-3 py-3 w-16 text-center sticky left-0 bg-slate-800 z-30 border-r border-slate-700">Aksi</th>
+                <th className="px-3 py-3 w-20 text-center sticky left-16 bg-slate-800 z-30 border-r border-slate-700">NIK</th>
+                <th className="px-3 py-3 w-48 sticky left-36 bg-slate-800 z-30 border-r border-slate-700 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.2)]">Nama</th>
+                <th className="px-3 py-3 bg-slate-800">Status</th>
+                <th className="px-3 py-3 bg-slate-800">Sisa Cuti</th>
+                <th className="px-3 py-3 bg-slate-800">Face ID</th>
+                <th className="px-3 py-3 bg-slate-800">Shift</th>
+                <th className="px-3 py-3 bg-slate-800">Grade</th>
+                <th className="px-3 py-3 bg-slate-800">Jabatan</th>
+                <th className="px-3 py-3 bg-slate-800">Bagian</th>
+                <th className="px-3 py-3 bg-slate-800">Departemen</th>
+                <th className="px-3 py-3 bg-slate-800">Status Kerja</th>
+                <th className="px-3 py-3 bg-slate-800">Lama Kontrak</th>
+                <th className="px-3 py-3 bg-slate-800">Tgl Masuk</th>
+                <th className="px-3 py-3 bg-slate-800">Sisa Kontrak</th>
+                <th className="px-3 py-3 bg-slate-800">BPJS TK</th>
+                <th className="px-3 py-3 bg-slate-800">BPJS Kes</th>
+                <th className="px-3 py-3 bg-slate-800">NPWP</th>
+                <th className="px-3 py-3 bg-slate-800">Status PTKP</th>
+                <th className="px-3 py-3 bg-slate-800">No KK</th>
+                <th className="px-3 py-3 bg-slate-800">NIK KTP</th>
+                <th className="px-3 py-3 bg-slate-800">Tgl Lahir</th>
+                <th className="px-3 py-3 bg-slate-800">Tempat Lahir</th>
+                <th className="px-3 py-3 bg-slate-800">Alamat</th>
+                <th className="px-3 py-3 bg-slate-800">Pendidikan</th>
+                <th className="px-3 py-3 bg-slate-800">Jurusan</th>
+                <th className="px-3 py-3 bg-slate-800">Agama</th>
+                <th className="px-3 py-3 bg-slate-800">No HP</th>
+                <th className="px-3 py-3 bg-slate-800">Jml Anak</th>
+                <th className="px-3 py-3 bg-slate-800">Nama Ayah</th>
+                <th className="px-3 py-3 bg-slate-800">Nama Ibu</th>
+                <th className="px-3 py-3 bg-slate-800">Nama Suami/Istri</th>
+                <th className="px-3 py-3 bg-slate-800">Kontak Darurat</th>
+                <th className="px-3 py-3 bg-slate-800">Keterangan</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -356,6 +390,18 @@ const Employees = () => {
                   </td>
                   <td className="px-3 py-2 sticky left-36 bg-white group-hover:bg-slate-50 z-10 border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                     <span className="text-sm truncate block min-w-[80px]">{emp.name || <span className="text-slate-300 italic text-xs">Empty</span>}</span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                      emp.status === 'Active' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                      emp.status === 'On Leave' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                      'bg-rose-50 text-rose-600 border border-rose-100'
+                    }`}>{emp.status}</span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className={`text-sm font-bold ${(emp.remainingLeave ?? 0) <= 3 ? 'text-rose-600' : 'text-slate-700'}`}>
+                      {emp.remainingLeave ?? 0}/{emp.leaveQuota ?? 12}
+                    </span>
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2 px-2 py-1 bg-slate-50 rounded">
@@ -401,6 +447,28 @@ const Employees = () => {
             </tbody>
           </table>
         </div>
+        {/* Pagination */}
+        <div className="flex items-center justify-between px-4 py-2 border-t border-slate-100 bg-slate-50/50">
+          <p className="text-xs text-slate-400 font-medium">
+            Total <span className="font-bold text-slate-600">{totalEmployees}</span> karyawan — Halaman <span className="font-bold text-slate-600">{page}</span> dari <span className="font-bold text-slate-600">{totalPages}</span>
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              className="px-3 py-1.5 text-xs font-bold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              ← Prev
+            </button>
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setPage(p => p + 1)}
+              className="px-3 py-1.5 text-xs font-bold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Next →
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Tabbed Add Modal */}
@@ -428,19 +496,67 @@ const Employees = () => {
                 {activeTab === 'basic' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="space-y-4">
+                      <div>
+                        <label className="text-xs font-bold text-slate-500">NIK / Employee Code</label>
+                        <input
+                          value={newEmployee.employeeCode}
+                          onChange={e => { setNewEmployee({...newEmployee, employeeCode: e.target.value}); setNikError(''); }}
+                          onBlur={handleNikBlur}
+                          readOnly={!!newEmployee.dbId}
+                          placeholder={newEmployee.dbId ? '' : 'Kosongkan untuk auto-generate (misal: 3781 -> 3782)'}
+                          className={`w-full border rounded-xl px-4 py-2 text-sm mt-1 focus:outline-none transition-all ${
+                            nikError ? 'border-rose-500 bg-rose-50 focus:ring-rose-200' : 
+                            newEmployee.dbId ? 'bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200' : 
+                            'bg-slate-50 border-slate-200 focus:ring-primary/20'
+                          }`}
+                        />
+                        {nikError && (
+                          <p className="text-[10px] text-rose-600 mt-1.5 flex items-center gap-1 font-bold animate-in fade-in slide-in-from-top-1 duration-200">
+                            <AlertCircle className="w-3 h-3" /> {nikError}
+                          </p>
+                        )}
+                        {!newEmployee.dbId && !nikError && <p className="text-[10px] text-slate-400 mt-1 ml-1">Bisa diisi NIK perusahaan atau dikosongkan</p>}
+                      </div>
                       <div><label className="text-xs font-bold text-slate-500">Nama Lengkap</label><input required value={newEmployee.name} onChange={e => setNewEmployee({...newEmployee, name: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm mt-1" /></div>
                       <div><label className="text-xs font-bold text-slate-500">Email Login</label><input required type="email" value={newEmployee.email} onChange={e => setNewEmployee({...newEmployee, email: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm mt-1" /></div>
                       <div>
                         <label className="text-xs font-bold text-slate-500">Departemen</label>
-                        <CreatableSelect styles={selectStyles} isClearable options={toSelectOptions(masterOptions.departments)} value={newEmployee.dept ? {label: newEmployee.dept, value: newEmployee.dept} : null} onChange={(val) => setNewEmployee({...newEmployee, dept: val ? val.value : ''})} className="mt-1 text-sm"/>
+                        <CreatableSelect 
+                          styles={selectStyles} 
+                          isClearable 
+                          formatCreateLabel={(inputValue) => `+ Tambah Departemen "${inputValue}"`}
+                          placeholder="Cari atau ketik departemen baru..."
+                          options={toSelectOptions(masterOptions.departments)} 
+                          value={newEmployee.dept ? {label: newEmployee.dept, value: newEmployee.dept} : null} 
+                          onChange={(val) => setNewEmployee({...newEmployee, dept: val ? val.value : ''})} 
+                          className="mt-1 text-sm"
+                        />
                       </div>
                       <div>
                         <label className="text-xs font-bold text-slate-500">Jabatan</label>
-                        <CreatableSelect styles={selectStyles} isClearable options={toSelectOptions(masterOptions.positions)} value={newEmployee.position ? {label: newEmployee.position, value: newEmployee.position} : null} onChange={(val) => setNewEmployee({...newEmployee, position: val ? val.value : ''})} className="mt-1 text-sm"/>
+                        <CreatableSelect 
+                          styles={selectStyles} 
+                          isClearable 
+                          formatCreateLabel={(inputValue) => `+ Tambah Jabatan "${inputValue}"`}
+                          placeholder="Cari atau ketik jabatan baru..."
+                          options={toSelectOptions(masterOptions.positions)} 
+                          value={newEmployee.position ? {label: newEmployee.position, value: newEmployee.position} : null} 
+                          onChange={(val) => setNewEmployee({...newEmployee, position: val ? val.value : ''})} 
+                          className="mt-1 text-sm"
+                        />
                       </div>
                       <div>
                         <label className="text-xs font-bold text-slate-500">Bagian</label>
-                        <CreatableSelect styles={selectStyles} isClearable options={toSelectOptions(masterOptions.sections)} value={newEmployee.section ? {label: newEmployee.section, value: newEmployee.section} : null} onChange={(val) => setNewEmployee({...newEmployee, section: val ? val.value : ''})} className="mt-1 text-sm"/>
+                        <CreatableSelect 
+                          styles={selectStyles} 
+                          isClearable 
+                          formatCreateLabel={(inputValue) => `+ Tambah Bagian "${inputValue}"`}
+                          placeholder="Cari atau ketik bagian baru..."
+                          options={toSelectOptions(masterOptions.sections)} 
+                          value={newEmployee.section ? {label: newEmployee.section, value: newEmployee.section} : null} 
+                          onChange={(val) => setNewEmployee({...newEmployee, section: val ? val.value : ''})} 
+                          className="mt-1 text-sm"
+                        />
                       </div>
                     </div>
                     <div>
@@ -457,15 +573,22 @@ const Employees = () => {
                       <div className="face-reg-container rounded-2xl overflow-hidden relative">
                         <div className="relative mx-auto" style={{ maxWidth: '100%' }}>
                           {/* Camera/Photo Area */}
-                          <div className="aspect-[4/3] rounded-xl overflow-hidden relative bg-slate-900">
+                          <div className="aspect-[4/3] rounded-xl overflow-hidden relative bg-slate-900 shadow-inner group/cam">
                             {newEmployee.facePhoto ? (
                               <img src={newEmployee.facePhoto} alt="Face" className="w-full h-full object-cover" />
-                            ) : (
+                            ) : isCameraActive ? (
                               <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg" className="w-full h-full object-cover" videoConstraints={{ facingMode: "user", width: 480, height: 360 }} />
+                            ) : (
+                              <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-800/50 group-hover/cam:bg-slate-800/70 transition-colors">
+                                <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mb-4 border border-white/10 group-hover/cam:scale-110 transition-transform duration-300">
+                                  <Camera className="w-10 h-10 text-white/20" />
+                                </div>
+                                <p className="text-white/40 text-xs font-medium uppercase tracking-widest">Kamera Non-Aktif</p>
+                              </div>
                             )}
                             
                             {/* Corner Brackets */}
-                            {!newEmployee.facePhoto && (
+                            {!newEmployee.facePhoto && isCameraActive && (
                               <div className="absolute inset-3 pointer-events-none z-10">
                                 <div className="absolute top-0 left-0 w-8 h-8 border-t-[3px] border-l-[3px] border-white/70 rounded-tl-lg" />
                                 <div className="absolute top-0 right-0 w-8 h-8 border-t-[3px] border-r-[3px] border-white/70 rounded-tr-lg" />
@@ -475,14 +598,14 @@ const Employees = () => {
                             )}
                             
                             {/* Scan Line */}
-                            {!newEmployee.facePhoto && !isCapturing && modelsLoaded && (
+                            {!newEmployee.facePhoto && !isCapturing && modelsLoaded && isCameraActive && (
                               <div className="absolute inset-0 pointer-events-none">
                                 <div className="face-reg-scanline" />
                               </div>
                             )}
                             
                             {/* Loading AI Overlay */}
-                            {!modelsLoaded && !newEmployee.facePhoto && (
+                            {!modelsLoaded && !newEmployee.facePhoto && isCameraActive && (
                               <div className="absolute inset-0 bg-slate-900/85 backdrop-blur-sm flex flex-col items-center justify-center">
                                 <Loader2 className="w-8 h-8 text-primary animate-spin mb-2" />
                                 <p className="text-white/80 text-xs font-bold">Memuat Model AI...</p>
@@ -516,17 +639,28 @@ const Employees = () => {
                               className="w-full px-4 py-2.5 bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-all duration-200 border border-slate-200 hover:border-red-200">
                               <RefreshCw className="w-3.5 h-3.5" /> Ulangi Foto
                             </button>
-                          ) : (
-                            <button type="button" disabled={!modelsLoaded || isCapturing} onClick={captureFace} 
-                              className="w-full px-4 py-2.5 bg-gradient-to-r from-primary to-emerald-500 hover:from-primary-light hover:to-emerald-400 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-all duration-200 shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed">
-                              {isCapturing ? (
-                                <><Loader2 className="w-4 h-4 animate-spin" /> Mendeteksi...</>
-                              ) : !modelsLoaded ? (
-                                <><Loader2 className="w-4 h-4 animate-spin" /> Loading Model...</>
-                              ) : (
-                                <><ScanFace className="w-4 h-4" /> Ambil Wajah & Daftarkan</>
-                              )}
+                          ) : !isCameraActive ? (
+                            <button type="button" onClick={() => setIsCameraActive(true)} 
+                              className="w-full px-4 py-3 bg-slate-900 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/10">
+                              <Camera className="w-4 h-4" /> Aktifkan Kamera
                             </button>
+                          ) : (
+                            <div className="flex gap-2 w-full">
+                              <button type="button" onClick={() => setIsCameraActive(false)} 
+                                className="px-4 py-2.5 bg-slate-100 text-slate-500 font-bold rounded-xl text-sm border border-slate-200 hover:bg-slate-200 transition-all">
+                                Matikan
+                              </button>
+                              <button type="button" disabled={!modelsLoaded || isCapturing} onClick={captureFace} 
+                                className="flex-1 px-4 py-2.5 bg-gradient-to-r from-primary to-emerald-500 hover:from-primary-light hover:to-emerald-400 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-all duration-200 shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed">
+                                {isCapturing ? (
+                                  <><Loader2 className="w-4 h-4 animate-spin" /> Mendeteksi...</>
+                                ) : !modelsLoaded ? (
+                                  <><Loader2 className="w-4 h-4 animate-spin" /> Loading Model...</>
+                                ) : (
+                                  <><ScanFace className="w-4 h-4" /> Ambil Wajah</>
+                                )}
+                              </button>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -591,6 +725,8 @@ const Employees = () => {
                     <div><label className="text-xs font-bold text-slate-500">BPJS Kesehatan</label><input value={newEmployee.bpjsKesehatan} onChange={e => setNewEmployee({...newEmployee, bpjsKesehatan: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm mt-1" /></div>
                     <div><label className="text-xs font-bold text-slate-500">NPWP</label><input value={newEmployee.npwp} onChange={e => setNewEmployee({...newEmployee, npwp: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm mt-1" /></div>
                     <div><label className="text-xs font-bold text-slate-500">Status PTKP</label><input value={newEmployee.ptkpStatus} onChange={e => setNewEmployee({...newEmployee, ptkpStatus: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm mt-1" /></div>
+                    <div><label className="text-xs font-bold text-slate-500">Kuota Cuti (hari/tahun)</label><input type="number" min="0" value={newEmployee.leaveQuota} onChange={e => setNewEmployee({...newEmployee, leaveQuota: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm mt-1" /></div>
+                    <div><label className="text-xs font-bold text-slate-500">Sisa Cuti</label><input type="number" min="0" value={newEmployee.remainingLeave} onChange={e => setNewEmployee({...newEmployee, remainingLeave: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm mt-1" /></div>
                   </div>
                 )}
                 {activeTab === 'personal' && (
@@ -619,7 +755,14 @@ const Employees = () => {
             </div>
             <div className="p-4 border-t border-slate-100 flex justify-end gap-3 bg-slate-50">
               <button onClick={() => setAddModalOpen(false)} className="px-6 py-2.5 rounded-xl font-bold text-slate-500 hover:bg-slate-200">Batal</button>
-              <button type="submit" form="add-emp-form" className="btn-primary flex items-center gap-2"><Save className="w-4 h-4"/> Simpan Karyawan</button>
+              <button 
+                type="submit" 
+                form="add-emp-form" 
+                disabled={!!nikError || createMutation.isPending || updateMutation.isPending}
+                className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Save className="w-4 h-4"/> Simpan Karyawan
+              </button>
             </div>
           </div>
         </div>

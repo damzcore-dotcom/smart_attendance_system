@@ -9,14 +9,20 @@ import {
   Camera,
   Settings as SettingsIcon,
   Bell,
-  Loader2
+  Loader2,
+  X,
+  Briefcase,
+  Hash,
+  Clock as ClockIcon
 } from 'lucide-react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { authAPI } from '../../services/api';
 
 const Profile = () => {
   const navigate = useNavigate();
+  const [showPersonalInfo, setShowPersonalInfo] = useState(false);
 
   const { data: userData, isLoading } = useQuery({
     queryKey: ['me'],
@@ -32,11 +38,8 @@ const Profile = () => {
   };
 
   const menuItems = [
-    { name: 'Personal Information', icon: User, color: 'blue', path: '/employee/profile' },
+    { name: 'Personal Information', icon: User, color: 'blue', action: () => setShowPersonalInfo(true) },
     { name: 'Face ID Enrollment', icon: Camera, color: 'emerald', path: '/employee/face-check' },
-    { name: 'Notifications', icon: Bell, color: 'amber', path: '/employee/notifications' },
-    { name: 'Privacy & Security', icon: ShieldCheck, color: 'indigo', path: '/employee/profile' },
-    { name: 'App Settings', icon: SettingsIcon, color: 'slate', path: '/employee/profile' },
   ];
 
   if (isLoading) {
@@ -51,9 +54,9 @@ const Profile = () => {
           <div className="w-28 h-28 rounded-full border-4 border-white shadow-xl overflow-hidden bg-slate-200">
             <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${employee.name || 'user'}`} alt="profile" />
           </div>
-          <button className="absolute bottom-1 right-1 w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center shadow-lg border-2 border-white">
-            <Camera className="w-4 h-4" />
-          </button>
+          <div className="absolute bottom-1 right-1 w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center shadow-lg border-2 border-white">
+            <ShieldCheck className="w-4 h-4" />
+          </div>
         </div>
         <h2 className="text-2xl font-bold text-slate-900">{employee.name || 'Employee'}</h2>
         <p className="text-slate-500 font-medium">{employee.position || 'Employee'}</p>
@@ -94,7 +97,7 @@ const Profile = () => {
             return (
               <button 
                 key={item.name} 
-                onClick={() => navigate(item.path)}
+                onClick={item.action || (() => navigate(item.path))}
                 className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors group"
               >
                 <div className="flex items-center gap-4">
@@ -119,8 +122,57 @@ const Profile = () => {
         Log Out Account
       </button>
 
+      {/* Personal Info Modal/Overlay */}
+      {showPersonalInfo && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowPersonalInfo(false)} />
+          <div className="relative bg-white rounded-t-[2.5rem] p-8 space-y-6 animate-in slide-in-from-bottom duration-300 shadow-2xl">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="text-xl font-bold text-slate-800">Personal Info</h3>
+              <button onClick={() => setShowPersonalInfo(false)} className="p-2 bg-slate-100 rounded-full text-slate-400"><X className="w-5 h-5" /></button>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl">
+                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-blue-500 shadow-sm"><Hash className="w-5 h-5" /></div>
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Employee ID / NIK</p>
+                  <p className="text-sm font-bold text-slate-800">{employee.employeeCode}</p>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl">
+                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-emerald-500 shadow-sm"><Briefcase className="w-5 h-5" /></div>
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Department</p>
+                  <p className="text-sm font-bold text-slate-800">{employee.department}</p>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl">
+                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-amber-500 shadow-sm"><User className="w-5 h-5" /></div>
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Position</p>
+                  <p className="text-sm font-bold text-slate-800">{employee.position}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl">
+                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-indigo-500 shadow-sm"><ClockIcon className="w-5 h-5" /></div>
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Shift</p>
+                  <p className="text-sm font-bold text-slate-800">{employee.shift?.name || 'N/A'} ({employee.shift?.startTime} - {employee.shift?.endTime})</p>
+                </div>
+              </div>
+            </div>
+            
+            <button onClick={() => setShowPersonalInfo(false)} className="w-full py-4 bg-primary text-white rounded-2xl font-bold shadow-lg shadow-primary/20">Close Details</button>
+          </div>
+        </div>
+      )}
+
       <p className="text-center text-xs text-slate-400 font-medium">
-        Version 1.0.4 • Smart Attendance Pro
+        Version 1.0.5 • Smart Attendance Pro
       </p>
     </div>
   );

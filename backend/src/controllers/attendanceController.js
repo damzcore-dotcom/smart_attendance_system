@@ -1,5 +1,5 @@
 const prisma = require('../prismaClient');
-const { calculateLateness } = require('../utils/lateCalculator');
+const { calculateLateness, resolveStatus } = require('../utils/lateCalculator');
 const { getDistance } = require('../utils/geo');
 const XLSX = require('xlsx');
 
@@ -8,7 +8,12 @@ const XLSX = require('xlsx');
  */
 const getAll = async (req, res) => {
   try {
-    const { search, dept, section, position, date, period, startDate, endDate } = req.query;
+    const { search, dept, section, position, status, date, period, startDate, endDate } = req.query;
+
+    // Fetch Global Settings (Working Days)
+    const settingsList = await prisma.settings.findMany();
+    const workingDaysSetting = settingsList.find(s => s.key === 'workingDays')?.value || '[1,2,3,4,5]';
+    const workingDays = JSON.parse(workingDaysSetting);
 
     const where = {};
 
@@ -57,28 +62,95 @@ const getAll = async (req, res) => {
         name: { contains: search, mode: 'insensitive' },
       };
     }
+    if (status && status !== 'All') {
+      where.status = status;
+    }
 
-    const records = await prisma.attendance.findMany({
-      where,
-      include: { employee: { include: { department: true } } },
-      orderBy: { date: 'desc' },
-    });
+    // Pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const skip = (page - 1) * limit;
+
+    // 3. Dynamic Summary Calculation
+    // Use aggregate logic to get counts for different statuses
+    const [total, records, hadirCount, telatCount, mangkirCount, absenCount, holidayCount] = await Promise.all([
+      prisma.attendance.count({ where }),
+      prisma.attendance.findMany({
+        where,
+        include: { employee: { include: { department: true } } },
+        orderBy: { date: 'desc' },
+        skip,
+        take: limit,
+      }),
+      // Hadir: Status PRESENT
+      prisma.attendance.count({ where: { ...where, status: 'PRESENT', NOT: [{ checkIn: null }, { checkOut: null }] } }),
+      // Telat: Status LATE
+      prisma.attendance.count({ where: { ...where, status: 'LATE', NOT: [{ checkIn: null }, { checkOut: null }] } }),
+      // Mangkir: Logical MANGKIR (One of them is null)
+      prisma.attendance.count({ 
+        where: { 
+          ...where, 
+          OR: [
+            { AND: [{ checkIn: null }, { NOT: { checkOut: null } }] },
+            { AND: [{ NOT: { checkIn: null } }, { checkOut: null }] }
+          ]
+        } 
+      }),
+      // Absen: Logical ABSENT (Both are null AND not a known special status)
+      prisma.attendance.count({ 
+        where: { 
+          ...where, 
+          checkIn: null, 
+          checkOut: null,
+          status: { notIn: ['HOLIDAY', 'CUTI', 'SAKIT', 'IZIN'] }
+        } 
+      }),
+      // Holiday: Specifically HOLIDAY status
+      prisma.attendance.count({ where: { ...where, status: 'HOLIDAY' } }),
+    ]);
+
+    const summary = {
+      total: total,
+      hadir: hadirCount,
+      telat: telatCount,
+      mangkir: mangkirCount,
+      absen: absenCount,
+      holiday: holidayCount,
+    };
 
     res.json({
       success: true,
-      data: records.map(r => ({
-        id: r.id,
-        name: r.employee.name,
-        dept: r.employee.department.name,
-        section: r.employee.section,
-        position: r.employee.position,
-        date: r.date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
-        checkIn: r.checkIn ? r.checkIn.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-- : --',
-        checkOut: r.checkOut ? r.checkOut.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-- : --',
-        status: r.status === 'PRESENT' ? 'Present' : r.status === 'LATE' ? 'Late' : 'Absent',
-        lateMinutes: r.lateMinutes,
-        mode: r.mode,
-      })),
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+      summary,
+      data: records.map(r => {
+        const recordDay = new Date(r.date).getDay();
+        const isWorkingDay = workingDays.includes(recordDay);
+        
+        let finalStatus = r.status;
+        if (!isWorkingDay && !r.checkIn && !r.checkOut && r.status === 'ABSENT') {
+          finalStatus = 'HOLIDAY';
+        }
+
+        return {
+          id: r.id,
+          name: r.employee.name,
+          dept: r.employee.department.name,
+          section: r.employee.section,
+          position: r.employee.position,
+          date: r.date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
+          checkIn: r.checkIn ? r.checkIn.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-- : --',
+          checkOut: r.checkOut ? r.checkOut.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-- : --',
+          status: resolveStatus(r.checkIn, r.checkOut, finalStatus) === 'PRESENT' ? 'Present' : 
+                  resolveStatus(r.checkIn, r.checkOut, finalStatus) === 'LATE' ? 'Late' : 
+                  resolveStatus(r.checkIn, r.checkOut, finalStatus) === 'MANGKIR' ? 'Mangkir' : 
+                  resolveStatus(r.checkIn, r.checkOut, finalStatus) === 'HOLIDAY' ? 'Holiday' : 
+                  resolveStatus(r.checkIn, r.checkOut, finalStatus) === 'CUTI' ? 'Cuti' : 'Absent',
+          lateMinutes: r.lateMinutes,
+          mode: r.mode,
+        };
+      }),
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -90,7 +162,14 @@ const getAll = async (req, res) => {
  */
 const checkIn = async (req, res) => {
   try {
-    const { employeeId, mode = 'Credentials', lat, lng } = req.body;
+    const { employeeId, mode, lat, lng } = req.body;
+
+    if (mode !== 'Face ID') {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Manual check-in is disabled. Please use Face ID verification.' 
+      });
+    }
 
     const employee = await prisma.employee.findUnique({
       where: { id: employeeId },
@@ -164,7 +243,12 @@ const checkIn = async (req, res) => {
     // Calculate lateness
     const shiftStart = employee.shift?.startTime || '08:00';
     const gracePeriod = employee.shift?.gracePeriod || 15;
-    const { lateMinutes, status } = calculateLateness(now, shiftStart, gracePeriod);
+    const { lateMinutes, status: lateStatus } = calculateLateness(now, shiftStart, gracePeriod);
+
+    // Initial status for check-in is either PRESENT, LATE, or MANGKIR (if day ends)
+    // But since this is a real-time check-in, if we don't have check-out yet, 
+    // we show current status. resolveStatus will handle MANGKIR if we re-check later.
+    const status = resolveStatus(now, existing?.checkOut, lateStatus);
 
     const attendance = await prisma.attendance.upsert({
       where: { employeeId_date: { employeeId, date: today } },
@@ -204,6 +288,7 @@ const checkOut = async (req, res) => {
 
     const attendance = await prisma.attendance.findUnique({
       where: { employeeId_date: { employeeId, date: today } },
+      include: { employee: { include: { shift: true } } }
     });
 
     if (!attendance || !attendance.checkIn) {
@@ -214,9 +299,23 @@ const checkOut = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Already checked out today' });
     }
 
+    // Recalculate status now that we have both checkIn and checkOut
+    const shiftStart = attendance.employee?.shift?.startTime || '08:00';
+    const gracePeriod = attendance.employee?.shift?.gracePeriod || 15;
+    let lateStatus = 'PRESENT';
+    let lateMinutes = 0;
+    
+    if (attendance.checkIn) {
+      const calc = calculateLateness(attendance.checkIn, shiftStart, gracePeriod);
+      lateStatus = calc.status;
+      lateMinutes = calc.lateMinutes;
+    }
+
+    const finalStatus = resolveStatus(attendance.checkIn, now, lateStatus);
+
     const updated = await prisma.attendance.update({
       where: { id: attendance.id },
-      data: { checkOut: now },
+      data: { checkOut: now, status: finalStatus },
     });
 
     res.json({ success: true, message: 'Checked out successfully', data: updated });
@@ -243,14 +342,15 @@ const getSummary = async (req, res) => {
 
     const present = todayRecords.filter(r => r.status === 'PRESENT').length;
     const late = todayRecords.filter(r => r.status === 'LATE').length;
-    const absent = totalEmployees - present - late;
+    const mangkir = todayRecords.filter(r => r.status === 'MANGKIR').length;
+    const absent = totalEmployees - present - late - mangkir;
     const avgLateMinutes = late > 0
       ? Math.round(todayRecords.filter(r => r.status === 'LATE').reduce((sum, r) => sum + r.lateMinutes, 0) / late)
       : 0;
 
     res.json({
       success: true,
-      data: { totalEmployees, present, late, absent, avgLateMinutes },
+      data: { totalEmployees, present, late, mangkir, absent, avgLateMinutes },
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -411,15 +511,17 @@ const importFromExcel = async (req, res) => {
         const emp = entry.employee;
 
         // Calculate lateness if check-in exists
-        let status = 'ABSENT';
+        let lateStatus = 'PRESENT';
         let lateMinutes = 0;
         if (entry.checkIn) {
           const shiftStart = emp.shift?.startTime || '08:00';
           const gracePeriod = emp.shift?.gracePeriod || 15;
           const calc = calculateLateness(entry.checkIn, shiftStart, gracePeriod);
-          status = calc.status;
+          lateStatus = calc.status;
           lateMinutes = calc.lateMinutes;
         }
+
+        const status = resolveStatus(entry.checkIn, entry.checkOut, lateStatus);
 
         const existing = await prisma.attendance.findUnique({
           where: { employeeId_date: { employeeId: entry.employeeId, date: dateObj } },
@@ -506,13 +608,21 @@ const recalculate = async (req, res) => {
       const shiftStart = record.employee.shift?.startTime || '08:00';
       const gracePeriod = record.employee.shift?.gracePeriod || 15;
       
-      const { lateMinutes, status } = calculateLateness(record.checkIn, shiftStart, gracePeriod);
+      let lateStatus = 'PRESENT';
+      let lateMinutes = 0;
+      if (record.checkIn) {
+        const calc = calculateLateness(record.checkIn, shiftStart, gracePeriod);
+        lateStatus = calc.status;
+        lateMinutes = calc.lateMinutes;
+      }
+      
+      const finalStatus = resolveStatus(record.checkIn, record.checkOut, lateStatus);
       
       // Update if status or lateMinutes changed
-      if (record.status !== status || record.lateMinutes !== lateMinutes) {
+      if (record.status !== finalStatus || record.lateMinutes !== lateMinutes) {
         await prisma.attendance.update({
           where: { id: record.id },
-          data: { status, lateMinutes }
+          data: { status: finalStatus, lateMinutes }
         });
         updatedCount++;
       }
@@ -534,10 +644,10 @@ const recalculate = async (req, res) => {
  */
 const getMasterOptions = async (req, res) => {
   try {
-    const { period, date, startDate, endDate, dept } = req.query;
+    const { period, date, startDate, endDate, dept, search } = req.query;
     const where = {};
 
-    // Date filtering (reuse logic from getAll)
+    // 1. Logic for Date filtering (reuse from getAll)
     const now = new Date();
     if (period === 'Today' || (!period && !date && !startDate)) {
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -564,48 +674,63 @@ const getMasterOptions = async (req, res) => {
       where.date = { gte: d, lt: next };
     }
 
-    // Optional dept filter for section/position cascading
-    const employeeWhere = {};
-    if (dept && dept !== 'All') {
+    // 2. Query Employees who have attendance in the range
+    // Optimization: Use 'distinct' to get unique combinations directly from DB
+    const employeeWhere = {
+      attendance: { some: where },
+      status: 'ACTIVE'
+    };
+
+    if (dept && dept !== '') {
       employeeWhere.department = { name: dept };
     }
+    if (search && search.trim()) {
+      employeeWhere.name = { contains: search.trim(), mode: 'insensitive' };
+    }
 
-    // Get attendance records in range
-    const attendanceRecords = await prisma.attendance.findMany({
-      where: {
-        ...where,
-        employee: employeeWhere
-      },
+    const employees = await prisma.employee.findMany({
+      where: employeeWhere,
       select: {
-        employee: {
-          select: {
-            department: { select: { id: true, name: true } },
-            section: true,
-            position: true
-          }
+        department: { select: { id: true, name: true } },
+        section: true,
+        position: true,
+        attendance: {
+          where: where,
+          select: { status: true }
         }
-      }
+      },
+      distinct: ['departmentId', 'section', 'position']
     });
 
-    // Extract unique values
-    const departments = new Map();
-    const sections = new Set();
-    const positions = new Set();
+    // 3. Flatten and unique for response
+    const departmentsMap = new Map();
+    const sectionsSet = new Set();
+    const positionsSet = new Set();
+    const statusesSet = new Set();
 
-    attendanceRecords.forEach(r => {
-      if (r.employee.department) {
-        departments.set(r.employee.department.id, r.employee.department.name);
-      }
-      if (r.employee.section) sections.add(r.employee.section);
-      if (r.employee.position) positions.add(r.employee.position);
+    const attendanceRecords = await prisma.attendance.findMany({
+      where: where,
+      select: { status: true, checkIn: true, checkOut: true }
+    });
+
+    attendanceRecords.forEach(a => {
+      let resolved = resolveStatus(a.checkIn, a.checkOut, a.status);
+      if (resolved) statusesSet.add(resolved);
+    });
+
+    employees.forEach(e => {
+      if (e.department) departmentsMap.set(e.department.id, e.department.name);
+      if (e.section) sectionsSet.add(e.section);
+      if (e.position) positionsSet.add(e.position);
     });
 
     res.json({
       success: true,
       data: {
-        departments: Array.from(departments.entries()).map(([id, name]) => ({ id, name })),
-        sections: Array.from(sections).sort(),
-        positions: Array.from(positions).sort(),
+        departments: Array.from(departmentsMap.entries()).map(([id, name]) => ({ id, name })),
+        sections: Array.from(sectionsSet).filter(Boolean).sort(),
+        positions: Array.from(positionsSet).filter(Boolean).sort(),
+        statuses: Array.from(statusesSet).filter(Boolean).sort(),
       }
     });
   } catch (err) {

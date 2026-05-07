@@ -52,6 +52,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/announcements', announcementRoutes);
 app.use('/api/leave', leaveRoutes);
 app.use('/api/backup', backupRoutes);
+app.use('/api/manager', require('./routes/managerRoutes'));
+app.use('/api/direktur', require('./routes/direkturRoutes'));
 
 // Global error handler
 app.use((err, req, res, next) => {

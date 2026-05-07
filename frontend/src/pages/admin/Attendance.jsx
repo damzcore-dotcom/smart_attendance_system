@@ -1,55 +1,54 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { attendanceAPI, employeeAPI } from '../../services/api';
 import { 
   Calendar, Search, Download, Filter, CheckCircle2, XCircle, Clock, 
   ArrowRight, Scan, Upload, FileSpreadsheet, X, Loader2, AlertCircle, RefreshCw,
-  FileText
+  FileText, ChevronLeft, ChevronRight, LayoutDashboard
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+const STATUS_MAP = {
+  'PRESENT': 'Hadir',
+  'LATE': 'Terlambat',
+  'ABSENT': 'Absen',
+  'MANGKIR': 'Mangkir',
+  'HOLIDAY': 'Libur',
+  'CUTI': 'Cuti',
+  'SAKIT': 'Sakit',
+  'IZIN': 'Izin'
+};
+
 const Attendance = () => {
   const queryClient = useQueryClient();
-  const [filterDate, setFilterDate] = useState('Today');
-  const [customStart, setCustomStart] = useState('');
-  const [customEnd, setCustomEnd] = useState('');
-  const [filterDept, setFilterDept] = useState('');
-  const [filterSection, setFilterSection] = useState('');
-  const [filterPosition, setFilterPosition] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
   const [isImportOpen, setImportOpen] = useState(false);
   const [isRecalcModalOpen, setRecalcModalOpen] = useState(false);
   const [recalcRange, setRecalcRange] = useState({ start: '', end: '' });
   const [isUploading, setIsUploading] = useState(false);
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [importResult, setImportResult] = useState(null);
+  const [appliedFilters, setAppliedFilters] = useState({
+    page: 1,
+    period: 'Today',
+    startDate: '',
+    endDate: '',
+    dept: '',
+    section: '',
+    position: '',
+    status: '',
+    search: ''
+  });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['attendance', { period: filterDate, startDate: customStart, endDate: customEnd, dept: filterDept, section: filterSection, position: filterPosition, search: searchQuery }],
-    queryFn: () => attendanceAPI.getAll({ 
-      period: filterDate, 
-      startDate: customStart, 
-      endDate: customEnd, 
-      dept: filterDept, 
-      section: filterSection, 
-      position: filterPosition, 
-      search: searchQuery 
-    }),
+    queryKey: ['attendance', appliedFilters],
+    queryFn: () => attendanceAPI.getAll(appliedFilters),
   });
 
-  const { data: optionsData } = useQuery({
-    queryKey: ['attendance-options', { period: filterDate, startDate: customStart, endDate: customEnd, dept: filterDept }],
-    queryFn: () => attendanceAPI.getMasterOptions({ 
-      period: filterDate, 
-      startDate: customStart, 
-      endDate: customEnd, 
-      dept: filterDept 
-    }),
-  });
 
-  const masterOptions = optionsData?.data || { departments: [], sections: [], positions: [] };
+
+
 
   const filteredData = data?.data || [];
 
@@ -106,7 +105,7 @@ const Attendance = () => {
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Attendance');
-    XLSX.writeFile(wb, `Attendance_Report_${filterDate}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(wb, `Attendance_Report_${appliedFilters.period}_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const handleExportPDF = () => {
@@ -120,7 +119,7 @@ const Attendance = () => {
     
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text(`Report Period: ${filterDate} (${customStart || '-'} to ${customEnd || '-'})`, 14, 28);
+    doc.text(`Report Period: ${appliedFilters.period} (${appliedFilters.startDate || '-'} to ${appliedFilters.endDate || '-'})`, 14, 28);
     doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 33);
 
     // Summary Box
@@ -175,217 +174,194 @@ const Attendance = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-6 pb-10">
+      {/* 1. PAGE HEADER (Non-Sticky) */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Attendance Records</h1>
-          <p className="text-slate-500 mt-1">Review and audit daily attendance logs.</p>
+          <div className="flex items-center gap-2 text-slate-400 mb-1">
+            <LayoutDashboard className="w-3 h-3" />
+            <span className="text-[10px] font-bold uppercase tracking-widest">Admin Portal</span>
+            <ChevronRight className="w-3 h-3" />
+            <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Attendance</span>
+          </div>
+          <h1 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-3">
+            DATA KEHADIRAN
+            <span className="px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-bold uppercase">
+              Admin Control
+            </span>
+          </h1>
         </div>
-        <div className="flex gap-3">
+
+        <div className="flex flex-wrap items-center gap-2">
           <button 
-            onClick={() => setRecalcModalOpen(true)} 
+            onClick={() => setRecalcModalOpen(true)}
             disabled={isRecalculating}
-            className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+            className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-all"
           >
-            <RefreshCw className={`w-4 h-4 text-primary ${isRecalculating ? 'animate-spin' : ''}`} />
-            Recalculate
+            <RefreshCw className={`w-3.5 h-3.5 text-blue-500 ${isRecalculating ? 'animate-spin' : ''}`} /> Recalculate
           </button>
           <button 
             onClick={() => setImportOpen(true)}
-            className="flex items-center gap-2 bg-emerald-50 text-emerald-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-100 border border-emerald-100 transition-all shadow-sm"
+            className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-[11px] font-bold text-slate-600 hover:bg-slate-50 transition-all"
           >
-            <Upload className="w-4 h-4" /> Import Fingerprint
+            <Upload className="w-3.5 h-3.5 text-emerald-500" /> Import
           </button>
           <button 
             onClick={handleExportPDF}
-            className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all hover:border-rose-200 hover:text-rose-600"
+            className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-[11px] font-bold text-slate-600 hover:bg-slate-50 transition-all"
           >
-            <FileText className="w-4 h-4 text-rose-500" /> Download PDF
+            <FileText className="w-3.5 h-3.5 text-rose-500" /> PDF
           </button>
           <button 
             onClick={handleExportExcel}
-            className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/10"
+            className="flex items-center gap-2 bg-slate-900 text-white px-3 py-1.5 rounded-lg text-[11px] font-bold hover:bg-slate-800 transition-all"
           >
-            <FileSpreadsheet className="w-4 h-4" /> Export Excel
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" /> Excel
           </button>
         </div>
       </div>
 
-      {/* Filters Bar */}
-      <div className="card p-6">
-        <div className="flex flex-col gap-6">
-          <div className="flex flex-wrap items-center gap-2 pb-4 border-b border-slate-100">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-2">Periode Waktu:</label>
-            {['Today', 'This Week', 'This Month', 'Custom'].map((period) => (
-              <button
-                key={period}
-                onClick={() => setFilterDate(period)}
-                className={`px-5 py-2 rounded-xl text-xs font-bold transition-all duration-200 ${
-                  filterDate === period 
-                    ? 'bg-primary text-white shadow-lg shadow-primary/20 scale-105' 
-                    : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
-                }`}
-              >
-                {period}
-              </button>
+      {/* 2. FILTERS (Non-Sticky) */}
+      <FilterBar 
+        onApply={setAppliedFilters}
+        isLoading={isLoading}
+      />
+
+      {/* 3. SUMMARY BAR (Sticky to Page) */}
+      {!isLoading && data?.summary && (
+        <div className="sticky top-0 z-50 bg-slate-50/95 backdrop-blur-md py-3 -mx-6 px-6 border-b border-slate-200/50">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            {[
+              { label: 'Total', value: data.summary.total, color: 'slate', icon: Filter },
+              { label: 'Hadir', value: data.summary.hadir, color: 'emerald', icon: CheckCircle2 },
+              { label: 'Telat', value: data.summary.telat, color: 'amber', icon: Clock },
+              { label: 'Mangkir', value: data.summary.mangkir, color: 'orange', icon: AlertCircle },
+              { label: 'Libur', value: data.summary.holiday, color: 'indigo', icon: Calendar },
+              { label: 'Absen', value: data.summary.absen, color: 'rose', icon: XCircle },
+            ].map((item) => (
+              <div key={item.label} className={`bg-white border border-${item.color}-100 rounded-xl p-2.5 flex items-center gap-3 border-l-4 border-l-${item.color}-500 shadow-sm`}>
+                <div className={`w-8 h-8 rounded-lg bg-${item.color}-50 flex items-center justify-center shrink-0`}>
+                  <item.icon className={`w-4 h-4 text-${item.color}-500`} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{item.label}</p>
+                  <p className={`text-base font-black text-${item.color}-600 leading-tight`}>{item.value}</p>
+                </div>
+              </div>
             ))}
-
-            {filterDate === 'Custom' && (
-              <div className="flex items-center gap-2 animate-in slide-in-from-left-4 duration-300 ml-4">
-                <div className="flex flex-col">
-                  <span className="text-[9px] font-bold text-slate-400 uppercase ml-1">Dari</span>
-                  <input 
-                    type="date" 
-                    value={customStart}
-                    onChange={(e) => setCustomStart(e.target.value)}
-                    className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 font-bold text-slate-600"
-                  />
-                </div>
-                <ArrowRight className="w-4 h-4 text-slate-300 mt-4" />
-                <div className="flex flex-col">
-                  <span className="text-[9px] font-bold text-slate-400 uppercase ml-1">Sampai</span>
-                  <input 
-                    type="date" 
-                    value={customEnd}
-                    onChange={(e) => setCustomEnd(e.target.value)}
-                    className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 font-bold text-slate-600"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block ml-1">Search Employee</label>
-              <div className="relative">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input 
-                  type="text" 
-                  placeholder="Nama atau NIK..." 
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-slate-50/50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block ml-1">Departemen</label>
-              <select 
-                value={filterDept}
-                onChange={(e) => { setFilterDept(e.target.value); setFilterSection(''); setFilterPosition(''); }}
-                className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 text-slate-600 font-bold cursor-pointer transition-all"
-              >
-                <option value="">Semua Departemen</option>
-                {masterOptions.departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
-              </select>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block ml-1">Bagian (Section)</label>
-              <select 
-                value={filterSection}
-                onChange={(e) => setFilterSection(e.target.value)}
-                className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 text-slate-600 font-bold cursor-pointer transition-all"
-              >
-                <option value="">Semua Bagian</option>
-                {masterOptions.sections.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block ml-1">Jabatan (Position)</label>
-              <select 
-                value={filterPosition}
-                onChange={(e) => setFilterPosition(e.target.value)}
-                className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 text-slate-600 font-bold cursor-pointer transition-all"
-              >
-                <option value="">Semua Jabatan</option>
-                {masterOptions.positions.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Attendance Table */}
-      <div className="card shadow-xl shadow-slate-200/50">
-        <div className="overflow-auto max-h-[600px] relative">
+      {/* 4. TABLE SECTION with INTERNAL SCROLL */}
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-xl shadow-slate-200/40 overflow-hidden">
+        <div className="px-5 py-3 border-b border-slate-50 bg-white flex items-center justify-between">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">
+            Log Kehadiran <span className="text-slate-300 mx-2">|</span> 
+            Total Data: <span className="text-slate-800">{data?.summary?.total || 0}</span>
+          </p>
+        </div>
+        
+        <div className="relative overflow-auto max-h-[calc(100vh-320px)] scrollbar-thin scrollbar-thumb-slate-200">
           <table className="w-full text-left border-separate border-spacing-0">
-            <thead className="sticky top-0 z-10">
-              <tr className="bg-slate-50/95 backdrop-blur-sm text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
-                <th className="px-6 py-4 border-b border-slate-100 first:rounded-tl-xl">Karyawan</th>
-                <th className="px-6 py-4 border-b border-slate-100">Departemen</th>
-                <th className="px-6 py-4 border-b border-slate-100">Bagian</th>
-                <th className="px-6 py-4 border-b border-slate-100">Jabatan</th>
-                <th className="px-6 py-4 border-b border-slate-100">Tanggal</th>
-                <th className="px-6 py-4 border-b border-slate-100">Masuk</th>
-                <th className="px-6 py-4 border-b border-slate-100">Keluar</th>
-                <th className="px-6 py-4 border-b border-slate-100">Keterlambatan</th>
-                <th className="px-6 py-4 border-b border-slate-100 last:rounded-tr-xl">Status</th>
+            <thead className="sticky top-0 z-30">
+              <tr className="bg-slate-900 text-slate-400 text-[10px] font-black uppercase tracking-widest">
+                <th className="px-6 py-4 border-b border-slate-800">Karyawan</th>
+                <th className="px-3 py-4 border-b border-slate-800">Dept</th>
+                <th className="px-3 py-4 border-b border-slate-800">Bagian</th>
+                <th className="px-3 py-4 border-b border-slate-800">Jabatan</th>
+                <th className="px-3 py-4 border-b border-slate-800">Tanggal</th>
+                <th className="px-3 py-4 border-b border-slate-800">Masuk</th>
+                <th className="px-3 py-4 border-b border-slate-800">Keluar</th>
+                <th className="px-3 py-4 border-b border-slate-800 text-center">Telat</th>
+                <th className="px-3 py-4 border-b border-slate-800 text-center">Status</th>
               </tr>
             </thead>
-          <tbody className="divide-y divide-slate-50">
-            {isLoading ? (
-                <tr><td colSpan="7" className="text-center py-8 text-slate-500">Loading attendance data...</td></tr>
-              ) : filteredData.length === 0 ? (
-                <tr><td colSpan="7" className="text-center py-8 text-slate-500">No attendance records found.</td></tr>
-              ) : filteredData.map((row) => (
-                <tr key={row.id} className="hover:bg-slate-50/50 transition-colors">
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-primary font-bold text-xs border border-slate-200">
-                      {row.name.substring(0, 2).toUpperCase()}
+            <tbody className="divide-y divide-slate-100">
+              {isLoading ? (
+                <tr>
+                  <td colSpan="9" className="text-center py-20 bg-white">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      <p className="text-sm text-slate-400 font-medium">Memuat data kehadiran...</p>
                     </div>
-                    <span className="font-bold text-slate-800 text-sm block">{row.name}</span>
-                  </div>
-                </td>
-                <td className="px-6 py-4 text-xs font-bold text-slate-500">{row.dept || '-'}</td>
-                <td className="px-6 py-4 text-xs font-bold text-slate-500">{row.section || '-'}</td>
-                <td className="px-6 py-4 text-xs font-bold text-slate-500">{row.position || '-'}</td>
-                <td className="px-6 py-4 text-sm text-slate-600 font-medium">{row.date}</td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-emerald-500" />
-                    <span className="text-sm font-bold text-slate-700">{row.checkIn}</span>
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-slate-300" />
-                    <span className="text-sm font-bold text-slate-700">{row.checkOut}</span>
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex flex-col">
-                    <span className={`text-xs font-bold ${row.status === 'Late' ? 'text-amber-500' : 'text-slate-400'}`}>
-                      {row.status === 'Late' ? `${row.lateMinutes} min` : '0 min'}
-                    </span>
-                    <span className="text-[10px] text-slate-400">Late Time</span>
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500">
-                    <Scan className="w-3.5 h-3.5" />
-                    {row.mode}
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
-                    row.status === 'Present' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 
-                    row.status === 'Late' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
-                    'bg-rose-50 text-rose-600 border border-rose-100'
-                  }`}>
-                    {row.status}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  </td>
+                </tr>
+              ) : filteredData.length === 0 ? (
+                <tr>
+                  <td colSpan="9" className="text-center py-20 bg-white">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center">
+                        <Calendar className="w-7 h-7 text-slate-300" />
+                      </div>
+                      <p className="text-sm font-bold text-slate-500">Tidak ada data kehadiran</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredData.map((row, idx) => {
+                  const isEven = idx % 2 === 0;
+                  return (
+                    <tr
+                      key={row.id}
+                      className={`group transition-colors duration-150 ${isEven ? 'bg-white' : 'bg-slate-50/30'} hover:bg-primary/5`}
+                    >
+                      <td className="px-6 py-3.5 font-bold text-slate-800 text-sm truncate">{row.name}</td>
+                      <td className="px-3 py-3.5">
+                        <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-bold border border-slate-200 uppercase tracking-wider">{row.dept || '-'}</span>
+                      </td>
+                      <td className="px-3 py-3.5 text-[11px] font-medium text-slate-500 truncate uppercase tracking-tight">{row.section || '—'}</td>
+                      <td className="px-3 py-3.5 text-[11px] font-medium text-slate-500 truncate uppercase tracking-tight">{row.position || '—'}</td>
+                      <td className="px-3 py-3.5 text-[11px] font-bold text-slate-600 whitespace-nowrap">{row.date}</td>
+                      <td className="px-3 py-3.5 text-xs font-bold text-slate-800">{row.checkIn}</td>
+                      <td className="px-3 py-3.5 text-xs font-bold text-slate-800">{row.checkOut}</td>
+                      <td className="px-3 py-3.5 text-center text-[11px] font-black text-amber-600">{row.status === 'Late' ? `${row.lateMinutes}m` : '—'}</td>
+                      <td className="px-3 py-3.5 text-center">
+                        <span className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-black uppercase tracking-tighter ${
+                          row.status === 'Present' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                          row.status === 'Late' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                          row.status === 'Mangkir' ? 'bg-orange-50 text-orange-700 border border-orange-200' :
+                          row.status === 'Holiday' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' :
+                          row.status === 'Cuti' ? 'bg-sky-50 text-sky-700 border border-sky-200' :
+                          'bg-rose-50 text-rose-700 border border-rose-200'
+                        }`}>
+                          {row.status === 'Present' ? 'Hadir' : row.status === 'Late' ? 'Telat' : row.status === 'Mangkir' ? 'Mangkir' : row.status === 'Holiday' ? 'Libur' : row.status === 'Cuti' ? 'Cuti' : 'Absen'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+        {/* Table Footer with Pagination */}
+        {!isLoading && filteredData.length > 0 && (
+          <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
+            <p className="text-xs text-slate-400 font-medium">
+              Halaman <span className="font-bold text-slate-600">{appliedFilters.page}</span> dari <span className="font-bold text-slate-600">{data?.totalPages || 1}</span>
+              <span className="mx-2 text-slate-200">|</span>
+              Total <span className="font-bold text-slate-600">{data?.total || 0}</span> record
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                disabled={appliedFilters.page <= 1}
+                onClick={() => setAppliedFilters(prev => ({ ...prev, page: prev.page - 1 }))}
+                className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
+              >
+                <ChevronLeft className="w-4 h-4 text-slate-600" />
+              </button>
+              <button
+                disabled={appliedFilters.page >= (data?.totalPages || 1)}
+                onClick={() => setAppliedFilters(prev => ({ ...prev, page: prev.page + 1 }))}
+                className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
+              >
+                <ChevronRight className="w-4 h-4 text-slate-600" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
 
     {/* Import Modal - Professional Overhaul */}
       {isImportOpen && (
@@ -592,6 +568,182 @@ const Attendance = () => {
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+// --- Sub-component to optimize performance ---
+
+const FilterBar = ({ onApply, isLoading }) => {
+  const [filterDate, setFilterDate] = useState('Today');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+  const [filterDept, setFilterDept] = useState('');
+  const [filterSection, setFilterSection] = useState('');
+  const [filterPosition, setFilterPosition] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  // Debounce search input to avoid excessive API calls
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Reactive options fetch based on current filter state
+  const { data: optionsData } = useQuery({
+    queryKey: ['attendance-options-reactive', { 
+      period: filterDate, 
+      startDate: customStart, 
+      endDate: customEnd, 
+      dept: filterDept, 
+      search: debouncedSearch 
+    }],
+    queryFn: () => attendanceAPI.getMasterOptions({ 
+      period: filterDate, 
+      startDate: customStart, 
+      endDate: customEnd, 
+      dept: filterDept, 
+      search: debouncedSearch 
+    }),
+    staleTime: 30000, // 30 seconds cache for reactive options
+  });
+
+  const masterOptions = optionsData?.data || { departments: [], sections: [], positions: [], statuses: [] };
+
+  const handleApply = () => {
+    onApply({
+      page: 1, // Reset to page 1 on new filter
+      period: filterDate,
+      startDate: customStart,
+      endDate: customEnd,
+      dept: filterDept,
+      section: filterSection,
+      position: filterPosition,
+      status: filterStatus,
+      search: searchQuery
+    });
+  };
+
+  return (
+    <div className="card p-4">
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-1">Periode:</label>
+          {['Today', 'This Week', 'This Month', 'Custom'].map((period) => (
+            <button
+              key={period}
+              onClick={() => setFilterDate(period)}
+              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                filterDate === period 
+                  ? 'bg-primary text-white shadow-md shadow-primary/20' 
+                  : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-100'
+              }`}
+            >
+              {period === 'Today' ? 'Hari Ini' : period === 'This Week' ? 'Minggu Ini' : period === 'This Month' ? 'Bulan Ini' : 'Kustom'}
+            </button>
+          ))}
+
+          {filterDate === 'Custom' && (
+            <div className="flex items-center gap-2 ml-2">
+              <input 
+                type="date" 
+                value={customStart}
+                onChange={(e) => setCustomStart(e.target.value)}
+                className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 font-bold text-slate-600"
+              />
+              <ArrowRight className="w-4 h-4 text-slate-300" />
+              <input 
+                type="date" 
+                value={customEnd}
+                onChange={(e) => setCustomEnd(e.target.value)}
+                className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 font-bold text-slate-600"
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 items-end bg-slate-50/50 p-6 rounded-2xl border border-slate-100">
+          <div className="space-y-1.5 lg:col-span-1">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block ml-1">Cari Karyawan</label>
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="Nama atau NIK..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleApply()}
+                className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all font-medium text-slate-600 hover:border-slate-300"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block ml-1">Departemen</label>
+            <select 
+              value={filterDept}
+              onChange={(e) => { setFilterDept(e.target.value); setFilterSection(''); setFilterPosition(''); }}
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 text-slate-600 font-bold cursor-pointer transition-all hover:border-slate-300"
+            >
+              <option value="">Semua</option>
+              {masterOptions.departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block ml-1">Bagian</label>
+            <select 
+              value={filterSection}
+              onChange={(e) => setFilterSection(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 text-slate-600 font-bold cursor-pointer transition-all hover:border-slate-300"
+            >
+              <option value="">Semua</option>
+              {masterOptions.sections.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block ml-1">Jabatan</label>
+            <select 
+              value={filterPosition}
+              onChange={(e) => setFilterPosition(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 text-slate-600 font-bold cursor-pointer transition-all hover:border-slate-300"
+            >
+              <option value="">Semua</option>
+              {masterOptions.positions.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block ml-1">Status Absen</label>
+            <select 
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 text-slate-600 font-bold cursor-pointer transition-all hover:border-slate-300"
+            >
+              <option value="">Semua Status</option>
+              {masterOptions.statuses.map(s => (
+                <option key={s} value={s}>
+                  {STATUS_MAP[s] || s}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <button 
+              onClick={handleApply}
+              disabled={isLoading}
+              className="w-full bg-primary hover:bg-primary-dark text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-primary/20 hover:shadow-primary/30 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-70 h-[42px]"
+            >
+              {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4 transition-transform" />}
+              Tampilkan
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

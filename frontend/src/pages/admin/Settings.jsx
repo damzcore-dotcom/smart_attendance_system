@@ -12,11 +12,13 @@ import {
   Bell,
   Globe,
   Loader2,
-  X
+  X,
+  Shield
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { settingsAPI } from '../../services/api';
+import { settingsAPI, authAPI } from '../../services/api';
 import LocationMapModal from '../../components/modals/LocationMapModal';
+import AdminPermissions from '../../components/admin/AdminPermissions';
 
 const Settings = () => {
   const queryClient = useQueryClient();
@@ -175,12 +177,17 @@ const Settings = () => {
     setShiftModalOpen(true);
   };
 
+  const user = authAPI.getStoredUser();
   const tabs = [
     { id: 'General', icon: Building2, label: 'Company Profile' },
     { id: 'Location', icon: MapPin, label: 'Geofencing' },
     { id: 'Shifts', icon: Clock, label: 'Shift Rules' },
     { id: 'Security', icon: ShieldCheck, label: 'Biometrics' },
   ];
+
+  if (user?.role === 'SUPER_ADMIN') {
+    tabs.push({ id: 'Permissions', icon: Shield, label: 'Hak Akses Admin' });
+  }
 
   if (settingsLoading || locationsLoading || shiftsLoading) {
     return (
@@ -452,6 +459,44 @@ const Settings = () => {
               </div>
 
               <div className="card p-6">
+                <h3 className="font-bold text-slate-800 mb-6">Weekly Working Days</h3>
+                <p className="text-sm text-slate-500 mb-6 text-center lg:text-left">Select which days your company operates. Unselected days will be marked as holidays.</p>
+                <div className="flex flex-wrap justify-center lg:justify-start gap-3">
+                  {[
+                    { id: 0, label: 'Sun' },
+                    { id: 1, label: 'Mon' },
+                    { id: 2, label: 'Tue' },
+                    { id: 3, label: 'Wed' },
+                    { id: 4, label: 'Thu' },
+                    { id: 5, label: 'Fri' },
+                    { id: 6, label: 'Sat' },
+                  ].map((day) => {
+                    const workingDays = JSON.parse(formData.workingDays || '[1,2,3,4,5]');
+                    const isSelected = workingDays.includes(day.id);
+                    return (
+                      <button
+                        key={day.id}
+                        onClick={() => {
+                          const newDays = isSelected 
+                            ? workingDays.filter(d => d !== day.id)
+                            : [...workingDays, day.id].sort();
+                          handleInputChange('workingDays', JSON.stringify(newDays));
+                        }}
+                        className={`w-14 h-14 rounded-2xl flex flex-col items-center justify-center gap-1 border transition-all ${
+                          isSelected 
+                            ? 'bg-primary border-primary text-white shadow-lg shadow-primary/20 scale-110' 
+                            : 'bg-white border-slate-100 text-slate-400 hover:border-primary/30 hover:text-primary'
+                        }`}
+                      >
+                        <span className="text-[10px] font-black uppercase tracking-tighter">{day.label}</span>
+                        {isSelected && <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="card p-6">
                 <h3 className="font-bold text-slate-800 mb-6">Global Attendance Policy</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
@@ -568,6 +613,10 @@ const Settings = () => {
                 </div>
               </div>
             </div>
+          )}
+
+          {activeTab === 'Permissions' && (
+            <AdminPermissions />
           )}
         </div>
       </div>

@@ -12,6 +12,8 @@ datasource db {
 enum Role {
   SUPER_ADMIN
   ADMIN
+  DIREKTUR
+  MANAGER
   EMPLOYEE
 }
 
@@ -30,6 +32,7 @@ enum AttStatus {
   PRESENT
   LATE
   ABSENT
+  MANGKIR
   SAKIT
   IZIN
   CUTI
@@ -51,10 +54,19 @@ model User {
   role         Role             @default(EMPLOYEE)
   employeeId   Int?             @unique
   employee     Employee?        @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  managerAccess ManagerAccess?
   permissions  MenuPermission[]
   refreshToken String?
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
+}
+
+model ManagerAccess {
+  id             Int        @id @default(autoincrement())
+  userId         Int        @unique
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  managedDeptId  Int?       // NULL if manageAllDepts is true
+  manageAllDepts Boolean    @default(false)
 }
 
 model MenuPermission {
@@ -110,6 +122,8 @@ model Employee {
   notes             String?
   status        EmpStatus  @default(ACTIVE)
   faceStatus    FaceStatus @default(PENDING)
+  leaveQuota     Int        @default(12)
+  remainingLeave Int        @default(12)
   departmentId  Int
   department    Department @relation(fields: [departmentId], references: [id])
   shiftId       Int?
@@ -204,6 +218,7 @@ model LeaveRequest {
   reason     String
   status     ReqStatus @default(PENDING)
   reviewNote String?
+  medicalAttachment String? // Base64 compressed image of doctor's note
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 }
@@ -217,4 +232,12 @@ model Announcement {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+model MassLeave {
+  id        Int      @id @default(autoincrement())
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  type      String   // "Holiday", "Cuti"
+  reason    String
+  createdAt DateTime @default(now())
 }
