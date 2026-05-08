@@ -80,6 +80,11 @@ const restoreData = async (req, res) => {
             // Remove updatedAt to let Prisma handle it
             if (newRec.updatedAt) delete newRec.updatedAt;
 
+            // Remove legacy fields that might exist in old backups
+            if (model === 'user' && 'managedDeptId' in newRec) {
+              delete newRec.managedDeptId;
+            }
+
             // Convert ISO strings back to Date objects
             Object.keys(newRec).forEach(key => {
               if (newRec[key] && typeof newRec[key] === 'string') {
