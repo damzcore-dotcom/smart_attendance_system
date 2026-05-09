@@ -460,39 +460,55 @@ const importFromExcel = async (req, res) => {
       const idNumber = colMap.idNumber >= 0 ? (row[colMap.idNumber] || '').toString().trim() : '';
       const empName = colMap.name >= 0 ? (row[colMap.name] || '').toString().trim() : '';
 
-      if (!rawDateTime || (!statusStr.includes('in') && !statusStr.includes('out'))) continue;
+      if (!rawDateTime) continue;
 
-      // Parse datetime
+      // Robust Date Parsing
       let dt;
       if (typeof rawDateTime === 'number') {
-        // Excel serial date
+        // Excel serial date (Number of days since Dec 30, 1899)
         dt = new Date(Math.round((rawDateTime - 25569) * 86400 * 1000));
       } else {
-        dt = new Date(rawDateTime.toString());
+        const str = rawDateTime.toString().trim();
+        // Regex for M/D/YYYY H:mm:ss
+        const parts = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\s+(\d{1,2}):(\d{1,2})/);
+        if (parts) {
+          // Based on screenshot, format is M/D/YYYY
+          dt = new Date(parseInt(parts[3]), parseInt(parts[1]) - 1, parseInt(parts[2]), parseInt(parts[4]), parseInt(parts[5]));
+        } else {
+          dt = new Date(str);
+        }
       }
-      if (isNaN(dt.getTime())) continue;
 
-      // Match employee: prefer by employeeCode (idNumber), fallback to name
+      if (!dt || isNaN(dt.getTime())) {
+        console.warn(`[Import] Skipping row: Invalid Date format (${rawDateTime})`);
+        continue;
+      }
+
+      // Match employee
       let emp = empByCode[idNumber] || empByName[empName.toLowerCase().trim()] || null;
       if (!emp) {
         unmatchedNames.add(empName || idNumber);
         continue;
       }
 
-      const dateKey = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+      const dateKey = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
       const groupKey = `${emp.id}|${dateKey}`;
 
       if (!grouped[groupKey]) {
         grouped[groupKey] = { employeeId: emp.id, employee: emp, date: dateKey, checkIn: null, checkOut: null };
       }
 
-      if (statusStr.includes('in')) {
-        // Keep earliest check-in
+      // Handle Status with fallback to time-based detection
+      let finalStatus = statusStr;
+      if (!finalStatus || (!finalStatus.includes('in') && !finalStatus.includes('out'))) {
+        finalStatus = dt.getHours() < 12 ? 'in' : 'out';
+      }
+
+      if (finalStatus.includes('in')) {
         if (!grouped[groupKey].checkIn || dt < grouped[groupKey].checkIn) {
           grouped[groupKey].checkIn = dt;
         }
-      } else if (statusStr.includes('out')) {
-        // Keep latest check-out
+      } else if (finalStatus.includes('out')) {
         if (!grouped[groupKey].checkOut || dt > grouped[groupKey].checkOut) {
           grouped[groupKey].checkOut = dt;
         }
