@@ -44,7 +44,6 @@ const Scan = () => {
     setLocationError(null);
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        // Anti-manipulation: Check for accuracy (must be within 50 meters)
         const { accuracy, latitude, longitude } = position.coords;
         if (accuracy > 50) {
           const msg = `GPS Accuracy low (${Math.round(accuracy)}m). Please move to an open area for a better signal.`;
@@ -55,17 +54,16 @@ const Scan = () => {
 
         setCoords({ lat: latitude, lng: longitude, accuracy, timestamp: position.timestamp });
         
-        // Start visual scan only after location is acquired
         setIsScanning(true);
         let progress = 0;
         const interval = setInterval(() => {
-          progress += 10;
+          progress += 5;
           setScanProgress(progress);
           if (progress >= 100) {
             clearInterval(interval);
             mutation.mutate('Face ID');
           }
-        }, 40);
+        }, 30);
       },
       (error) => {
         let msg = "Please enable location services to check in.";
@@ -81,69 +79,80 @@ const Scan = () => {
   };
 
   return (
-    <div className="h-screen bg-slate-900 flex flex-col text-white relative overflow-hidden">
-      {/* Background Camera Mock */}
-      <div className="absolute inset-0 bg-slate-800 flex items-center justify-center">
-        <div className="w-full h-full bg-[url('https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=800')] bg-cover bg-center opacity-40 mix-blend-overlay"></div>
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-900/60 via-transparent to-slate-900"></div>
-      </div>
+    <div className="h-screen relative flex flex-col overflow-hidden font-sans bg-gradient-to-br from-blue-50 via-white to-slate-50">
+
+      {/* Decorative background */}
+      <div className="absolute top-0 right-0 w-96 h-96 bg-blue-100/40 rounded-full blur-[120px] -translate-y-1/3 translate-x-1/4 pointer-events-none" />
+      <div className="absolute bottom-0 left-0 w-80 h-80 bg-blue-50 rounded-full blur-[100px] translate-y-1/3 -translate-x-1/4 pointer-events-none" />
+
+      {/* Subtle grid overlay */}
+      <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ 
+        backgroundImage: 'radial-gradient(circle, #2563eb 1px, transparent 1px)', 
+        backgroundSize: '40px 40px' 
+      }}></div>
 
       {/* Header */}
       <div className="relative z-10 p-6 flex items-center justify-between">
         <button 
           onClick={() => navigate('/employee')}
-          className="p-2 bg-white/10 hover:bg-white/20 rounded-xl backdrop-blur-md transition-colors"
+          className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 hover:bg-slate-50 rounded-xl transition-all shadow-sm"
         >
-          <ChevronLeft className="w-6 h-6" />
+          <ChevronLeft className="w-5 h-5 text-slate-500" />
         </button>
         <div className="flex flex-col items-center">
-          <span className="text-xs font-bold uppercase tracking-widest text-slate-400">Biometric Auth</span>
-          <span className="font-bold text-sm">Face Recognition</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-600 mb-0.5">Secure Protocol</span>
+          <span className="font-bold text-sm text-slate-800 tracking-tight">Biometric Recognition</span>
         </div>
-        <div className="w-10"></div>
+        <div className="w-10 h-10 flex items-center justify-center bg-emerald-50 border border-emerald-100 rounded-xl">
+          <ShieldCheck className="w-5 h-5 text-emerald-600" />
+        </div>
       </div>
 
       {/* Scanner UI */}
       <div className="relative z-10 flex-1 flex flex-col items-center justify-center p-8">
         <div className="relative w-64 h-64 md:w-80 md:h-80">
           {/* Scanning Frame */}
-          <div className="absolute inset-0 border-2 border-white/20 rounded-[3rem]"></div>
+          <div className={`absolute inset-0 border-2 transition-all duration-500 rounded-3xl ${isScanning ? 'border-blue-400 shadow-lg shadow-blue-200/50' : 'border-slate-200'}`}></div>
           
-          {/* Corner accents */}
-          <div className="absolute -top-1 -left-1 w-12 h-12 border-t-4 border-l-4 border-primary rounded-tl-[3rem]"></div>
-          <div className="absolute -top-1 -right-1 w-12 h-12 border-t-4 border-r-4 border-primary rounded-tr-[3rem]"></div>
-          <div className="absolute -bottom-1 -left-1 w-12 h-12 border-b-4 border-l-4 border-primary rounded-bl-[3rem]"></div>
-          <div className="absolute -bottom-1 -right-1 w-12 h-12 border-b-4 border-r-4 border-primary rounded-br-[3rem]"></div>
+          {/* Corner Brackets */}
+          <div className="absolute -inset-2 z-10 pointer-events-none">
+            <div className={`absolute top-0 left-0 w-12 h-12 border-t-4 border-l-4 rounded-tl-3xl transition-colors duration-500 ${isScanning ? 'border-blue-500' : 'border-slate-300'}`} />
+            <div className={`absolute top-0 right-0 w-12 h-12 border-t-4 border-r-4 rounded-tr-3xl transition-colors duration-500 ${isScanning ? 'border-blue-500' : 'border-slate-300'}`} />
+            <div className={`absolute bottom-0 left-0 w-12 h-12 border-b-4 border-l-4 rounded-bl-3xl transition-colors duration-500 ${isScanning ? 'border-blue-500' : 'border-slate-300'}`} />
+            <div className={`absolute bottom-0 right-0 w-12 h-12 border-b-4 border-r-4 rounded-br-3xl transition-colors duration-500 ${isScanning ? 'border-blue-500' : 'border-slate-300'}`} />
+          </div>
 
-          {/* Scanning Bar */}
+          {/* Laser Scanning Line */}
           {isScanning && (
-            <div 
-              className="absolute left-0 right-0 h-1 bg-primary shadow-[0_0_15px_rgba(0,108,73,0.8)] z-20"
-              style={{ top: `${scanProgress}%` }}
-            ></div>
+            <div className="absolute inset-x-6 h-0.5 bg-blue-500 shadow-[0_0_15px_rgba(37,99,235,0.6)] z-20 rounded-full animate-scan-line" style={{ top: `${scanProgress}%` }}></div>
           )}
 
-          {/* Icon/Status */}
+          {/* Status Display */}
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             {mutation.isPending ? (
-              <Loader2 className="w-12 h-12 animate-spin text-primary" />
+              <div className="relative">
+                <Loader2 className="w-16 h-16 animate-spin text-blue-300" />
+                <div className="absolute inset-0 flex items-center justify-center font-bold text-blue-600 text-xs animate-pulse">VERIFY</div>
+              </div>
             ) : isScanning ? (
-              <div className="text-center">
-                <p className="text-primary font-black text-2xl mb-1">{scanProgress}%</p>
-                <p className="text-xs font-bold uppercase tracking-wider text-white/60">Analyzing...</p>
+              <div className="text-center animate-in zoom-in-75 duration-500">
+                <p className="text-blue-600 font-bold text-5xl tracking-tight mb-2">{scanProgress}%</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Scanning...</p>
               </div>
             ) : (
-              <ScanIcon className="w-16 h-16 text-white/20" />
+              <div className="p-8 rounded-full bg-blue-50 border border-blue-100 group transition-all duration-500 hover:bg-blue-100">
+                <ScanIcon className="w-16 h-16 text-blue-200 group-hover:text-blue-400 transition-colors" />
+              </div>
             )}
           </div>
         </div>
 
-        <div className="mt-12 text-center max-w-xs">
-          <h3 className="text-xl font-bold mb-2">
-            {isScanning ? 'Hold Steady' : 'Ready to Scan'}
+        <div className="mt-12 text-center max-w-sm px-6">
+          <h3 className="text-xl font-bold text-slate-800 mb-3 tracking-tight">
+            {isScanning ? 'Hold Still' : 'Identity Verification'}
           </h3>
-          <p className="text-sm text-slate-400 leading-relaxed">
-            Position your face within the frame. Ensure good lighting for better accuracy.
+          <p className="text-sm text-slate-500 leading-relaxed">
+            Align your face within the frame. Authentication requires a <span className="text-blue-600 font-semibold">98%+ match</span> score.
           </p>
         </div>
       </div>
@@ -153,26 +162,36 @@ const Scan = () => {
         {!isScanning ? (
           <button 
             onClick={startScan}
-            className="w-full btn-primary py-4 rounded-2xl font-bold text-lg shadow-xl shadow-primary/25 active:scale-95 transition-transform flex items-center justify-center gap-3"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-bold text-sm shadow-lg shadow-blue-600/25 active:scale-[0.98] flex items-center justify-center gap-3 transition-all"
           >
             <Camera className="w-5 h-5" />
-            Start Face Scan
+            START SCAN
           </button>
         ) : (
-          <div className="flex gap-4">
-            <button 
-              onClick={() => { setIsScanning(false); setScanProgress(0); }}
-              className="flex-1 bg-white/10 py-4 rounded-2xl font-bold backdrop-blur-md flex items-center justify-center gap-2"
-            >
-              Cancel
-            </button>
-          </div>
+          <button 
+            onClick={() => { setIsScanning(false); setScanProgress(0); }}
+            className="w-full bg-white py-4 rounded-2xl font-semibold text-sm text-red-600 flex items-center justify-center gap-2 border border-red-200 active:scale-[0.98] transition-all hover:bg-red-50"
+          >
+            <RefreshCcw className="w-4 h-4" />
+            CANCEL SCAN
+          </button>
         )}
-        <div className="mt-6 flex items-center justify-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-          <ShieldCheck className="w-3 h-3 text-emerald-500" />
-          End-to-End Encrypted Biometrics
+        <div className="mt-6 flex items-center justify-center gap-2 text-[10px] font-medium text-slate-300 uppercase tracking-wider">
+          <div className="w-6 h-px bg-slate-200"></div>
+          AES-256 Encrypted
+          <div className="w-6 h-px bg-slate-200"></div>
         </div>
       </div>
+
+      <style>{`
+        @keyframes scanLine {
+          0%, 100% { filter: brightness(1); opacity: 0.5; }
+          50% { filter: brightness(1.5); opacity: 1; }
+        }
+        .animate-scan-line {
+          animation: scanLine 2s ease-in-out infinite;
+        }
+      `}</style>
     </div>
   );
 };

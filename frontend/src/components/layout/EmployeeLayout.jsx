@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { authAPI, notificationAPI } from '../../services/api';
+import { IgaLogo } from '../IgaLogo';
 
 const EmployeeLayout = () => {
   const location = useLocation();
@@ -40,36 +41,44 @@ const EmployeeLayout = () => {
   ];
 
   if (userLoading) {
-    return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>;
+    return (
+      <div className="h-screen flex items-center justify-center bg-[#f7f8fc]">
+        <Loader2 className="animate-spin text-blue-600 w-10 h-10" />
+      </div>
+    );
   }
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
+    <div className="flex flex-col h-screen relative overflow-hidden font-sans bg-[#f7f8fc]">
+
       {/* Top Bar */}
-      <header className="h-16 bg-white border-b border-slate-100 flex items-center justify-between px-6 shrink-0">
+      <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-50 shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-xs">{employee.name?.[0] || 'U'}</span>
+          <div className="w-16 h-8 flex items-center justify-center">
+            <IgaLogo className="w-full h-full" />
           </div>
-          <span className="font-bold text-slate-800">Hello, {employee.name?.split(' ')[0] || 'User'}</span>
+          <div className="flex flex-col">
+            <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Welcome</span>
+            <span className="font-semibold text-slate-800 tracking-tight text-sm">{employee.name || 'Staff Member'}</span>
+          </div>
         </div>
-        <Link to="/employee/notifications" className="p-2 text-slate-400 relative">
+        <Link to="/employee/notifications" className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-slate-50 text-slate-400 relative transition-all">
           <Bell className="w-5 h-5" />
           {unreadCount > 0 && (
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+            <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white shadow-sm animate-pulse"></span>
           )}
         </Link>
       </header>
 
       {/* Content */}
-      <main className="flex-1 overflow-y-auto pb-24">
-        <div className="max-w-md mx-auto min-h-full">
+      <main className="flex-1 overflow-y-auto pb-28 pt-2">
+        <div className="max-w-md mx-auto min-h-full px-4">
           <Outlet />
         </div>
       </main>
 
       {/* Bottom Nav */}
-      <nav className="fixed bottom-0 left-0 right-0 h-20 bg-white border-t border-slate-100 flex items-center justify-around px-2 z-50">
+      <nav className="fixed bottom-4 left-4 right-4 h-16 bg-white border border-slate-200 flex items-center justify-around px-4 z-50 rounded-2xl shadow-lg shadow-slate-200/50">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.path;
@@ -79,9 +88,9 @@ const EmployeeLayout = () => {
               <Link 
                 key={item.name} 
                 to={item.path}
-                className="relative -top-6 w-14 h-14 bg-primary rounded-full flex items-center justify-center shadow-lg shadow-primary/30 text-white transition-transform active:scale-90"
+                className="relative -top-8 w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-600/30 text-white transition-all active:scale-90 group hover:bg-blue-700"
               >
-                <Icon className="w-6 h-6" />
+                <Icon className="w-7 h-7" />
               </Link>
             );
           }
@@ -90,19 +99,17 @@ const EmployeeLayout = () => {
             <Link 
               key={item.name} 
               to={item.path}
-              className={`flex flex-col items-center gap-1 w-16 transition-colors relative ${
-                isActive ? 'text-primary' : 'text-slate-400 hover:text-slate-600'
+              className={`flex flex-col items-center gap-1 w-14 transition-all duration-300 ${
+                isActive ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'
               }`}
             >
-              <div className="relative">
-                <Icon className="w-5 h-5" />
-                {item.badge > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 bg-primary text-white text-[8px] px-1 rounded-full border border-white">
-                    {item.badge}
-                  </span>
-                )}
-              </div>
-              <span className="text-[10px] font-bold uppercase tracking-wider">{item.name}</span>
+              <Icon className={`w-5 h-5 transition-all ${isActive ? '' : ''}`} />
+              <span className={`text-[9px] font-bold uppercase tracking-wide ${isActive ? 'opacity-100' : 'opacity-0'}`}>
+                {item.name}
+              </span>
+              {isActive && (
+                <div className="absolute -bottom-0.5 w-1 h-1 bg-blue-600 rounded-full"></div>
+              )}
             </Link>
           );
         })}

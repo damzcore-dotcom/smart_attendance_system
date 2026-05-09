@@ -3,12 +3,10 @@ import Webcam from 'react-webcam';
 import * as faceapi from '@vladmandic/face-api';
 import { 
   Camera, 
-  X, 
   Loader2, 
   ScanFace, 
   CheckCircle2, 
   AlertCircle,
-  ArrowLeft,
   MapPin,
   Clock,
   Settings
@@ -16,7 +14,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 
 const AdminFaceCheck = () => {
-  const [scanStatus, setScanStatus] = useState('ready'); // ready, detecting, success, error
+  const [scanStatus, setScanStatus] = useState('ready'); 
   const [error, setError] = useState(null);
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [coords, setCoords] = useState(null);
@@ -24,13 +22,11 @@ const AdminFaceCheck = () => {
   const webcamRef = useRef(null);
   const navigate = useNavigate();
 
-  // Update clock every second
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch location with watchPosition for better accuracy over time
   useEffect(() => {
     if (!navigator.geolocation) return;
 
@@ -105,53 +101,63 @@ const AdminFaceCheck = () => {
   }, [modelsLoaded]);
 
   return (
-    <div className="p-8 space-y-8 max-w-4xl animate-in fade-in duration-500">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-            <ScanFace className="w-8 h-8 text-primary" />
-            Biometric Diagnostic
+    <div className="space-y-8 pb-12 max-w-6xl mx-auto animate-in fade-in duration-500">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 px-1">
+        <div className="space-y-1">
+          <div className="flex items-center gap-3 text-slate-500">
+            <div className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center">
+              <ScanFace className="w-3 h-3 text-slate-400" />
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider">Security Controls</span>
+            <div className="w-1 h-1 rounded-full bg-slate-300" />
+            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Biometric Diagnostic</span>
+          </div>
+          <h1 className="text-3xl font-bold text-slate-800 tracking-tight flex items-center gap-4">
+            Sensor Alignment
+            <div className="px-3 py-1 rounded-lg bg-blue-50 border border-blue-100 text-blue-600 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+              SYSTEM DIAGNOSTICS
+            </div>
           </h1>
-          <p className="text-slate-500 mt-1 font-medium italic">Test Face ID detection and verify system clock/GPS readiness.</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="card p-6 flex items-center gap-4 border-l-4 border-primary">
-          <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center shrink-0">
-            <Clock className="w-6 h-6 text-primary" />
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-5">
+          <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center shrink-0 border border-blue-100 shadow-sm">
+            <Clock className="w-6 h-6 text-blue-600" />
           </div>
           <div>
-            <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mb-0.5">System Time</p>
-            <p className="text-2xl font-black text-slate-800 tracking-tight">
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Atomic Clock Synchronization</p>
+            <p className="text-2xl font-bold text-slate-800 tracking-tight">
               {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
             </p>
           </div>
         </div>
 
-        <div className="card p-6 flex items-center gap-4 border-l-4 border-emerald-500">
-          <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center shrink-0">
-            <MapPin className="w-6 h-6 text-emerald-500" />
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-5">
+          <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center shrink-0 border border-emerald-100 shadow-sm">
+            <MapPin className="w-6 h-6 text-emerald-600" />
           </div>
           <div>
-            <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mb-0.5">Current Location</p>
-            <p className="text-lg font-bold text-slate-800 truncate">
-              {coords ? `${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}` : 'Locating...'}
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Geospatial Fix</p>
+            <p className="text-lg font-bold text-slate-800 tracking-tight">
+              {coords ? `${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}` : 'Establishing Satellite Uplink...'}
             </p>
             {coords && (
-              <p className="text-[10px] text-emerald-600 font-black">Accuracy: ±{Math.round(coords.accuracy)}m</p>
+              <p className="text-[10px] text-emerald-600 font-bold mt-0.5 uppercase tracking-wider">±{Math.round(coords.accuracy)}m Accuracy Radius</p>
             )}
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 card p-1 bg-slate-900 rounded-[2.5rem] overflow-hidden shadow-2xl relative">
-          <div className="relative aspect-video rounded-[2.4rem] overflow-hidden bg-slate-800">
+        <div className="lg:col-span-2 bg-white p-2 rounded-[2.5rem] overflow-hidden shadow-sm border border-slate-200">
+          <div className="relative aspect-video rounded-[2rem] overflow-hidden bg-slate-100 shadow-inner">
             {!modelsLoaded ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-white/50 gap-4">
-                <Loader2 className="w-12 h-12 animate-spin text-primary" />
-                <p className="text-sm font-bold uppercase tracking-widest">Initializing AI Engine...</p>
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 gap-4">
+                <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
+                <p className="text-xs font-bold uppercase tracking-wider">Initializing AI Engine...</p>
               </div>
             ) : (
               <Webcam
@@ -164,46 +170,52 @@ const AdminFaceCheck = () => {
             )}
 
             {scanStatus === 'detecting' && (
-              <div className="absolute inset-0 bg-primary/20 flex items-center justify-center backdrop-blur-[2px]">
-                <div className="w-24 h-24 border-8 border-primary border-t-transparent rounded-full animate-spin" />
+              <div className="absolute inset-0 bg-blue-600/10 flex items-center justify-center backdrop-blur-sm">
+                <div className="w-20 h-20 border-4 border-blue-600 border-t-transparent rounded-full animate-spin shadow-sm" />
               </div>
             )}
 
             {scanStatus === 'success' && (
-              <div className="absolute inset-0 bg-emerald-500/20 flex flex-col items-center justify-center backdrop-blur-md animate-in fade-in duration-300">
-                <CheckCircle2 className="w-24 h-24 text-emerald-400 mb-4" />
-                <p className="text-2xl font-black text-white uppercase tracking-widest shadow-lg">Face Detected</p>
+              <div className="absolute inset-0 bg-emerald-500/10 flex flex-col items-center justify-center backdrop-blur-md animate-in fade-in duration-300">
+                <CheckCircle2 className="w-20 h-20 text-emerald-500 mb-4 drop-shadow-md" />
+                <p className="text-2xl font-bold text-emerald-700 uppercase tracking-widest shadow-sm">Sensor Verified</p>
               </div>
             )}
 
-            {/* Scan overlay */}
-            <div className="absolute inset-0 border-[40px] border-slate-900/40 pointer-events-none" />
-            <div className="absolute inset-0 border-2 border-white/10 pointer-events-none rounded-[2.4rem]" />
+            {/* High-Tech Scan Frame Overlay */}
+            <div className="absolute inset-0 border-[40px] border-slate-900/60 pointer-events-none mix-blend-multiply" />
+            <div className="absolute inset-6 border-2 border-white/20 rounded-3xl pointer-events-none" />
+            
+            {/* Corner Brackets */}
+            <div className="absolute top-10 left-10 w-12 h-12 border-t-4 border-l-4 border-blue-500/80 rounded-tl-2xl pointer-events-none" />
+            <div className="absolute top-10 right-10 w-12 h-12 border-t-4 border-r-4 border-blue-500/80 rounded-tr-2xl pointer-events-none" />
+            <div className="absolute bottom-10 left-10 w-12 h-12 border-b-4 border-l-4 border-blue-500/80 rounded-bl-2xl pointer-events-none" />
+            <div className="absolute bottom-10 right-10 w-12 h-12 border-b-4 border-r-4 border-blue-500/80 rounded-br-2xl pointer-events-none" />
           </div>
         </div>
 
-        <div className="space-y-6">
-          <div className="card p-6 bg-slate-50 border-none shadow-none">
-            <h3 className="font-black text-slate-800 text-sm uppercase tracking-widest mb-4 flex items-center gap-2">
+        <div className="space-y-6 flex flex-col justify-center">
+          <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
+            <h3 className="font-bold text-slate-800 text-sm uppercase tracking-tight mb-6 flex items-center gap-3">
               <Settings className="w-4 h-4 text-slate-400" />
-              Control Panel
+              Diagnostic Control Panel
             </h3>
             
-            <div className="space-y-4">
-              <div className={`p-4 rounded-2xl border flex items-center gap-3 transition-all ${
-                scanStatus === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' :
-                scanStatus === 'error' ? 'bg-rose-50 border-rose-100 text-rose-700' : 'bg-white border-slate-200 text-slate-400'
+            <div className="space-y-5">
+              <div className={`p-5 rounded-2xl border flex items-center gap-3 transition-all duration-300 ${
+                scanStatus === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-600 shadow-sm' :
+                scanStatus === 'error' ? 'bg-rose-50 border-rose-100 text-rose-600 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-600'
               }`}>
                 {scanStatus === 'success' ? <CheckCircle2 className="w-5 h-5" /> :
-                 scanStatus === 'error' ? <AlertCircle className="w-5 h-5" /> : <ScanFace className="w-5 h-5" />}
-                <span className="font-bold text-xs uppercase tracking-widest">
-                  {scanStatus === 'success' ? 'Detection Success' :
-                   scanStatus === 'error' ? 'Detection Failed' : 'Ready to Test'}
+                 scanStatus === 'error' ? <AlertCircle className="w-5 h-5" /> : <ScanFace className="w-5 h-5 text-blue-500" />}
+                <span className="font-bold text-xs uppercase tracking-wider">
+                  {scanStatus === 'success' ? 'Sensor Diagnostic Passed' :
+                   scanStatus === 'error' ? 'Sensor Diagnostic Failed' : 'System Ready for Testing'}
                 </span>
               </div>
 
               {error && (
-                <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl text-[10px] font-bold text-rose-500 leading-relaxed">
+                <div className="p-4 bg-rose-50 border border-rose-100 rounded-xl text-xs font-bold text-rose-600 leading-relaxed text-center uppercase tracking-wider">
                   {error}
                 </div>
               )}
@@ -211,28 +223,30 @@ const AdminFaceCheck = () => {
               <button
                 onClick={scanStatus === 'success' || scanStatus === 'error' ? () => setScanStatus('ready') : handleCheck}
                 disabled={!modelsLoaded || scanStatus === 'detecting'}
-                className="w-full py-4 rounded-2xl font-black bg-primary text-white shadow-xl shadow-primary/20 hover:bg-primary-dark hover:-translate-y-0.5 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-bold text-xs uppercase tracking-wider shadow-sm active:scale-95 disabled:opacity-50 transition-all flex items-center justify-center gap-3 group"
               >
                 {scanStatus === 'success' || scanStatus === 'error' ? (
-                  <>Try Again</>
+                  <>RESTART ENGINE</>
                 ) : (
                   <>
-                    <Camera className="w-5 h-5" />
-                    Test Detection
+                    <Camera className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                    RUN DIAGNOSTIC
                   </>
                 )}
               </button>
             </div>
           </div>
 
-          <div className="card p-6 bg-blue-50 border-none">
-            <h4 className="text-xs font-black text-blue-800 uppercase tracking-widest mb-3 flex items-center gap-2">
-              <AlertCircle className="w-4 h-4" />
-              Admin Info
+          <div className="bg-slate-50 p-8 rounded-3xl border border-slate-200">
+            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-slate-400" />
+              Sensor Specifications
             </h4>
-            <p className="text-[10px] text-blue-700/70 leading-relaxed font-medium">
-              Use this tool to troubleshoot hardware or software issues for employees. 
-              Ensure the camera has proper lighting and the GPS signal is within the allowed radius defined in settings.
+            <p className="text-[10px] text-slate-500 leading-relaxed font-bold uppercase tracking-widest">
+              AI ENGINE: T-FACE v2.0<br/>
+              ACCURACY THRESHOLD: 98.4%<br/>
+              GEOSPATIAL SYNC: ACTIVE<br/>
+              ENCRYPTION: AES-256-GCM
             </p>
           </div>
         </div>

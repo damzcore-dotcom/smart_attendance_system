@@ -20,6 +20,7 @@ import Backup from './pages/admin/Backup';
 import Attendance from './pages/admin/Attendance';
 import Settings from './pages/admin/Settings';
 import AdminCorrections from './pages/admin/Corrections';
+import DeviceSettings from './pages/admin/DeviceSettings';
 import EmployeeHome from './pages/employee/EmployeeHome';
 import History from './pages/employee/History';
 import Profile from './pages/employee/Profile';
@@ -101,6 +102,7 @@ function App() {
             <Route path="announcements" element={<PermissionRoute menuKey="announcements"><Announcements /></PermissionRoute>} />
             <Route path="face-check" element={<PermissionRoute menuKey="announcements"><AdminFaceCheck /></PermissionRoute>} />
             <Route path="settings" element={<PermissionRoute menuKey="settings"><Settings /></PermissionRoute>} />
+            <Route path="devices" element={<PermissionRoute menuKey="settings"><DeviceSettings /></PermissionRoute>} />
             <Route path="corrections" element={<PermissionRoute menuKey="corrections"><AdminCorrections /></PermissionRoute>} />
           </Route>
 

@@ -1,55 +1,67 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #006C49;
-  --color-primary-dark: #004D34;
-  --color-primary-light: #008F61;
-  --color-secondary: #F3FBF8;
+  --color-primary: #2563eb;
+  --color-primary-dark: #1d4ed8;
+  --color-primary-light: #3b82f6;
+  --color-secondary: #f7f8fc;
   
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-sans: "Inter", "Outfit", system-ui, -apple-system, sans-serif;
 }
 
 @layer base {
   body {
-    @apply bg-slate-50 text-slate-900 antialiased;
+    @apply bg-[#f7f8fc] text-slate-800 antialiased selection:bg-blue-500/20 selection:text-blue-900;
   }
 }
 
 @layer components {
   .btn-primary {
-    @apply bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg transition-all duration-200 shadow-sm active:scale-95;
+    @apply bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl font-bold text-sm tracking-wide transition-all duration-300 shadow-lg shadow-blue-600/20 active:scale-95;
+  }
+
+  .btn-professional {
+    @apply relative overflow-hidden bg-gradient-to-br from-blue-600 to-blue-700 text-white px-8 py-4 rounded-2xl font-bold text-sm tracking-wide transition-all duration-300 shadow-xl shadow-blue-600/25 hover:shadow-blue-500/40 hover:-translate-y-0.5 active:scale-95;
   }
   
   .card {
-    @apply bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden;
+    @apply bg-white rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md overflow-hidden transition-all duration-300;
+  }
+
+  .dark-card {
+    @apply bg-white rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all duration-300;
   }
   
   .glass {
-    @apply bg-white/80 backdrop-blur-md border border-white/20;
+    @apply bg-white/80 backdrop-blur-xl border border-slate-200/50 shadow-sm;
+  }
+
+  .executive-bg {
+    @apply fixed inset-0 -z-10 bg-[#f7f8fc];
   }
 }
 
-/* Professional Custom Scrollbar */
+/* Crystal Azure Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: #f1f5f9;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1; /* slate-300 */
-  border-radius: 10px;
+  background: #cbd5e1;
+  border-radius: 20px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8; /* slate-400 */
+  background: #94a3b8;
 }
 
 /* For Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 transparent;
+  scrollbar-color: #cbd5e1 #f1f5f9;
 }

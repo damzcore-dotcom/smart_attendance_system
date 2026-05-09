@@ -104,70 +104,72 @@ const Leave = () => {
   const list = requests?.data || [];
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center px-2">
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-5 duration-500">
+      <div className="flex justify-between items-center px-1">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">Leave Management</h1>
-          <p className="text-xs text-slate-400 mt-1">Submit and track your time-off requests.</p>
+          <h1 className="text-xl font-bold text-slate-800">Leave Request</h1>
+          <p className="text-xs text-slate-400 mt-0.5">Manage your absences</p>
         </div>
         <button 
           onClick={() => setIsModalOpen(true)}
-          className="p-3 bg-primary text-white rounded-2xl shadow-lg shadow-primary/20 flex items-center gap-2 active:scale-95 transition-all"
+          className="w-12 h-12 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-600/25 flex items-center justify-center active:scale-95 transition-all hover:bg-blue-700"
         >
-          <Plus className="w-5 h-5" />
+          <Plus className="w-6 h-6" />
         </button>
       </div>
 
       {/* History List */}
       <div className="space-y-4">
-        <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-2">Request History</h2>
+        <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-1">Request History</h2>
         {isLoading ? (
-          <div className="flex justify-center py-10"><Loader2 className="animate-spin text-primary" /></div>
+          <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>
         ) : list.length === 0 ? (
-          <div className="card p-10 flex flex-col items-center justify-center text-center space-y-3 bg-slate-50/50 border-dashed">
-            <div className="w-16 h-16 bg-white rounded-3xl flex items-center justify-center text-slate-200">
+          <div className="bg-white p-16 flex flex-col items-center justify-center text-center border-2 border-dashed border-slate-200 rounded-2xl">
+            <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-300 mb-4 border border-slate-200">
               <Calendar className="w-8 h-8" />
             </div>
-            <p className="text-slate-400 text-sm font-medium">No leave requests found.</p>
+            <p className="text-sm text-slate-400">No leave records yet</p>
           </div>
         ) : list.map((item) => (
-          <div key={item.id} className="card p-5 group animate-in slide-in-from-bottom-2 duration-300">
+          <div key={item.id} className="bg-white p-6 group animate-in slide-in-from-bottom-4 duration-500 border border-slate-200 rounded-2xl hover:border-blue-200 hover:shadow-sm transition-all shadow-sm">
             <div className="flex justify-between items-start mb-4">
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
-                  item.type === 'Sakit' ? 'bg-rose-50 text-rose-500' :
-                  item.type === 'Izin' ? 'bg-amber-50 text-amber-500' :
-                  'bg-blue-50 text-blue-500'
+              <div className="flex items-center gap-4">
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center border transition-all duration-300 ${
+                  item.type === 'Sakit' ? 'bg-rose-50 border-rose-200 text-rose-500' :
+                  item.type === 'Izin' ? 'bg-amber-50 border-amber-200 text-amber-500' :
+                  'bg-blue-50 border-blue-100 text-blue-600 group-hover:bg-blue-600 group-hover:text-white'
                 }`}>
                   <FileText className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-slate-800">{item.type}</h4>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{new Date(item.createdAt).toLocaleDateString()}</p>
+                  <h4 className="text-base font-bold text-slate-800">{item.type}</h4>
+                  <p className="text-[10px] text-slate-400 font-medium mt-0.5">Filed: {new Date(item.createdAt).toLocaleDateString()}</p>
                 </div>
               </div>
-              <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter border ${
-                item.status === 'PENDING' ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                item.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                'bg-rose-50 text-rose-600 border-rose-100'
+              <span className={`px-3 py-1.5 rounded-lg text-[10px] font-semibold border ${
+                item.status === 'PENDING' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                item.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                'bg-rose-50 text-rose-700 border-rose-200'
               }`}>
                 {item.status}
               </span>
             </div>
             
-            <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-2xl mb-4">
-              <div>
-                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">From</p>
-                <p className="text-xs font-bold text-slate-700">{new Date(item.startDate).toLocaleDateString()}</p>
+            <div className="grid grid-cols-2 gap-6 p-4 bg-slate-50 border border-slate-100 rounded-xl mb-4">
+              <div className="space-y-0.5">
+                <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">Start</p>
+                <p className="text-sm font-bold text-slate-800">{new Date(item.startDate).toLocaleDateString()}</p>
               </div>
-              <div className="text-right">
-                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">Until</p>
-                <p className="text-xs font-bold text-slate-700">{new Date(item.endDate).toLocaleDateString()}</p>
+              <div className="text-right space-y-0.5">
+                <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">End</p>
+                <p className="text-sm font-bold text-slate-800">{new Date(item.endDate).toLocaleDateString()}</p>
               </div>
             </div>
 
             {item.reason && (
-              <p className="text-xs text-slate-500 italic px-1 line-clamp-2">"{item.reason}"</p>
+              <div className="px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl">
+                <p className="text-xs text-slate-500 italic leading-relaxed">"{item.reason}"</p>
+              </div>
             )}
           </div>
         ))}
@@ -175,32 +177,35 @@ const Leave = () => {
 
       {/* Submission Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}></div>
-          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-sm relative z-10 overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-            <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-primary/10 rounded-2xl flex items-center justify-center text-primary">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/30 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setIsModalOpen(false)}></div>
+          <div className="bg-white border border-slate-200 shadow-2xl w-full max-w-lg relative z-10 overflow-hidden animate-in zoom-in-95 duration-300 rounded-2xl">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
                   <Plus className="w-5 h-5" />
                 </div>
-                <h3 className="font-black text-slate-800 text-sm">Ajukan Cuti / Izin</h3>
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">New Leave Request</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Fill in the details below</p>
+                </div>
               </div>
-              <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
-                <XCircle className="w-5 h-5 text-slate-300" />
+              <button onClick={() => setIsModalOpen(false)} className="w-8 h-8 flex items-center justify-center hover:bg-slate-100 rounded-lg transition-colors text-slate-400 hover:text-slate-700">
+                <XCircle className="w-5 h-5" />
               </button>
             </div>
             
-            <form onSubmit={handleSubmit} className="p-8 space-y-5">
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Tipe Pengajuan</label>
-                <div className="grid grid-cols-3 gap-2">
+            <form onSubmit={handleSubmit} className="p-6 space-y-5">
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-slate-500">Leave Type</label>
+                <div className="grid grid-cols-3 gap-3">
                   {['Cuti', 'Sakit', 'Izin'].map(t => (
                     <button
                       key={t}
                       type="button"
                       onClick={() => setFormData({...formData, type: t})}
-                      className={`py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${
-                        formData.type === t ? 'bg-primary border-primary text-white shadow-lg shadow-primary/20' : 'bg-white border-slate-100 text-slate-400'
+                      className={`py-3 rounded-xl text-sm font-semibold border transition-all duration-300 ${
+                        formData.type === t ? 'bg-blue-600 border-blue-600 text-white shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300'
                       }`}
                     >
                       {t}
@@ -210,42 +215,42 @@ const Leave = () => {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Mulai</label>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-slate-500">Start Date</label>
                   <input 
                     type="date"
                     required
-                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 text-xs font-bold text-slate-700 focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 transition-all"
                     value={formData.startDate}
                     onChange={(e) => setFormData({...formData, startDate: e.target.value})}
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Berakhir</label>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-slate-500">End Date</label>
                   <input 
                     type="date"
                     required
-                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 text-xs font-bold text-slate-700 focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 transition-all"
                     value={formData.endDate}
                     onChange={(e) => setFormData({...formData, endDate: e.target.value})}
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Alasan / Keperluan</label>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-slate-500">Reason</label>
                 <textarea 
                   required
-                  placeholder="Jelaskan alasan Anda..."
-                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3.5 text-xs font-medium text-slate-600 focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all min-h-[80px] resize-none"
+                  placeholder="Explain the reason for your leave..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 transition-all min-h-[100px] resize-none placeholder:text-slate-400"
                   value={formData.reason}
                   onChange={(e) => setFormData({...formData, reason: e.target.value})}
                 />
               </div>
 
               {formData.type === 'Sakit' && (
-                <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Surat Dokter / Resep</label>
+                <div className="space-y-2 animate-in fade-in slide-in-from-top-4 duration-500">
+                  <label className="text-xs font-semibold text-slate-500">Medical Certificate</label>
                   <div className="relative group">
                     <input 
                       type="file"
@@ -257,23 +262,23 @@ const Leave = () => {
                     />
                     <label 
                       htmlFor="medical-upload"
-                      className="flex flex-col items-center justify-center w-full min-h-[120px] bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl cursor-pointer hover:bg-slate-100 hover:border-primary/30 transition-all overflow-hidden"
+                      className="flex flex-col items-center justify-center w-full min-h-[120px] bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition-all overflow-hidden relative group"
                     >
                       {formData.medicalAttachment ? (
                         <div className="relative w-full h-full p-2">
                           <img 
                             src={formData.medicalAttachment} 
                             alt="Preview" 
-                            className="w-full h-32 object-cover rounded-xl"
+                            className="w-full h-32 object-cover rounded-lg"
                           />
-                          <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-xl">
-                            <p className="text-white text-[10px] font-bold">Ganti Foto</p>
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-lg">
+                            <p className="text-white text-xs font-semibold">Change File</p>
                           </div>
                         </div>
                       ) : (
-                        <div className="flex flex-col items-center gap-2 p-4 text-slate-400">
+                        <div className="flex flex-col items-center gap-2 p-6 text-slate-400 group-hover:text-blue-500 transition-colors">
                           <Plus className="w-6 h-6" />
-                          <p className="text-[10px] font-bold uppercase tracking-widest">Klik untuk Upload</p>
+                          <p className="text-xs font-semibold">Upload Certificate</p>
                         </div>
                       )}
                     </label>
@@ -281,20 +286,21 @@ const Leave = () => {
                 </div>
               )}
 
-              <div className="pt-4 flex gap-3">
+              <div className="flex gap-3 pt-2">
                 <button 
                   type="button" 
                   onClick={() => setIsModalOpen(false)}
-                  className="flex-1 py-4 text-sm font-black text-slate-400 hover:bg-slate-50 rounded-2xl transition-all"
+                  className="flex-1 py-3.5 text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors bg-slate-50 rounded-xl border border-slate-200"
                 >
-                  Batal
+                  Cancel
                 </button>
                 <button 
                   type="submit"
                   disabled={leaveMutation.isPending}
-                  className="flex-[2] py-4 bg-primary text-white text-sm font-black rounded-2xl shadow-xl shadow-primary/20 hover:bg-primary-dark transition-all disabled:opacity-50"
+                  className="flex-[2] bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-30 transition-all shadow-sm active:scale-[0.98]"
                 >
-                  {leaveMutation.isPending ? 'Mengirim...' : 'Kirim Pengajuan'}
+                  {leaveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                  Submit Request
                 </button>
               </div>
             </form>

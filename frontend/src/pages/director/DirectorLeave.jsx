@@ -8,9 +8,9 @@ import { direkturAPI } from '../../services/api';
 import * as XLSX from 'xlsx';
 
 const STATUS_CONFIG = {
-  PENDING:  { label: 'Waiting',  color: 'bg-amber-50 text-amber-700 border-amber-200',  icon: Clock },
+  PENDING:  { label: 'Pending',  color: 'bg-amber-50 text-amber-700 border-amber-200',    icon: Clock },
   APPROVED: { label: 'Approved', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: CheckCircle2 },
-  REJECTED: { label: 'Rejected', color: 'bg-rose-50 text-rose-700 border-rose-200',      icon: XCircle },
+  REJECTED: { label: 'Rejected', color: 'bg-rose-50 text-rose-700 border-rose-200',       icon: XCircle },
 };
 
 const DirectorLeave = () => {
@@ -53,60 +53,60 @@ const DirectorLeave = () => {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-5 duration-500">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Leave Review</h1>
-          <p className="text-slate-500 mt-1 text-sm font-medium">Review and monitor employee leave requests — executive view</p>
+          <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Leave Review</h1>
+          <p className="text-sm text-slate-500 mt-1">Institutional leave auditing</p>
         </div>
         <button 
           onClick={handleExport}
           disabled={!records.length}
-          className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-sm disabled:opacity-40 transition-all active:scale-95"
+          className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-sm disabled:opacity-30 transition-all active:scale-95"
         >
-          <Download className="w-4 h-4" /> Export Excel
+          <Download className="w-4 h-4" /> Export Records
         </button>
       </div>
 
-      {/* Filter Card */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-        <div className="flex flex-wrap gap-4 items-end">
-          <div className="flex-1 min-w-[240px] space-y-1.5">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block ml-1">Search Employee</label>
-            <div className="relative">
-              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+      {/* Filter */}
+      <div className="bg-white p-6 border border-slate-200 rounded-2xl shadow-sm">
+        <div className="flex flex-col xl:flex-row gap-6 items-end">
+          <div className="flex-1 space-y-2">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Search</label>
+            <div className="relative group">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
               <input 
                 type="text" 
                 placeholder="Name or NIK..." 
                 value={search}
                 onChange={e => { setSearch(e.target.value); setPage(1); }}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all font-medium"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 placeholder:text-slate-400"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-2 gap-4">
-            <div className="space-y-1.5 min-w-[160px]">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block ml-1">Status</label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 xl:w-1/2">
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</label>
               <select 
                 value={status} 
                 onChange={e => { setStatus(e.target.value); setPage(1); }}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none font-bold text-slate-700 cursor-pointer"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 appearance-none cursor-pointer"
               >
                 <option value="">All Status</option>
-                <option value="PENDING">Waiting</option>
+                <option value="PENDING">Pending</option>
                 <option value="APPROVED">Approved</option>
                 <option value="REJECTED">Rejected</option>
               </select>
             </div>
 
-            <div className="space-y-1.5 min-w-[160px]">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block ml-1">Department</label>
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Department</label>
               <select 
                 value={dept} 
                 onChange={e => { setDept(e.target.value); setPage(1); }}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none font-bold text-slate-700 cursor-pointer"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 appearance-none cursor-pointer"
               >
                 <option value="">All Departments</option>
                 {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -116,79 +116,98 @@ const DirectorLeave = () => {
         </div>
       </div>
 
-      {/* Table Section */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-tight">
-            Showing <span className="text-slate-900">{records.length}</span> of <span className="text-slate-900">{total}</span> requests
+      {/* Data Table */}
+      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+          <p className="text-xs font-semibold text-slate-500">
+            Showing <span className="text-slate-800 font-bold">{total}</span> records
           </p>
         </div>
         
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/50 text-slate-500 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
-                <th className="px-6 py-4">Employee</th>
-                <th className="px-6 py-4">Type</th>
-                <th className="px-6 py-4">Period</th>
-                <th className="px-6 py-4">Duration</th>
-                <th className="px-6 py-4">Reason</th>
-                <th className="px-6 py-4 text-center">Status</th>
+        <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-400px)]">
+          <table className="w-full text-left border-separate border-spacing-0">
+            <thead className="sticky top-0 z-10">
+              <tr className="bg-slate-50 border-b border-slate-200">
+                <th className="px-6 py-4">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Personnel</span>
+                </th>
+                <th className="px-4 py-4">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Type</span>
+                </th>
+                <th className="px-4 py-4">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Date Range</span>
+                </th>
+                <th className="px-4 py-4 text-center">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Duration</span>
+                </th>
+                <th className="px-4 py-4">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Reason</span>
+                </th>
+                <th className="px-6 py-4 text-center">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</span>
+                </th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
                   <td colSpan="6" className="text-center py-20">
-                    <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-2" />
-                    <p className="text-sm text-slate-400 font-medium">Loading requests...</p>
+                    <div className="flex flex-col items-center gap-4">
+                      <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
+                      <p className="text-sm text-slate-400">Loading...</p>
+                    </div>
                   </td>
                 </tr>
               ) : records.length === 0 ? (
                 <tr>
                   <td colSpan="6" className="text-center py-20">
-                    <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-slate-100">
-                      <FileText className="w-8 h-8 text-slate-300" />
+                    <div className="flex flex-col items-center gap-4">
+                      <div className="w-16 h-16 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-center">
+                        <FileText className="w-8 h-8 text-slate-300" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-500">No records found</p>
+                        <p className="text-xs text-slate-400 mt-1">Try adjusting your filters</p>
+                      </div>
                     </div>
-                    <p className="text-sm font-bold text-slate-500">No leave requests found</p>
                   </td>
                 </tr>
               ) : records.map((r) => {
-                const cfg = STATUS_CONFIG[r.status] || { label: r.status, color: 'bg-slate-100 text-slate-500' };
+                const cfg = STATUS_CONFIG[r.status] || { label: r.status, color: 'bg-slate-50 text-slate-600 border-slate-200' };
                 return (
-                  <tr key={r.id} className="hover:bg-slate-50/50 transition-colors border-b border-slate-100 last:border-0">
+                  <tr key={r.id} className="group hover:bg-blue-50/50 transition-colors">
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs">
+                      <div className="flex items-center gap-4 min-w-[200px]">
+                        <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs group-hover:scale-105 transition-transform">
                           {(r.name || 'E').charAt(0)}
                         </div>
                         <div>
-                          <p className="font-bold text-slate-800 text-sm">{r.name}</p>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase">{r.department}</p>
+                          <p className="font-semibold text-slate-800 text-sm group-hover:text-blue-600 transition-colors">{r.name}</p>
+                          <p className="text-xs text-slate-400 mt-0.5">{r.department}</p>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                       <span className="px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-wide border border-indigo-100">
+                    <td className="px-4 py-4">
+                       <span className="px-3 py-1 rounded-lg bg-slate-50 text-slate-600 text-xs font-semibold border border-slate-200">
                         {r.type}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
-                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-2 text-sm text-slate-700">
+                        <Calendar className="w-4 h-4 text-slate-400" />
                         {new Date(r.startDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}
-                        <span className="text-slate-300">—</span>
+                        <span className="text-slate-300">→</span>
                         {new Date(r.endDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <span className="text-xs font-black text-slate-800">{r.duration} Days</span>
+                    <td className="px-4 py-4 text-center">
+                      <span className="text-sm font-semibold text-slate-700 bg-slate-50 px-3 py-1 rounded-lg border border-slate-200">{r.duration}d</span>
                     </td>
-                    <td className="px-6 py-4">
-                      <p className="text-xs text-slate-500 max-w-[200px] truncate italic">"{r.reason}"</p>
+                    <td className="px-4 py-4">
+                      <p className="text-xs text-slate-500 max-w-[180px] truncate italic">"{r.reason}"</p>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wide border ${cfg.color}`}>
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border ${cfg.color}`}>
                         {cfg.label}
                       </span>
                     </td>
@@ -201,22 +220,22 @@ const DirectorLeave = () => {
 
         {/* Pagination */}
         {!isLoading && records.length > 0 && (
-          <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50/50">
-            <p className="text-xs text-slate-400 font-medium">
-              Page <span className="font-bold text-slate-600">{page}</span> of <span className="font-bold text-slate-600">{totalPages}</span>
+          <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+            <p className="text-xs text-slate-500 font-medium">
+              Page <span className="text-slate-800 font-bold">{page}</span> of <span className="text-slate-800 font-bold">{totalPages}</span>
             </p>
             <div className="flex gap-2">
               <button
                 disabled={page <= 1}
                 onClick={() => setPage(p => p - 1)}
-                className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
-                <ChevronLeft className="w-4 h-4 text-slate-600" />
+                className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 hover:bg-slate-50 disabled:opacity-20 transition-all">
+                <ChevronLeft className="w-4 h-4" />
               </button>
               <button
                 disabled={page >= totalPages}
                 onClick={() => setPage(p => p + 1)}
-                className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
-                <ChevronRight className="w-4 h-4 text-slate-600" />
+                className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 hover:bg-slate-50 disabled:opacity-20 transition-all">
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           </div>

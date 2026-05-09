@@ -14,6 +14,7 @@ const userRoutes = require('./routes/userRoutes');
 const announcementRoutes = require('./routes/announcementRoutes');
 const leaveRoutes = require('./routes/leaveRoutes');
 const backupRoutes = require('./routes/backupRoutes');
+const deviceRoutes = require('./routes/deviceRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -54,6 +55,7 @@ app.use('/api/leave', leaveRoutes);
 app.use('/api/backup', backupRoutes);
 app.use('/api/manager', require('./routes/managerRoutes'));
 app.use('/api/direktur', require('./routes/direkturRoutes'));
+app.use('/api/devices', deviceRoutes);
 
 // Global error handler
 app.use((err, req, res, next) => {

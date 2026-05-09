@@ -2,7 +2,6 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   CalendarCheck, 
-  FileCheck2, 
   LogOut, 
   Bell,
   Menu,
@@ -14,6 +13,7 @@ import {
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { authAPI, dashboardAPI } from '../../services/api';
+import { IgaLogo } from '../IgaLogo';
 
 const ManagerLayout = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(window.innerWidth > 1024);
@@ -65,11 +65,12 @@ const ManagerLayout = () => {
   };
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden">
+    <div className="flex h-screen relative overflow-hidden font-sans bg-[#f7f8fc]">
+
       {/* Mobile Backdrop */}
       {isMobile && isSidebarOpen && (
         <div 
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 animate-in fade-in duration-300"
+          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 animate-in fade-in duration-300"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -77,28 +78,26 @@ const ManagerLayout = () => {
       {/* Sidebar */}
       <aside 
         className={`
-          fixed inset-y-0 left-0 z-50 transition-all duration-300 flex flex-col shadow-2xl
-          lg:relative lg:translate-x-0
+          fixed inset-y-0 left-0 z-50 transition-all duration-500 flex flex-col bg-white border-r border-slate-200 shadow-lg
+          lg:relative lg:translate-x-0 lg:shadow-none
           ${isSidebarOpen ? 'translate-x-0 w-72' : '-translate-x-full w-0 lg:w-20 lg:translate-x-0'}
         `}
-        style={{ background: 'linear-gradient(160deg, #0f172a 0%, #1e3a5f 60%, #1a4a7a 100%)' }}
       >
         {/* Brand */}
-        <div className="p-6 flex items-center gap-3 border-b border-white/5">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-blue-500/20"
-            style={{ background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)' }}>
-            <Building2 className="w-6 h-6 text-white" />
-          </div>
-          {(isSidebarOpen || !isMobile) && (
-            <div className={`animate-in fade-in slide-in-from-left-2 duration-300 ${!isSidebarOpen && 'lg:hidden'}`}>
-              <span className="font-bold text-white text-lg block tracking-tight">Manager Portal</span>
-              <span className="text-blue-400 text-[10px] font-bold tracking-widest uppercase">Department Ops</span>
+        <div className="p-6 flex items-center justify-center border-b border-slate-100 min-h-[88px]">
+          {isSidebarOpen ? (
+            <div className="h-10 animate-in fade-in slide-in-from-left-2 duration-500">
+              <IgaLogo className="w-full h-full" />
+            </div>
+          ) : (
+            <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center shrink-0 shadow-md">
+              <span className="text-white font-black text-lg">I</span>
             </div>
           )}
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 space-y-1.5 mt-6 overflow-y-auto">
+        <nav className="flex-1 px-3 space-y-1 mt-4 overflow-y-auto">
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
@@ -107,16 +106,18 @@ const ManagerLayout = () => {
               <Link
                 key={item.name}
                 to={item.path}
-                className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
+                className={`flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-200 group relative ${
                   isActive 
-                    ? 'text-white' 
-                    : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                    ? 'bg-blue-50 text-blue-700 font-semibold' 
+                    : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
                 }`}
-                style={isActive ? { background: 'linear-gradient(135deg, #2563eb, #1d4ed8)', boxShadow: '0 8px 20px rgba(37,99,235,0.3)' } : {}}
               >
-                <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-white' : 'group-hover:scale-110 transition-transform'}`} />
+                {isActive && (
+                   <div className="absolute left-0 w-1 h-6 bg-blue-600 rounded-r-full" />
+                )}
+                <Icon className={`w-5 h-5 shrink-0 transition-all duration-200 ${isActive ? 'text-blue-600' : 'group-hover:scale-105 group-hover:text-slate-700'}`} />
                 {(isSidebarOpen || (isMobile && isSidebarOpen)) && (
-                  <span className={`font-semibold text-sm tracking-wide ${!isSidebarOpen && 'lg:hidden'}`}>{item.name}</span>
+                  <span className={`text-sm ${!isSidebarOpen && 'lg:hidden'}`}>{item.name}</span>
                 )}
               </Link>
             );
@@ -125,73 +126,70 @@ const ManagerLayout = () => {
 
         {/* User Profile Area */}
         <div className="p-4 mt-auto">
-          <div className={`rounded-2xl border border-white/5 p-4 transition-all duration-300 ${isSidebarOpen ? 'bg-white/5' : 'bg-transparent'}`}>
+          <div className="rounded-xl border border-slate-100 p-4 bg-slate-50 transition-all duration-500">
             {isSidebarOpen && (
-              <div className="flex items-center gap-3 mb-4 animate-in fade-in duration-300">
-                <div className="w-10 h-10 rounded-full bg-blue-500/20 border border-blue-400/30 flex items-center justify-center overflow-hidden">
-                   <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`} alt="avatar" />
+              <div className="flex items-center gap-3 mb-4 animate-in fade-in duration-500">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center overflow-hidden">
+                   <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`} alt="avatar" className="w-full h-full object-cover" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-white truncate">{user.name || user.username}</p>
-                  <p className="text-[10px] font-bold text-blue-400 uppercase tracking-tighter">{user.role}</p>
+                  <p className="text-sm font-semibold text-slate-800 truncate">{user.name || user.username}</p>
+                  <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">{user.role}</p>
                 </div>
               </div>
             )}
             <button
               onClick={handleLogout}
-              className={`w-full flex items-center gap-3 rounded-xl text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-all duration-300 font-bold text-sm ${isSidebarOpen ? 'px-4 py-3' : 'px-0 py-2 justify-center'}`}
+              className={`w-full flex items-center gap-3 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all duration-200 text-sm font-medium ${isSidebarOpen ? 'px-3 py-2.5' : 'px-0 py-2 justify-center'}`}
             >
               <LogOut className="w-5 h-5 shrink-0" />
-              {isSidebarOpen && <span>Logout Portal</span>}
+              {isSidebarOpen && <span>Logout</span>}
             </button>
           </div>
         </div>
       </aside>
 
-      {/* Main Content */}
+      {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        {/* Top Nav */}
-        <header className="h-16 lg:h-20 bg-white border-b border-slate-200 flex items-center justify-between px-4 lg:px-8 z-20 shadow-sm shrink-0">
-          <div className="flex items-center gap-3 lg:gap-4">
+        {/* Top Navbar */}
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 z-20 shrink-0 shadow-sm">
+          <div className="flex items-center gap-4">
             <button 
               onClick={() => setSidebarOpen(!isSidebarOpen)}
-              className="p-2 lg:p-2.5 hover:bg-slate-50 text-slate-500 rounded-xl transition-all border border-transparent hover:border-slate-100"
+              className="w-10 h-10 flex items-center justify-center hover:bg-slate-50 rounded-xl transition-all text-slate-400"
             >
               {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
-            <div className="md:block">
-               <h2 className="text-base lg:text-lg font-bold text-slate-800 truncate max-w-[150px] lg:max-w-none">
-                {menuItems.find(m => m.path === location.pathname)?.name || 'Dashboard'}
-              </h2>
-            </div>
+            <h2 className="text-lg font-bold text-slate-800 tracking-tight">
+              {menuItems.find(m => m.path === location.pathname)?.name || 'Manager Hub'}
+            </h2>
           </div>
 
-          <div className="flex items-center gap-2 lg:gap-4">
+          <div className="flex items-center gap-4">
              <div className="relative">
               <button 
                 onClick={() => setNotificationsOpen(!isNotificationsOpen)}
-                className={`p-2 lg:p-2.5 rounded-xl transition-all relative ${isNotificationsOpen ? 'bg-blue-50 text-blue-600 border-blue-100' : 'hover:bg-slate-50 text-slate-400 border-transparent'} border`}
+                className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all relative ${isNotificationsOpen ? 'bg-blue-50 text-blue-600' : 'hover:bg-slate-50 text-slate-400'}`}
               >
                 <Bell className="w-5 h-5" />
                 {unreadCount > 0 && (
-                  <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-rose-500 rounded-full border border-white lg:w-2 lg:h-2"></span>
+                  <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white shadow-sm animate-pulse"></span>
                 )}
               </button>
             </div>
-            <div className="h-6 w-[1px] bg-slate-200 mx-1 lg:mx-2"></div>
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 lg:px-4 lg:py-2 bg-slate-50 border border-slate-100 rounded-2xl">
-               <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
-               <span className="text-[10px] lg:text-[11px] font-bold text-slate-600 uppercase tracking-widest">{user.role}</span>
-            </div>
-            <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-br from-blue-500 to-blue-700 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20 sm:hidden">
-               <span className="text-white text-xs font-bold">{(user.name || 'M').charAt(0)}</span>
+            <div className="h-8 w-px bg-slate-200"></div>
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-lg">
+               <div className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
+               <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">{user.role}</span>
             </div>
           </div>
         </header>
 
-        {/* Page Content */}
-        <main className="flex-1 overflow-y-auto p-4 lg:p-8 bg-[#f8fafc]">
-          <Outlet />
+        {/* Page Container */}
+        <main className="flex-1 overflow-y-auto p-6">
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-6">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

@@ -13,7 +13,8 @@ import {
   Globe,
   Loader2,
   X,
-  Shield
+  Shield,
+  CalendarCheck
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { settingsAPI, authAPI } from '../../services/api';
@@ -192,7 +193,7 @@ const Settings = () => {
   if (settingsLoading || locationsLoading || shiftsLoading) {
     return (
       <div className="h-96 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-slate-300" />
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
       </div>
     );
   }
@@ -201,167 +202,218 @@ const Settings = () => {
   const shifts = shiftsData?.data || [];
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">System Settings</h1>
-          <p className="text-slate-500 mt-1">Configure global rules and office locations.</p>
+    <div className="space-y-8 pb-12 animate-in fade-in duration-500">
+      {/* Header */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 px-1">
+        <div className="space-y-1">
+          <div className="flex items-center gap-3 text-slate-500">
+            <div className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center">
+              <ShieldCheck className="w-3 h-3 text-slate-400" />
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider">Administrative Authority</span>
+            <div className="w-1 h-1 rounded-full bg-slate-300" />
+            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Global Configurations</span>
+          </div>
+          <h1 className="text-3xl font-bold text-slate-800 tracking-tight flex items-center gap-4">
+            System Settings
+            <div className="px-3 py-1 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-600 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              SYSTEM SECURE
+            </div>
+          </h1>
         </div>
+
         <button 
           onClick={handleSave}
           disabled={saveMutation.isPending}
-          className="btn-primary flex items-center gap-2 px-6 disabled:opacity-70"
+          className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl text-sm font-bold uppercase tracking-wider flex items-center justify-center gap-3 disabled:opacity-50 transition-all shadow-sm active:scale-95 min-w-[200px]"
         >
           {saveMutation.isPending ? (
             <Loader2 className="w-4 h-4 animate-spin" />
           ) : (
             <Save className="w-4 h-4" />
           )}
-          {saveMutation.isPending ? 'Saving...' : 'Save Changes'}
+          {saveMutation.isPending ? 'SYNCHRONIZING...' : 'COMMIT CHANGES'}
         </button>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-8">
-        {/* Sidebar Tabs */}
-        <aside className="w-full lg:w-64 shrink-0">
-          <div className="card p-2 space-y-1">
+      <div className="flex flex-col lg:flex-row gap-8 items-start">
+        {/* Sidebar Navigation */}
+        <aside className="w-full lg:w-72 shrink-0 lg:sticky lg:top-8">
+          <div className="bg-white p-3 border border-slate-200 rounded-2xl shadow-sm space-y-1">
             {tabs.map((tab) => {
               const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
               return (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${
-                    activeTab === tab.id 
-                      ? 'bg-primary text-white shadow-md shadow-primary/20' 
-                      : 'text-slate-500 hover:bg-slate-50'
+                  className={`w-full flex items-center gap-4 px-5 py-4 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-300 group relative overflow-hidden ${
+                    isActive 
+                      ? 'bg-blue-50 text-blue-700' 
+                      : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
                   }`}
                 >
-                  <Icon className="w-4 h-4" />
-                  {tab.label}
+                  <Icon className={`w-4 h-4 transition-transform duration-300 ${isActive ? 'text-blue-600 scale-110' : 'text-slate-400 group-hover:scale-110 group-hover:rotate-6 group-hover:text-blue-500'}`} />
+                  <span className="relative z-10">{tab.label}</span>
+                  {isActive && (
+                    <div className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.6)]" />
+                  )}
                 </button>
               );
             })}
           </div>
+          
+          <div className="mt-6 px-6 py-5 bg-blue-50/50 border border-blue-100 rounded-2xl relative overflow-hidden group">
+            <div className="relative z-10 space-y-2">
+              <div className="flex items-center gap-2">
+                <Shield className="w-4 h-4 text-blue-600" />
+                <span className="text-[10px] font-bold text-blue-700 uppercase tracking-widest">Protocol Check</span>
+              </div>
+              <p className="text-[10px] text-slate-500 font-medium leading-relaxed tracking-wider">
+                All changes are logged and audited in real-time by the central node.
+              </p>
+            </div>
+          </div>
         </aside>
 
         {/* Content Area */}
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           {activeTab === 'General' && (
-            <div className="card p-6 space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <div>
-                <h3 className="font-bold text-slate-800 mb-6">Company Information</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="bg-white p-8 md:p-10 border border-slate-200 rounded-3xl shadow-sm relative overflow-hidden">
+                <div className="flex items-center gap-5 mb-10">
+                  <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shadow-sm">
+                    <Building2 className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-slate-800 tracking-tight">Enterprise Identity</h3>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">Core Organizational Metadata</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Company Name</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Corporate Designation</label>
                     <input 
                       type="text" 
                       value={formData.companyName || ''} 
                       onChange={(e) => handleInputChange('companyName', e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder:text-slate-400"
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Website URL</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Global Intelligence Node (Website)</label>
                     <input 
                       type="url" 
                       value={formData.companyWebsite || ''} 
                       onChange={(e) => handleInputChange('companyWebsite', e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder:text-slate-400"
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Business Email</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Administrative Link (Email)</label>
                     <input 
                       type="email" 
                       value={formData.companyEmail || ''} 
                       onChange={(e) => handleInputChange('companyEmail', e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder:text-slate-400"
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Phone Number</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Telecommunication Matrix</label>
                     <input 
                       type="tel" 
                       value={formData.companyPhone || ''} 
                       onChange={(e) => handleInputChange('companyPhone', e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder:text-slate-400"
                     />
                   </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Company Address</label>
-                <textarea 
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[100px]"
-                  value={formData.companyAddress || ''}
-                  onChange={(e) => handleInputChange('companyAddress', e.target.value)}
-                ></textarea>
+                <div className="mt-8 space-y-2">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Geographic Headquarters Address</label>
+                  <textarea 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder:text-slate-400 min-h-[120px] resize-none"
+                    value={formData.companyAddress || ''}
+                    onChange={(e) => handleInputChange('companyAddress', e.target.value)}
+                  ></textarea>
+                </div>
               </div>
             </div>
           )}
 
           {activeTab === 'Location' && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <div className="card p-6">
-                <div className="flex justify-between items-center mb-6">
-                  <div>
-                    <h3 className="font-bold text-slate-800">Office Locations</h3>
-                    <p className="text-sm text-slate-500">Define geofence boundaries for attendance validation.</p>
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="bg-white p-8 md:p-10 border border-slate-200 shadow-sm rounded-3xl">
+                <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 mb-10">
+                  <div className="flex items-center gap-5">
+                    <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shadow-sm">
+                      <MapPin className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-slate-800 tracking-tight">Geofencing Nodes</h3>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">Authorized Operational Boundaries</p>
+                    </div>
                   </div>
                   <button 
                     onClick={handleOpenAddModal}
-                    className="flex items-center gap-2 bg-primary/5 text-primary px-4 py-2 rounded-lg text-sm font-bold hover:bg-primary/10 transition-colors"
+                    className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-sm"
                   >
-                    <Plus className="w-4 h-4" />
-                    Add New Location
+                    <Plus className="w-4 h-4" /> NEW LOCATION
                   </button>
                 </div>
 
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-5">
                   {locations.length === 0 ? (
-                    <p className="text-center text-slate-400 py-8 text-sm">No locations defined.</p>
+                    <div className="py-16 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+                      <MapPin className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">No location nodes identified.</p>
+                    </div>
                   ) : (
                     locations.map((loc) => (
-                      <div key={loc.id} className="flex flex-col md:flex-row md:items-center justify-between p-4 border border-slate-100 rounded-2xl hover:border-primary/20 transition-colors group">
-                        <div className="flex items-start gap-4">
-                          <div className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 group-hover:bg-primary/5 group-hover:text-primary transition-colors">
-                            <MapPin className="w-6 h-6" />
-                          </div>
-                          <div>
-                            <h4 className="font-bold text-slate-800">{loc.name}</h4>
-                            <p className="text-xs text-slate-400">{loc.address}</p>
-                            <div className="flex gap-4 mt-2">
-                              <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1 bg-slate-50 px-2 py-0.5 rounded">
-                                <Globe className="w-3 h-3" /> {loc.lat}, {loc.lng}
-                              </span>
-                              <span className="text-[10px] font-bold text-primary flex items-center gap-1 bg-primary/5 px-2 py-0.5 rounded">
-                                <Target className="w-3 h-3" /> {loc.radius}m Radius
-                              </span>
+                      <div key={loc.id} className="group relative bg-white border border-slate-200 rounded-2xl p-6 hover:border-blue-300 hover:shadow-md transition-all duration-300">
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                          <div className="flex items-start gap-5">
+                            <div className="w-14 h-14 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 group-hover:text-blue-600 group-hover:bg-blue-50 border border-slate-100 group-hover:border-blue-100 transition-all duration-300">
+                              <Target className="w-6 h-6" />
+                            </div>
+                            <div className="space-y-1">
+                              <h4 className="text-lg font-bold text-slate-800 tracking-tight group-hover:text-blue-600 transition-colors uppercase">{loc.name}</h4>
+                              <p className="text-[11px] text-slate-500 font-medium leading-relaxed max-w-xl">{loc.address}</p>
+                              <div className="flex flex-wrap gap-3 mt-3">
+                                <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+                                  <Globe className="w-3.5 h-3.5 text-slate-400" />
+                                  <span className="text-[10px] font-bold text-slate-600 tracking-wider">{loc.lat}, {loc.lng}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100">
+                                  <Target className="w-3.5 h-3.5 text-emerald-600" />
+                                  <span className="text-[10px] font-bold text-emerald-700 tracking-wider">{loc.radius}m RADIUS</span>
+                                </div>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                        <div className="flex gap-2 mt-4 md:mt-0">
-                          <button 
-                            onClick={() => handleOpenMap(loc)}
-                            className="p-2 text-primary hover:bg-primary/5 rounded-lg flex items-center gap-1.5 text-xs font-bold transition-all"
-                          >
-                            <Globe className="w-3.5 h-3.5" />
-                            Test Location
-                          </button>
-                          <button 
-                            onClick={() => handleOpenEditModal(loc)}
-                            className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-50"
-                          >
-                            Edit
-                          </button>
-                          <button 
-                            onClick={() => { if(confirm('Delete location?')) deleteLocationMutation.mutate(loc.id) }}
-                            className="p-2 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          
+                          <div className="flex items-center gap-2">
+                            <button 
+                              onClick={() => handleOpenMap(loc)}
+                              className="px-4 py-2.5 bg-white hover:bg-blue-50 text-slate-600 hover:text-blue-700 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border border-slate-200 hover:border-blue-200 flex items-center gap-2"
+                            >
+                              <Globe className="w-3.5 h-3.5" /> TEST MAP
+                            </button>
+                            <button 
+                              onClick={() => handleOpenEditModal(loc)}
+                              className="w-10 h-10 flex items-center justify-center bg-white hover:bg-slate-50 text-slate-400 hover:text-blue-600 rounded-lg transition-all border border-slate-200 hover:border-blue-200"
+                            >
+                              <Save className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => { if(confirm('Permanently terminate location node?')) deleteLocationMutation.mutate(loc.id) }}
+                              className="w-10 h-10 flex items-center justify-center bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-all border border-slate-200 hover:border-rose-200"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))
@@ -369,13 +421,19 @@ const Settings = () => {
                 </div>
               </div>
 
-              <div className="card p-6">
-                <h3 className="font-bold text-slate-800 mb-4">Global Geofencing Rules</h3>
+              <div className="bg-white p-8 md:p-10 border border-slate-200 shadow-sm rounded-3xl">
+                <div className="flex items-center gap-5 mb-8">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-800 tracking-tight">Global Sector Protocols</h3>
+                </div>
+                
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
-                    <div>
-                      <p className="text-sm font-bold text-slate-700">Strict Geofencing</p>
-                      <p className="text-xs text-slate-500">Only allow check-in/out within the defined radius.</p>
+                  <div className="flex items-center justify-between p-6 bg-slate-50 border border-slate-100 rounded-2xl hover:border-blue-200 transition-all duration-300">
+                    <div className="space-y-1">
+                      <p className="text-sm font-bold text-slate-800 tracking-tight">Strict Geofencing Protocol</p>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Enforce physical proximity requirements for all check-in/out events.</p>
                     </div>
                     <div className="relative inline-flex items-center cursor-pointer">
                       <input 
@@ -384,7 +442,7 @@ const Settings = () => {
                         checked={formData.strictGeofencing === 'true'} 
                         onChange={(e) => handleInputChange('strictGeofencing', String(e.target.checked))}
                       />
-                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                      <div className="w-12 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                     </div>
                   </div>
                 </div>
@@ -393,83 +451,92 @@ const Settings = () => {
           )}
 
           {activeTab === 'Shifts' && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <div className="card p-6">
-                <div className="flex justify-between items-center mb-6">
-                  <div>
-                    <h3 className="font-bold text-slate-800">Shift Schedules</h3>
-                    <p className="text-sm text-slate-500">Define working hours and standard check-in times.</p>
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="bg-white p-8 md:p-10 border border-slate-200 shadow-sm rounded-3xl">
+                <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 mb-10">
+                  <div className="flex items-center gap-5">
+                    <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shadow-sm">
+                      <Clock className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-slate-800 tracking-tight">Temporal Protocols</h3>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">Operational Shift Configurations</p>
+                    </div>
                   </div>
                   <button 
                     onClick={() => { setShiftForm({ name: '', startTime: '08:00', endTime: '17:00', breakStart: '12:00', breakEnd: '13:00', gracePeriod: 15 }); setShiftModalOpen(true); }}
-                    className="flex items-center gap-2 bg-primary/5 text-primary px-4 py-2 rounded-lg text-sm font-bold hover:bg-primary/10 transition-colors"
+                    className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-sm"
                   >
-                    <Plus className="w-4 h-4" />
-                    Create Shift
+                    <Plus className="w-4 h-4" /> NEW SHIFT
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   {shifts.map(shift => (
-                    <div key={shift.id} className="p-4 border border-slate-100 rounded-2xl hover:border-primary/20 transition-all bg-slate-50/30 group">
-                      <div className="flex justify-between items-start mb-3">
-                        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-primary border border-slate-100 shadow-sm group-hover:scale-110 transition-transform">
-                          <Clock className="w-5 h-5" />
+                    <div key={shift.id} className="group relative bg-white border border-slate-200 rounded-2xl p-6 hover:border-blue-300 hover:shadow-md transition-all duration-300">
+                      <div className="flex justify-between items-start mb-5">
+                        <div className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 group-hover:text-blue-600 group-hover:bg-blue-50 border border-slate-100 group-hover:border-blue-100 transition-all duration-300">
+                          <Clock className="w-6 h-6" />
                         </div>
-                        <div className="flex gap-1">
+                        <div className="flex gap-2">
                           <button 
                             onClick={() => handleOpenEditShift(shift)}
-                            className="p-1.5 text-slate-400 hover:text-primary hover:bg-white rounded-lg transition-colors"
+                            className="w-9 h-9 flex items-center justify-center bg-white hover:bg-slate-50 text-slate-400 hover:text-blue-600 rounded-lg transition-all border border-slate-200 hover:border-blue-200"
                           >
-                            <Save className="w-3.5 h-3.5" />
+                            <Save className="w-4 h-4" />
                           </button>
                           <button 
-                            onClick={() => { if(confirm('Delete shift?')) deleteShiftMutation.mutate(shift.id) }}
-                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-white rounded-lg transition-colors"
+                            onClick={() => { if(confirm('Permanently delete shift protocol?')) deleteShiftMutation.mutate(shift.id) }}
+                            className="w-9 h-9 flex items-center justify-center bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-all border border-slate-200 hover:border-rose-200"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </div>
-                      <h4 className="font-bold text-slate-800 mb-1">{shift.name}</h4>
-                      <div className="flex flex-col gap-1.5">
-                        <div className="flex items-center gap-2 text-xs text-slate-500">
-                          <Clock className="w-3 h-3 text-slate-400" />
-                          <span>Start: <b className="text-slate-700">{shift.startTime}</b></span>
-                          <span className="text-slate-300 mx-1">|</span>
-                          <span>End: <b className="text-slate-700">{shift.endTime}</b></span>
+                      <h4 className="text-base font-bold text-slate-800 tracking-tight group-hover:text-blue-600 transition-colors uppercase mb-4">{shift.name}</h4>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Active Span</span>
+                          <span className="text-xs font-bold text-slate-700">{shift.startTime} <span className="text-slate-400 mx-1">—</span> {shift.endTime}</span>
                         </div>
-                        <div className="flex items-center gap-2 text-[10px] text-slate-400">
-                          <ShieldCheck className="w-3 h-3" />
-                          <span>Grace Period: <b className="text-slate-600">{shift.gracePeriod} min</b></span>
-                          <span className="ml-auto font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
-                            {shift._count?.employees || 0} Emp
-                          </span>
+                        <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Grace Tolerance</span>
+                          <span className="text-xs font-bold text-amber-600">{shift.gracePeriod}m PROTOCOL</span>
+                        </div>
+                        <div className="flex items-center gap-3 pt-2">
+                          <div className="px-3 py-1 bg-emerald-50 text-emerald-700 text-[9px] font-bold uppercase tracking-widest rounded-md border border-emerald-100">
+                            {shift._count?.employees || 0} Assets Assigned
+                          </div>
                         </div>
                       </div>
                     </div>
                   ))}
                   {shifts.length === 0 && (
-                    <div className="col-span-2 py-8 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
-                      <Clock className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                      <p className="text-sm text-slate-400">No shifts defined yet.</p>
+                    <div className="col-span-1 md:col-span-2 py-16 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+                      <Clock className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">No shift protocols defined.</p>
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="card p-6">
-                <h3 className="font-bold text-slate-800 mb-6">Weekly Working Days</h3>
-                <p className="text-sm text-slate-500 mb-6 text-center lg:text-left">Select which days your company operates. Unselected days will be marked as holidays.</p>
-                <div className="flex flex-wrap justify-center lg:justify-start gap-3">
+              <div className="bg-white p-8 md:p-10 border border-slate-200 shadow-sm rounded-3xl">
+                <div className="flex items-center gap-5 mb-8">
+                  <div className="w-10 h-10 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600">
+                    <CalendarCheck className="w-5 h-5" />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-800 tracking-tight">Weekly Operational Matrix</h3>
+                </div>
+                
+                <div className="flex flex-wrap gap-3">
                   {[
-                    { id: 0, label: 'Sun' },
-                    { id: 1, label: 'Mon' },
-                    { id: 2, label: 'Tue' },
-                    { id: 3, label: 'Wed' },
-                    { id: 4, label: 'Thu' },
-                    { id: 5, label: 'Fri' },
-                    { id: 6, label: 'Sat' },
+                    { id: 0, label: 'SUN' },
+                    { id: 1, label: 'MON' },
+                    { id: 2, label: 'TUE' },
+                    { id: 3, label: 'WED' },
+                    { id: 4, label: 'THU' },
+                    { id: 5, label: 'FRI' },
+                    { id: 6, label: 'SAT' },
                   ].map((day) => {
                     const workingDays = JSON.parse(formData.workingDays || '[1,2,3,4,5]');
                     const isSelected = workingDays.includes(day.id);
@@ -482,64 +549,70 @@ const Settings = () => {
                             : [...workingDays, day.id].sort();
                           handleInputChange('workingDays', JSON.stringify(newDays));
                         }}
-                        className={`w-14 h-14 rounded-2xl flex flex-col items-center justify-center gap-1 border transition-all ${
+                        className={`w-20 h-20 rounded-2xl flex flex-col items-center justify-center gap-2 border transition-all duration-300 ${
                           isSelected 
-                            ? 'bg-primary border-primary text-white shadow-lg shadow-primary/20 scale-110' 
-                            : 'bg-white border-slate-100 text-slate-400 hover:border-primary/30 hover:text-primary'
+                            ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-500/20 scale-105' 
+                            : 'bg-white border-slate-200 text-slate-500 hover:border-blue-300 hover:text-slate-800'
                         }`}
                       >
-                        <span className="text-[10px] font-black uppercase tracking-tighter">{day.label}</span>
-                        {isSelected && <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />}
+                        <span className="text-[10px] font-bold uppercase tracking-wider">{day.label}</span>
+                        {isSelected ? (
+                          <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                        ) : (
+                          <div className="w-1.5 h-1.5 bg-slate-300 rounded-full" />
+                        )}
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              <div className="card p-6">
-                <h3 className="font-bold text-slate-800 mb-6">Global Attendance Policy</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Default Grace Period (Minutes)</label>
-                    <input 
-                      type="number" 
-                      value={formData.gracePeriod || 15} 
-                      onChange={(e) => handleInputChange('gracePeriod', e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    />
-                    <p className="text-[10px] text-slate-400">Fallback tolerance if employee has no assigned shift.</p>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Auto Check-out Time</label>
-                    <input 
-                      type="time" 
-                      value={formData.autoCheckoutTime || '23:59'} 
-                      onChange={(e) => handleInputChange('autoCheckoutTime', e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    />
-                    <p className="text-[10px] text-slate-400">System will automatically check-out forgotten logs at this time.</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="card p-6">
-                <h3 className="font-bold text-slate-800 mb-6">Overtime Rules</h3>
-                <div className="flex items-center justify-between p-4 border border-slate-100 rounded-2xl">
-                  <div className="flex items-center gap-4">
-                    <Bell className="w-5 h-5 text-primary" />
-                    <div>
-                      <p className="text-sm font-bold text-slate-700">OT Notification</p>
-                      <p className="text-xs text-slate-500">Notify HR when employee works more than 9 hours.</p>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                <div className="bg-white p-8 border border-slate-200 shadow-sm rounded-3xl">
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-widest mb-6 border-l-4 border-blue-500 pl-4">Default Compliance</h3>
+                  <div className="space-y-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Global Grace Period (Minutes)</label>
+                      <input 
+                        type="number" 
+                        value={formData.gracePeriod || 15} 
+                        onChange={(e) => handleInputChange('gracePeriod', e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">System Auto-Termination (Check-out)</label>
+                      <input 
+                        type="time" 
+                        value={formData.autoCheckoutTime || '23:59'} 
+                        onChange={(e) => handleInputChange('autoCheckoutTime', e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                      />
                     </div>
                   </div>
-                  <div className="relative inline-flex items-center cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      className="sr-only peer" 
-                      checked={formData.otNotification === 'true'}
-                      onChange={(e) => handleInputChange('otNotification', String(e.target.checked))}
-                    />
-                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                </div>
+
+                <div className="bg-white p-8 border border-slate-200 shadow-sm rounded-3xl">
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-widest mb-6 border-l-4 border-amber-500 pl-4">Overtime Intelligence</h3>
+                  <div className="flex items-center justify-between p-6 bg-slate-50 border border-slate-100 rounded-2xl hover:border-blue-200 transition-all duration-300">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 bg-amber-50 border border-amber-100 rounded-xl flex items-center justify-center text-amber-600">
+                        <Bell className="w-5 h-5" />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-bold text-slate-800 tracking-tight">OT Notification Relay</p>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Alert HR when shift exceeds 9 hours.</p>
+                      </div>
+                    </div>
+                    <div className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        className="sr-only peer" 
+                        checked={formData.otNotification === 'true'}
+                        onChange={(e) => handleInputChange('otNotification', String(e.target.checked))}
+                      />
+                      <div className="w-12 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -547,275 +620,316 @@ const Settings = () => {
           )}
 
           {activeTab === 'Security' && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <div className="card p-6">
-                <h3 className="font-bold text-slate-800 mb-6">Biometric Configuration</h3>
-                <div className="space-y-6">
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Face Match Threshold (%)</label>
-                      <span className="text-sm font-black text-primary">{formData.faceMatchThreshold || 85}%</span>
-                    </div>
-                    <input 
-                      type="range" 
-                      min="50" 
-                      max="100" 
-                      value={formData.faceMatchThreshold || 85}
-                      onChange={(e) => handleInputChange('faceMatchThreshold', e.target.value)}
-                      className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-primary"
-                    />
-                    <p className="text-[10px] text-slate-400">Higher threshold increases security but may cause more false rejections.</p>
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="bg-white p-8 md:p-10 border border-slate-200 shadow-sm rounded-3xl relative overflow-hidden">
+                <div className="flex items-center gap-5 mb-10">
+                  <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shadow-sm">
+                    <ShieldCheck className="w-6 h-6" />
                   </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-slate-800 tracking-tight">Biometric Authentication</h3>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">Personnel Identification Protocols</p>
+                  </div>
+                </div>
 
-                  <div className="h-[1px] bg-slate-50"></div>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-bold text-slate-700">Liveness Detection</p>
-                      <p className="text-xs text-slate-500">Require eye blinking or head movement to prevent photo-based spoofs.</p>
+                <div className="space-y-10">
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-end px-2">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Face Match Confidence</label>
+                        <p className="text-[9px] text-slate-400 font-semibold uppercase tracking-tight">Minimum similarity for authorization.</p>
+                      </div>
+                      <span className="text-xl font-bold text-blue-600 tabular-nums">{formData.faceMatchThreshold || 85}%</span>
                     </div>
-                    <div className="relative inline-flex items-center cursor-pointer">
+                    <div className="relative h-8 flex items-center">
+                      <div className="absolute inset-0 bg-slate-50 rounded-full border border-slate-200" />
                       <input 
-                        type="checkbox" 
-                        className="sr-only peer" 
-                        checked={formData.livenessDetection === 'true'}
-                        onChange={(e) => handleInputChange('livenessDetection', String(e.target.checked))}
+                        type="range" 
+                        min="50" 
+                        max="100" 
+                        value={formData.faceMatchThreshold || 85}
+                        onChange={(e) => handleInputChange('faceMatchThreshold', e.target.value)}
+                        className="relative z-10 w-full h-1 bg-transparent appearance-none cursor-pointer accent-blue-600 px-4"
                       />
-                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-bold text-slate-700">Auto-Enrollment</p>
-                      <p className="text-xs text-slate-500">Automatically update face template on high-confidence matches.</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div className="flex items-center justify-between p-6 bg-slate-50 border border-slate-100 rounded-2xl hover:border-blue-200 transition-all duration-300">
+                      <div className="space-y-1">
+                        <p className="text-sm font-bold text-slate-800 tracking-tight">Liveness Protocol</p>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Prevent spoofing via movement.</p>
+                      </div>
+                      <div className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          className="sr-only peer" 
+                          checked={formData.livenessDetection === 'true'}
+                          onChange={(e) => handleInputChange('livenessDetection', String(e.target.checked))}
+                        />
+                        <div className="w-12 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </div>
                     </div>
-                    <div className="relative inline-flex items-center cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        className="sr-only peer" 
-                        checked={formData.autoEnrollment === 'true'}
-                        onChange={(e) => handleInputChange('autoEnrollment', String(e.target.checked))}
-                      />
-                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+
+                    <div className="flex items-center justify-between p-6 bg-slate-50 border border-slate-100 rounded-2xl hover:border-blue-200 transition-all duration-300">
+                      <div className="space-y-1">
+                        <p className="text-sm font-bold text-slate-800 tracking-tight">Auto-Enrollment</p>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Update biometrics on match.</p>
+                      </div>
+                      <div className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          className="sr-only peer" 
+                          checked={formData.autoEnrollment === 'true'}
+                          onChange={(e) => handleInputChange('autoEnrollment', String(e.target.checked))}
+                        />
+                        <div className="w-12 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-[2rem] flex gap-4">
-                <ShieldCheck className="w-8 h-8 text-emerald-500 shrink-0" />
-                <div>
-                  <h4 className="text-sm font-bold text-emerald-800 mb-1">Enterprise Grade Encryption</h4>
-                  <p className="text-xs text-emerald-600 leading-relaxed">
-                    Biometric templates are encrypted using AES-256 and stored as non-reversible mathematical hashes. Actual face images are never stored in the database.
+              <div className="bg-emerald-50 border border-emerald-100 p-8 rounded-3xl flex flex-col md:flex-row gap-6 items-center">
+                <div className="w-16 h-16 bg-emerald-100 rounded-2xl flex items-center justify-center text-emerald-600 shrink-0">
+                  <ShieldCheck className="w-8 h-8" />
+                </div>
+                <div className="space-y-2 text-center md:text-left">
+                  <h4 className="text-base font-bold text-emerald-900 tracking-tight">Enterprise Encryption Assurance</h4>
+                  <p className="text-xs text-emerald-700 font-medium leading-relaxed">
+                    All biometric templates are processed via non-reversible mathematical hashing. 
+                    Raw pixel data is never persisted. Security compliance: <span className="font-bold">ISO/IEC 27001</span>
                   </p>
                 </div>
               </div>
             </div>
           )}
-
           {activeTab === 'Permissions' && (
             <AdminPermissions />
           )}
         </div>
       </div>
+
+      {/* Modals */}
+      
       {/* Location Modal */}
       {isLocationModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setLocationModalOpen(false)}></div>
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md relative z-10 overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-            <div className="p-6 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
-              <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-primary" />
-                {editingLocation ? 'Edit Office Location' : 'Add New Location'}
-              </h3>
-              <button onClick={() => setLocationModalOpen(false)} className="p-1 hover:bg-slate-200 rounded-full transition-colors">
-                <X className="w-5 h-5 text-slate-400" />
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setLocationModalOpen(false)}></div>
+          <div className="bg-white shadow-2xl w-full max-w-xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-300 rounded-3xl">
+            <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
+                  <MapPin className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800 tracking-tight">
+                    {editingLocation ? 'Configure Geofence' : 'Register Location'}
+                  </h3>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">Spatial Boundary Calibration</p>
+                </div>
+              </div>
+              <button onClick={() => setLocationModalOpen(false)} className="w-8 h-8 flex items-center justify-center hover:bg-slate-200 rounded-lg transition-colors text-slate-500">
+                <X className="w-4 h-4" />
               </button>
             </div>
             
-            <form onSubmit={handleLocationSubmit}>
-              <div className="p-6 space-y-4">
+            <form onSubmit={handleLocationSubmit} className="p-8 space-y-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Node Designation (Name)</label>
+                <input 
+                  type="text" 
+                  required
+                  value={locationForm.name}
+                  onChange={(e) => setLocationForm({...locationForm, name: e.target.value})}
+                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm"
+                  placeholder="e.g. ALPHA HQ"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Physical Interface (Address)</label>
+                <input 
+                  type="text" 
+                  value={locationForm.address}
+                  onChange={(e) => setLocationForm({...locationForm, address: e.target.value})}
+                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm"
+                  placeholder="Operational address..."
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-5">
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Location Name</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Lateral Axis</label>
                   <input 
-                    type="text" 
+                    type="number" 
+                    step="any"
                     required
-                    value={locationForm.name}
-                    onChange={(e) => setLocationForm({...locationForm, name: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    placeholder="e.g. Headquarters, Factory A"
+                    value={locationForm.lat}
+                    onChange={(e) => setLocationForm({...locationForm, lat: e.target.value})}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm"
+                    placeholder="-6.XXXX"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Address</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Longitudinal Axis</label>
                   <input 
-                    type="text" 
-                    value={locationForm.address}
-                    onChange={(e) => setLocationForm({...locationForm, address: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    placeholder="Full street address"
+                    type="number" 
+                    step="any"
+                    required
+                    value={locationForm.lng}
+                    onChange={(e) => setLocationForm({...locationForm, lng: e.target.value})}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm"
+                    placeholder="106.XXXX"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Latitude</label>
-                    <input 
-                      type="number" 
-                      step="any"
-                      required
-                      value={locationForm.lat}
-                      onChange={(e) => setLocationForm({...locationForm, lat: e.target.value})}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      placeholder="-6.1234"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Longitude</label>
-                    <input 
-                      type="number" 
-                      step="any"
-                      required
-                      value={locationForm.lng}
-                      onChange={(e) => setLocationForm({...locationForm, lng: e.target.value})}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      placeholder="106.1234"
-                    />
-                  </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex justify-between items-end px-2">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Operational Radius</label>
+                  <span className="text-lg font-bold text-blue-600 tabular-nums">{locationForm.radius}m</span>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Geofence Radius (meters)</label>
-                  <div className="flex items-center gap-4">
-                    <input 
-                      type="range" 
-                      min="50" 
-                      max="1000" 
-                      step="50"
-                      value={locationForm.radius}
-                      onChange={(e) => setLocationForm({...locationForm, radius: parseInt(e.target.value)})}
-                      className="flex-1 h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-primary"
-                    />
-                    <span className="text-sm font-black text-primary w-12">{locationForm.radius}m</span>
-                  </div>
+                <div className="relative h-8 flex items-center">
+                  <div className="absolute inset-0 bg-slate-50 rounded-full border border-slate-200" />
+                  <input 
+                    type="range" 
+                    min="50" 
+                    max="1000" 
+                    step="50"
+                    value={locationForm.radius}
+                    onChange={(e) => setLocationForm({...locationForm, radius: parseInt(e.target.value)})}
+                    className="relative z-10 w-full h-1 bg-transparent appearance-none cursor-pointer accent-blue-600 px-4"
+                  />
                 </div>
               </div>
               
-              <div className="p-6 bg-slate-50/50 border-t border-slate-50 flex gap-3">
+              <div className="flex gap-3 pt-4 border-t border-slate-100">
                 <button 
                   type="button"
                   onClick={() => setLocationModalOpen(false)}
-                  className="flex-1 py-3 text-sm font-bold text-slate-500 hover:bg-slate-200 rounded-xl transition-colors"
+                  className="flex-1 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider hover:text-slate-800 hover:bg-slate-50 rounded-xl transition-all"
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit"
                   disabled={createLocationMutation.isPending || updateLocationMutation.isPending}
-                  className="flex-1 py-3 bg-primary text-white text-sm font-bold rounded-xl shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all disabled:opacity-70"
+                  className="flex-[2] bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 disabled:opacity-50 transition-all shadow-sm"
                 >
-                  {createLocationMutation.isPending || updateLocationMutation.isPending ? 'Saving...' : 'Save Location'}
+                  {createLocationMutation.isPending || updateLocationMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  {editingLocation ? 'Save Changes' : 'Create Location'}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
       {/* Shift Modal */}
       {isShiftModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShiftModalOpen(false)}></div>
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md relative z-10 overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-            <div className="p-6 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
-              <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                <Clock className="w-5 h-5 text-primary" />
-                {editingShift ? 'Edit Shift Schedule' : 'Create New Shift'}
-              </h3>
-              <button onClick={() => setShiftModalOpen(false)} className="p-1 hover:bg-slate-200 rounded-full transition-colors">
-                <X className="w-5 h-5 text-slate-400" />
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setShiftModalOpen(false)}></div>
+          <div className="bg-white shadow-2xl w-full max-w-xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-300 rounded-3xl">
+            <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800 tracking-tight">
+                    {editingShift ? 'Reconfigure Shift' : 'Initialize Shift'}
+                  </h3>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">Temporal Alignment</p>
+                </div>
+              </div>
+              <button onClick={() => setShiftModalOpen(false)} className="w-8 h-8 flex items-center justify-center hover:bg-slate-200 rounded-lg transition-colors text-slate-500">
+                <X className="w-4 h-4" />
               </button>
             </div>
             
-            <form onSubmit={handleShiftSubmit}>
-              <div className="p-6 space-y-4">
+            <form onSubmit={handleShiftSubmit} className="p-8 space-y-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Protocol Identifier (Name)</label>
+                <input 
+                  type="text" 
+                  required
+                  value={shiftForm.name}
+                  onChange={(e) => setShiftForm({...shiftForm, name: e.target.value})}
+                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm"
+                  placeholder="e.g. MORNING SHIFT"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-5">
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Shift Name</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Start Time</label>
                   <input 
-                    type="text" 
+                    type="time" 
                     required
-                    value={shiftForm.name}
-                    onChange={(e) => setShiftForm({...shiftForm, name: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    placeholder="e.g. Regular Shift, Morning"
+                    value={shiftForm.startTime}
+                    onChange={(e) => setShiftForm({...shiftForm, startTime: e.target.value})}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Start Time</label>
-                    <input 
-                      type="time" 
-                      required
-                      value={shiftForm.startTime}
-                      onChange={(e) => setShiftForm({...shiftForm, startTime: e.target.value})}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">End Time</label>
-                    <input 
-                      type="time" 
-                      required
-                      value={shiftForm.endTime}
-                      onChange={(e) => setShiftForm({...shiftForm, endTime: e.target.value})}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Break Start</label>
-                    <input 
-                      type="time" 
-                      value={shiftForm.breakStart}
-                      onChange={(e) => setShiftForm({...shiftForm, breakStart: e.target.value})}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Break End</label>
-                    <input 
-                      type="time" 
-                      value={shiftForm.breakEnd}
-                      onChange={(e) => setShiftForm({...shiftForm, breakEnd: e.target.value})}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    />
-                  </div>
-                </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Grace Period (Minutes)</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">End Time</label>
                   <input 
-                    type="number" 
-                    value={shiftForm.gracePeriod}
-                    onChange={(e) => setShiftForm({...shiftForm, gracePeriod: parseInt(e.target.value)})}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    type="time" 
+                    required
+                    value={shiftForm.endTime}
+                    onChange={(e) => setShiftForm({...shiftForm, endTime: e.target.value})}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm"
                   />
                 </div>
               </div>
+
+              <div className="grid grid-cols-2 gap-5">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Break Start</label>
+                  <input 
+                    type="time" 
+                    value={shiftForm.breakStart}
+                    onChange={(e) => setShiftForm({...shiftForm, breakStart: e.target.value})}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Break End</label>
+                  <input 
+                    type="time" 
+                    value={shiftForm.breakEnd}
+                    onChange={(e) => setShiftForm({...shiftForm, breakEnd: e.target.value})}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Tolerance (Grace Minutes)</label>
+                <input 
+                  type="number" 
+                  value={shiftForm.gracePeriod}
+                  onChange={(e) => setShiftForm({...shiftForm, gracePeriod: parseInt(e.target.value)})}
+                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm"
+                />
+              </div>
               
-              <div className="p-6 bg-slate-50/50 border-t border-slate-50 flex gap-3">
+              <div className="flex gap-3 pt-4 border-t border-slate-100">
                 <button 
                   type="button"
                   onClick={() => setShiftModalOpen(false)}
-                  className="flex-1 py-3 text-sm font-bold text-slate-500 hover:bg-slate-200 rounded-xl transition-colors"
+                  className="flex-1 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider hover:text-slate-800 hover:bg-slate-50 rounded-xl transition-all"
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit"
-                  disabled={createShiftMutation.isPending}
-                  className="flex-1 py-3 bg-primary text-white text-sm font-bold rounded-xl shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all disabled:opacity-70"
+                  disabled={createShiftMutation.isPending || updateShiftMutation.isPending}
+                  className="flex-[2] bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 disabled:opacity-50 transition-all shadow-sm"
                 >
-                  {createShiftMutation.isPending ? 'Creating...' : 'Create Shift'}
+                  {createShiftMutation.isPending || updateShiftMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  {editingShift ? 'Save Changes' : 'Create Shift'}
                 </button>
               </div>
             </form>
@@ -823,15 +937,16 @@ const Settings = () => {
         </div>
       )}
       
-      {/* Map Preview Modal */}
-      <LocationMapModal 
-        isOpen={isMapModalOpen}
-        onClose={() => setMapModalOpen(false)}
-        location={selectedMapLocation}
-      />
+      {/* Map Modal */}
+      {isMapModalOpen && (
+        <LocationMapModal 
+          isOpen={isMapModalOpen} 
+          onClose={() => setMapModalOpen(false)} 
+          location={selectedMapLocation} 
+        />
+      )}
     </div>
   );
 };
 
 export default Settings;
-

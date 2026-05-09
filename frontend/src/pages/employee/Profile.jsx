@@ -43,70 +43,75 @@ const Profile = () => {
   ];
 
   if (isLoading) {
-    return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>;
+    return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600 w-8 h-8" /></div>;
   }
 
   return (
-    <div className="p-6 space-y-8">
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-5 duration-500">
       {/* Profile Header */}
-      <div className="flex flex-col items-center text-center pt-4">
-        <div className="relative mb-4">
-          <div className="w-28 h-28 rounded-full border-4 border-white shadow-xl overflow-hidden bg-slate-200">
-            <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${employee.name || 'user'}`} alt="profile" />
+      <div className="flex flex-col items-center text-center pt-6">
+        <div className="relative mb-5">
+          <div className="w-28 h-28 rounded-full border-2 border-slate-200 p-1 bg-white shadow-lg relative">
+            <div className="w-full h-full rounded-full overflow-hidden bg-slate-50 border border-slate-100">
+              <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${employee.name || 'user'}`} alt="profile" className="w-full h-full object-cover" />
+            </div>
           </div>
-          <div className="absolute bottom-1 right-1 w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center shadow-lg border-2 border-white">
-            <ShieldCheck className="w-4 h-4" />
+          <div className="absolute bottom-1 right-1 w-9 h-9 bg-blue-600 text-white rounded-xl flex items-center justify-center shadow-lg shadow-blue-600/20 border-2 border-white">
+            <ShieldCheck className="w-5 h-5" />
           </div>
         </div>
-        <h2 className="text-2xl font-bold text-slate-900">{employee.name || 'Employee'}</h2>
-        <p className="text-slate-500 font-medium">{employee.position || 'Employee'}</p>
-        <div className="flex items-center gap-2 mt-2 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-xs font-bold uppercase tracking-wider">
-          <ShieldCheck className="w-3 h-3" />
-          Face ID Verified
+        <h2 className="text-2xl font-bold text-slate-800">{employee.name || 'Staff Member'}</h2>
+        <p className="text-blue-600 font-semibold text-xs uppercase tracking-wider mt-1">{employee.position || 'Operational Personnel'}</p>
+        
+        <div className="flex items-center gap-2 mt-4 px-4 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-[10px] font-semibold uppercase tracking-wider border border-emerald-200">
+          <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+          Verified
         </div>
       </div>
 
       {/* Info Cards */}
-      <div className="grid grid-cols-1 gap-3">
-        <div className="card p-4 flex items-center gap-4">
-          <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 shrink-0">
+      <div className="grid grid-cols-1 gap-3 px-1">
+        <div className="bg-white p-5 flex items-center gap-5 border border-slate-200 rounded-2xl hover:border-blue-200 transition-all shadow-sm">
+          <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 shrink-0 border border-blue-100">
             <Mail className="w-5 h-5" />
           </div>
           <div className="flex-1 overflow-hidden">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Email Address</p>
-            <p className="text-sm font-bold text-slate-800 truncate">{employee.email || 'N/A'}</p>
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Email</p>
+            <p className="text-sm font-semibold text-slate-800 truncate">{employee.email || 'Not set'}</p>
           </div>
         </div>
-        <div className="card p-4 flex items-center gap-4">
-          <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 shrink-0">
+        <div className="bg-white p-5 flex items-center gap-5 border border-slate-200 rounded-2xl hover:border-blue-200 transition-all shadow-sm">
+          <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600 shrink-0 border border-emerald-100">
             <Phone className="w-5 h-5" />
           </div>
           <div className="flex-1 overflow-hidden">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Phone Number</p>
-            <p className="text-sm font-bold text-slate-800 truncate">{employee.phone || 'N/A'}</p>
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Phone</p>
+            <p className="text-sm font-semibold text-slate-800 truncate">{employee.phone || 'Not set'}</p>
           </div>
         </div>
       </div>
 
-      {/* Settings Menu */}
-      <div className="space-y-3">
-        <h3 className="font-bold text-slate-800 px-2">Account Settings</h3>
-        <div className="card divide-y divide-slate-50">
-          {menuItems.map((item) => {
+      {/* Menu */}
+      <div className="space-y-3 px-1">
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-1">Settings</h3>
+        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+          {menuItems.map((item, idx) => {
             const Icon = item.icon;
             return (
               <button 
                 key={item.name} 
                 onClick={item.action || (() => navigate(item.path))}
-                className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors group"
+                className={`w-full flex items-center justify-between p-5 hover:bg-slate-50 transition-all duration-200 group ${idx !== menuItems.length - 1 ? 'border-b border-slate-100' : ''}`}
               >
                 <div className="flex items-center gap-4">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center bg-${item.color}-50 text-${item.color}-500`}>
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center border transition-all duration-300 ${
+                    item.color === 'blue' ? 'bg-blue-50 border-blue-100 text-blue-600' : 'bg-emerald-50 border-emerald-100 text-emerald-600'
+                  }`}>
                     <Icon className="w-5 h-5" />
                   </div>
-                  <span className="font-bold text-slate-700 text-sm">{item.name}</span>
+                  <span className="font-semibold text-slate-700 text-sm">{item.name}</span>
                 </div>
-                <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-primary transition-colors" />
+                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition-all duration-300 group-hover:translate-x-0.5" />
               </button>
             );
           })}
@@ -114,65 +119,73 @@ const Profile = () => {
       </div>
 
       {/* Logout */}
-      <button 
-        onClick={handleLogout}
-        className="w-full flex items-center justify-center gap-3 p-4 bg-rose-50 text-rose-600 rounded-2xl font-bold active:scale-[0.98] transition-transform"
-      >
-        <LogOut className="w-5 h-5" />
-        Log Out Account
-      </button>
+      <div className="px-1">
+        <button 
+          onClick={handleLogout}
+          className="w-full flex items-center justify-center gap-3 p-4 bg-red-50 text-red-600 rounded-2xl font-semibold text-sm border border-red-200 active:scale-[0.98] transition-all hover:bg-red-600 hover:text-white hover:border-red-600"
+        >
+          <LogOut className="w-4 h-4" />
+          Logout
+        </button>
+      </div>
 
-      {/* Personal Info Modal/Overlay */}
+      {/* Personal Info Modal */}
       {showPersonalInfo && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end">
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowPersonalInfo(false)} />
-          <div className="relative bg-white rounded-t-[2.5rem] p-8 space-y-6 animate-in slide-in-from-bottom duration-300 shadow-2xl">
-            <div className="flex justify-between items-center mb-2">
-              <h3 className="text-xl font-bold text-slate-800">Personal Info</h3>
-              <button onClick={() => setShowPersonalInfo(false)} className="p-2 bg-slate-100 rounded-full text-slate-400"><X className="w-5 h-5" /></button>
+        <div className="fixed inset-0 z-[100] flex flex-col justify-end">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setShowPersonalInfo(false)} />
+          <div className="relative bg-white border-t border-slate-200 rounded-t-3xl p-8 space-y-5 animate-in slide-in-from-bottom-20 duration-500 shadow-2xl">
+            <div className="w-12 h-1 bg-slate-200 rounded-full mx-auto mb-2" onClick={() => setShowPersonalInfo(false)} />
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">Personal Info</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Your employment details</p>
+              </div>
+              <button onClick={() => setShowPersonalInfo(false)} className="w-10 h-10 flex items-center justify-center bg-slate-50 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-700 transition-all border border-slate-200">
+                <X className="w-5 h-5" />
+              </button>
             </div>
             
-            <div className="space-y-4">
-              <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl">
-                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-blue-500 shadow-sm"><Hash className="w-5 h-5" /></div>
+            <div className="grid grid-cols-1 gap-3">
+              <div className="flex items-center gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 border border-blue-100"><Hash className="w-5 h-5" /></div>
                 <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Employee ID / NIK</p>
-                  <p className="text-sm font-bold text-slate-800">{employee.employeeCode}</p>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Employee ID (NIK)</p>
+                  <p className="text-sm font-bold text-slate-800">{employee.employeeCode || 'Not set'}</p>
                 </div>
               </div>
               
-              <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl">
-                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-emerald-500 shadow-sm"><Briefcase className="w-5 h-5" /></div>
+              <div className="flex items-center gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600 border border-emerald-100"><Briefcase className="w-5 h-5" /></div>
                 <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Department</p>
-                  <p className="text-sm font-bold text-slate-800">{employee.department}</p>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Department</p>
+                  <p className="text-sm font-bold text-slate-800">{employee.department || 'General'}</p>
                 </div>
               </div>
               
-              <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl">
-                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-amber-500 shadow-sm"><User className="w-5 h-5" /></div>
+              <div className="flex items-center gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600 border border-amber-100"><User className="w-5 h-5" /></div>
                 <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Position</p>
-                  <p className="text-sm font-bold text-slate-800">{employee.position}</p>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Position</p>
+                  <p className="text-sm font-bold text-slate-800">{employee.position || 'Staff'}</p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl">
-                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-indigo-500 shadow-sm"><ClockIcon className="w-5 h-5" /></div>
+              <div className="flex items-center gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                <div className="w-10 h-10 bg-violet-50 rounded-xl flex items-center justify-center text-violet-600 border border-violet-100"><ClockIcon className="w-5 h-5" /></div>
                 <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Shift</p>
-                  <p className="text-sm font-bold text-slate-800">{employee.shift?.name || 'N/A'} ({employee.shift?.startTime} - {employee.shift?.endTime})</p>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Shift</p>
+                  <p className="text-sm font-bold text-slate-800">{employee.shift?.name || 'Default'} ({employee.shift?.startTime} - {employee.shift?.endTime})</p>
                 </div>
               </div>
             </div>
             
-            <button onClick={() => setShowPersonalInfo(false)} className="w-full py-4 bg-primary text-white rounded-2xl font-bold shadow-lg shadow-primary/20">Close Details</button>
+            <button onClick={() => setShowPersonalInfo(false)} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-xl text-sm font-semibold transition-all shadow-sm mt-2 active:scale-[0.98]">Close</button>
           </div>
         </div>
       )}
 
-      <p className="text-center text-xs text-slate-400 font-medium">
-        Version 1.0.5 • Smart Attendance Pro
+      <p className="text-center text-[10px] text-slate-300 font-medium pb-8">
+        Smart Attendance Pro v1.0.9
       </p>
     </div>
   );

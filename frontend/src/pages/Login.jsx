@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogIn, ShieldCheck, Fingerprint, Camera, X, Loader2, ScanFace, CheckCircle2, AlertCircle, User } from 'lucide-react';
+import { IgaLogo } from '../components/IgaLogo';
 import Webcam from 'react-webcam';
 import * as faceapi from '@vladmandic/face-api';
 import { authAPI } from '../services/api';
@@ -147,7 +148,7 @@ const Login = () => {
       case 'verifying': return 'border-blue-400 shadow-blue-400/30';
       case 'success': return 'border-emerald-400 shadow-emerald-400/40';
       case 'error': return 'border-red-400 shadow-red-400/30';
-      default: return 'border-primary/30 shadow-primary/10';
+      default: return 'border-blue-300 shadow-blue-300/10';
     }
   };
 
@@ -165,39 +166,33 @@ const Login = () => {
   const isBusy = scanStatus === 'detecting' || scanStatus === 'verifying' || scanStatus === 'success';
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 sm:p-6 md:p-8 relative overflow-x-hidden font-sans">
-      {/* Decorative Background Elements */}
-      <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-emerald-500/10 rounded-full blur-[120px] animate-pulse pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-blue-500/10 rounded-full blur-[120px] animate-pulse delay-1000 pointer-events-none" />
+    <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 md:p-8 relative overflow-hidden font-sans bg-gradient-to-br from-blue-50 via-white to-slate-50">
+      
+      {/* Decorative background elements */}
+      <div className="absolute top-0 right-0 w-96 h-96 bg-blue-100/50 rounded-full blur-[120px] -translate-y-1/2 translate-x-1/3 pointer-events-none" />
+      <div className="absolute bottom-0 left-0 w-80 h-80 bg-blue-50 rounded-full blur-[100px] translate-y-1/3 -translate-x-1/4 pointer-events-none" />
       
       {/* Main Container */}
-      <div className="w-full max-w-[460px] bg-white/90 backdrop-blur-2xl rounded-[2.5rem] shadow-[0_20px_80px_-15px_rgba(0,0,0,0.08)] flex flex-col overflow-hidden z-10 border border-white p-6 sm:p-8 md:p-10 relative">
+      <div className="w-full max-w-[440px] bg-white rounded-3xl flex flex-col overflow-hidden z-10 p-6 sm:p-8 md:p-10 relative shadow-xl shadow-slate-200/50 border border-slate-100">
         
-        {/* Top Decorative Glow */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80%] h-32 bg-emerald-500/10 blur-[50px] pointer-events-none" />
-
         <div className="relative z-10 w-full">
           
           {/* Logo */}
           <div className="mb-8 flex flex-col items-center text-center">
-            <div className="w-14 h-14 bg-emerald-50 rounded-[1.25rem] flex items-center justify-center mb-4 border border-emerald-100 shadow-sm">
-              <ShieldCheck className="w-7 h-7 text-emerald-600" />
+            <div className="h-14 sm:h-16 mb-6">
+              <IgaLogo className="w-full h-full text-slate-800" />
             </div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">{publicSettings.companyName}</h1>
-          </div>
-
-          {/* Greeting - Removed or Minimized */}
-          <div className="mb-6 text-center">
-            <p className="text-slate-500 font-medium text-xs px-4">Please enter your credentials to access the portal.</p>
+            <h1 className="text-2xl font-bold text-slate-800 tracking-tight">{publicSettings.companyName}</h1>
+            <p className="text-slate-400 text-xs mt-2 font-medium uppercase tracking-widest">Management Portal</p>
           </div>
 
           {/* Segmented Control Tabs */}
-          <div className="flex p-1.5 bg-slate-100/80 backdrop-blur-sm rounded-2xl mb-8 border border-slate-200/50">
+          <div className="flex p-1 bg-slate-100 rounded-xl mb-8">
             <button
               onClick={() => setLoginMode('credentials')}
-              className={`flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all duration-300 ${
+              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-xs font-semibold transition-all duration-300 ${
                 loginMode === 'credentials' 
-                  ? 'bg-white text-emerald-700 shadow-sm border border-slate-100 scale-[1.02]' 
+                  ? 'bg-white text-blue-600 shadow-sm' 
                   : 'text-slate-500 hover:text-slate-700'
               }`}
             >
@@ -210,9 +205,9 @@ const Login = () => {
                 setIsScanning(false);
                 setError(null);
               }}
-              className={`flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all duration-300 ${
+              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-xs font-semibold transition-all duration-300 ${
                 loginMode === 'face' 
-                  ? 'bg-white text-emerald-700 shadow-sm border border-slate-100 scale-[1.02]' 
+                  ? 'bg-white text-blue-600 shadow-sm' 
                   : 'text-slate-500 hover:text-slate-700'
               }`}
             >
@@ -223,44 +218,44 @@ const Login = () => {
 
           {/* Form Content */}
           {loginMode === 'credentials' ? (
-            <form onSubmit={handleCredentialLogin} className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="space-y-4">
+            <form onSubmit={handleCredentialLogin} className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
+              <div className="space-y-5">
                 <div className="group">
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 ml-1 group-focus-within:text-emerald-600 transition-colors">Username</label>
+                  <label className="block text-xs font-semibold text-slate-500 mb-2 ml-1">Username</label>
                   <div className="relative">
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors">
-                      <Fingerprint className="w-5 h-5" />
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors">
+                      <User className="w-5 h-5" />
                     </div>
                     <input
                       type="text"
-                      placeholder="Enter your username"
+                      placeholder="Enter username"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
                       required
-                      className="w-full bg-slate-50/80 border border-slate-200 rounded-2xl pl-12 pr-4 py-4 focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all duration-300 font-medium text-slate-700 placeholder:text-slate-400"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-12 pr-4 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-slate-800 placeholder:text-slate-400 transition-all"
                     />
                   </div>
                 </div>
 
                 <div className="group">
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 ml-1 group-focus-within:text-emerald-600 transition-colors">Password</label>
+                  <label className="block text-xs font-semibold text-slate-500 mb-2 ml-1">Password</label>
                   <div className="relative">
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors">
                       <ShieldCheck className="w-5 h-5" />
                     </div>
                     <input
                       type="password"
-                      placeholder="••••••••••••"
+                      placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
-                      className="w-full bg-slate-50/80 border border-slate-200 rounded-2xl pl-12 pr-4 py-4 focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all duration-300 font-medium text-slate-700 placeholder:text-slate-400 tracking-widest"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-12 pr-4 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-slate-800 placeholder:text-slate-400 tracking-widest transition-all"
                     />
                   </div>
                 </div>
 
                 {error && (
-                  <div className="p-4 bg-rose-50 border border-rose-100 text-rose-600 rounded-2xl text-xs font-bold flex items-center gap-3 animate-in fade-in zoom-in-95 duration-300">
+                  <div className="p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm font-medium flex items-center gap-3 animate-in fade-in zoom-in-95 duration-300">
                     <AlertCircle className="w-5 h-5 shrink-0" />
                     {error}
                   </div>
@@ -271,62 +266,62 @@ const Login = () => {
                 <button
                   type="submit"
                   disabled={isLoggingIn}
-                  className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 group disabled:opacity-70 active:scale-95 transition-all shadow-xl shadow-slate-900/10"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-600/20 active:scale-[0.98] disabled:opacity-70"
                 >
                   {isLoggingIn ? (
-                    <><Loader2 className="w-4 h-4 animate-spin" /> Verifying...</>
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Authenticating...</>
                   ) : (
-                    <>Sign In <LogIn className="w-3.5 h-3.5" /></>
+                    <>Login to System <LogIn className="w-4 h-4" /></>
                   )}
                 </button>
-                <div className="mt-4 flex justify-center">
+                <div className="mt-6 flex justify-center">
                   <button 
                     type="button" 
                     onClick={handleForgotPassword}
-                    className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold transition-colors"
+                    className="text-slate-400 hover:text-blue-600 text-xs font-medium transition-colors"
                   >
-                    Forgot Password?
+                    Forgot password?
                   </button>
                 </div>
               </div>
             </form>
           ) : (
-              <div className="p-8 sm:p-10 bg-slate-50/80 rounded-[2rem] border border-slate-200 group hover:border-emerald-200 hover:bg-emerald-50/50 transition-all duration-500 shadow-sm hover:shadow-md">
-                <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-[1.5rem] flex items-center justify-center mx-auto mb-6 group-hover:scale-110 group-hover:-rotate-3 transition-transform duration-500 shadow-sm border border-emerald-200/50">
+              <div className="p-10 bg-blue-50 rounded-2xl border border-blue-100 group hover:border-blue-300 transition-all duration-500 text-center">
+                <div className="w-20 h-20 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-105 transition-transform duration-500">
                   <ScanFace className="w-10 h-10" />
                 </div>
-                <h3 className="text-xl font-bold text-slate-900 mb-2">Biometric Access</h3>
-                <p className="text-sm text-slate-500 mb-8 leading-relaxed">Secure, passwordless entry using AI facial recognition.</p>
+                <h3 className="text-xl font-bold text-slate-800 mb-2">Biometric Verification</h3>
+                <p className="text-sm text-slate-500 mb-8 leading-relaxed">Secure access using recognized facial geometry.</p>
                 <button
                   onClick={() => setIsScanning(true)}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-2xl font-bold text-sm shadow-xl shadow-emerald-600/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-semibold text-sm shadow-lg shadow-blue-600/20 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
                 >
-                  <Camera className="w-4 h-4" /> Start Scanner
+                  <Camera className="w-4 h-4" /> Initialize Scanner
                 </button>
               </div>
           )}
         </div>
       </div>
 
-      {/* ─── Professional Face Scanning Modal ─── */}
+      {/* ─── Face Scanning Modal ─── */}
       {isScanning && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 face-modal-backdrop">
           <div className="face-modal-card w-full max-w-md relative">
             {/* Close Button */}
             <button 
               onClick={closeScan}
-              className="absolute top-5 right-5 z-20 w-9 h-9 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-sm transition-all duration-200"
+              className="absolute top-5 right-5 z-20 w-9 h-9 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 transition-all duration-200"
             >
               <X className="w-4 h-4" />
             </button>
 
             {/* Header */}
             <div className="text-center pt-8 pb-4 px-8">
-              <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-sm mb-4">
-                <ScanFace className="w-6 h-6 text-white" />
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-blue-50 mb-4">
+                <ScanFace className="w-6 h-6 text-blue-600" />
               </div>
-              <h2 className="text-xl font-bold text-white mb-1">Verifikasi Wajah</h2>
-              <p className="text-sm text-white/60">Posisikan wajah Anda di dalam frame</p>
+              <h2 className="text-xl font-bold text-slate-800 mb-1">Verifikasi Wajah</h2>
+              <p className="text-sm text-slate-500">Posisikan wajah Anda di dalam frame</p>
             </div>
 
             {/* Camera Area */}
@@ -337,14 +332,14 @@ const Login = () => {
                 
                 {/* Corner Brackets */}
                 <div className="absolute -inset-1 z-10 pointer-events-none">
-                  <div className="absolute top-0 left-0 w-8 h-8 border-t-3 border-l-3 border-white/70 rounded-tl-xl" />
-                  <div className="absolute top-0 right-0 w-8 h-8 border-t-3 border-r-3 border-white/70 rounded-tr-xl" />
-                  <div className="absolute bottom-0 left-0 w-8 h-8 border-b-3 border-l-3 border-white/70 rounded-bl-xl" />
-                  <div className="absolute bottom-0 right-0 w-8 h-8 border-b-3 border-r-3 border-white/70 rounded-br-xl" />
+                  <div className="absolute top-0 left-0 w-8 h-8 border-t-3 border-l-3 border-blue-400 rounded-tl-xl" />
+                  <div className="absolute top-0 right-0 w-8 h-8 border-t-3 border-r-3 border-blue-400 rounded-tr-xl" />
+                  <div className="absolute bottom-0 left-0 w-8 h-8 border-b-3 border-l-3 border-blue-400 rounded-bl-xl" />
+                  <div className="absolute bottom-0 right-0 w-8 h-8 border-b-3 border-r-3 border-blue-400 rounded-br-xl" />
                 </div>
 
                 {/* Camera Feed */}
-                <div className="aspect-square rounded-2xl overflow-hidden bg-slate-900 relative">
+                <div className="aspect-square rounded-2xl overflow-hidden bg-slate-100 relative">
                   {scanStatus !== 'success' ? (
                     <Webcam
                       audio={false}
@@ -354,7 +349,7 @@ const Login = () => {
                       videoConstraints={{ facingMode: "user", width: 480, height: 480 }}
                     />
                   ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-emerald-600 to-emerald-800">
+                    <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-emerald-500 to-emerald-600">
                       <CheckCircle2 className="w-16 h-16 text-white mb-3 face-success-pop" />
                       <p className="text-white font-bold text-lg">Berhasil!</p>
                       <p className="text-white/70 text-sm">Mengalihkan...</p>
@@ -395,8 +390,8 @@ const Login = () => {
 
             {/* Error Message */}
             {error && (
-               <div className="mx-8 mb-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
-                 <p className="text-red-300 text-sm text-center font-medium">{error}</p>
+               <div className="mx-8 mb-2 p-3 bg-red-50 border border-red-200 rounded-xl">
+                 <p className="text-red-600 text-sm text-center font-medium">{error}</p>
                </div>
             )}
 
@@ -404,7 +399,7 @@ const Login = () => {
             <div className="px-8 pb-8 pt-3 flex gap-3">
               <button
                 onClick={closeScan}
-                className="flex-1 px-5 py-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-white font-semibold text-sm backdrop-blur-sm transition-all duration-200"
+                className="flex-1 px-5 py-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition-all duration-200"
               >
                 Batal
               </button>
@@ -419,7 +414,7 @@ const Login = () => {
                 <button
                   onClick={capture}
                   disabled={isBusy || !modelsLoaded}
-                  className="flex-1 px-5 py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-semibold text-sm transition-all duration-200 shadow-lg shadow-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="flex-1 px-5 py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-semibold text-sm transition-all duration-200 shadow-lg shadow-blue-600/25 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {!modelsLoaded ? (
                     <><Loader2 className="w-4 h-4 animate-spin" /> Loading...</>
@@ -433,60 +428,55 @@ const Login = () => {
         </div>
       )}
 
-      {/* Face Scanner Styles */}
       <style>{`
         .face-modal-backdrop {
-          background: linear-gradient(135deg, rgba(15,23,42,0.95), rgba(0,40,30,0.95));
-          backdrop-filter: blur(20px);
+          background: rgba(0, 0, 0, 0.4);
+          backdrop-filter: blur(8px);
           animation: fadeIn 0.3s ease-out;
         }
         .face-modal-card {
-          background: linear-gradient(145deg, rgba(30,41,59,0.9), rgba(15,23,42,0.95));
-          border: 1px solid rgba(255,255,255,0.08);
+          background: white;
+          border: 1px solid #e2e8f0;
           border-radius: 2rem;
-          box-shadow: 0 25px 60px rgba(0,0,0,0.5), 0 0 80px rgba(16,185,129,0.1);
-          animation: slideUp 0.4s cubic-bezier(0.16,1,0.3,1);
+          box-shadow: 0 25px 60px rgba(0,0,0,0.15);
+          animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
         }
-        @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
-        @keyframes slideUp { from { opacity:0; transform:translateY(30px) scale(0.97) } to { opacity:1; transform:translateY(0) scale(1) } }
+        @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(30px) scale(0.97) } to { opacity: 1; transform: translateY(0) scale(1) } }
         
         .face-scan-line {
           position: absolute;
-          left: 10%; right: 10%;
-          height: 2px;
-          background: linear-gradient(90deg, transparent, rgba(16,185,129,0.8), transparent);
-          box-shadow: 0 0 15px rgba(16,185,129,0.5);
-          animation: scanMove 2.5s ease-in-out infinite;
+          left: 5%; right: 5%;
+          height: 3px;
+          background: linear-gradient(90deg, transparent, #3b82f6, transparent);
+          box-shadow: 0 0 20px rgba(59, 130, 246, 0.6);
+          animation: scanMove 3s ease-in-out infinite;
         }
-        @keyframes scanMove { 0%,100% { top:15% } 50% { top:85% } }
+        @keyframes scanMove { 0%, 100% { top: 10% } 50% { top: 90% } }
         
-        .face-ring-pulse { animation: ringPulse 1.5s ease-in-out infinite; }
-        @keyframes ringPulse { 0%,100% { opacity:0.5; transform:scale(1) } 50% { opacity:1; transform:scale(1.02) } }
+        .face-ring-pulse { animation: ringPulse 2s ease-in-out infinite; }
+        @keyframes ringPulse { 0%, 100% { opacity: 0.4; transform: scale(1) } 50% { opacity: 1; transform: scale(1.03) } }
         
         .face-detect-ring {
-          width: 80px; height: 80px;
-          border: 3px solid transparent;
-          border-top-color: rgba(245,158,11,0.8);
-          border-right-color: rgba(245,158,11,0.4);
+          width: 100px; height: 100px;
+          border: 4px solid transparent;
+          border-top-color: #3b82f6;
           border-radius: 50%;
-          animation: detectSpin 1s linear infinite;
+          animation: detectSpin 0.8s linear infinite;
         }
         @keyframes detectSpin { to { transform: rotate(360deg) } }
         
         .face-verify-spinner {
-          width: 90px; height: 90px;
-          border: 3px solid transparent;
-          border-top-color: rgba(59,130,246,0.8);
-          border-left-color: rgba(59,130,246,0.4);
+          width: 110px; height: 110px;
+          border: 4px solid transparent;
+          border-top-color: #3b82f6;
+          border-right-color: #3b82f6;
           border-radius: 50%;
-          animation: detectSpin 0.8s linear infinite;
-          box-shadow: 0 0 20px rgba(59,130,246,0.2);
+          animation: detectSpin 0.6s linear infinite;
         }
         
-        .face-success-pop { animation: successPop 0.5s cubic-bezier(0.16,1,0.3,1); }
-        @keyframes successPop { 0% { transform: scale(0); opacity:0 } 60% { transform: scale(1.2) } 100% { transform: scale(1); opacity:1 } }
-        
-        .border-3 { border-width: 3px; }
+        .face-success-pop { animation: successPop 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+        @keyframes successPop { 0% { transform: scale(0); opacity: 0 } 60% { transform: scale(1.15) } 100% { transform: scale(1); opacity: 1 } }
       `}</style>
     </div>
   );
