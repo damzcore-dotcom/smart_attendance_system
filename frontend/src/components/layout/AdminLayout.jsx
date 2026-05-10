@@ -15,7 +15,8 @@ import {
   Megaphone,
   ScanFace,
   Database,
-  Fingerprint
+  Fingerprint,
+  Shield
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -43,6 +44,11 @@ const AdminLayout = () => {
     { name: 'Settings', path: '/admin/settings', icon: Settings, key: 'settings' },
   ];
 
+  // Super Admin exclusive items
+  const superAdminItems = [
+    { name: 'Audit Log', path: '/admin/audit-log', icon: Shield, key: 'audit-log' },
+  ];
+
   const { data: userData } = useQuery({
     queryKey: ['me'],
     queryFn: () => authAPI.getMe(),
@@ -65,6 +71,11 @@ const AdminLayout = () => {
     const perm = user.permissions.find(p => p.menuKey === item.key);
     return perm?.canRead;
   });
+
+  // Merge super admin exclusive items
+  const finalMenuItems = user.role === 'SUPER_ADMIN' 
+    ? [...filteredMenuItems, ...superAdminItems] 
+    : filteredMenuItems;
 
   const handleLogout = () => {
     authAPI.logout();
@@ -93,7 +104,7 @@ const AdminLayout = () => {
         </div>
 
         <nav className="flex-1 px-3 space-y-1 mt-4 overflow-y-auto">
-          {filteredMenuItems.map((item) => {
+          {finalMenuItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
             return (

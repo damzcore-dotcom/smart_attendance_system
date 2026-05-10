@@ -63,7 +63,7 @@ const History = () => {
   });
 
   const handleDayClick = (item) => {
-    if (item.status === 'Holiday') return;
+    if (item.status === 'Libur') return;
     setSelectedDay(item);
     setIsModalOpen(true);
   };
@@ -81,10 +81,10 @@ const History = () => {
   };
   
   const stats = historyList.reduce((acc, curr) => {
-    if (curr.status === 'Present') acc.present++;
-    else if (curr.status === 'Late') acc.late++;
+    if (curr.status === 'Hadir') acc.present++;
+    else if (curr.status === 'Terlambat') acc.late++;
     else if (curr.status === 'Mangkir') acc.mangkir++;
-    else if (curr.status === 'Absent') acc.absent++;
+    else if (curr.status === 'Tanpa Keterangan (Alpa)') acc.absent++;
     return acc;
   }, { present: 0, late: 0, mangkir: 0, absent: 0 });
 
@@ -147,19 +147,19 @@ const History = () => {
           <div className="grid grid-cols-4 gap-2">
             <div className="bg-white p-4 border border-slate-200 flex flex-col items-center rounded-xl shadow-sm">
               <span className="text-xl font-bold text-emerald-600">{stats.present}</span>
-              <span className="text-[9px] font-semibold text-emerald-500 uppercase tracking-wider mt-0.5">Present</span>
+              <span className="text-[9px] font-semibold text-emerald-500 uppercase tracking-wider mt-0.5">Hadir</span>
             </div>
             <div className="bg-white p-4 border border-slate-200 flex flex-col items-center rounded-xl shadow-sm">
               <span className="text-xl font-bold text-amber-600">{stats.late}</span>
-              <span className="text-[9px] font-semibold text-amber-500 uppercase tracking-wider mt-0.5">Late</span>
+              <span className="text-[9px] font-semibold text-amber-500 uppercase tracking-wider mt-0.5">Terlambat</span>
             </div>
             <div className="bg-white p-4 border border-slate-200 flex flex-col items-center rounded-xl shadow-sm">
               <span className="text-xl font-bold text-orange-600">{stats.mangkir}</span>
-              <span className="text-[9px] font-semibold text-orange-500 uppercase tracking-wider mt-0.5">Missing</span>
+              <span className="text-[9px] font-semibold text-orange-500 uppercase tracking-wider mt-0.5">Mangkir</span>
             </div>
             <div className="bg-white p-4 border border-slate-200 flex flex-col items-center rounded-xl shadow-sm">
               <span className="text-xl font-bold text-rose-600">{stats.absent}</span>
-              <span className="text-[9px] font-semibold text-rose-500 uppercase tracking-wider mt-0.5">Absent</span>
+              <span className="text-[9px] font-semibold text-rose-500 uppercase tracking-wider mt-0.5">Alpa</span>
             </div>
           </div>
 
@@ -176,12 +176,12 @@ const History = () => {
                 key={idx} 
                 onClick={() => handleDayClick(item)}
                 className={`bg-white p-5 flex items-center gap-5 group active:scale-[0.98] transition-all duration-300 cursor-pointer border border-slate-200 hover:border-blue-200 hover:shadow-sm rounded-2xl ${
-                  item.status === 'Absent' ? 'bg-rose-50/50' : ''
+                  item.status === 'Tanpa Keterangan (Alpa)' ? 'bg-rose-50/50' : ''
                 }`}
               >
                 <div className={`w-14 h-14 rounded-xl flex flex-col items-center justify-center shrink-0 border transition-all duration-300 ${
-                  item.status === 'Holiday' ? 'bg-slate-50 border-slate-200 text-slate-400' : 
-                  item.status === 'Absent' ? 'bg-rose-50 border-rose-200 text-rose-500' :
+                  item.status === 'Libur' ? 'bg-slate-50 border-slate-200 text-slate-400' : 
+                  item.status === 'Tanpa Keterangan (Alpa)' ? 'bg-rose-50 border-rose-200 text-rose-500' :
                   'bg-blue-50 border-blue-100 text-blue-600 group-hover:bg-blue-600 group-hover:text-white'
                 }`}>
                   <span className="text-[9px] font-bold uppercase">{item.weekday}</span>
@@ -191,19 +191,19 @@ const History = () => {
                 <div className="flex-1">
                   <div className="flex justify-between items-center mb-3">
                     <span className={`text-xs font-semibold uppercase tracking-wider ${
-                      item.status === 'Present' ? 'text-emerald-600' :
-                      item.status === 'Late' ? 'text-amber-600' :
+                      item.status === 'Hadir' ? 'text-emerald-600' :
+                      item.status === 'Terlambat' ? 'text-amber-600' :
                       item.status === 'Mangkir' ? 'text-orange-600' :
-                      item.status === 'Absent' ? 'text-rose-600' :
+                      item.status === 'Tanpa Keterangan (Alpa)' ? 'text-rose-600' :
                       'text-slate-400'
                     }`}>
                       {item.status}
                     </span>
                     <div className="flex items-center gap-1.5">
-                      {item.status === 'Present' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
-                      {item.status === 'Late' && <Clock className="w-4 h-4 text-amber-500" />}
+                      {item.status === 'Hadir' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                      {item.status === 'Terlambat' && <Clock className="w-4 h-4 text-amber-500" />}
                       {item.status === 'Mangkir' && <AlertCircle className="w-4 h-4 text-orange-500" />}
-                      {item.status === 'Absent' && <XCircle className="w-4 h-4 text-rose-500" />}
+                      {item.status === 'Tanpa Keterangan (Alpa)' && <XCircle className="w-4 h-4 text-rose-500" />}
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-6">

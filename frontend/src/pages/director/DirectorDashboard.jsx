@@ -109,8 +109,8 @@ const DirectorDashboard = () => {
           onClick={() => navigate('/director/attendance')}
           className="bg-white p-8 border border-slate-200 rounded-2xl hover:border-blue-300 hover:shadow-md transition-all duration-300 text-left group shadow-sm"
         >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-6">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 text-center sm:text-left">
               <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center border border-blue-100 group-hover:scale-105 transition-transform shadow-sm">
                 <CalendarCheck className="w-8 h-8 text-blue-600" />
               </div>
@@ -129,8 +129,8 @@ const DirectorDashboard = () => {
           onClick={() => navigate('/director/leave')}
           className="bg-white p-8 border border-slate-200 rounded-2xl hover:border-blue-300 hover:shadow-md transition-all duration-300 text-left group shadow-sm"
         >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-6">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 text-center sm:text-left">
               <div className="w-16 h-16 bg-violet-50 rounded-2xl flex items-center justify-center border border-violet-100 group-hover:scale-105 transition-transform shadow-sm">
                 <FileCheck className="w-8 h-8 text-violet-600" />
               </div>

@@ -141,7 +141,7 @@ const DirectorLayout = () => {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Top Navbar */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 z-20 shrink-0 shadow-sm">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6 z-20 shrink-0 shadow-sm">
           <div className="flex items-center gap-4">
             <button 
               onClick={() => setSidebarOpen(!isSidebarOpen)}
@@ -167,7 +167,7 @@ const DirectorLayout = () => {
         </header>
 
         {/* Page Container */}
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-4 md:p-6">
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-6">
             <Outlet />
           </div>

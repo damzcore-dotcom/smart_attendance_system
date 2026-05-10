@@ -254,13 +254,13 @@ const ManagerAttendance = () => {
           <table className="w-full text-left whitespace-nowrap">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                <th className="px-6 py-4 sticky left-0 bg-slate-50 z-10 border-r border-slate-100">Personnel</th>
+                <th className="px-6 py-4 md:sticky left-0 bg-slate-50 z-10 border-r border-slate-100">Personnel</th>
                 <th className="px-6 py-4">Department</th>
                 <th className="px-6 py-4 text-center">Date</th>
                 <th className="px-6 py-4 text-center">Check In</th>
                 <th className="px-6 py-4 text-center">Check Out</th>
                 <th className="px-6 py-4 text-center">Late</th>
-                <th className="px-6 py-4 sticky right-0 bg-slate-50 z-10 border-l border-slate-100 text-center">Status</th>
+                <th className="px-6 py-4 md:sticky right-0 bg-slate-50 z-10 border-l border-slate-100 text-center">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -284,7 +284,7 @@ const ManagerAttendance = () => {
 
                 return (
                   <tr key={`${r.id}-${idx}`} className="group hover:bg-blue-50/50 transition-colors">
-                    <td className="px-6 py-4 sticky left-0 bg-white group-hover:bg-blue-50/50 z-10 border-r border-slate-50">
+                    <td className="px-6 py-4 md:sticky left-0 bg-white group-hover:bg-blue-50/50 z-10 border-r border-slate-50">
                       <div className="flex items-center gap-3 min-w-[200px]">
                         <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${avatarColor}`}>
                           {initials}
@@ -309,7 +309,7 @@ const ManagerAttendance = () => {
                         <span className="text-slate-300">—</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 sticky right-0 bg-white group-hover:bg-blue-50/50 z-10 border-l border-slate-50 text-center">
+                    <td className="px-6 py-4 md:sticky right-0 bg-white group-hover:bg-blue-50/50 z-10 border-l border-slate-50 text-center">
                       <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border ${cfg.color}`}>
                         <Icon className="w-3.5 h-3.5" />
                         {cfg.label}

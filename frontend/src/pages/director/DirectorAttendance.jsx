@@ -242,7 +242,7 @@ const DirectorAttendance = () => {
           <table className="w-full text-left border-separate border-spacing-0">
             <thead className="sticky top-0 z-40 bg-slate-50">
               <tr>
-                <th className="px-6 py-4 sticky left-0 top-0 z-50 bg-slate-50 border-b border-slate-200 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                <th className="px-6 py-4 md:sticky left-0 top-0 z-50 bg-slate-50 border-b border-slate-200 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                   <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Personnel</span>
                 </th>
                 <th className="px-4 py-4 border-b border-slate-200">
@@ -260,7 +260,7 @@ const DirectorAttendance = () => {
                 <th className="px-4 py-4 border-b border-slate-200 text-center">
                   <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Late</span>
                 </th>
-                <th className="px-6 py-4 sticky right-0 top-0 z-50 bg-slate-50 border-b border-slate-200 border-l border-slate-200 text-center shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                <th className="px-6 py-4 md:sticky right-0 top-0 z-50 bg-slate-50 border-b border-slate-200 border-l border-slate-200 text-center shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                   <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Status</span>
                 </th>
               </tr>
@@ -296,7 +296,7 @@ const DirectorAttendance = () => {
                 return (
                   <tr key={`${r.id}-${idx}`}
                     className="group hover:bg-blue-50/30 transition-colors duration-200">
-                    <td className="px-6 py-4 sticky left-0 z-20 bg-white group-hover:bg-blue-50/50 transition-colors border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.02)]">
+                    <td className="px-6 py-4 md:sticky left-0 z-20 bg-white group-hover:bg-blue-50/50 transition-colors border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.02)]">
                       <div className="flex items-center gap-4 min-w-[200px]">
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs border shrink-0 transition-all duration-300 group-hover:scale-105 ${avatarStyle}`}>
                           {initials}
@@ -338,7 +338,7 @@ const DirectorAttendance = () => {
                         <span className="text-slate-300 font-bold">—</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 sticky right-0 z-20 bg-white group-hover:bg-blue-50/50 transition-colors border-l border-slate-100 text-center shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.02)]">
+                    <td className="px-6 py-4 md:sticky right-0 z-20 bg-white group-hover:bg-blue-50/50 transition-colors border-l border-slate-100 text-center shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.02)]">
                       <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-semibold border ${cfg.color}`}>
                         {cfg.label}
                       </span>

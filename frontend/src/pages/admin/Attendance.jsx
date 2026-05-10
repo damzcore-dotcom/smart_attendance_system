@@ -4,7 +4,7 @@ import { attendanceAPI, employeeAPI } from '../../services/api';
 import { 
   Calendar, Search, Download, Filter, CheckCircle2, XCircle, Clock, 
   ArrowRight, Scan, Upload, FileSpreadsheet, X, Loader2, AlertCircle, RefreshCw,
-  FileText, ChevronLeft, ChevronRight, LayoutDashboard
+  FileText, ChevronLeft, ChevronRight, LayoutDashboard, Edit2, ArrowUpDown
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -29,6 +29,10 @@ const Attendance = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [importResult, setImportResult] = useState(null);
+  const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
+  const [correctionModal, setCorrectionModal] = useState({ isOpen: false, recordId: null, employeeName: '', currentStatus: '', newStatus: 'CUTI', notes: '' });
+  const [isCorrecting, setIsCorrecting] = useState(false);
+  const [importProgress, setImportProgress] = useState({ percent: 0, phase: '', detail: '' });
   const [appliedFilters, setAppliedFilters] = useState({
     page: 1,
     period: 'Today',
@@ -47,6 +51,40 @@ const Attendance = () => {
   });
 
   const filteredData = data?.data || [];
+
+  const sortedAndFilteredData = [...filteredData].sort((a, b) => {
+    if (sortConfig.key === 'name') {
+      return sortConfig.direction === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
+    }
+    if (sortConfig.key === 'date') {
+      const dateA = new Date(a.date);
+      const dateB = new Date(b.date);
+      return sortConfig.direction === 'asc' ? dateA - dateB : dateB - dateA;
+    }
+    return 0;
+  });
+
+  const handleSort = (key) => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+
+  const handleCorrectionSubmit = async (e) => {
+    e.preventDefault();
+    setIsCorrecting(true);
+    try {
+      await attendanceAPI.update(correctionModal.recordId, { status: correctionModal.newStatus, notes: correctionModal.notes });
+      setCorrectionModal({ isOpen: false, recordId: null, employeeName: '', currentStatus: '', newStatus: 'CUTI', notes: '' });
+      await queryClient.invalidateQueries({ queryKey: ['attendance'] });
+      alert('Status absensi berhasil dikoreksi!');
+    } catch (err) {
+      alert(`Gagal koreksi data: ${err.message}`);
+    } finally {
+      setIsCorrecting(false);
+    }
+  };
 
   const handleRecalculate = async () => {
     if (!recalcRange.start || !recalcRange.end) {
@@ -70,22 +108,48 @@ const Attendance = () => {
   const handleImport = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    const jobId = `att_${Date.now()}`;
     setIsUploading(true);
     setImportResult(null);
+    setImportProgress({ percent: 0, phase: 'initializing', detail: 'Menyiapkan upload...' });
+
+    // Polling function for progress
+    const pollInterval = setInterval(async () => {
+      try {
+        const progressRes = await attendanceAPI.getImportProgress(jobId);
+        if (progressRes.success) {
+          setImportProgress({
+            percent: progressRes.progress,
+            phase: progressRes.phase,
+            detail: progressRes.detail
+          });
+        }
+      } catch (err) {
+        console.error('Progress polling error:', err);
+      }
+    }, 800);
+
     try {
-      const res = await attendanceAPI.importExcel(file);
+      const res = await attendanceAPI.importExcel(file, jobId);
       setImportResult(res);
-      queryClient.invalidateQueries({ queryKey: ['attendance'] });
+      // HARD REFRESH: Force the UI to discard cache and fetch fresh database records
+      await queryClient.resetQueries({ queryKey: ['attendance'] });
+      await queryClient.invalidateQueries({ queryKey: ['attendance'] });
     } catch (err) {
       setImportResult({ success: false, message: err.message });
     } finally {
+      clearInterval(pollInterval);
       setIsUploading(false);
       e.target.value = '';
     }
   };
 
   const handleExportExcel = () => {
-    const exportData = filteredData.map(row => ({
+    // Sort data ascending by date (oldest first)
+    const sortedData = [...filteredData].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    const exportData = sortedData.map(row => ({
       'Employee Name': row.name,
       'Department': row.dept,
       'Section': row.section,
@@ -118,7 +182,7 @@ const Attendance = () => {
     doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 33);
 
     const total = filteredData.length;
-    const late = filteredData.filter(r => r.status === 'Late').length;
+    const late = filteredData.filter(r => r.status === 'Terlambat').length;
     
     doc.setDrawColor(226, 232, 240); // slate-200
     doc.setFillColor(248, 250, 252); // slate-50
@@ -131,7 +195,10 @@ const Attendance = () => {
     doc.setTextColor(30, 41, 59); // slate-800
     doc.text(`Total: ${total} | Late: ${late}`, pageWidth - 76, 28);
 
-    const tableData = filteredData.map(row => [
+    // Sort data ascending by date (oldest first)
+    const sortedData = [...filteredData].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    const tableData = sortedData.map(row => [
       row.name,
       row.dept,
       row.section,
@@ -159,65 +226,80 @@ const Attendance = () => {
     doc.save(`Attendance_Report_${new Date().getTime()}.pdf`);
   };
 
+  const handleDownloadTemplate = async () => {
+    try {
+      const response = await attendanceAPI.getTemplate(); // Use the standardized service call
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'attendance_template.xlsx');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      console.error('Download error:', err);
+      alert('Gagal mengunduh template');
+    }
+  };
+
   return (
     <div className="space-y-8 pb-12 animate-in fade-in duration-500">
       {/* Header */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 px-1">
-        <div className="space-y-1">
-          <div className="flex items-center gap-3 text-slate-500">
-            <div className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center">
-              <LayoutDashboard className="w-3 h-3 text-slate-400" />
-            </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider">Administrative Oversight</span>
-            <div className="w-1 h-1 rounded-full bg-slate-300" />
-            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Hardware Sync Hub</span>
+      <div className="px-1 space-y-3">
+        <div className="flex items-center gap-3 text-slate-500">
+          <div className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center">
+            <LayoutDashboard className="w-3 h-3 text-slate-400" />
           </div>
-          <h1 className="text-3xl font-bold text-slate-800 tracking-tight flex flex-wrap items-center gap-3">
+          <span className="text-[10px] font-bold uppercase tracking-wider">Administrative Oversight</span>
+          <div className="w-1 h-1 rounded-full bg-slate-300" />
+          <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Hardware Sync Hub</span>
+        </div>
+        
+        <div className="flex flex-row items-center justify-between w-full gap-4">
+          <h1 className="text-2xl xl:text-3xl font-bold text-slate-800 tracking-tight flex items-center gap-3 whitespace-nowrap">
             <span>Attendance Archive</span>
-            <div className="px-3 py-1 rounded-lg bg-blue-50 border border-blue-100 text-blue-600 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 mt-1 sm:mt-0">
+            <div className="px-3 py-1 rounded-lg bg-blue-50 border border-blue-100 text-blue-600 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
               Live Terminal Feed
             </div>
           </h1>
-        </div>
 
-        <div className="flex flex-wrap items-center justify-start md:justify-end gap-4 w-full xl:w-auto">
-          <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-2xl border border-slate-200">
-            <button 
-              onClick={() => setRecalcModalOpen(true)}
-              disabled={isRecalculating}
-              className="group flex items-center gap-2 bg-white px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold text-slate-600 hover:text-blue-600 hover:border-blue-200 transition-all border border-slate-200 shadow-sm active:scale-95 uppercase tracking-wider"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isRecalculating ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} /> 
-              <span className="hidden sm:inline">Sync & Recalculate</span>
-              <span className="inline sm:hidden">Sync</span>
-            </button>
-            <button 
-              onClick={() => setImportOpen(true)}
-              className="group flex items-center gap-2 bg-white px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold text-slate-600 hover:text-emerald-600 hover:border-emerald-200 transition-all border border-slate-200 shadow-sm active:scale-95 uppercase tracking-wider"
-            >
-              <Upload className="w-3.5 h-3.5 group-hover:-translate-y-0.5 transition-transform" /> 
-              <span className="hidden sm:inline">Inject Data</span>
-              <span className="inline sm:hidden">Inject</span>
-            </button>
-          </div>
-          
-          <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-2xl border border-slate-200">
-            <button 
-              onClick={handleExportPDF}
-              className="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 transition-all group shadow-sm"
-              title="Export PDF Document"
-            >
-              <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500 group-hover:text-rose-600 transition-all" />
-            </button>
-            <button 
-              onClick={handleExportExcel}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-bold uppercase tracking-wider transition-all shadow-sm active:scale-95 group"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:rotate-12 transition-transform" /> 
-              <span className="hidden sm:inline">Export Matrix</span>
-              <span className="inline sm:hidden">Export</span>
-            </button>
+          {/* Right Actions - Inline */}
+          <div className="flex flex-row items-center gap-3 whitespace-nowrap overflow-x-auto pb-1 xl:pb-0">
+            <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-2xl border border-slate-200 shadow-sm">
+              <button 
+                onClick={() => setRecalcModalOpen(true)}
+                disabled={isRecalculating}
+                className="group flex items-center gap-2 bg-white px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold text-slate-600 hover:text-blue-600 hover:border-blue-200 transition-all border border-slate-200 shadow-sm active:scale-95 uppercase tracking-wider"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRecalculating ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} /> 
+                <span>Sync</span>
+              </button>
+              <button 
+                onClick={() => setImportOpen(true)}
+                className="group flex items-center gap-2 bg-white px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold text-slate-600 hover:text-emerald-600 hover:border-emerald-200 transition-all border border-slate-200 shadow-sm active:scale-95 uppercase tracking-wider"
+              >
+                <Upload className="w-3.5 h-3.5 group-hover:-translate-y-0.5 transition-transform" /> 
+                <span>Upload</span>
+              </button>
+            </div>
+            
+            <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-2xl border border-slate-200 shadow-sm">
+              <button 
+                onClick={handleExportPDF}
+                className="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 transition-all group shadow-sm"
+                title="Export PDF Document"
+              >
+                <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500 group-hover:text-rose-600 transition-all" />
+              </button>
+              <button 
+                onClick={handleExportExcel}
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-bold uppercase tracking-wider transition-all shadow-sm active:scale-95 group"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:rotate-12 transition-transform" /> 
+                <span>Export Excel</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -232,12 +314,12 @@ const Attendance = () => {
       {!isLoading && data?.summary && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {[
-            { label: 'Total Logs', value: data.summary.total, color: 'blue', icon: Filter, desc: 'Aggregated Entries' },
-            { label: 'Present', value: data.summary.hadir, color: 'emerald', icon: CheckCircle2, desc: 'Personnel On-Site' },
-            { label: 'Late Arrival', value: data.summary.telat, color: 'amber', icon: Clock, desc: 'Protocol Breach' },
-            { label: 'Unaccounted', value: data.summary.mangkir, color: 'rose', icon: AlertCircle, desc: 'Security Concern' },
-            { label: 'Holiday', value: data.summary.holiday, color: 'indigo', icon: Calendar, desc: 'Scheduled Downtime' },
-            { label: 'Leave/Off', value: (data.summary.absen || 0) + (data.summary.cuti || 0), color: 'slate', icon: XCircle, desc: 'Authorized Absence' },
+            { label: 'Total Data', value: data.summary.total, color: 'blue', icon: Filter, desc: 'Semua Absen' },
+            { label: 'Hadir', value: data.summary.hadir, color: 'emerald', icon: CheckCircle2, desc: 'Tepat Waktu' },
+            { label: 'Terlambat', value: data.summary.telat, color: 'amber', icon: Clock, desc: 'Pelanggaran Waktu' },
+            { label: 'Mangkir', value: data.summary.mangkir, color: 'rose', icon: AlertCircle, desc: 'Tidak Ada Keterangan' },
+            { label: 'Libur', value: data.summary.holiday, color: 'indigo', icon: Calendar, desc: 'Hari Minggu / Libur' },
+            { label: 'Izin / Cuti / Alpa', value: (data.summary.absen || 0) + (data.summary.cuti || 0) + (data.summary.sakit || 0) + (data.summary.izin || 0), color: 'slate', icon: XCircle, desc: 'Tidak Masuk Kerja' },
           ].map((item) => (
             <div key={item.label} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-4 hover:shadow-md hover:border-blue-200 transition-all group">
               <div className="flex justify-between items-start">
@@ -263,25 +345,42 @@ const Attendance = () => {
           <div className="flex items-center gap-3">
             <div className="w-2 h-2 rounded-full bg-blue-600 animate-pulse shadow-[0_0_5px_rgba(37,99,235,0.5)]" />
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-              Primary Data Stream <span className="text-slate-300 mx-2">|</span> 
-              Log Density: <span className="text-slate-700 ml-1">{data?.summary?.total || 0} Nodes</span>
+              Data Absensi <span className="text-slate-300 mx-2">|</span> 
+              Total Data: <span className="text-slate-700 ml-1">{data?.summary?.total || 0} Baris</span>
             </p>
           </div>
         </div>
         
-        <div className="relative overflow-auto max-h-[calc(100vh-450px)] hide-scrollbar custom-scrollbar">
+        <div className="relative overflow-auto min-h-[600px] hide-scrollbar custom-scrollbar">
           <table className="w-full text-left whitespace-nowrap">
             <thead className="sticky top-0 z-30 bg-slate-50 border-b border-slate-100 shadow-sm">
               <tr className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">
-                <th className="px-6 py-4">Personnel Identity</th>
-                <th className="px-4 py-4">Unit</th>
-                <th className="px-4 py-4">Section</th>
-                <th className="px-4 py-4">Rank</th>
-                <th className="px-4 py-4">Temporal Stamp</th>
-                <th className="px-4 py-4">Check_In</th>
-                <th className="px-4 py-4">Check_Out</th>
-                <th className="px-4 py-4 text-center">Latency</th>
-                <th className="px-6 py-4 text-center">Status Protocol</th>
+                <th 
+                  className="px-6 py-4 cursor-pointer hover:bg-slate-100 transition-colors group"
+                  onClick={() => handleSort('name')}
+                >
+                  <div className="flex items-center gap-2">
+                    Nama Karyawan
+                    <ArrowUpDown className={`w-3 h-3 ${sortConfig.key === 'name' ? 'text-blue-600' : 'text-slate-300 group-hover:text-slate-400'}`} />
+                  </div>
+                </th>
+                <th 
+                  className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors group"
+                  onClick={() => handleSort('date')}
+                >
+                  <div className="flex items-center gap-2">
+                    Tanggal
+                    <ArrowUpDown className={`w-3 h-3 ${sortConfig.key === 'date' ? 'text-blue-600' : 'text-slate-300 group-hover:text-slate-400'}`} />
+                  </div>
+                </th>
+                <th className="px-4 py-4">Jam Masuk</th>
+                <th className="px-4 py-4">Jam Keluar</th>
+                <th className="px-6 py-4 text-center">Status</th>
+                <th className="px-4 py-4 text-center">Terlambat</th>
+                <th className="px-4 py-4">Departemen</th>
+                <th className="px-4 py-4">Bagian / Seksi</th>
+                <th className="px-4 py-4">Jabatan</th>
+                <th className="px-4 py-4 text-center">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -290,23 +389,24 @@ const Attendance = () => {
                   <td colSpan="9" className="text-center py-24">
                     <div className="flex flex-col items-center gap-4">
                       <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest animate-pulse">Querying Relays...</p>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest animate-pulse">Memuat Data...</p>
                     </div>
                   </td>
                 </tr>
-              ) : filteredData.length === 0 ? (
+              ) : (!filteredData || filteredData.length === 0) ? (
                 <tr>
                   <td colSpan="9" className="text-center py-24">
                     <div className="flex flex-col items-center gap-4 opacity-70">
                       <div className="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center border border-slate-100">
                         <Calendar className="w-8 h-8 text-slate-400" />
                       </div>
-                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Zero Log Reconciliation</p>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Data Kosong</p>
+                      <p className="text-[9px] text-slate-400 uppercase font-medium">Tidak ada data absensi untuk periode ini</p>
                     </div>
                   </td>
                 </tr>
               ) : (
-                filteredData.map((row) => (
+                sortedAndFilteredData.map((row) => (
                   <tr
                     key={row.id}
                     className="group transition-all duration-300 hover:bg-blue-50/50"
@@ -317,11 +417,6 @@ const Attendance = () => {
                         <span className="text-[9px] text-slate-500 font-semibold uppercase tracking-wider mt-0.5">{row.employeeCode || 'SYS_ID_ERR'}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-4">
-                      <span className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 text-[10px] font-bold border border-slate-200 uppercase tracking-widest">{row.dept || 'N/A'}</span>
-                    </td>
-                    <td className="px-4 py-4 text-[10px] font-bold text-slate-600 uppercase tracking-wider">{row.section || '—'}</td>
-                    <td className="px-4 py-4 text-[10px] font-bold text-slate-600 uppercase tracking-wider">{row.position || '—'}</td>
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-2">
                         <Calendar className="w-3.5 h-3.5 text-slate-400" />
@@ -340,24 +435,47 @@ const Attendance = () => {
                         <span className="text-xs font-bold text-slate-800 tracking-widest">{row.checkOut || '--:--'}</span>
                       </div>
                     </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className={`inline-flex items-center px-3 py-1.5 rounded-md text-[9px] font-bold uppercase tracking-wider border transition-all ${
+                        row.status === 'Hadir' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' :
+                        row.status === 'Terlambat' ? 'bg-amber-50 text-amber-600 border-amber-200' :
+                        row.status === 'Mangkir' ? 'bg-rose-50 text-rose-600 border-rose-200' :
+                        row.status === 'Libur' ? 'bg-indigo-50 text-indigo-600 border-indigo-200' :
+                        row.status === 'Cuti' ? 'bg-cyan-50 text-cyan-600 border-cyan-200' :
+                        row.status === 'Sakit' ? 'bg-yellow-50 text-yellow-600 border-yellow-200' :
+                        row.status === 'Izin' ? 'bg-blue-50 text-blue-600 border-blue-200' :
+                        'bg-slate-50 text-slate-500 border-slate-200'
+                      }`}>
+                        {row.status}
+                      </span>
+                    </td>
                     <td className="px-4 py-4 text-center">
-                      {row.status === 'Late' ? (
+                      {row.status === 'Terlambat' ? (
                         <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">+{row.lateMinutes}m</span>
                       ) : (
                         <span className="text-slate-400">—</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className={`inline-flex items-center px-3 py-1.5 rounded-md text-[9px] font-bold uppercase tracking-wider border transition-all ${
-                        row.status === 'Present' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' :
-                        row.status === 'Late' ? 'bg-amber-50 text-amber-600 border-amber-200' :
-                        row.status === 'Mangkir' ? 'bg-rose-50 text-rose-600 border-rose-200' :
-                        row.status === 'Holiday' ? 'bg-indigo-50 text-indigo-600 border-indigo-200' :
-                        row.status === 'Cuti' ? 'bg-cyan-50 text-cyan-600 border-cyan-200' :
-                        'bg-slate-50 text-slate-500 border-slate-200'
-                      }`}>
-                        {row.status === 'Present' ? 'Operational' : row.status === 'Late' ? 'Protocol Breach' : row.status === 'Mangkir' ? 'Missing' : row.status === 'Holiday' ? 'Rest Protocol' : row.status === 'Cuti' ? 'Authorized Off' : 'Offline'}
-                      </span>
+                    <td className="px-4 py-4">
+                      <span className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 text-[10px] font-bold border border-slate-200 uppercase tracking-widest">{row.dept || 'N/A'}</span>
+                    </td>
+                    <td className="px-4 py-4 text-[10px] font-bold text-slate-600 uppercase tracking-wider">{row.section || '—'}</td>
+                    <td className="px-4 py-4 text-[10px] font-bold text-slate-600 uppercase tracking-wider">{row.position || '—'}</td>
+                    <td className="px-4 py-4 text-center">
+                      <button 
+                        onClick={() => setCorrectionModal({
+                          isOpen: true,
+                          recordId: row.id,
+                          employeeName: row.name,
+                          currentStatus: row.status,
+                          newStatus: 'CUTI',
+                          notes: ''
+                        })}
+                        className="p-1.5 rounded-lg bg-slate-50 hover:bg-blue-50 text-slate-400 hover:text-blue-600 border border-slate-200 hover:border-blue-200 transition-all"
+                        title="Koreksi Status"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -451,46 +569,91 @@ const Attendance = () => {
                   </label>
                 </div>
               ) : isUploading ? (
-                <div className="py-20 flex flex-col items-center justify-center">
+                <div className="py-12 flex flex-col items-center justify-center">
                   <div className="relative mb-8">
                     <div className="w-24 h-24 border-4 border-slate-100 rounded-full" />
                     <div className="w-24 h-24 border-4 border-blue-600 border-t-transparent rounded-full animate-spin absolute inset-0 shadow-[0_0_20px_rgba(37,99,235,0.2)]" />
-                    <Loader2 className="w-10 h-10 text-blue-600 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+                    <div className="absolute inset-0 flex items-center justify-center text-blue-600 font-bold text-lg">
+                      {importProgress.percent}%
+                    </div>
                   </div>
-                  <h4 className="font-bold text-slate-800 uppercase tracking-wider text-sm">Ingesting Log Nodes</h4>
-                  <p className="text-[10px] text-slate-500 font-bold uppercase mt-2 tracking-widest">Committing to Central Intelligence...</p>
+                  
+                  <div className="w-full max-w-sm space-y-4">
+                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-blue-600 transition-all duration-500 ease-out shadow-[0_0_10px_rgba(37,99,235,0.3)]" 
+                        style={{ width: `${importProgress.percent}%` }}
+                      />
+                    </div>
+                    
+                    <div className="text-center">
+                      <h4 className="font-bold text-slate-800 uppercase tracking-wider text-sm">
+                        {importProgress.phase === 'saving' ? 'Committing to Database' : 
+                         importProgress.phase === 'parsing' ? 'Parsing Matrix' :
+                         importProgress.phase === 'matching' ? 'Employee Mapping' :
+                         'Ingesting Log Nodes'}
+                      </h4>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase mt-2 tracking-widest animate-pulse">
+                        {importProgress.detail || 'Processing...'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               ) : (
-                <div className="space-y-8 animate-in fade-in zoom-in-95 duration-500">
+                <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
                   <div className={`p-6 rounded-2xl flex items-center gap-6 border ${importResult.success ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>
-                    <div className={`w-14 h-14 rounded-xl flex items-center justify-center shadow-sm ${importResult.success ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'}`}>
+                    <div className={`w-14 h-14 rounded-xl flex items-center justify-center shadow-sm shrink-0 ${importResult.success ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'}`}>
                       {importResult.success ? <CheckCircle2 className="w-6 h-6" /> : <AlertCircle className="w-6 h-6" />}
                     </div>
                     <div>
-                      <h4 className="font-bold text-slate-800 text-lg tracking-tight">{importResult.success ? 'Sync Finalized' : 'Protocol Failure'}</h4>
+                      <h4 className="font-bold text-slate-800 text-lg tracking-tight">{importResult.success ? 'Import Selesai' : 'Import Gagal'}</h4>
                       <p className="text-[11px] text-slate-600 font-medium mt-1 leading-relaxed">{importResult.message}</p>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-3 gap-3">
                     {[
-                      { label: 'Total Entries', val: importResult.data?.totalRows, color: 'blue' },
-                      { label: 'Validated', val: importResult.data?.imported, color: 'emerald' },
-                      { label: 'Modified', val: importResult.data?.updated, color: 'amber' },
-                      { label: 'Discarded', val: importResult.data?.skipped, color: 'slate', opacity: 'opacity-50' }
+                      { label: 'Total Baris Excel', val: importResult.data?.totalRows, color: 'blue' },
+                      { label: 'Berhasil Diproses', val: importResult.data?.imported, color: 'emerald' },
+                      { label: 'Tidak Ditemukan', val: importResult.data?.unmatchedCount || 0, color: 'rose' },
                     ].map((m, i) => (
-                      <div key={i} className={`bg-white p-5 rounded-2xl border border-slate-200 flex flex-col items-center transition-all shadow-sm ${m.opacity || ''}`}>
+                      <div key={i} className={`bg-white p-5 rounded-2xl border border-slate-200 flex flex-col items-center transition-all shadow-sm`}>
                         <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-2">{m.label}</span>
                         <span className={`text-3xl font-bold tracking-tight text-${m.color}-600`}>{m.val || 0}</span>
                       </div>
                     ))}
                   </div>
 
+                  {/* Unmatched Employees List */}
+                  {importResult.data?.unmatched?.length > 0 && (
+                    <div className="bg-rose-50 border border-rose-200 rounded-2xl overflow-hidden">
+                      <div className="px-5 py-3 bg-rose-100/50 border-b border-rose-200 flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-rose-600" />
+                        <span className="text-[10px] font-bold text-rose-700 uppercase tracking-widest">
+                          Karyawan Tidak Ditemukan di Sistem ({importResult.data.unmatched.length})
+                        </span>
+                      </div>
+                      <div className="p-4 max-h-48 overflow-y-auto space-y-1.5">
+                        {importResult.data.unmatched.map((name, idx) => (
+                          <div key={idx} className="flex items-center gap-2 px-3 py-2 bg-white rounded-lg border border-rose-100">
+                            <XCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                            <span className="text-xs font-semibold text-slate-700">{name}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="px-5 py-3 bg-rose-100/30 border-t border-rose-200">
+                        <p className="text-[9px] text-rose-600 font-bold uppercase tracking-wider">
+                          Pastikan nama dan NIK karyawan di atas sudah terdaftar di menu Employees sebelum import ulang.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   <button 
                     onClick={() => setImportResult(null)}
                     className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all"
                   >
-                    CLOSE BATCH SESSION
+                    TUTUP
                   </button>
                 </div>
               )}
@@ -555,6 +718,90 @@ const Attendance = () => {
               >
                 {isRecalculating ? <Loader2 className="w-4 h-4 animate-spin inline mr-2" /> : 'Execute Audit'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Correction Modal */}
+      {correctionModal.isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => !isCorrecting && setCorrectionModal(prev => ({ ...prev, isOpen: false }))} />
+          
+          <div className="bg-white w-full max-w-md relative z-10 overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300 rounded-3xl">
+            <div className="px-8 py-6 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center border border-amber-100 shadow-sm">
+                  <Edit2 className="w-6 h-6 text-amber-600" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 text-lg tracking-tight">Koreksi Absensi</h3>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">{correctionModal.employeeName}</p>
+                </div>
+              </div>
+              <button onClick={() => !isCorrecting && setCorrectionModal(prev => ({ ...prev, isOpen: false }))} className="w-10 h-10 flex items-center justify-center hover:bg-slate-200 rounded-xl transition-all">
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+
+            <div className="p-8">
+              <form onSubmit={handleCorrectionSubmit} className="space-y-6">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Status Saat Ini</label>
+                  <div className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700">
+                    {correctionModal.currentStatus}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Pilih Status Baru</label>
+                  <select
+                    value={correctionModal.newStatus}
+                    onChange={(e) => setCorrectionModal(prev => ({ ...prev, newStatus: e.target.value }))}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-bold text-slate-700 outline-none transition-all"
+                    required
+                  >
+                    <option value="CUTI">Cuti</option>
+                    <option value="SAKIT">Sakit</option>
+                    <option value="IZIN">Izin</option>
+                    <option value="ABSENT">Absen (Tanpa Keterangan)</option>
+                    <option value="MANGKIR">Mangkir</option>
+                    <option value="HOLIDAY">Libur</option>
+                    <option value="PRESENT">Hadir (Manual)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Keterangan / Alasan (Opsional)</label>
+                  <textarea
+                    value={correctionModal.notes}
+                    onChange={(e) => setCorrectionModal(prev => ({ ...prev, notes: e.target.value }))}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-medium text-slate-700 outline-none transition-all resize-none h-24"
+                    placeholder="Masukkan alasan koreksi status..."
+                  />
+                </div>
+
+                <div className="pt-2 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setCorrectionModal(prev => ({ ...prev, isOpen: false }))}
+                    className="px-5 py-2.5 rounded-xl font-bold text-slate-600 hover:bg-slate-100 transition-all text-xs uppercase tracking-wider"
+                    disabled={isCorrecting}
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isCorrecting}
+                    className="px-6 py-2.5 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-700 active:scale-95 transition-all text-xs uppercase tracking-wider disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {isCorrecting ? (
+                      <><Loader2 className="w-4 h-4 animate-spin" /> Menyimpan...</>
+                    ) : (
+                      <><CheckCircle2 className="w-4 h-4" /> Simpan Koreksi</>
+                    )}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>

@@ -197,11 +197,11 @@ export const attendanceAPI = {
     const q = new URLSearchParams(params).toString();
     return apiFetch(`/attendance/master-options${q ? `?${q}` : ''}`);
   },
-  importExcel: async (file) => {
+  importExcel: async (file, jobId) => {
     const formData = new FormData();
     formData.append('file', file);
     const token = localStorage.getItem('accessToken');
-    const res = await fetch(`/api/attendance/import`, {
+    const res = await fetch(`/api/attendance/import${jobId ? `?jobId=${jobId}` : ''}`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` },
       body: formData
@@ -210,7 +210,23 @@ export const attendanceAPI = {
     if (!res.ok) throw new Error(data.message || 'Import failed');
     return data;
   },
+  getImportProgress: async (jobId) => {
+    const token = localStorage.getItem('accessToken');
+    const res = await fetch(`/api/attendance/import-progress?jobId=${jobId}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return await res.json();
+  },
+  getTemplate: async () => {
+    const token = localStorage.getItem('accessToken');
+    const res = await fetch(`/api/attendance/template`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error('Download failed');
+    return { data: await res.blob() };
+  },
   recalculate: (startDate, endDate) => apiFetch('/attendance/recalculate', { method: 'POST', body: JSON.stringify({ startDate, endDate }) }),
+  update: (id, data) => apiFetch(`/attendance/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 };
 
 // ─── Dashboard API ─────────────────────────────────
@@ -220,6 +236,15 @@ export const dashboardAPI = {
   getDeptLateness: () => apiFetch('/dashboard/dept-lateness'),
   getRecentLate: () => apiFetch('/dashboard/recent-late'),
   getAdminNotifications: () => apiFetch('/dashboard/notifications'),
+};
+
+// ─── Audit Log API ─────────────────────────────────
+export const auditLogAPI = {
+  getAll: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return apiFetch(`/audit-logs${q ? `?${q}` : ''}`);
+  },
+  getStats: () => apiFetch('/audit-logs/stats'),
 };
 
 // ─── Settings API ────────────────────────────────
