@@ -71,9 +71,9 @@ const DirectorLeave = () => {
 
       {/* Filter */}
       <div className="bg-white p-6 border border-slate-200 rounded-2xl shadow-sm">
-        <div className="flex flex-col xl:flex-row gap-6 items-end">
-          <div className="flex-1 space-y-2">
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Search</label>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="space-y-2">
+            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">Search</label>
             <div className="relative group">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
               <input 
@@ -86,32 +86,30 @@ const DirectorLeave = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 xl:w-1/2">
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</label>
-              <select 
-                value={status} 
-                onChange={e => { setStatus(e.target.value); setPage(1); }}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 appearance-none cursor-pointer"
-              >
-                <option value="">All Status</option>
-                <option value="PENDING">Pending</option>
-                <option value="APPROVED">Approved</option>
-                <option value="REJECTED">Rejected</option>
-              </select>
-            </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">Status</label>
+            <select 
+              value={status} 
+              onChange={e => { setStatus(e.target.value); setPage(1); }}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 appearance-none cursor-pointer"
+            >
+              <option value="">All Status</option>
+              <option value="PENDING">Pending</option>
+              <option value="APPROVED">Approved</option>
+              <option value="REJECTED">Rejected</option>
+            </select>
+          </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Department</label>
-              <select 
-                value={dept} 
-                onChange={e => { setDept(e.target.value); setPage(1); }}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 appearance-none cursor-pointer"
-              >
-                <option value="">All Departments</option>
-                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
-            </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">Department</label>
+            <select 
+              value={dept} 
+              onChange={e => { setDept(e.target.value); setPage(1); }}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 appearance-none cursor-pointer"
+            >
+              <option value="">All Departments</option>
+              {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
           </div>
         </div>
       </div>
@@ -201,7 +199,7 @@ const DirectorLeave = () => {
                       </div>
                     </td>
                     <td className="px-4 py-4 text-center">
-                      <span className="text-sm font-semibold text-slate-700 bg-slate-50 px-3 py-1 rounded-lg border border-slate-200">{r.duration}d</span>
+                      <span className="text-sm font-semibold text-slate-700 bg-slate-50 px-3 py-1 rounded-lg border border-slate-200">{r.duration || 1}d</span>
                     </td>
                     <td className="px-4 py-4">
                       <p className="text-xs text-slate-500 max-w-[180px] truncate italic">"{r.reason}"</p>

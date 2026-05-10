@@ -119,86 +119,88 @@ const DirectorAttendance = () => {
       </div>
 
       {/* Filter Matrix */}
-      <div className="bg-white p-8 border border-slate-200 rounded-2xl shadow-sm">
-        <div className="space-y-8">
-          <div className="flex flex-col xl:flex-row xl:items-center gap-6 border-b border-slate-100 pb-6">
-            <div className="flex items-center gap-3">
+      <div className="bg-white p-6 border border-slate-200 rounded-2xl shadow-sm">
+        <div className="space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center gap-4 border-b border-slate-100 pb-6">
+            <div className="flex items-center gap-3 shrink-0">
               <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
                 <Calendar className="w-5 h-5" />
               </div>
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Date Range</span>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {PERIODS.map(p => (
-                <button key={p.key} onClick={() => { setPeriod(p.key); }}
-                  className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-300 border ${
-                    period === p.key ? 'bg-blue-600 border-blue-600 text-white shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-600 hover:text-slate-800 hover:border-slate-300'
-                  }`}>
-                  {p.label}
-                </button>
-              ))}
-            </div>
-            {period === 'custom' && (
-              <div className="flex items-center gap-3 animate-in slide-in-from-left-4 duration-500">
-                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 outline-none" />
-                <ArrowRight className="w-4 h-4 text-slate-400" />
-                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 outline-none" />
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-xl border border-slate-200">
+                {PERIODS.map(p => (
+                  <button key={p.key} onClick={() => { setPeriod(p.key); }}
+                    className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-300 ${
+                      period === p.key ? 'bg-white text-blue-600 shadow-sm border border-slate-200/60' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100/50 border border-transparent'
+                    }`}>
+                    {p.label}
+                  </button>
+                ))}
               </div>
-            )}
+              {period === 'custom' && (
+                <div className="flex items-center gap-2 animate-in slide-in-from-left-4 duration-500 bg-slate-50 p-1 rounded-xl border border-slate-200">
+                  <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+                    className="bg-white border border-slate-200/60 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 outline-none" />
+                  <ArrowRight className="w-3 h-3 text-slate-400" />
+                  <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
+                    className="bg-white border border-slate-200/60 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 outline-none" />
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-6">
-            <div className="xl:col-span-2 space-y-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="space-y-1.5">
               <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">Search Personnel</label>
               <div className="relative group">
-                <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
                 <input type="text" placeholder="Name or NIK..."
                   value={search} onChange={e => setSearch(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-sm text-slate-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 transition-all placeholder:text-slate-400" />
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm text-slate-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 transition-all placeholder:text-slate-400" />
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">Department</label>
               <div className="relative group">
-                <Filter className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <Filter className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 <select value={deptFilter} onChange={e => { setDept(e.target.value); setSection(''); setPosition(''); }}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-sm text-slate-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 outline-none appearance-none cursor-pointer">
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm text-slate-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 outline-none appearance-none cursor-pointer">
                   <option value="">All Departments</option>
                   {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
                 </select>
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">Section</label>
               <select value={sectionFilter} onChange={e => setSection(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 outline-none appearance-none cursor-pointer">
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 outline-none appearance-none cursor-pointer">
                 <option value="">All Sections</option>
                 {sections.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">Status</label>
               <select value={statusFilter} onChange={e => setStatus(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 outline-none appearance-none cursor-pointer">
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 outline-none appearance-none cursor-pointer">
                 <option value="">All Status</option>
                 {Object.keys(STATUS_CONFIG).map(k => (
                   <option key={k} value={k}>{STATUS_CONFIG[k]?.label || k}</option>
                 ))}
               </select>
             </div>
-
-            <div className="flex items-end">
-              <button onClick={handleApplyFilters} disabled={isLoading}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-30 h-[46px] shadow-sm transition-all active:scale-[0.98]">
-                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                Apply
-              </button>
-            </div>
+          </div>
+          
+          <div className="flex justify-end pt-2">
+            <button onClick={handleApplyFilters} disabled={isLoading}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50 shadow-sm transition-all active:scale-[0.98]">
+              {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+              Apply Filters
+            </button>
           </div>
         </div>
       </div>
