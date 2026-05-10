@@ -2,6 +2,7 @@ const prisma = require('../prismaClient');
 const { calculateLateness, resolveStatus } = require('../utils/lateCalculator');
 const { getDistance } = require('../utils/geo');
 const XLSX = require('xlsx');
+const { recordAuditLog } = require('./auditLogController');
 
 /**
  * GET /api/attendance
@@ -20,9 +21,9 @@ const getAll = async (req, res) => {
     // Date filtering
     const now = new Date();
     if (period === 'Today' || (!period && !date && !startDate)) {
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
       const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
       where.date = { gte: today, lt: tomorrow };
     } else if (period === 'This Week') {
       const startOfWeek = new Date(now);
@@ -30,7 +31,7 @@ const getAll = async (req, res) => {
       startOfWeek.setHours(0, 0, 0, 0);
       where.date = { gte: startOfWeek, lte: now };
     } else if (period === 'This Month') {
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const startOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
       where.date = { gte: startOfMonth, lte: now };
     } else if (period === 'Custom' && startDate && endDate) {
       const start = new Date(startDate);
@@ -39,9 +40,10 @@ const getAll = async (req, res) => {
       where.date = { gte: start, lte: end };
     } else if (date) {
       const d = new Date(date);
-      const next = new Date(d);
-      next.setDate(next.getDate() + 1);
-      where.date = { gte: d, lt: next };
+      const start = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+      const next = new Date(start);
+      next.setUTCDate(next.getUTCDate() + 1);
+      where.date = { gte: start, lt: next };
     }
 
     // Organizational filters
@@ -73,7 +75,7 @@ const getAll = async (req, res) => {
 
     // 3. Dynamic Summary Calculation
     // Use aggregate logic to get counts for different statuses
-    const [total, records, hadirCount, telatCount, mangkirCount, absenCount, holidayCount] = await Promise.all([
+    const [total, records, allRecords] = await Promise.all([
       prisma.attendance.count({ where }),
       prisma.attendance.findMany({
         where,
@@ -82,32 +84,33 @@ const getAll = async (req, res) => {
         skip,
         take: limit,
       }),
-      // Hadir: Status PRESENT
-      prisma.attendance.count({ where: { ...where, status: 'PRESENT', NOT: [{ checkIn: null }, { checkOut: null }] } }),
-      // Telat: Status LATE
-      prisma.attendance.count({ where: { ...where, status: 'LATE', NOT: [{ checkIn: null }, { checkOut: null }] } }),
-      // Mangkir: Logical MANGKIR (One of them is null)
-      prisma.attendance.count({ 
-        where: { 
-          ...where, 
-          OR: [
-            { AND: [{ checkIn: null }, { NOT: { checkOut: null } }] },
-            { AND: [{ NOT: { checkIn: null } }, { checkOut: null }] }
-          ]
-        } 
-      }),
-      // Absen: Logical ABSENT (Both are null AND not a known special status)
-      prisma.attendance.count({ 
-        where: { 
-          ...where, 
-          checkIn: null, 
-          checkOut: null,
-          status: { notIn: ['HOLIDAY', 'CUTI', 'SAKIT', 'IZIN'] }
-        } 
-      }),
-      // Holiday: Specifically HOLIDAY status
-      prisma.attendance.count({ where: { ...where, status: 'HOLIDAY' } }),
+      prisma.attendance.findMany({
+        where,
+        select: { date: true, checkIn: true, checkOut: true, status: true }
+      })
     ]);
+
+    let hadirCount = 0, telatCount = 0, mangkirCount = 0, absenCount = 0, holidayCount = 0, cutiCount = 0, sakitCount = 0, izinCount = 0;
+    
+    allRecords.forEach(r => {
+      const recordDay = new Date(r.date).getDay();
+      const isWorkingDay = workingDays.includes(recordDay);
+      let finalStatus = r.status;
+      
+      if (!isWorkingDay && !r.checkIn && !r.checkOut && r.status === 'ABSENT') {
+        finalStatus = 'HOLIDAY';
+      }
+      
+      const resolved = resolveStatus(r.checkIn, r.checkOut, finalStatus);
+      if (resolved === 'PRESENT') hadirCount++;
+      else if (resolved === 'LATE') telatCount++;
+      else if (resolved === 'MANGKIR') mangkirCount++;
+      else if (resolved === 'HOLIDAY') holidayCount++;
+      else if (resolved === 'CUTI') cutiCount++;
+      else if (resolved === 'SAKIT') sakitCount++;
+      else if (resolved === 'IZIN') izinCount++;
+      else absenCount++;
+    });
 
     const summary = {
       total: total,
@@ -116,6 +119,9 @@ const getAll = async (req, res) => {
       mangkir: mangkirCount,
       absen: absenCount,
       holiday: holidayCount,
+      cuti: cutiCount,
+      sakit: sakitCount,
+      izin: izinCount,
     };
 
     res.json({
@@ -136,17 +142,20 @@ const getAll = async (req, res) => {
         return {
           id: r.id,
           name: r.employee.name,
+          employeeCode: r.employee.employeeCode,
           dept: r.employee.department.name,
           section: r.employee.section,
           position: r.employee.position,
-          date: r.date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
+          date: r.date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }),
           checkIn: r.checkIn ? r.checkIn.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-- : --',
           checkOut: r.checkOut ? r.checkOut.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-- : --',
-          status: resolveStatus(r.checkIn, r.checkOut, finalStatus) === 'PRESENT' ? 'Present' : 
-                  resolveStatus(r.checkIn, r.checkOut, finalStatus) === 'LATE' ? 'Late' : 
+          status: resolveStatus(r.checkIn, r.checkOut, finalStatus) === 'PRESENT' ? 'Hadir' : 
+                  resolveStatus(r.checkIn, r.checkOut, finalStatus) === 'LATE' ? 'Terlambat' : 
                   resolveStatus(r.checkIn, r.checkOut, finalStatus) === 'MANGKIR' ? 'Mangkir' : 
-                  resolveStatus(r.checkIn, r.checkOut, finalStatus) === 'HOLIDAY' ? 'Holiday' : 
-                  resolveStatus(r.checkIn, r.checkOut, finalStatus) === 'CUTI' ? 'Cuti' : 'Absent',
+                  resolveStatus(r.checkIn, r.checkOut, finalStatus) === 'HOLIDAY' ? 'Libur' : 
+                  resolveStatus(r.checkIn, r.checkOut, finalStatus) === 'CUTI' ? 'Cuti' : 
+                  resolveStatus(r.checkIn, r.checkOut, finalStatus) === 'SAKIT' ? 'Sakit' : 
+                  resolveStatus(r.checkIn, r.checkOut, finalStatus) === 'IZIN' ? 'Izin' : 'Tanpa Keterangan (Alpa)',
           lateMinutes: r.lateMinutes,
           mode: r.mode,
         };
@@ -229,7 +238,7 @@ const checkIn = async (req, res) => {
     }
 
     const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
 
     // Check if already checked in today
     const existing = await prisma.attendance.findUnique({
@@ -284,7 +293,7 @@ const checkOut = async (req, res) => {
   try {
     const { employeeId } = req.body;
     const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
 
     const attendance = await prisma.attendance.findUnique({
       where: { employeeId_date: { employeeId, date: today } },
@@ -330,9 +339,9 @@ const checkOut = async (req, res) => {
 const getSummary = async (req, res) => {
   try {
     const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
     const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
 
     const totalEmployees = await prisma.employee.count({ where: { status: 'ACTIVE' } });
 
@@ -368,8 +377,8 @@ const getHistory = async (req, res) => {
     const where = { employeeId: empId };
 
     if (month && year) {
-      const start = new Date(parseInt(year), parseInt(month) - 1, 1);
-      const end = new Date(parseInt(year), parseInt(month), 0);
+      const start = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, 1));
+      const end = new Date(Date.UTC(parseInt(year), parseInt(month), 0, 23, 59, 59, 999));
       where.date = { gte: start, lte: end };
     }
 
@@ -386,13 +395,35 @@ const getHistory = async (req, res) => {
         weekday: r.date.toLocaleDateString('en-US', { weekday: 'short' }),
         in: r.checkIn ? r.checkIn.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-- : --',
         out: r.checkOut ? r.checkOut.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-- : --',
-        status: r.status === 'PRESENT' ? 'Present' : r.status === 'LATE' ? 'Late' : 'Absent',
+        status: r.status === 'PRESENT' ? 'Hadir' : 
+                r.status === 'LATE' ? 'Terlambat' : 
+                r.status === 'MANGKIR' ? 'Mangkir' : 
+                r.status === 'HOLIDAY' ? 'Libur' : 
+                r.status === 'CUTI' ? 'Cuti' : 
+                r.status === 'SAKIT' ? 'Sakit' : 
+                r.status === 'IZIN' ? 'Izin' : 'Tanpa Keterangan (Alpa)',
         lateMinutes: r.lateMinutes,
       })),
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
+};
+
+// Global progress store for attendance import
+global.attendanceImportProgress = global.attendanceImportProgress || {};
+
+/**
+ * GET /api/attendance/import-progress
+ * Poll the progress of an attendance import job
+ */
+const getImportProgress = async (req, res) => {
+  const { jobId } = req.query;
+  if (!jobId || !global.attendanceImportProgress[jobId]) {
+    return res.json({ success: true, progress: 0, phase: 'idle', detail: '' });
+  }
+  const p = global.attendanceImportProgress[jobId];
+  res.json({ success: true, ...p });
 };
 
 /**
@@ -405,6 +436,12 @@ const importFromExcel = async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ success: false, message: 'No file uploaded' });
     }
+
+    const jobId = req.query.jobId || `att_${Date.now()}`;
+    const updateProgress = (progress, phase, detail) => {
+      global.attendanceImportProgress[jobId] = { progress, phase, detail };
+    };
+    updateProgress(5, 'reading', 'Membaca file Excel...');
 
     const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
     const ws = wb.Sheets[wb.SheetNames[0]];
@@ -423,7 +460,7 @@ const importFromExcel = async (req, res) => {
       dateTime: header.findIndex(h => h.includes('date') || h.includes('time')),
       status: header.findIndex(h => h === 'status'),
       locationId: header.findIndex(h => h.includes('location')),
-      idNumber: header.findIndex(h => h.includes('id number') || h.includes('idnumber')),
+      idNumber: header.findIndex(h => h.includes('id number') || h.includes('idnumber') || h.includes('id num')),
       verifyCode: header.findIndex(h => h.includes('verify')),
       cardNo: header.findIndex(h => h.includes('card')),
     };
@@ -435,103 +472,130 @@ const importFromExcel = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Cannot detect ID Number or Name column for employee matching' });
     }
 
+    console.log('[Import Debug] Column Mapping:', colMap);
+    console.log('[Import Debug] Total Rows found:', rows.length - 1);
+    updateProgress(10, 'parsing', `Membaca ${rows.length - 1} baris data...`);
     // Parse all data rows
     const dataRows = rows.slice(1).filter(r => r && r.length > 0);
     
     // Group by employee+date
-    // Key: employeeCode|date -> { checkIn, checkOut, employeeName, dept }
     const grouped = {};
     const unmatchedNames = new Set();
+    
+    let imported = 0;
+    const errors = [];
 
-    // Pre-fetch all employees for fast lookup
+    // Pre-fetch all employees
     const allEmployees = await prisma.employee.findMany({
-      select: { id: true, employeeCode: true, name: true, shiftId: true, shift: true },
+      select: { id: true, employeeCode: true, name: true, shift: true },
     });
     const empByCode = {};
     const empByName = {};
     allEmployees.forEach(e => {
-      empByCode[e.employeeCode] = e;
+      empByCode[e.employeeCode.toString().trim()] = e;
       empByName[e.name.toLowerCase().trim()] = e;
     });
 
+    updateProgress(15, 'matching', `Mencocokkan ${dataRows.length} baris dengan ${allEmployees.length} karyawan...`);
+
+    // 1. DETERMINE TARGET MONTH/YEAR (From first valid data row)
+    let targetMonth = 4; // Default April
+    let targetYear = 2026;
+    
+    // 2. GROUP RAW EXCEL DATA (STRICT DATE ALIGNMENT)
     for (const row of dataRows) {
-      const rawDateTime = row[colMap.dateTime];
-      const statusStr = (row[colMap.status] || '').toString().trim().toLowerCase();
-      const idNumber = colMap.idNumber >= 0 ? (row[colMap.idNumber] || '').toString().trim() : '';
-      const empName = colMap.name >= 0 ? (row[colMap.name] || '').toString().trim() : '';
+      if (!row || row.length < 3) continue;
+      const rawDateTime = (row[2] || '').toString().trim();
+      const rawStatus = (row[3] || '').toString().trim().toLowerCase();
+      const rawId = (row[4] || '').toString().trim();
+      const rawName = (row[1] || '').toString().trim();
 
-      if (!rawDateTime) continue;
+      if (!rawDateTime.includes('/')) continue;
 
-      // Robust Date Parsing
-      let dt;
-      if (typeof rawDateTime === 'number') {
-        // Excel serial date (Number of days since Dec 30, 1899)
-        dt = new Date(Math.round((rawDateTime - 25569) * 86400 * 1000));
-      } else {
-        const str = rawDateTime.toString().trim();
-        // Regex for M/D/YYYY H:mm:ss
-        const parts = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\s+(\d{1,2}):(\d{1,2})/);
-        if (parts) {
-          // Based on screenshot, format is M/D/YYYY
-          dt = new Date(parseInt(parts[3]), parseInt(parts[1]) - 1, parseInt(parts[2]), parseInt(parts[4]), parseInt(parts[5]));
-        } else {
-          dt = new Date(str);
-        }
-      }
+      // Format from Machine: "M/D/YYYY H:MM:SS AM/PM"
+      const parts = rawDateTime.split(' ');
+      const dateParts = parts[0].split('/');
+      
+      const m = parseInt(dateParts[0]); // Month
+      const d = parseInt(dateParts[1]); // Day
+      const y = parseInt(dateParts[2]); // Year
 
-      if (!dt || isNaN(dt.getTime())) {
-        console.warn(`[Import] Skipping row: Invalid Date format (${rawDateTime})`);
-        continue;
-      }
+      if (isNaN(m) || isNaN(d) || isNaN(y)) continue;
+      
+      // Update target month/year
+      targetMonth = m;
+      targetYear = y;
 
-      // Match employee
-      let emp = empByCode[idNumber] || empByName[empName.toLowerCase().trim()] || null;
+      let emp = empByCode[rawId] || empByName[rawName.toLowerCase()];
       if (!emp) {
-        unmatchedNames.add(empName || idNumber);
+        // Record unmatched employee info so admin knows who was skipped
+        const identifier = rawId ? `${rawName} (NIK: ${rawId})` : rawName;
+        if (identifier.trim()) unmatchedNames.add(identifier);
         continue;
       }
 
-      const dateKey = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-      const groupKey = `${emp.id}|${dateKey}`;
+      // CONSTRUCT DATE STRING (YYYY-MM-DD) - NO SHIFTING ALLOWED
+      const dateOnlyStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const groupKey = `${emp.id}|${dateOnlyStr}`;
 
       if (!grouped[groupKey]) {
-        grouped[groupKey] = { employeeId: emp.id, employee: emp, date: dateKey, checkIn: null, checkOut: null };
+        grouped[groupKey] = { employeeId: emp.id, employee: emp, date: dateOnlyStr, checkIn: null, checkOut: null };
       }
 
-      // Handle Status with fallback to time-based detection
-      let finalStatus = statusStr;
-      if (!finalStatus || (!finalStatus.includes('in') && !finalStatus.includes('out'))) {
-        finalStatus = dt.getHours() < 12 ? 'in' : 'out';
-      }
+      // Parse time accurately
+      const timeParts = parts[1].split(':');
+      let hours = parseInt(timeParts[0]);
+      const minutes = parseInt(timeParts[1]);
+      const seconds = parseInt(timeParts[2] || 0);
+      const ampm = (parts[2] || '').toUpperCase();
 
-      if (finalStatus.includes('in')) {
-        if (!grouped[groupKey].checkIn || dt < grouped[groupKey].checkIn) {
-          grouped[groupKey].checkIn = dt;
-        }
-      } else if (finalStatus.includes('out')) {
-        if (!grouped[groupKey].checkOut || dt > grouped[groupKey].checkOut) {
-          grouped[groupKey].checkOut = dt;
+      if (ampm === 'PM' && hours < 12) hours += 12;
+      if (ampm === 'AM' && hours === 12) hours = 0;
+
+      // This is the actual timestamp of the event
+      const eventTime = new Date(y, m - 1, d, hours, minutes, seconds);
+
+      if (rawStatus.includes('in') || hours < 12) {
+        if (!grouped[groupKey].checkIn || eventTime < grouped[groupKey].checkIn) grouped[groupKey].checkIn = eventTime;
+      } else {
+        if (!grouped[groupKey].checkOut || eventTime > grouped[groupKey].checkOut) grouped[groupKey].checkOut = eventTime;
+      }
+    }
+
+    // 3. GENERATE FULL SEQUENCE (1 to End of Month)
+    const daysInMonth = new Date(targetYear, targetMonth, 0).getDate(); // Get last day
+    const employeesInvolved = [...new Set(Object.values(grouped).map(g => g.employeeId))];
+
+    for (const empId of employeesInvolved) {
+      const emp = allEmployees.find(e => e.id === empId);
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const key = `${empId}|${dateStr}`;
+        
+        // If this date is NOT in excel data, we create an empty entry
+        if (!grouped[key]) {
+          grouped[key] = { employeeId: empId, employee: emp, date: dateStr, checkIn: null, checkOut: null };
         }
       }
     }
 
-    // Upsert attendance records
-    let imported = 0;
-    let updated = 0;
-    let skipped = 0;
-    const errors = [];
+    // 4. UPSERT ALL RECORDS (1-30)
+    const totalEntries = Object.keys(grouped).length;
+    let processedEntries = 0;
+    updateProgress(30, 'saving', `Menyimpan 0/${totalEntries} data ke database...`);
 
     for (const [key, entry] of Object.entries(grouped)) {
       try {
-        const dateObj = new Date(entry.date + 'T00:00:00');
+        const [y, m, d] = entry.date.split('-').map(Number);
+        const dateObj = new Date(Date.UTC(y, m - 1, d, 0, 0, 0)); 
+        
         const emp = entry.employee;
+        const shiftStart = emp.shift?.startTime || '08:00';
+        const gracePeriod = emp.shift?.gracePeriod || 15;
 
-        // Calculate lateness if check-in exists
         let lateStatus = 'PRESENT';
         let lateMinutes = 0;
         if (entry.checkIn) {
-          const shiftStart = emp.shift?.startTime || '08:00';
-          const gracePeriod = emp.shift?.gracePeriod || 15;
           const calc = calculateLateness(entry.checkIn, shiftStart, gracePeriod);
           lateStatus = calc.status;
           lateMinutes = calc.lateMinutes;
@@ -539,59 +603,61 @@ const importFromExcel = async (req, res) => {
 
         const status = resolveStatus(entry.checkIn, entry.checkOut, lateStatus);
 
-        const existing = await prisma.attendance.findUnique({
+        await prisma.attendance.upsert({
           where: { employeeId_date: { employeeId: entry.employeeId, date: dateObj } },
+          update: {
+            checkIn: entry.checkIn || null,
+            checkOut: entry.checkOut || null,
+            status,
+            lateMinutes,
+            mode: 'Fingerprint'
+          },
+          create: {
+            employeeId: entry.employeeId,
+            date: dateObj,
+            checkIn: entry.checkIn || null,
+            checkOut: entry.checkOut || null,
+            status,
+            lateMinutes,
+            mode: 'Fingerprint'
+          }
         });
-
-        if (existing) {
-          // Update only if imported data has more info
-          const updateData = {};
-          if (entry.checkIn && !existing.checkIn) updateData.checkIn = entry.checkIn;
-          if (entry.checkOut && !existing.checkOut) updateData.checkOut = entry.checkOut;
-          if (entry.checkIn && !existing.checkIn) {
-            updateData.status = status;
-            updateData.lateMinutes = lateMinutes;
-            updateData.mode = 'Fingerprint';
-          }
-          
-          if (Object.keys(updateData).length > 0) {
-            await prisma.attendance.update({ where: { id: existing.id }, data: updateData });
-            updated++;
-          } else {
-            skipped++;
-          }
-        } else {
-          await prisma.attendance.create({
-            data: {
-              employeeId: entry.employeeId,
-              date: dateObj,
-              checkIn: entry.checkIn || null,
-              checkOut: entry.checkOut || null,
-              status,
-              lateMinutes,
-              mode: 'Fingerprint',
-            },
-          });
-          imported++;
+        imported++;
+        processedEntries++;
+        // Update progress every 10 records to avoid overhead
+        if (processedEntries % 10 === 0 || processedEntries === totalEntries) {
+          const pct = Math.round(30 + (processedEntries / totalEntries) * 65);
+          updateProgress(pct, 'saving', `Menyimpan ${processedEntries}/${totalEntries} data ke database...`);
         }
       } catch (err) {
         errors.push(`${key}: ${err.message}`);
+        processedEntries++;
       }
     }
 
+    updateProgress(98, 'finalizing', 'Menyelesaikan import...');
+
+    const unmatchedList = Array.from(unmatchedNames);
+    const unmatchedCount = unmatchedList.length;
+
+    updateProgress(100, 'done', 'Import selesai!');
+
     res.json({
       success: true,
-      message: `Import selesai: ${imported} baru, ${updated} diperbarui, ${skipped} dilewati`,
+      jobId,
+      message: `Import Selesai: ${imported} data berhasil diproses otomatis.${unmatchedCount > 0 ? ` ${unmatchedCount} karyawan tidak ditemukan di sistem.` : ''}${errors.length > 0 ? ` ${errors.length} error.` : ''}`,
       data: {
         totalRows: dataRows.length,
-        groupedRecords: Object.keys(grouped).length,
         imported,
-        updated,
-        skipped,
-        unmatched: Array.from(unmatchedNames),
-        errors: errors.slice(0, 10),
+        unmatchedCount,
+        unmatched: unmatchedList,
+        errorCount: errors.length,
+        errors: errors.slice(0, 20),
       },
     });
+
+    // Clean up progress after 30s
+    setTimeout(() => { delete global.attendanceImportProgress[jobId]; }, 30000);
   } catch (err) {
     console.error('Import attendance error:', err);
     res.status(500).json({ success: false, message: err.message });
@@ -666,9 +732,9 @@ const getMasterOptions = async (req, res) => {
     // 1. Logic for Date filtering (reuse from getAll)
     const now = new Date();
     if (period === 'Today' || (!period && !date && !startDate)) {
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
       const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
       where.date = { gte: today, lt: tomorrow };
     } else if (period === 'This Week') {
       const startOfWeek = new Date(now);
@@ -676,7 +742,7 @@ const getMasterOptions = async (req, res) => {
       startOfWeek.setHours(0, 0, 0, 0);
       where.date = { gte: startOfWeek, lte: now };
     } else if (period === 'This Month') {
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const startOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
       where.date = { gte: startOfMonth, lte: now };
     } else if (period === 'Custom' && startDate && endDate) {
       const start = new Date(startDate);
@@ -685,9 +751,10 @@ const getMasterOptions = async (req, res) => {
       where.date = { gte: start, lte: end };
     } else if (date) {
       const d = new Date(date);
-      const next = new Date(d);
-      next.setDate(next.getDate() + 1);
-      where.date = { gte: d, lt: next };
+      const start = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+      const next = new Date(start);
+      next.setUTCDate(next.getUTCDate() + 1);
+      where.date = { gte: start, lt: next };
     }
 
     // 2. Query Employees who have attendance in the range
@@ -771,8 +838,8 @@ const createManual = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Employee not found' });
     }
 
-    const dateObj = new Date(date);
-    dateObj.setHours(0, 0, 0, 0);
+    const [y, m, d] = date.split('-').map(Number);
+    const dateObj = new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
 
     const record = await prisma.attendance.upsert({
       where: { employeeId_date: { employeeId: parseInt(employeeId), date: dateObj } },
@@ -786,4 +853,77 @@ const createManual = async (req, res) => {
   }
 };
 
-module.exports = { getAll, checkIn, checkOut, getSummary, getHistory, importFromExcel, recalculate, getMasterOptions, createManual };
+const downloadTemplate = async (req, res) => {
+  try {
+    const workbook = XLSX.utils.book_new();
+    const worksheetData = [
+      ['ID Number', 'Name', 'Date (YYYY-MM-DD)', 'Time (HH:mm)', 'Status (In/Out)'],
+      ['14059', 'M. Faizal Akbar', '2026-04-01', '08:00', 'In'],
+      ['14059', 'M. Faizal Akbar', '2026-04-01', '17:00', 'Out']
+    ];
+    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Template');
+    
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=attendance_template.xlsx');
+    res.send(buffer);
+  } catch (err) {
+    console.error('Download error:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const update = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, notes } = req.body;
+    
+    const validStatuses = ['PRESENT', 'LATE', 'ABSENT', 'MANGKIR', 'SAKIT', 'IZIN', 'CUTI', 'HOLIDAY'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ success: false, message: 'Invalid status' });
+    }
+
+    // Get the old record for audit comparison
+    const oldRecord = await prisma.attendance.findUnique({ where: { id: parseInt(id) }, include: { employee: true } });
+
+    const record = await prisma.attendance.update({
+      where: { id: parseInt(id) },
+      data: { status, notes: notes || null }
+    });
+
+    // Audit log
+    if (req.user) {
+      await recordAuditLog({
+        userId: req.user.id,
+        username: req.user.username,
+        role: req.user.role,
+        action: 'CORRECTION',
+        entity: 'Attendance',
+        entityId: parseInt(id),
+        details: { employee: oldRecord?.employee?.name, oldStatus: oldRecord?.status, newStatus: status, notes },
+        ipAddress: req.ip,
+      });
+    }
+
+    res.json({ success: true, message: 'Data absensi berhasil diperbarui', data: record });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = {
+  getAll,
+  checkIn,
+  checkOut,
+  getSummary,
+  getHistory,
+  importFromExcel,
+  getImportProgress,
+  recalculate,
+  getMasterOptions,
+  createManual,
+  downloadTemplate,
+  update
+};

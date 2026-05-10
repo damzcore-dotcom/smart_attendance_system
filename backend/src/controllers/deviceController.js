@@ -123,66 +123,108 @@ const syncUsers = async (req, res) => {
  */
 const syncAttendance = async (req, res) => {
   const { id } = req.params;
+  console.log(`[Sync] Starting attendance sync for device ID: ${id}`);
+  
+  let zkInstance = null;
   try {
     const device = await prisma.device.findUnique({ where: { id: parseInt(id) } });
-    if (!device) return res.status(404).json({ success: false, message: 'Device not found' });
+    if (!device) {
+      console.error(`[Sync] Device with ID ${id} not found`);
+      return res.status(404).json({ success: false, message: 'Device not found' });
+    }
 
-    const zkInstance = new ZKLib(device.ipAddress, device.port, 10000, 4000);
-    await zkInstance.createSocket();
-    const logs = await zkInstance.getAttendances();
-    await zkInstance.disconnect();
-
-    let saved = 0;
+    console.log(`[Sync] Connecting to device at ${device.ipAddress}:${device.port}...`);
+    zkInstance = new ZKLib(device.ipAddress, device.port, 5000, 4000); // 5s timeout
     
-    // Mengelompokkan absen berdasarkan User (PIN) dan Tanggal
+    await zkInstance.createSocket();
+    console.log(`[Sync] Socket created. Fetching logs...`);
+    
+    const logs = await zkInstance.getAttendances();
+    console.log(`[Sync] Successfully fetched ${logs?.data?.length || 0} logs from device.`);
+    
+    await zkInstance.disconnect();
+    console.log(`[Sync] Device disconnected. Processing records...`);
+
+    if (!logs || !logs.data || logs.data.length === 0) {
+      return res.json({ success: true, message: 'Tidak ada data log baru di mesin.' });
+    }
+    const employees = await prisma.employee.findMany({
+      include: { shift: true }
+    });
+    const empByCode = {};
+    employees.forEach(e => {
+      if (e.idNumber) empByCode[e.idNumber] = e;
+    });
+
+    const { calculateLateness, resolveStatus } = require('../utils/lateCalculator');
+    
+    // Group logs by User + Date
+    const grouped = {};
     for (const log of logs.data) {
       const pinStr = String(log.deviceUserId);
       const recordTime = new Date(log.recordTime);
-      const dateOnly = new Date(recordTime);
-      dateOnly.setHours(0, 0, 0, 0);
+      const dateKey = recordTime.toISOString().split('T')[0];
+      
+      const emp = empByCode[pinStr];
+      if (!emp) continue;
 
-      // Cari Karyawan
-      const emp = await prisma.employee.findFirst({ where: { idNumber: pinStr } });
-      if (!emp) continue; // Skip jika belum didaftarkan di sistem (atau belum di syncUsers)
+      const key = `${emp.id}|${dateKey}`;
+      if (!grouped[key]) {
+        grouped[key] = { employeeId: emp.id, employee: emp, date: new Date(dateKey + 'T00:00:00'), checkIn: recordTime, checkOut: recordTime };
+      } else {
+        if (recordTime < grouped[key].checkIn) grouped[key].checkIn = recordTime;
+        if (recordTime > grouped[key].checkOut) grouped[key].checkOut = recordTime;
+      }
+    }
 
-      // Cek apakah absensi hari tersebut sudah ada
-      let attendance = await prisma.attendance.findUnique({
-        where: {
-          employeeId_date: {
-            employeeId: emp.id,
-            date: dateOnly
-          }
-        }
+    // Process grouped records
+    const recordsToCreate = [];
+    const entries = Object.values(grouped);
+    
+    for (const entry of entries) {
+      const emp = entry.employee;
+      const shiftStart = emp.shift?.startTime || '08:00';
+      const gracePeriod = emp.shift?.gracePeriod || 15;
+      
+      // Calculate Lateness
+      const calc = calculateLateness(entry.checkIn, shiftStart, gracePeriod);
+      const status = resolveStatus(entry.checkIn, entry.checkIn === entry.checkOut ? null : entry.checkOut, calc.status);
+
+      recordsToCreate.push({
+        employeeId: entry.employeeId,
+        date: entry.date,
+        checkIn: entry.checkIn,
+        checkOut: entry.checkIn === entry.checkOut ? null : entry.checkOut,
+        status,
+        lateMinutes: calc.lateMinutes,
+        mode: 'Fingerprint'
       });
+    }
 
-      if (!attendance) {
-        // Buat baru sebagai CHECK IN
-        await prisma.attendance.create({
-          data: {
-            employeeId: emp.id,
-            date: dateOnly,
-            checkIn: recordTime,
-            status: 'PRESENT',
+    // Bulk Upsert (using individual upserts in a promise pool to be safest for existing data)
+    // or createMany with skipDuplicates. Let's use individual upserts to ensure update works.
+    let saved = 0;
+    for (const record of recordsToCreate) {
+      try {
+        await prisma.attendance.upsert({
+          where: {
+            employeeId_date: {
+              employeeId: record.employeeId,
+              date: record.date
+            }
+          },
+          update: {
+            checkIn: record.checkIn,
+            checkOut: record.checkOut,
+            status: record.status,
+            lateMinutes: record.lateMinutes,
             mode: 'Fingerprint'
-          }
+          },
+          create: record
         });
         saved++;
-      } else {
-        // Jika sudah ada, jadikan CHECK OUT (jika waktu lebih baru dari checkIn)
-        if (!attendance.checkOut && attendance.checkIn < recordTime) {
-          await prisma.attendance.update({
-            where: { id: attendance.id },
-            data: { checkOut: recordTime, mode: 'Fingerprint' }
-          });
-          saved++;
-        } else if (attendance.checkOut && attendance.checkOut < recordTime) {
-          // Update check out ke waktu paling akhir
-          await prisma.attendance.update({
-            where: { id: attendance.id },
-            data: { checkOut: recordTime, mode: 'Fingerprint' }
-          });
-          saved++;
-        }
+      } catch (e) {
+        console.error(`[Sync] Failed record for emp ${record.employeeId}:`, e.message);
       }
     }
 

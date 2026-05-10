@@ -253,3 +253,16 @@ model Device {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 }
+
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  username    String
+  role        String
+  action      String   // "CREATE", "UPDATE", "DELETE", "IMPORT", "EXPORT", "SYNC", "LOGIN", "CORRECTION"
+  entity      String   // "Employee", "Attendance", "User", "Leave", "Settings", etc.
+  entityId    Int?     // ID of affected record (nullable for bulk operations)
+  details     String?  // JSON or text describing what changed
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+}

@@ -19,6 +19,16 @@ const deviceRoutes = require('./routes/deviceRoutes');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Global safety shield to prevent crashes from external libraries
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('⚠️ Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught Exception:', err.message);
+  // Keep server alive instead of exiting
+});
+
 // Middleware
 app.use(cors({
   origin: [
@@ -56,6 +66,7 @@ app.use('/api/backup', backupRoutes);
 app.use('/api/manager', require('./routes/managerRoutes'));
 app.use('/api/direktur', require('./routes/direkturRoutes'));
 app.use('/api/devices', deviceRoutes);
+app.use('/api/audit-logs', require('./routes/auditLogRoutes'));
 
 // Global error handler
 app.use((err, req, res, next) => {

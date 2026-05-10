@@ -1,6 +1,7 @@
 const prisma = require('../prismaClient');
 const bcrypt = require('bcryptjs');
 const xlsx = require('xlsx');
+const { recordAuditLog } = require('./auditLogController');
 
 const getAll = async (req, res) => {
   try {
@@ -151,6 +152,11 @@ const create = async (req, res) => {
     });
 
     res.status(201).json({ success: true, message: 'Employee created successfully', data: employee });
+
+    // Audit log (fire-and-forget)
+    if (req.user) {
+      recordAuditLog({ userId: req.user.id, username: req.user.username, role: req.user.role, action: 'CREATE', entity: 'Employee', entityId: employee.id, details: { name, employeeCode, dept }, ipAddress: req.ip });
+    }
   } catch (err) {
     if (err.code === 'P2002') return res.status(400).json({ success: false, message: 'Email or ID already exists' });
     res.status(500).json({ success: false, message: err.message });
@@ -165,18 +171,26 @@ const update = async (req, res) => {
     if (email) data.email = email;
     if (phone !== undefined) data.phone = phone;
     if (position !== undefined) data.position = position;
-    if (status) data.status = status;
-    if (faceStatus) data.faceStatus = faceStatus;
+    if (status) {
+      if (status.toUpperCase() === 'ACTIVE' || status === 'Active') data.status = 'ACTIVE';
+      else if (status.toUpperCase() === 'ON_LEAVE' || status === 'On Leave') data.status = 'ON_LEAVE';
+      else if (status.toUpperCase() === 'TERMINATED' || status === 'Terminated') data.status = 'TERMINATED';
+    }
+    if (faceStatus) {
+      if (faceStatus.toUpperCase() === 'ENROLLED' || faceStatus === 'Enrolled') data.faceStatus = 'ENROLLED';
+      else if (faceStatus.toUpperCase() === 'PENDING' || faceStatus === 'Pending') data.faceStatus = 'PENDING';
+    }
     if (data.numberOfChildren) data.numberOfChildren = parseInt(data.numberOfChildren);
-    if (data.joinDate) data.joinDate = new Date(data.joinDate);
-    if (data.contractEnd) data.contractEnd = new Date(data.contractEnd);
-    if (data.birthDate) data.birthDate = new Date(data.birthDate);
+    if ('joinDate' in data) data.joinDate = data.joinDate ? new Date(data.joinDate) : null;
+    if ('contractEnd' in data) data.contractEnd = data.contractEnd ? new Date(data.contractEnd) : null;
+    if ('birthDate' in data) data.birthDate = data.birthDate ? new Date(data.birthDate) : null;
     if (faceDescriptor) data.faceDescriptor = JSON.parse(faceDescriptor);
     if (data.shiftId) data.shiftId = parseInt(data.shiftId);
     if (data.leaveQuota !== undefined) data.leaveQuota = parseInt(data.leaveQuota);
     if (data.remainingLeave !== undefined) data.remainingLeave = parseInt(data.remainingLeave);
-    // Remove read-only fields that shouldn't be updated
+    // Remove read-only fields and relation objects that shouldn't be updated directly
     delete data.employeeCode; delete data.dbId; delete data.id;
+    delete data.shift; delete data.department;
 
     if (dept) {
       let department = await prisma.department.findUnique({ where: { name: dept } });
@@ -190,6 +204,11 @@ const update = async (req, res) => {
       include: { department: true },
     });
     res.json({ success: true, message: 'Employee updated', data: employee });
+
+    // Audit log (fire-and-forget)
+    if (req.user) {
+      recordAuditLog({ userId: req.user.id, username: req.user.username, role: req.user.role, action: 'UPDATE', entity: 'Employee', entityId: employee.id, details: { name: employee.name, updatedFields: Object.keys(data) }, ipAddress: req.ip });
+    }
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -199,6 +218,11 @@ const remove = async (req, res) => {
   try {
     await prisma.employee.delete({ where: { id: parseInt(req.params.id) } });
     res.json({ success: true, message: 'Employee deleted' });
+
+    // Audit log (fire-and-forget)
+    if (req.user) {
+      recordAuditLog({ userId: req.user.id, username: req.user.username, role: req.user.role, action: 'DELETE', entity: 'Employee', entityId: parseInt(req.params.id), details: null, ipAddress: req.ip });
+    }
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
