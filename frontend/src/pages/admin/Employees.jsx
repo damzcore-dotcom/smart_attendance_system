@@ -615,14 +615,14 @@ const Employees = () => {
               </button>
             </div>
             
-            <div className="flex border-b border-slate-100 bg-white px-2">
-              {['basic', 'hr', 'personal', 'family'].map(tab => (
+            <div className="flex border-b border-slate-100 bg-white px-2 overflow-x-auto hide-scrollbar">
+              {['basic', 'biometric', 'hr', 'personal', 'family'].map(tab => (
                 <button 
                   key={tab} 
                   onClick={() => setActiveTab(tab)} 
-                  className={`px-6 py-4 text-xs font-bold uppercase tracking-wider transition-all relative ${activeTab === tab ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                  className={`px-6 py-4 text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === tab ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
                 >
-                  {tab === 'basic' ? 'Core Info & Biometrics' : tab === 'hr' ? 'Employment Info' : tab === 'personal' ? 'Personal Data' : 'Family Data'}
+                  {tab === 'basic' ? 'Core Info' : tab === 'biometric' ? 'Biometrics' : tab === 'hr' ? 'Employment Info' : tab === 'personal' ? 'Personal Data' : 'Family Data'}
                   {activeTab === tab && (
                     <div className="absolute bottom-0 left-4 right-4 h-0.5 bg-blue-600 rounded-t-full"></div>
                   )}
@@ -630,85 +630,115 @@ const Employees = () => {
               ))}
             </div>
 
-            <div className="p-8 overflow-y-auto flex-1 hide-scrollbar bg-slate-50/50">
+            <div className="p-8 overflow-y-auto flex-1 min-h-0 hide-scrollbar bg-slate-50/50">
               <form id="add-emp-form" onSubmit={handleAddEmployee} className="space-y-6">
                 {activeTab === 'basic' && (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                    <div className="space-y-4">
-                      <div>
-                        <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">NIK (Employee ID)</label>
-                        <input
-                          value={newEmployee.employeeCode}
-                          onChange={e => { setNewEmployee({...newEmployee, employeeCode: e.target.value}); setNikError(''); }}
-                          onBlur={handleNikBlur}
-                          readOnly={!!newEmployee.dbId}
-                          placeholder={newEmployee.dbId ? '' : 'Auto-generated if empty'}
-                          className={`w-full border rounded-xl px-4 py-3 text-sm transition-all focus:outline-none ${
-                            nikError ? 'border-rose-300 bg-rose-50 text-rose-700 focus:ring-2 focus:ring-rose-500/20' : 
-                            newEmployee.dbId ? 'bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200' : 
-                            'bg-white border-slate-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 text-slate-800 placeholder:text-slate-400'
-                          }`}
-                        />
-                        {nikError && (
-                          <p className="text-[10px] text-rose-600 mt-1.5 flex items-center gap-1 font-semibold uppercase tracking-wider">
-                            <AlertCircle className="w-3.5 h-3.5" /> {nikError}
-                          </p>
-                        )}
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">Full Name</label>
-                        <input required value={newEmployee.name} onChange={e => setNewEmployee({...newEmployee, name: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all" />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">Email Address</label>
-                        <input required type="email" value={newEmployee.email} onChange={e => setNewEmployee({...newEmployee, email: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all" />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">Department</label>
-                          <CreatableSelect 
-                            styles={customSelectStyles} 
-                            isClearable 
-                            placeholder="Select..."
-                            options={toSelectOptions(masterOptions.departments)} 
-                            value={newEmployee.dept ? {label: newEmployee.dept, value: newEmployee.dept} : null} 
-                            onChange={(val) => setNewEmployee({...newEmployee, dept: val ? val.value : ''})} 
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">Position</label>
-                          <CreatableSelect 
-                            styles={customSelectStyles} 
-                            isClearable 
-                            placeholder="Select..."
-                            options={toSelectOptions(masterOptions.positions)} 
-                            value={newEmployee.position ? {label: newEmployee.position, value: newEmployee.position} : null} 
-                            onChange={(val) => setNewEmployee({...newEmployee, position: val ? val.value : ''})} 
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">Section</label>
-                        <CreatableSelect 
-                          styles={customSelectStyles} 
-                          isClearable 
-                          placeholder="Select..."
-                          options={toSelectOptions(masterOptions.sections)} 
-                          value={newEmployee.section ? {label: newEmployee.section, value: newEmployee.section} : null} 
-                          onChange={(val) => setNewEmployee({...newEmployee, section: val ? val.value : ''})} 
-                        />
-                      </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">NIK (Employee ID)</label>
+                      <input
+                        value={newEmployee.employeeCode}
+                        onChange={e => { setNewEmployee({...newEmployee, employeeCode: e.target.value}); setNikError(''); }}
+                        onBlur={handleNikBlur}
+                        readOnly={!!newEmployee.dbId}
+                        placeholder={newEmployee.dbId ? '' : 'Auto-generated if empty'}
+                        className={`w-full border rounded-xl px-4 py-3 text-sm transition-all focus:outline-none ${
+                          nikError ? 'border-rose-300 bg-rose-50 text-rose-700 focus:ring-2 focus:ring-rose-500/20' : 
+                          newEmployee.dbId ? 'bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200' : 
+                          'bg-white border-slate-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 text-slate-800 placeholder:text-slate-400'
+                        }`}
+                      />
+                      {nikError && (
+                        <p className="text-[10px] text-rose-600 mt-1.5 flex items-center gap-1 font-semibold uppercase tracking-wider">
+                          <AlertCircle className="w-3.5 h-3.5" /> {nikError}
+                        </p>
+                      )}
                     </div>
-                    
-                    <div className="space-y-4">
-                      <label className="text-[10px] font-bold text-blue-600 uppercase tracking-wider flex items-center gap-2">
-                        <ScanFace className="w-4 h-4" /> Biometric Capture
-                        {newEmployee.faceId === 'Enrolled' && (
-                          <span className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-600 text-[9px] font-bold uppercase tracking-wider rounded-md border border-emerald-200">
-                            <ShieldCheck className="w-3 h-3" /> Enrolled
-                          </span>
-                        )}
-                      </label>
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">Full Name</label>
+                      <input required value={newEmployee.name} onChange={e => setNewEmployee({...newEmployee, name: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">Email Address</label>
+                      <input required type="email" value={newEmployee.email} onChange={e => setNewEmployee({...newEmployee, email: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">Department</label>
+                      <CreatableSelect 
+                        styles={customSelectStyles} 
+                        isClearable 
+                        placeholder="Select..."
+                        options={toSelectOptions(masterOptions.departments)} 
+                        value={newEmployee.dept ? {label: newEmployee.dept, value: newEmployee.dept} : null} 
+                        onChange={(val) => setNewEmployee({...newEmployee, dept: val ? val.value : ''})} 
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">Position</label>
+                      <CreatableSelect 
+                        styles={customSelectStyles} 
+                        isClearable 
+                        placeholder="Select..."
+                        options={toSelectOptions(masterOptions.positions)} 
+                        value={newEmployee.position ? {label: newEmployee.position, value: newEmployee.position} : null} 
+                        onChange={(val) => setNewEmployee({...newEmployee, position: val ? val.value : ''})} 
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">Section</label>
+                      <CreatableSelect 
+                        styles={customSelectStyles} 
+                        isClearable 
+                        placeholder="Select..."
+                        options={toSelectOptions(masterOptions.sections)} 
+                        value={newEmployee.section ? {label: newEmployee.section, value: newEmployee.section} : null} 
+                        onChange={(val) => setNewEmployee({...newEmployee, section: val ? val.value : ''})} 
+                      />
+                    </div>
+                  </div>
+                )}
+                {activeTab === 'biometric' && (
+                  <div className="flex justify-center pb-8">
+                    <div className="w-full max-w-md space-y-6">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-bold text-blue-600 uppercase tracking-wider flex items-center gap-2">
+                          <ScanFace className="w-4 h-4" /> Biometric Capture
+                          {newEmployee.faceId === 'Enrolled' && (
+                            <span className="ml-2 inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-600 text-[9px] font-bold uppercase tracking-wider rounded-md border border-emerald-200">
+                              <ShieldCheck className="w-3 h-3" /> Enrolled
+                            </span>
+                          )}
+                        </label>
+                        
+                        <div>
+                          {newEmployee.facePhoto ? (
+                            <button type="button" onClick={() => setNewEmployee({...newEmployee, facePhoto: '', faceDescriptor: null, faceId: 'Pending'})} 
+                              className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold uppercase tracking-wider rounded-lg text-[10px] flex items-center justify-center gap-2 transition-all border border-rose-200">
+                              <RefreshCw className="w-3 h-3" /> Retake
+                            </button>
+                          ) : !isCameraActive ? (
+                            <button type="button" onClick={() => setIsCameraActive(true)} 
+                              className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold uppercase tracking-wider rounded-lg text-[10px] flex items-center justify-center gap-2 transition-all border border-blue-200 shadow-sm">
+                              <Camera className="w-3 h-3" /> Start Camera
+                            </button>
+                          ) : (
+                            <div className="flex gap-2">
+                              <button type="button" onClick={() => setIsCameraActive(false)} 
+                                className="px-4 py-2 bg-white text-slate-500 font-bold uppercase tracking-wider rounded-lg text-[10px] border border-slate-200 hover:bg-slate-50 transition-all">
+                                Cancel
+                              </button>
+                              <button type="button" disabled={!modelsLoaded || isCapturing} onClick={captureFace} 
+                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold uppercase tracking-wider rounded-lg flex items-center justify-center gap-2 transition-all disabled:opacity-50 shadow-sm">
+                                {isCapturing ? (
+                                  <><Loader2 className="w-3 h-3 animate-spin" /> Processing</>
+                                ) : (
+                                  <><ScanFace className="w-3 h-3" /> Capture</>
+                                )}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                       
                       <div className="relative">
                         <div className="aspect-[4/3] rounded-2xl overflow-hidden relative bg-slate-100 border border-slate-200 shadow-inner group/cam">
@@ -753,35 +783,6 @@ const Employees = () => {
                           
                           {newEmployee.facePhoto && (
                             <div className="absolute inset-0 border-4 border-emerald-500/30 rounded-2xl z-20 pointer-events-none" />
-                          )}
-                        </div>
-                        
-                        <div className="mt-4">
-                          {newEmployee.facePhoto ? (
-                            <button type="button" onClick={() => setNewEmployee({...newEmployee, facePhoto: '', faceDescriptor: null, faceId: 'Pending'})} 
-                              className="w-full px-6 py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold uppercase tracking-wider rounded-xl text-[10px] flex items-center justify-center gap-2 transition-all border border-rose-200">
-                              <RefreshCw className="w-4 h-4" /> Retake Photo
-                            </button>
-                          ) : !isCameraActive ? (
-                            <button type="button" onClick={() => setIsCameraActive(true)} 
-                              className="w-full px-6 py-3 bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold uppercase tracking-wider rounded-xl text-[10px] flex items-center justify-center gap-2 transition-all border border-blue-200 shadow-sm">
-                              <Camera className="w-4 h-4" /> Start Camera
-                            </button>
-                          ) : (
-                            <div className="flex gap-3">
-                              <button type="button" onClick={() => setIsCameraActive(false)} 
-                                className="px-6 py-3 bg-white text-slate-500 font-bold uppercase tracking-wider rounded-xl text-[10px] border border-slate-200 hover:bg-slate-50 transition-all">
-                                Cancel
-                              </button>
-                              <button type="button" disabled={!modelsLoaded || isCapturing} onClick={captureFace} 
-                                className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50 shadow-sm">
-                                {isCapturing ? (
-                                  <><Loader2 className="w-4 h-4 animate-spin" /> Processing</>
-                                ) : (
-                                  <><ScanFace className="w-4 h-4" /> Capture Face</>
-                                )}
-                              </button>
-                            </div>
                           )}
                         </div>
                       </div>
