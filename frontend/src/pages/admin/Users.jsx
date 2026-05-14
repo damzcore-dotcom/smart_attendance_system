@@ -647,7 +647,7 @@ const AddUserModal = ({ isOpen, onClose, employees, departments, onSave, isPendi
                 <option value="SUPER_ADMIN">Super Admin</option>
               </select>
             </div>
-            {formData.role === 'MANAGER' ? (
+            {formData.role === 'MANAGER' || formData.role === 'ADMIN' || formData.role === 'SUPER_ADMIN' ? (
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Managed Department</label>
                 <select 
@@ -662,9 +662,10 @@ const AddUserModal = ({ isOpen, onClose, employees, departments, onSave, isPendi
                     <option key={dept.id} value={dept.id}>{dept.name}</option>
                   ))}
                 </select>
-                <p className="text-[10px] text-slate-500 mt-2 ml-1 font-medium">Determine which department this manager can view.</p>
+                <p className="text-[10px] text-slate-500 mt-2 ml-1 font-medium">Determine which department this user can monitor.</p>
               </div>
-            ) : (
+            ) : null}
+            {formData.role !== 'MANAGER' && (
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Link to Employee (Optional)</label>
                 <select 
@@ -768,7 +769,7 @@ const EditUserModal = ({ isOpen, onClose, user, departments, onSave, isPending }
                 <option value="SUPER_ADMIN">Super Admin</option>
               </select>
             </div>
-            {role === 'MANAGER' && (
+            {(role === 'MANAGER' || role === 'ADMIN' || role === 'SUPER_ADMIN') && (
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Managed Department</label>
                 <select 

@@ -62,9 +62,10 @@ const update = async (req, res) => {
       data,
     });
 
-    if (managedDeptId !== undefined) {
-      const isAll = parseInt(managedDeptId) === 0;
-      const deptVal = isAll || managedDeptId === 'null' ? 'NULL' : parseInt(managedDeptId);
+    if (role === 'MANAGER' || role === 'ADMIN' || role === 'SUPER_ADMIN') {
+      const parsedDeptId = parseInt(managedDeptId);
+      const isAll = parsedDeptId === 0;
+      const deptVal = (isAll || isNaN(parsedDeptId) || managedDeptId === 'null' || managedDeptId === null) ? 'NULL' : parsedDeptId;
       const allDeptsVal = isAll ? 'TRUE' : 'FALSE';
 
       // Raw SQL Upsert for ManagerAccess
@@ -124,9 +125,10 @@ const create = async (req, res) => {
       },
     });
 
-    if (managedDeptId !== undefined) {
-      const isAll = parseInt(managedDeptId) === 0;
-      const deptVal = isAll || managedDeptId === 'null' ? 'NULL' : parseInt(managedDeptId);
+    if (role === 'MANAGER' || role === 'ADMIN' || role === 'SUPER_ADMIN') {
+      const parsedDeptId = parseInt(managedDeptId);
+      const isAll = parsedDeptId === 0;
+      const deptVal = (isAll || isNaN(parsedDeptId) || managedDeptId === 'null' || managedDeptId === null) ? 'NULL' : parsedDeptId;
       const allDeptsVal = isAll ? 'TRUE' : 'FALSE';
 
       await prisma.$executeRawUnsafe(`
