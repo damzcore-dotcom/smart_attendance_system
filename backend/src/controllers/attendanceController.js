@@ -9,7 +9,7 @@ const { recordAuditLog } = require('./auditLogController');
  */
 const getAll = async (req, res) => {
   try {
-    const { search, dept, section, position, status, date, period, startDate, endDate } = req.query;
+    const { search, dept, section, position, status, date, period, startDate, endDate, sortBy, order } = req.query;
 
     // Fetch Global Settings (Working Days)
     const settingsList = await prisma.settings.findMany();
@@ -68,6 +68,19 @@ const getAll = async (req, res) => {
       where.status = status;
     }
 
+    // Sorting Logic
+    let orderBy = { date: 'desc' };
+    if (sortBy) {
+      const sortDir = order === 'asc' ? 'asc' : 'desc';
+      if (sortBy === 'name') {
+        orderBy = { employee: { name: sortDir } };
+      } else if (sortBy === 'dept') {
+        orderBy = { employee: { department: { name: sortDir } } };
+      } else {
+        orderBy = { [sortBy]: sortDir };
+      }
+    }
+
     // Pagination
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 50;
@@ -80,19 +93,21 @@ const getAll = async (req, res) => {
       prisma.attendance.findMany({
         where,
         include: { employee: { include: { department: true } } },
-        orderBy: { date: 'desc' },
+        orderBy,
         skip,
         take: limit,
       }),
       prisma.attendance.findMany({
         where,
-        select: { date: true, checkIn: true, checkOut: true, status: true }
+        select: { date: true, checkIn: true, checkOut: true, status: true, lateMinutes: true, employeeId: true }
       })
     ]);
 
-    let hadirCount = 0, telatCount = 0, mangkirCount = 0, absenCount = 0, holidayCount = 0, cutiCount = 0, sakitCount = 0, izinCount = 0;
+    let hadirCount = 0, telatCount = 0, mangkirCount = 0, absenCount = 0, holidayCount = 0, cutiCount = 0, sakitCount = 0, izinCount = 0, totalLate = 0;
+    const uniqueEmployees = new Set();
     
     allRecords.forEach(r => {
+      uniqueEmployees.add(r.employeeId);
       const recordDay = new Date(r.date).getDay();
       const isWorkingDay = workingDays.includes(recordDay);
       let finalStatus = r.status;
@@ -101,7 +116,7 @@ const getAll = async (req, res) => {
         finalStatus = 'HOLIDAY';
       }
       
-      const resolved = resolveStatus(r.checkIn, r.checkOut, finalStatus);
+      const resolved = resolveStatus(r.checkIn, r.checkOut, finalStatus, r.date);
       if (resolved === 'PRESENT') hadirCount++;
       else if (resolved === 'LATE') telatCount++;
       else if (resolved === 'MANGKIR') mangkirCount++;
@@ -110,6 +125,10 @@ const getAll = async (req, res) => {
       else if (resolved === 'SAKIT') sakitCount++;
       else if (resolved === 'IZIN') izinCount++;
       else absenCount++;
+
+      // Penalty logic: +30 for Mangkir
+      const penalty = (resolved === 'MANGKIR') ? 30 : 0;
+      totalLate += (r.lateMinutes || 0) + penalty;
     });
 
     const summary = {
@@ -122,6 +141,8 @@ const getAll = async (req, res) => {
       cuti: cutiCount,
       sakit: sakitCount,
       izin: izinCount,
+      totalLate: totalLate,
+      uniqueEmployeeCount: uniqueEmployees.size,
     };
 
     res.json({
@@ -131,13 +152,16 @@ const getAll = async (req, res) => {
       totalPages: Math.ceil(total / limit),
       summary,
       data: records.map(r => {
-        const recordDay = new Date(r.date).getDay();
-        const isWorkingDay = workingDays.includes(recordDay);
+        const resolved = resolveStatus(r.checkIn, r.checkOut, r.status, r.date);
         
-        let finalStatus = r.status;
-        if (!isWorkingDay && !r.checkIn && !r.checkOut && r.status === 'ABSENT') {
-          finalStatus = 'HOLIDAY';
-        }
+        let displayStatus = 'Tanpa Keterangan (Alpa)';
+        if (resolved === 'PRESENT') displayStatus = 'Hadir';
+        else if (resolved === 'LATE') displayStatus = 'Terlambat';
+        else if (resolved === 'MANGKIR') displayStatus = 'Mangkir';
+        else if (resolved === 'HOLIDAY') displayStatus = 'Libur';
+        else if (resolved === 'CUTI') displayStatus = 'Cuti';
+        else if (resolved === 'SAKIT') displayStatus = 'Sakit';
+        else if (resolved === 'IZIN') displayStatus = 'Izin';
 
         return {
           id: r.id,
@@ -149,13 +173,7 @@ const getAll = async (req, res) => {
           date: r.date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }),
           checkIn: r.checkIn ? r.checkIn.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-- : --',
           checkOut: r.checkOut ? r.checkOut.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-- : --',
-          status: resolveStatus(r.checkIn, r.checkOut, finalStatus) === 'PRESENT' ? 'Hadir' : 
-                  resolveStatus(r.checkIn, r.checkOut, finalStatus) === 'LATE' ? 'Terlambat' : 
-                  resolveStatus(r.checkIn, r.checkOut, finalStatus) === 'MANGKIR' ? 'Mangkir' : 
-                  resolveStatus(r.checkIn, r.checkOut, finalStatus) === 'HOLIDAY' ? 'Libur' : 
-                  resolveStatus(r.checkIn, r.checkOut, finalStatus) === 'CUTI' ? 'Cuti' : 
-                  resolveStatus(r.checkIn, r.checkOut, finalStatus) === 'SAKIT' ? 'Sakit' : 
-                  resolveStatus(r.checkIn, r.checkOut, finalStatus) === 'IZIN' ? 'Izin' : 'Tanpa Keterangan (Alpa)',
+          status: displayStatus,
           lateMinutes: r.lateMinutes,
           mode: r.mode,
         };

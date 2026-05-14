@@ -1,4 +1,5 @@
 const prisma = require('../prismaClient');
+const { resolveStatus } = require('../utils/lateCalculator');
 
 /**
  * GET /api/manager/dashboard
@@ -99,7 +100,9 @@ const getAttendanceOptions = async (req, res) => {
     const sections = [...new Set((await prisma.employee.findMany({ where: isAllDepts ? {} : { departmentId: deptId }, select: { section: true } })).map(e => e.section).filter(Boolean))];
     const positions = [...new Set((await prisma.employee.findMany({ where: isAllDepts ? {} : { departmentId: deptId }, select: { position: true } })).map(e => e.position).filter(Boolean))];
 
-    res.json({ success: true, data: { departments, sections, positions } });
+    const statuses = ['PRESENT', 'LATE', 'MANGKIR', 'HOLIDAY', 'CUTI', 'SAKIT', 'IZIN', 'ABSENT'];
+
+    res.json({ success: true, data: { departments, sections, positions, statuses } });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 };
 
@@ -109,43 +112,38 @@ const getAttendanceOptions = async (req, res) => {
  */
 const getAttendance = async (req, res) => {
   try {
-    const { period, startDate, endDate, dept, section, position, status, search, page = 1, limit = 50 } = req.query;
-    
     const user = await prisma.user.findUnique({ where: { id: req.user.id } });
     const access = await prisma.$queryRaw`SELECT * FROM "ManagerAccess" WHERE "userId" = ${user.id}`;
     const ma = access[0];
     const isAllDepts = ma?.manageAllDepts || false;
     const managedDeptId = ma?.managedDeptId;
 
-    let dateRange = {};
+    const { period, startDate, endDate, dept, section, position, status, search, page = 1, limit = 50, sortBy, order } = req.query;
+
+    const dateRange = {};
     const now = new Date();
     if (period === 'today') {
-      dateRange = { gte: new Date(now.setHours(0,0,0,0)), lte: new Date(now.setHours(23,59,59,999)) };
+      const today = new Date(now.setHours(0, 0, 0, 0));
+      const end = new Date(now.setHours(23, 59, 59, 999));
+      dateRange.gte = today; dateRange.lte = end;
     } else if (period === 'week') {
       const start = new Date(now.setDate(now.getDate() - now.getDay()));
-      dateRange = { gte: new Date(start.setHours(0,0,0,0)), lte: new Date() };
+      dateRange.gte = start; dateRange.lte = new Date();
     } else if (period === 'month') {
-      dateRange = { gte: new Date(now.getFullYear(), now.getMonth(), 1), lte: new Date(now.getFullYear(), now.getMonth() + 1, 0) };
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      dateRange.gte = start; dateRange.lte = new Date();
     } else if (period === 'custom' && startDate && endDate) {
-      dateRange = { gte: new Date(startDate), lte: new Date(endDate) };
+      dateRange.gte = new Date(startDate);
+      dateRange.lte = new Date(new Date(endDate).setHours(23, 59, 59, 999));
     }
 
     const where = { date: dateRange };
     const empWhere = {};
-    if (!isAllDepts) {
-      empWhere.departmentId = managedDeptId;
-    } else if (dept) {
-      empWhere.department = { name: dept };
-    }
-
-    if (section) empWhere.section = section;
-    if (position) empWhere.position = position;
-    if (search) {
-      empWhere.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { employeeCode: { contains: search, mode: 'insensitive' } }
-      ];
-    }
+    if (!isAllDepts) empWhere.departmentId = managedDeptId;
+    if (dept && dept !== 'All') empWhere.department = { name: dept };
+    if (section && section !== 'All') empWhere.section = section;
+    if (position && position !== 'All') empWhere.position = position;
+    if (search) empWhere.name = { contains: search, mode: 'insensitive' };
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
     
@@ -163,6 +161,12 @@ const getAttendance = async (req, res) => {
 
       const mangkirList = allEmployees.filter(e => !attendedIds.includes(e.id));
       const total = mangkirList.length;
+
+      // Sort mangkir list if needed (frontend sort since it's an array)
+      if (sortBy === 'name') {
+        mangkirList.sort((a, b) => order === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name));
+      }
+
       const paginated = mangkirList.slice(skip, skip + parseInt(limit));
 
       const finalData = paginated.map(e => ({
@@ -185,34 +189,101 @@ const getAttendance = async (req, res) => {
     where.employee = empWhere;
     if (status) where.status = status;
 
-    const [records, total] = await Promise.all([
+    // Sorting Logic
+    let orderBy = { date: 'desc' };
+    if (sortBy) {
+      const sortDir = order === 'asc' ? 'asc' : 'desc';
+      if (sortBy === 'name') {
+        orderBy = { employee: { name: sortDir } };
+      } else if (sortBy === 'dept') {
+        orderBy = { employee: { department: { name: sortDir } } };
+      } else {
+        orderBy = { [sortBy]: sortDir };
+      }
+    }
+
+    const { resolveStatus } = require('../utils/lateCalculator');
+
+    // Fetch Global Settings (Working Days)
+    const settingsList = await prisma.settings.findMany();
+    const workingDaysSetting = settingsList.find(s => s.key === 'workingDays')?.value || '[1,2,3,4,5]';
+    const workingDays = JSON.parse(workingDaysSetting);
+
+    const [records, total, allRecords] = await Promise.all([
       prisma.attendance.findMany({
         where,
         include: { employee: { include: { department: true } } },
-        orderBy: { date: 'desc' },
+        orderBy,
         skip,
         take: parseInt(limit)
       }),
-      prisma.attendance.count({ where })
+      prisma.attendance.count({ where }),
+      prisma.attendance.findMany({ 
+        where,
+        select: { status: true, lateMinutes: true, checkIn: true, checkOut: true, date: true, employeeId: true }
+      })
     ]);
+
+    let summary = { hadir: 0, telat: 0, mangkir: 0, absen: 0, holiday: 0, cuti: 0, sakit: 0, izin: 0, totalLate: 0, uniqueEmployeeCount: 0 };
+    const uniqueEmployees = new Set();
+    allRecords.forEach(r => {
+      uniqueEmployees.add(r.employeeId);
+      const recordDay = new Date(r.date).getDay();
+      const isWorkingDay = workingDays.includes(recordDay);
+      let finalStatus = r.status;
+      
+      if (!isWorkingDay && !r.checkIn && !r.checkOut && r.status === 'ABSENT') {
+        finalStatus = 'HOLIDAY';
+      }
+
+      const resolved = resolveStatus(r.checkIn, r.checkOut, finalStatus, r.date);
+      if (resolved === 'PRESENT') summary.hadir++;
+      else if (resolved === 'LATE') summary.telat++;
+      else if (resolved === 'MANGKIR') summary.mangkir++;
+      else if (resolved === 'HOLIDAY') summary.holiday++;
+      else if (resolved === 'CUTI') summary.cuti++;
+      else if (resolved === 'SAKIT') summary.sakit++;
+      else if (resolved === 'IZIN') summary.izin++;
+      else summary.absen++;
+
+      const penalty = (resolved === 'MANGKIR') ? 30 : 0;
+      summary.totalLate += (r.lateMinutes || 0) + penalty;
+    });
+    summary.uniqueEmployeeCount = uniqueEmployees.size;
 
     res.json({
       success: true,
-      data: records.map(att => ({
-        id: att.id,
-        date: att.date,
-        nik: att.employee.employeeCode,
-        name: att.employee.name,
-        dept: att.employee.department.name,
-        section: att.employee.section,
-        position: att.employee.position,
-        checkIn: att.checkIn,
-        checkOut: att.checkOut,
-        status: att.status,
-        lateMinutes: att.lateMinutes
-      })),
       total,
-      totalPages: Math.ceil(total / limit)
+      page,
+      totalPages: Math.ceil(total / limit),
+      summary,
+      data: records.map(att => {
+        const resolved = resolveStatus(att.checkIn, att.checkOut, att.status, att.date);
+        
+        let displayStatus = 'Tanpa Keterangan (Alpa)';
+        if (resolved === 'PRESENT') displayStatus = 'Hadir';
+        else if (resolved === 'LATE') displayStatus = 'Terlambat';
+        else if (resolved === 'MANGKIR') displayStatus = 'Mangkir';
+        else if (resolved === 'HOLIDAY') displayStatus = 'Libur';
+        else if (resolved === 'CUTI') displayStatus = 'Cuti';
+        else if (resolved === 'SAKIT') displayStatus = 'Sakit';
+        else if (resolved === 'IZIN') displayStatus = 'Izin';
+
+        return {
+          id: att.id,
+          name: att.employee.name,
+          employeeCode: att.employee.employeeCode,
+          dept: att.employee.department?.name,
+          section: att.employee.section,
+          position: att.employee.position,
+          date: att.date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }),
+          checkIn: att.checkIn ? att.checkIn.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-- : --',
+          checkOut: att.checkOut ? att.checkOut.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-- : --',
+          status: displayStatus,
+          lateMinutes: att.lateMinutes,
+          mode: att.mode,
+        };
+      }),
     });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 };

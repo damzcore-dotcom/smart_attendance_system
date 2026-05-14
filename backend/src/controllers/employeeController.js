@@ -5,7 +5,7 @@ const { recordAuditLog } = require('./auditLogController');
 
 const getAll = async (req, res) => {
   try {
-    const { search, dept, section, position, status, page = 1, limit = 20 } = req.query;
+    const { search, dept, section, position, status, page = 1, limit = 20, sortBy = 'createdAt', order = 'desc' } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const where = {};
@@ -21,13 +21,20 @@ const getAll = async (req, res) => {
     if (position && position !== 'All') where.position = position;
     if (status && status !== 'All') where.status = status;
 
+    let orderBy = {};
+    if (sortBy === 'dept') {
+      orderBy = { department: { name: order } };
+    } else {
+      orderBy = { [sortBy]: order };
+    }
+
     const [employees, total] = await Promise.all([
       prisma.employee.findMany({
         where,
         include: { department: true, shift: true },
         skip,
         take: parseInt(limit),
-        orderBy: { createdAt: 'desc' },
+        orderBy,
       }),
       prisma.employee.count({ where }),
     ]);

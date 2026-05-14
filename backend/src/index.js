@@ -84,7 +84,7 @@ app.use((req, res) => {
 
 // Start server only if not in production/vercel
 if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`\n🚀 Smart Attendance Pro API`);
     console.log(`   Server running on http://localhost:${PORT}`);
     console.log(`   Health check: http://localhost:${PORT}/api/health\n`);

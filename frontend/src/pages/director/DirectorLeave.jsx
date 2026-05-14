@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { 
   Search, Download, Loader2, ChevronLeft, ChevronRight,
-  Filter, CheckCircle2, XCircle, Clock, AlertCircle, FileText, Calendar
+  Filter, CheckCircle2, XCircle, Clock, AlertCircle, FileText, Calendar,
+  ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react';
 import { direkturAPI } from '../../services/api';
 import * as XLSX from 'xlsx';
@@ -18,10 +19,11 @@ const DirectorLeave = () => {
   const [search, setSearch] = useState('');
   const [dept, setDept] = useState('');
   const [page, setPage] = useState(1);
+  const [sortConfig, setSortConfig] = useState({ key: 'createdAt', order: 'desc' });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['director-leave', { status, search, dept, page }],
-    queryFn: () => direkturAPI.getLeave({ status, search, dept, page, limit: 20 }),
+    queryKey: ['director-leave', { status, search, dept, page, sortBy: sortConfig.key, order: sortConfig.order }],
+    queryFn: () => direkturAPI.getLeave({ status, search, dept, page, limit: 20, sortBy: sortConfig.key, order: sortConfig.order }),
   });
 
   const { data: deptData } = useQuery({
@@ -33,6 +35,17 @@ const DirectorLeave = () => {
   const total = data?.total || 0;
   const totalPages = data?.totalPages || 1;
   const departments = deptData?.data || [];
+
+  const handleSort = (key) => {
+    const newOrder = sortConfig.key === key && sortConfig.order === 'asc' ? 'desc' : 'asc';
+    setSortConfig({ key, order: newOrder });
+    setPage(1);
+  };
+
+  const SortIcon = ({ column }) => {
+    if (sortConfig.key !== column) return <ArrowUpDown className="w-3 h-3 text-slate-300" />;
+    return sortConfig.order === 'asc' ? <ArrowUp className="w-3 h-3 text-blue-500" /> : <ArrowDown className="w-3 h-3 text-blue-500" />;
+  };
 
   const handleExport = () => {
     const rows = records.map(r => ({
@@ -127,13 +140,22 @@ const DirectorLeave = () => {
             <thead className="sticky top-0 z-10">
               <tr className="bg-slate-50 border-b border-slate-200">
                 <th className="px-6 py-4">
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Personnel</span>
+                  <button onClick={() => handleSort('name')} className="flex items-center gap-2 group/btn">
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider group-hover/btn:text-blue-600 transition-colors">Personnel</span>
+                    <SortIcon column="name" />
+                  </button>
                 </th>
                 <th className="px-4 py-4">
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Type</span>
+                  <button onClick={() => handleSort('type')} className="flex items-center gap-2 group/btn">
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider group-hover/btn:text-blue-600 transition-colors">Type</span>
+                    <SortIcon column="type" />
+                  </button>
                 </th>
                 <th className="px-4 py-4">
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Date Range</span>
+                  <button onClick={() => handleSort('startDate')} className="flex items-center gap-2 group/btn">
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider group-hover/btn:text-blue-600 transition-colors">Date Range</span>
+                    <SortIcon column="startDate" />
+                  </button>
                 </th>
                 <th className="px-4 py-4 text-center">
                   <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Duration</span>
@@ -142,7 +164,10 @@ const DirectorLeave = () => {
                   <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Reason</span>
                 </th>
                 <th className="px-6 py-4 text-center">
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</span>
+                  <button onClick={() => handleSort('status')} className="flex items-center gap-2 mx-auto group/btn">
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider group-hover/btn:text-blue-600 transition-colors">Status</span>
+                    <SortIcon column="status" />
+                  </button>
                 </th>
               </tr>
             </thead>

@@ -35,7 +35,11 @@ router.get('/stats', async (req, res) => {
 // GET /api/direktur/attendance — All attendance records (read-only)
 router.get('/attendance', async (req, res) => {
   try {
-    const { period = 'today', dept, status, search, section, position, startDate, endDate, page = 1, limit = 50 } = req.query;
+    const { 
+      period = 'today', dept, status, search, section, position, 
+      startDate, endDate, page = 1, limit = 50,
+      sortBy = 'date', order = 'desc'
+    } = req.query;
 
     let dateFilter = {};
     const now = new Date();
@@ -68,6 +72,17 @@ router.get('/attendance', async (req, res) => {
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
+    // Build orderBy
+    let orderBy = [];
+    if (sortBy === 'name') orderBy.push({ employee: { name: order } });
+    else if (sortBy === 'nik') orderBy.push({ employee: { employeeCode: order } });
+    else if (sortBy === 'dept') orderBy.push({ employee: { department: { name: order } } });
+    else if (sortBy === 'date') orderBy.push({ date: order });
+    else if (sortBy === 'checkIn') orderBy.push({ checkIn: order });
+    else if (sortBy === 'checkOut') orderBy.push({ checkOut: order });
+    else if (sortBy === 'status') orderBy.push({ status: order });
+    else orderBy.push({ date: 'desc' }, { employee: { name: 'asc' } });
+
     // Logic for Mangkir (Absent)
     if (status === 'Mangkir' || status === 'Absent') {
       const allEmployees = await prisma.employee.findMany({
@@ -80,7 +95,21 @@ router.get('/attendance', async (req, res) => {
         select: { employeeId: true }
       })).map(a => a.employeeId);
 
-      const mangkirList = allEmployees.filter(e => !attendedIds.includes(e.id));
+      let mangkirList = allEmployees.filter(e => !attendedIds.includes(e.id));
+      
+      // Sort mangkirList in memory
+      if (sortBy === 'name') {
+        mangkirList.sort((a, b) => order === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name));
+      } else if (sortBy === 'nik') {
+        mangkirList.sort((a, b) => order === 'asc' ? a.employeeCode.localeCompare(b.employeeCode) : b.employeeCode.localeCompare(a.employeeCode));
+      } else if (sortBy === 'dept') {
+        mangkirList.sort((a, b) => {
+          const da = a.department?.name || '';
+          const db = b.department?.name || '';
+          return order === 'asc' ? da.localeCompare(db) : db.localeCompare(da);
+        });
+      }
+
       const total = mangkirList.length;
       const paginated = mangkirList.slice(skip, skip + parseInt(limit));
 
@@ -101,9 +130,18 @@ router.get('/attendance', async (req, res) => {
       return res.json({ success: true, data: finalData, total, totalPages: Math.ceil(total / limit) });
     }
 
+    const statusMap = {
+      'Present': 'PRESENT',
+      'Late': 'LATE',
+      'Mangkir': 'MANGKIR',
+      'Missing': 'MANGKIR',
+      'Absent': 'ABSENT',
+      'Holiday': 'HOLIDAY',
+    };
+
     const where = {
       ...(Object.keys(dateFilter).length && { date: dateFilter }),
-      ...(status && { status: status === 'Present' ? 'PRESENT' : status === 'Late' ? 'LATE' : status }),
+      ...(status && statusMap[status] && { status: statusMap[status] }),
       employee: empWhere
     };
 
@@ -112,33 +150,78 @@ router.get('/attendance', async (req, res) => {
         where,
         skip,
         take: parseInt(limit),
-        orderBy: [{ date: 'desc' }, { employee: { employeeCode: 'asc' } }],
+        orderBy,
         include: {
           employee: {
             include: { department: true }
           }
         }
       }),
-      prisma.attendance.count({ where }),
+      prisma.attendance.count({ where })
     ]);
 
-    const formatted = records.map(r => ({
-      id: r.id,
-      date: r.date,
-      nik: r.employee.employeeCode,
-      name: r.employee.name,
-      dept: r.employee.department?.name || '-',
-      section: r.employee.section || '-',
-      position: r.employee.position || '-',
-      checkIn: r.checkIn,
-      checkOut: r.checkOut,
-      status: resolveStatus(r.checkIn, r.checkOut, r.status) === 'PRESENT' ? 'Present' : 
-              resolveStatus(r.checkIn, r.checkOut, r.status) === 'LATE' ? 'Late' : 
-              resolveStatus(r.checkIn, r.checkOut, r.status) === 'MANGKIR' ? 'Mangkir' : 'Absent',
-      lateMinutes: r.lateMinutes,
-    }));
+    // Standardized summary calculation to match Admin portal
+    const allRecordsForSummary = await prisma.attendance.findMany({
+      where,
+      select: { checkIn: true, checkOut: true, status: true, date: true, lateMinutes: true, employeeId: true }
+    });
 
-    res.json({ success: true, data: formatted, total, page: parseInt(page), totalPages: Math.ceil(total / parseInt(limit)) });
+    // Fetch working days for holiday check
+    const settings = await prisma.settings.findFirst();
+    const workingDays = settings?.workingDays ? settings.workingDays.split(',').map(d => d.trim()) : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+
+    const summary = {
+      hadir: 0, telat: 0, mangkir: 0, absen: 0, holiday: 0, cuti: 0, sakit: 0, izin: 0, totalLate: 0, uniqueEmployeeCount: 0
+    };
+
+    const uniqueEmps = new Set();
+
+    allRecordsForSummary.forEach(r => {
+      const resolved = resolveStatus(r.checkIn, r.checkOut, r.status, r.date, workingDays);
+      if (resolved === 'PRESENT') summary.hadir++;
+      else if (resolved === 'LATE') { summary.telat++; summary.totalLate += (r.lateMinutes || 0); }
+      else if (resolved === 'MANGKIR') { summary.mangkir++; summary.totalLate += 30; }
+      else if (resolved === 'HOLIDAY') summary.holiday++;
+      else if (resolved === 'CUTI') summary.cuti++;
+      else if (resolved === 'SAKIT') summary.sakit++;
+      else if (resolved === 'IZIN') summary.izin++;
+      else summary.absen++;
+      
+      uniqueEmps.add(r.employeeId);
+    });
+    summary.uniqueEmployeeCount = uniqueEmps.size;
+
+    res.json({
+      success: true,
+      data: records.map(att => {
+        const resolved = resolveStatus(att.checkIn, att.checkOut, att.status, att.date, workingDays);
+        
+        let displayStatus = 'Absent';
+        if (resolved === 'PRESENT') displayStatus = 'Present';
+        else if (resolved === 'LATE') displayStatus = 'Late';
+        else if (resolved === 'MANGKIR') displayStatus = 'Mangkir';
+        else if (resolved === 'HOLIDAY') displayStatus = 'Holiday';
+
+        return {
+          id: att.id,
+          name: att.employee.name,
+          employeeCode: att.employee.employeeCode,
+          dept: att.employee.department?.name,
+          section: att.employee.section,
+          position: att.employee.position,
+          date: att.date,
+          checkIn: att.checkIn,
+          checkOut: att.checkOut,
+          status: att.status, // Keep raw status for mapping
+          displayStatus: displayStatus,
+          lateMinutes: att.lateMinutes,
+        };
+      }),
+      total,
+      page: parseInt(page),
+      totalPages: Math.ceil(total / parseInt(limit)),
+      summary
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -147,7 +230,7 @@ router.get('/attendance', async (req, res) => {
 // GET /api/direktur/leave — All leave requests (read-only)
 router.get('/leave', async (req, res) => {
   try {
-    const { status, dept, type, page = 1, limit = 50 } = req.query;
+    const { status, dept, type, page = 1, limit = 50, sortBy = 'createdAt', order = 'desc' } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const where = {
@@ -156,12 +239,22 @@ router.get('/leave', async (req, res) => {
       ...(dept && { employee: { department: { name: dept } } }),
     };
 
+    // Build orderBy
+    let orderBy = {};
+    if (sortBy === 'name') orderBy = { employee: { name: order } };
+    else if (sortBy === 'nik') orderBy = { employee: { employeeCode: order } };
+    else if (sortBy === 'dept') orderBy = { employee: { department: { name: order } } };
+    else if (sortBy === 'type') orderBy = { type: order };
+    else if (sortBy === 'status') orderBy = { status: order };
+    else if (sortBy === 'startDate') orderBy = { startDate: order };
+    else orderBy = { createdAt: order };
+
     const [records, total] = await Promise.all([
       prisma.leaveRequest.findMany({
         where,
         skip,
         take: parseInt(limit),
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         include: {
           employee: {
             select: {
@@ -278,7 +371,7 @@ router.get('/attendance-options', async (req, res) => {
         departments: Array.from(departments.entries()).map(([id, name]) => ({ id, name })),
         sections: Array.from(sections).sort(),
         positions: Array.from(positions).sort(),
-        statuses: Array.from(statuses).sort(),
+        statuses: ['PRESENT', 'LATE', 'MANGKIR', 'HOLIDAY', 'CUTI', 'SAKIT', 'IZIN', 'ABSENT'],
       }
     });
   } catch (err) {

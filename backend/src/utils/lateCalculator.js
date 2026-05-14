@@ -41,11 +41,17 @@ function calculateLateness(checkInTime, shiftStartTime, gracePeriodMinutes = 15)
  * @param {Date|null} checkIn 
  * @param {Date|null} checkOut 
  * @param {string} currentStatus - Current status (PRESENT or LATE) from check-in
- * @returns {string} - ABSENT, MANGKIR, PRESENT, or LATE
+ * @param {Date|string|null} date - The date of attendance
+ * @returns {string} - ABSENT, MANGKIR, PRESENT, LATE, or HOLIDAY
  */
-function resolveStatus(checkIn, checkOut, currentStatus = 'PRESENT') {
+function resolveStatus(checkIn, checkOut, currentStatus = 'PRESENT', date = null) {
   // If it's explicitly marked as HOLIDAY, CUTI, SAKIT, or IZIN (e.g. from Leave System or Mass Leave)
   if (['HOLIDAY', 'CUTI', 'SAKIT', 'IZIN'].includes(currentStatus)) return currentStatus;
+  
+  // If it's Sunday and no activity, mark as Holiday
+  if (date && new Date(date).getDay() === 0 && !checkIn && !checkOut) {
+    return 'HOLIDAY';
+  }
   
   if (!checkIn && !checkOut) return 'ABSENT';
   if (!checkIn || !checkOut) return 'MANGKIR';

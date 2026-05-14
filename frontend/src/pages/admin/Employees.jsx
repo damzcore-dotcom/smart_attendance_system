@@ -7,7 +7,7 @@ import * as faceapi from '@vladmandic/face-api';
 import * as XLSX from 'xlsx';
 import { 
   Search, Filter, CheckCircle2, Clock, UserPlus, FileSpreadsheet, Upload, X, Download, Save, Camera,
-  ScanFace, Loader2, AlertCircle, RefreshCw, ShieldCheck, ChevronRight
+  ScanFace, Loader2, AlertCircle, RefreshCw, ShieldCheck, ChevronRight, ChevronUp, ChevronDown
 } from 'lucide-react';
 
 const emptyEmployee = { 
@@ -37,6 +37,7 @@ const Employees = () => {
   const [isQuickShiftModalOpen, setQuickShiftModalOpen] = useState(false);
   const [quickShiftForm, setQuickShiftForm] = useState({ departmentId: '', shiftId: '' });
   const [page, setPage] = useState(1);
+  const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
   const PAGE_SIZE = 25;
   
   const webcamRef = useRef(null);
@@ -44,6 +45,14 @@ const Employees = () => {
   const [isCapturing, setIsCapturing] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [nikError, setNikError] = useState('');
+
+  const handleSort = (key) => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
+    }));
+    setPage(1);
+  };
 
   useEffect(() => {
     const loadModels = async () => {
@@ -63,8 +72,8 @@ const Employees = () => {
   }, []);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['employees', { search: searchTerm, dept: deptFilter, section: sectionFilter, position: positionFilter, page }],
-    queryFn: () => employeeAPI.getAll({ search: searchTerm, dept: deptFilter, section: sectionFilter, position: positionFilter, page, limit: PAGE_SIZE }),
+    queryKey: ['employees', { search: searchTerm, dept: deptFilter, section: sectionFilter, position: positionFilter, page, sortBy: sortConfig.key, order: sortConfig.direction }],
+    queryFn: () => employeeAPI.getAll({ search: searchTerm, dept: deptFilter, section: sectionFilter, position: positionFilter, page, limit: PAGE_SIZE, sortBy: sortConfig.key, order: sortConfig.direction }),
     keepPreviousData: true,
   });
 
@@ -372,37 +381,87 @@ const Employees = () => {
             <thead className="sticky top-0 z-20 bg-slate-50">
               <tr>
                 <th className="px-6 py-4 sticky left-0 z-30 bg-slate-50 border-b border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] text-center">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Action</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Action</span>
                 </th>
-                <th className="px-6 py-4 sticky left-[120px] z-30 bg-slate-50 border-b border-r border-slate-200 text-center">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">NIK</span>
+                <th 
+                  className="px-6 py-4 sticky left-[120px] z-30 bg-slate-50 border-b border-r border-slate-200 text-center cursor-pointer hover:bg-slate-100 transition-colors group"
+                  onClick={() => handleSort('employeeCode')}
+                >
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">NIK</span>
+                    {sortConfig.key === 'employeeCode' ? (
+                      sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3 text-blue-600" /> : <ChevronDown className="w-3 h-3 text-blue-600" />
+                    ) : (
+                      <ChevronDown className="w-3 h-3 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    )}
+                  </div>
                 </th>
-                <th className="px-6 py-4 sticky left-[250px] z-30 bg-slate-50 border-b border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Employee Name</span>
+                <th 
+                  className="px-6 py-4 sticky left-[250px] z-30 bg-slate-50 border-b border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] cursor-pointer hover:bg-slate-100 transition-colors group"
+                  onClick={() => handleSort('name')}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Employee Name</span>
+                    {sortConfig.key === 'name' ? (
+                      sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3 text-blue-600" /> : <ChevronDown className="w-3 h-3 text-blue-600" />
+                    ) : (
+                      <ChevronDown className="w-3 h-3 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    )}
+                  </div>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Status</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Status</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Leave Quota</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Leave Quota</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Biometrics</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Biometrics</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Shift</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Shift</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Grade</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Grade</span>
                 </th>
-                <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Position</span>
+                <th 
+                  className="px-6 py-4 border-b border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors group"
+                  onClick={() => handleSort('position')}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Position</span>
+                    {sortConfig.key === 'position' ? (
+                      sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3 text-blue-600" /> : <ChevronDown className="w-3 h-3 text-blue-600" />
+                    ) : (
+                      <ChevronDown className="w-3 h-3 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    )}
+                  </div>
                 </th>
-                <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Section</span>
+                <th 
+                  className="px-6 py-4 border-b border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors group"
+                  onClick={() => handleSort('section')}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Section</span>
+                    {sortConfig.key === 'section' ? (
+                      sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3 text-blue-600" /> : <ChevronDown className="w-3 h-3 text-blue-600" />
+                    ) : (
+                      <ChevronDown className="w-3 h-3 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    )}
+                  </div>
                 </th>
-                <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Department</span>
+                <th 
+                  className="px-6 py-4 border-b border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors group"
+                  onClick={() => handleSort('dept')}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Department</span>
+                    {sortConfig.key === 'dept' ? (
+                      sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3 text-blue-600" /> : <ChevronDown className="w-3 h-3 text-blue-600" />
+                    ) : (
+                      <ChevronDown className="w-3 h-3 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    )}
+                  </div>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
                   <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Emp. Status</span>

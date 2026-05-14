@@ -4,7 +4,8 @@ import { attendanceAPI, employeeAPI } from '../../services/api';
 import { 
   Calendar, Search, Download, Filter, CheckCircle2, XCircle, Clock, 
   ArrowRight, Scan, Upload, FileSpreadsheet, X, Loader2, AlertCircle, RefreshCw,
-  FileText, ChevronLeft, ChevronRight, LayoutDashboard, Edit2, ArrowUpDown
+  FileText, ChevronLeft, ChevronRight, LayoutDashboard, Edit2, ArrowUpDown,
+  ArrowUp, ArrowDown
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -21,6 +22,14 @@ const STATUS_MAP = {
   'IZIN': 'Izin'
 };
 
+const formatDuration = (minutes) => {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h === 0) return `${m} menit`;
+  if (m === 0) return `${h} jam`;
+  return `${h} jam ${m} menit`;
+};
+
 const Attendance = () => {
   const queryClient = useQueryClient();
   const [isImportOpen, setImportOpen] = useState(false);
@@ -29,7 +38,7 @@ const Attendance = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [importResult, setImportResult] = useState(null);
-  const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
+  const [sortConfig, setSortConfig] = useState({ key: 'date', order: 'desc' });
   const [correctionModal, setCorrectionModal] = useState({ isOpen: false, recordId: null, employeeName: '', currentStatus: '', newStatus: 'CUTI', notes: '' });
   const [isCorrecting, setIsCorrecting] = useState(false);
   const [importProgress, setImportProgress] = useState({ percent: 0, phase: '', detail: '' });
@@ -42,7 +51,9 @@ const Attendance = () => {
     section: '',
     position: '',
     status: '',
-    search: ''
+    search: '',
+    sortBy: 'date',
+    order: 'desc'
   });
 
   const { data, isLoading } = useQuery({
@@ -52,23 +63,15 @@ const Attendance = () => {
 
   const filteredData = data?.data || [];
 
-  const sortedAndFilteredData = [...filteredData].sort((a, b) => {
-    if (sortConfig.key === 'name') {
-      return sortConfig.direction === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
-    }
-    if (sortConfig.key === 'date') {
-      const dateA = new Date(a.date);
-      const dateB = new Date(b.date);
-      return sortConfig.direction === 'asc' ? dateA - dateB : dateB - dateA;
-    }
-    return 0;
-  });
-
   const handleSort = (key) => {
-    setSortConfig(prev => ({
-      key,
-      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
-    }));
+    const newOrder = sortConfig.key === key && sortConfig.order === 'asc' ? 'desc' : 'asc';
+    setSortConfig({ key, order: newOrder });
+    setAppliedFilters(prev => ({ ...prev, sortBy: key, order: newOrder, page: 1 }));
+  };
+
+  const SortIcon = ({ column }) => {
+    if (sortConfig.key !== column) return <ArrowUpDown className="w-3 h-3 text-slate-300" />;
+    return sortConfig.order === 'asc' ? <ArrowUp className="w-3 h-3 text-blue-500" /> : <ArrowDown className="w-3 h-3 text-blue-500" />;
   };
 
   const handleCorrectionSubmit = async (e) => {
@@ -149,18 +152,21 @@ const Attendance = () => {
     // Sort data ascending by date (oldest first)
     const sortedData = [...filteredData].sort((a, b) => new Date(a.date) - new Date(b.date));
 
-    const exportData = sortedData.map(row => ({
-      'Employee Name': row.name,
-      'Department': row.dept,
-      'Section': row.section,
-      'Position': row.position,
-      'Date': row.date,
-      'Check In': row.checkIn,
-      'Check Out': row.checkOut,
-      'Late Minutes': row.lateMinutes,
-      'Status': row.status,
-      'Mode': row.mode
-    }));
+    const exportData = sortedData.map(row => {
+      const penalty = (row.status === 'MANGKIR' || row.status === 'MISSING') ? 30 : 0;
+      return {
+        'Employee Name': row.name,
+        'Department': row.dept,
+        'Section': row.section,
+        'Position': row.position,
+        'Date': row.date,
+        'Check In': row.checkIn,
+        'Check Out': row.checkOut,
+        'Late Minutes': (row.lateMinutes || 0) + penalty,
+        'Status': row.status,
+        'Mode': row.mode
+      };
+    });
 
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
@@ -198,17 +204,20 @@ const Attendance = () => {
     // Sort data ascending by date (oldest first)
     const sortedData = [...filteredData].sort((a, b) => new Date(a.date) - new Date(b.date));
 
-    const tableData = sortedData.map(row => [
-      row.name,
-      row.dept,
-      row.section,
-      row.position,
-      row.date,
-      row.checkIn,
-      row.checkOut,
-      `${row.lateMinutes} min`,
-      row.status
-    ]);
+    const tableData = sortedData.map(row => {
+      const penalty = (row.status === 'MANGKIR' || row.status === 'MISSING') ? 30 : 0;
+      return [
+        row.name,
+        row.dept,
+        row.section,
+        row.position,
+        row.date,
+        row.checkIn,
+        row.checkOut,
+        `${(row.lateMinutes || 0) + penalty} min`,
+        row.status
+      ];
+    });
 
     autoTable(doc, {
       startY: 45,
@@ -308,34 +317,66 @@ const Attendance = () => {
       <FilterBar 
         onApply={setAppliedFilters}
         isLoading={isLoading}
+        currentSearch={appliedFilters.search}
       />
 
       {/* Operational Summary Metrics */}
       {!isLoading && data?.summary && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          {[
-            { label: 'Total Data', value: data.summary.total, color: 'blue', icon: Filter, desc: 'Semua Absen' },
-            { label: 'Hadir', value: data.summary.hadir, color: 'emerald', icon: CheckCircle2, desc: 'Tepat Waktu' },
-            { label: 'Terlambat', value: data.summary.telat, color: 'amber', icon: Clock, desc: 'Pelanggaran Waktu' },
-            { label: 'Mangkir', value: data.summary.mangkir, color: 'rose', icon: AlertCircle, desc: 'Tidak Ada Keterangan' },
-            { label: 'Libur', value: data.summary.holiday, color: 'indigo', icon: Calendar, desc: 'Hari Minggu / Libur' },
-            { label: 'Izin / Cuti / Alpa', value: (data.summary.absen || 0) + (data.summary.cuti || 0) + (data.summary.sakit || 0) + (data.summary.izin || 0), color: 'slate', icon: XCircle, desc: 'Tidak Masuk Kerja' },
-          ].map((item) => (
-            <div key={item.label} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-4 hover:shadow-md hover:border-blue-200 transition-all group">
-              <div className="flex justify-between items-start">
-                <div className={`w-10 h-10 rounded-xl bg-${item.color}-50 flex items-center justify-center border border-${item.color}-100 transition-transform group-hover:scale-110 group-hover:-rotate-3`}>
-                  <item.icon className={`w-5 h-5 text-${item.color}-600`} />
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+            {[
+              { label: 'Total Data', value: data.summary.total, color: 'blue', icon: Filter, desc: 'Semua Absen' },
+              { label: 'Hadir', value: data.summary.hadir, color: 'emerald', icon: CheckCircle2, desc: 'Tepat Waktu' },
+              { label: 'Terlambat', value: data.summary.telat, color: 'amber', icon: Clock, desc: 'Pelanggaran Waktu' },
+              { label: 'Mangkir', value: data.summary.mangkir, color: 'rose', icon: AlertCircle, desc: 'Tidak Ada Keterangan' },
+              { label: 'Libur', value: data.summary.holiday, color: 'indigo', icon: Calendar, desc: 'Hari Minggu / Libur' },
+              { label: 'Total Terlambat', value: formatDuration(data.summary.totalLate || 0), color: 'rose', icon: Clock, desc: 'Akumulasi Waktu' },
+              { label: 'Lainnya', value: (data.summary.absen || 0) + (data.summary.cuti || 0) + (data.summary.sakit || 0) + (data.summary.izin || 0), color: 'slate', icon: XCircle, desc: 'Cuti/Sakit/Izin' },
+            ].map((item) => (
+              <div key={item.label} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-3 hover:shadow-md hover:border-blue-200 transition-all group">
+                <div className="flex justify-between items-start">
+                  <div className={`w-8 h-8 rounded-xl bg-${item.color}-50 flex items-center justify-center border border-${item.color}-100 transition-transform group-hover:scale-110 group-hover:-rotate-3`}>
+                    <item.icon className={`w-4 h-4 text-${item.color}-600`} />
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">{item.label}</p>
-                  <p className="text-2xl font-bold text-slate-800 leading-none">{item.value}</p>
+                <div>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{item.label}</p>
+                  <p className="text-lg font-bold text-slate-800 leading-tight">{item.value}</p>
+                </div>
+                <div className="pt-2 border-t border-slate-50">
+                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{item.desc}</p>
                 </div>
               </div>
-              <div className="pt-3 border-t border-slate-100">
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{item.desc}</p>
+            ))}
+          </div>
+
+          {/* Individual Search Summary Card */}
+          {appliedFilters.search && data.summary.uniqueEmployeeCount === 1 && data.summary.totalLate > 0 && (
+            <div className="bg-gradient-to-r from-rose-500 to-orange-600 rounded-2xl p-0.5 shadow-lg shadow-rose-100 animate-in slide-in-from-top-4 duration-500">
+              <div className="bg-white rounded-[14px] p-6 flex items-center justify-between gap-6">
+                <div className="flex items-center gap-6">
+                  <div className="w-16 h-16 rounded-2xl bg-rose-50 flex items-center justify-center border border-rose-100 shadow-inner shrink-0 group-hover:rotate-6 transition-transform">
+                    <Clock className="w-8 h-8 text-rose-600 animate-pulse" />
+                  </div>
+                  <div>
+                    <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Akumulasi Terlambat Personal</h3>
+                    <p className="text-3xl font-black text-slate-800 tracking-tight mt-1">
+                      {formatDuration(data.summary.totalLate)}
+                    </p>
+                    <p className="text-[10px] font-bold text-rose-500 uppercase mt-2 flex items-center gap-2">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      Termasuk sanksi mangkir (+30 menit/hari)
+                    </p>
+                  </div>
+                </div>
+                <div className="hidden lg:block h-16 w-px bg-slate-100" />
+                <div className="hidden lg:flex flex-col items-end text-right">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Employee Profile</p>
+                  <p className="text-2xl font-black text-slate-800 uppercase">{data?.data[0]?.name}</p>
+                </div>
               </div>
             </div>
-          ))}
+          )}
         </div>
       )}
 
@@ -355,29 +396,33 @@ const Attendance = () => {
           <table className="w-full text-left whitespace-nowrap">
             <thead className="sticky top-0 z-30 bg-slate-50 border-b border-slate-100 shadow-sm">
               <tr className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">
-                <th 
-                  className="px-6 py-4 cursor-pointer hover:bg-slate-100 transition-colors group"
-                  onClick={() => handleSort('name')}
-                >
-                  <div className="flex items-center gap-2">
+                <th className="px-6 py-4">
+                  <button onClick={() => handleSort('name')} className="flex items-center gap-2 group/btn">
                     Nama Karyawan
-                    <ArrowUpDown className={`w-3 h-3 ${sortConfig.key === 'name' ? 'text-blue-600' : 'text-slate-300 group-hover:text-slate-400'}`} />
-                  </div>
+                    <SortIcon column="name" />
+                  </button>
                 </th>
-                <th 
-                  className="px-4 py-4 cursor-pointer hover:bg-slate-100 transition-colors group"
-                  onClick={() => handleSort('date')}
-                >
-                  <div className="flex items-center gap-2">
+                <th className="px-4 py-4">
+                  <button onClick={() => handleSort('date')} className="flex items-center gap-2 group/btn">
                     Tanggal
-                    <ArrowUpDown className={`w-3 h-3 ${sortConfig.key === 'date' ? 'text-blue-600' : 'text-slate-300 group-hover:text-slate-400'}`} />
-                  </div>
+                    <SortIcon column="date" />
+                  </button>
                 </th>
-                <th className="px-4 py-4">Jam Masuk</th>
-                <th className="px-4 py-4">Jam Keluar</th>
-                <th className="px-6 py-4 text-center">Status</th>
+                <th className="px-4 py-4 text-center">Jam Masuk</th>
+                <th className="px-4 py-4 text-center">Jam Keluar</th>
+                <th className="px-6 py-4">
+                  <button onClick={() => handleSort('status')} className="flex items-center gap-2 mx-auto group/btn">
+                    Status
+                    <SortIcon column="status" />
+                  </button>
+                </th>
                 <th className="px-4 py-4 text-center">Terlambat</th>
-                <th className="px-4 py-4">Departemen</th>
+                <th className="px-4 py-4">
+                  <button onClick={() => handleSort('dept')} className="flex items-center gap-2 group/btn">
+                    Departemen
+                    <SortIcon column="dept" />
+                  </button>
+                </th>
                 <th className="px-4 py-4">Bagian / Seksi</th>
                 <th className="px-4 py-4">Jabatan</th>
                 <th className="px-4 py-4 text-center">Aksi</th>
@@ -406,15 +451,20 @@ const Attendance = () => {
                   </td>
                 </tr>
               ) : (
-                sortedAndFilteredData.map((row) => (
+                filteredData.map((row) => (
                   <tr
                     key={row.id}
                     className="group transition-all duration-300 hover:bg-blue-50/50"
                   >
-                    <td className="px-6 py-4">
+                    <td 
+                      className="px-6 py-4 cursor-pointer group/name"
+                      onClick={() => {
+                        setAppliedFilters(prev => ({ ...prev, search: row.name, page: 1 }));
+                      }}
+                    >
                       <div className="flex flex-col">
-                        <span className="text-xs font-bold text-slate-800 tracking-tight group-hover:text-blue-600 transition-colors uppercase">{row.name}</span>
-                        <span className="text-[9px] text-slate-500 font-semibold uppercase tracking-wider mt-0.5">{row.employeeCode || 'SYS_ID_ERR'}</span>
+                        <span className="text-xs font-bold text-slate-800 tracking-tight group-hover/name:text-blue-600 transition-colors uppercase">{row.name}</span>
+                        <span className="text-[9px] text-slate-500 font-semibold uppercase tracking-wider mt-0.5 group-hover/name:text-blue-400">{row.employeeCode || 'SYS_ID_ERR'}</span>
                       </div>
                     </td>
                     <td className="px-4 py-4">
@@ -450,8 +500,10 @@ const Attendance = () => {
                       </span>
                     </td>
                     <td className="px-4 py-4 text-center">
-                      {row.status === 'Terlambat' ? (
+                      {row.status === 'Terlambat' || row.status === 'LATE' ? (
                         <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">+{row.lateMinutes}m</span>
+                      ) : (row.status === 'Mangkir' || row.status === 'MANGKIR') ? (
+                        <span className="text-[10px] font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-200">+30m</span>
                       ) : (
                         <span className="text-slate-400">—</span>
                       )}
@@ -812,7 +864,7 @@ const Attendance = () => {
 
 // --- Sub-component to optimize performance ---
 
-const FilterBar = ({ onApply, isLoading }) => {
+const FilterBar = ({ onApply, isLoading, currentSearch }) => {
   const [filterDate, setFilterDate] = useState('Today');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
@@ -827,6 +879,12 @@ const FilterBar = ({ onApply, isLoading }) => {
     const timer = setTimeout(() => setDebouncedSearch(searchQuery), 500);
     return () => clearTimeout(timer);
   }, [searchQuery]);
+
+  useEffect(() => {
+    if (currentSearch !== undefined) {
+      setSearchQuery(currentSearch);
+    }
+  }, [currentSearch]);
 
   const { data: optionsData } = useQuery({
     queryKey: ['attendance-options-reactive', { period: filterDate, startDate: customStart, endDate: customEnd, dept: filterDept, search: debouncedSearch }],
