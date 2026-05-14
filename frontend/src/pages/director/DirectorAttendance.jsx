@@ -69,7 +69,7 @@ const DirectorAttendance = () => {
 
   const { data, isLoading } = useQuery({
     queryKey: ['director-attendance', applied],
-    queryFn: () => direkturAPI.getAttendance({ ...applied, limit: 50 }),
+    queryFn: () => direkturAPI.getAttendance({ ...applied, limit: 100 }),
   });
 
   const departments = optionsData?.data?.departments || [];
@@ -106,7 +106,7 @@ const DirectorAttendance = () => {
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-5 duration-500">
+    <div className="space-y-4 pb-4 animate-in fade-in slide-in-from-bottom-5 duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 px-1">
         <div>
           <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Attendance Analytics</h1>
@@ -215,9 +215,9 @@ const DirectorAttendance = () => {
             { label: 'Missing', value: summary.mangkir, icon: AlertCircle, color: 'text-orange-600', iconBg: 'bg-orange-50 border-orange-100' },
             { label: 'Absent', value: summary.absen, icon: XCircle, color: 'text-rose-600', iconBg: 'bg-rose-50 border-rose-100' },
           ].map(card => (
-            <div key={card.label} className="bg-white p-5 border border-slate-200 rounded-2xl flex items-center gap-4 shadow-sm hover:border-blue-200 transition-all duration-300">
-              <div className={`w-10 h-10 rounded-xl ${card.iconBg} border flex items-center justify-center shrink-0 transition-all duration-300`}>
-                <card.icon className={`w-5 h-5 ${card.color}`} />
+            <div key={card.label} className="bg-white p-3.5 border border-slate-200 rounded-2xl flex items-center gap-3 shadow-sm hover:border-blue-200 transition-all duration-300">
+              <div className={`w-9 h-9 rounded-xl ${card.iconBg} border flex items-center justify-center shrink-0 transition-all duration-300`}>
+                <card.icon className={`w-4.5 h-4.5 ${card.color}`} />
               </div>
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-0.5">{card.label}</p>
@@ -240,29 +240,29 @@ const DirectorAttendance = () => {
           </div>
         </div>
         
-        <div className="relative overflow-x-auto overflow-y-auto max-h-[calc(100vh-450px)]">
+        <div className="relative overflow-x-auto overflow-y-auto max-h-[calc(100vh-320px)] custom-scrollbar">
           <table className="w-full text-left border-separate border-spacing-0">
             <thead className="sticky top-0 z-40 bg-slate-50">
               <tr>
-                <th className="px-6 py-4 md:sticky left-0 top-0 z-50 bg-slate-50 border-b border-slate-200 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                <th className="px-6 py-3 md:sticky left-0 top-0 z-50 bg-slate-50 border-b border-slate-200 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                   <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Personnel</span>
                 </th>
-                <th className="px-4 py-4 border-b border-slate-200">
+                <th className="px-4 py-3 border-b border-slate-200">
                   <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Department</span>
                 </th>
-                <th className="px-4 py-4 border-b border-slate-200">
+                <th className="px-4 py-3 border-b border-slate-200">
                   <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Date</span>
                 </th>
-                <th className="px-4 py-4 border-b border-slate-200 text-center">
+                <th className="px-4 py-3 border-b border-slate-200 text-center">
                   <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Entry</span>
                 </th>
-                <th className="px-4 py-4 border-b border-slate-200 text-center">
+                <th className="px-4 py-3 border-b border-slate-200 text-center">
                   <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Exit</span>
                 </th>
-                <th className="px-4 py-4 border-b border-slate-200 text-center">
+                <th className="px-4 py-3 border-b border-slate-200 text-center">
                   <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Late</span>
                 </th>
-                <th className="px-6 py-4 md:sticky right-0 top-0 z-50 bg-slate-50 border-b border-slate-200 border-l border-slate-200 text-center shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                <th className="px-6 py-3 md:sticky right-0 top-0 z-50 bg-slate-50 border-b border-slate-200 border-l border-slate-200 text-center shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                   <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Status</span>
                 </th>
               </tr>
@@ -298,9 +298,9 @@ const DirectorAttendance = () => {
                 return (
                   <tr key={`${r.id}-${idx}`}
                     className="group hover:bg-blue-50/30 transition-colors duration-200">
-                    <td className="px-6 py-4 md:sticky left-0 z-20 bg-white group-hover:bg-blue-50/50 transition-colors border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.02)]">
-                      <div className="flex items-center gap-4 min-w-[200px]">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs border shrink-0 transition-all duration-300 group-hover:scale-105 ${avatarStyle}`}>
+                    <td className="px-6 py-2 md:sticky left-0 z-20 bg-white group-hover:bg-blue-50/50 transition-colors border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.02)]">
+                      <div className="flex items-center gap-3 min-w-[200px]">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-[10px] border shrink-0 transition-all duration-300 group-hover:scale-105 ${avatarStyle}`}>
                           {initials}
                         </div>
                         <div>
@@ -309,28 +309,28 @@ const DirectorAttendance = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-2">
                       <div className="space-y-0.5">
                         <p className="text-xs font-semibold text-slate-700 truncate max-w-[150px]">{r.dept || 'Uncategorized'}</p>
                         <p className="text-[10px] font-medium text-slate-400">{r.position || 'Staff'}</p>
                       </div>
                     </td>
-                    <td className="px-4 py-4 whitespace-nowrap">
-                       <span className="text-xs font-semibold text-slate-700 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200">
+                    <td className="px-4 py-2 whitespace-nowrap">
+                       <span className="text-xs font-semibold text-slate-700 bg-slate-50 px-2.5 py-0.5 rounded-md border border-slate-200">
                         {new Date(r.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
                        </span>
                     </td>
-                    <td className="px-4 py-4 text-center">
+                    <td className="px-4 py-2 text-center">
                       <span className={`text-sm font-semibold ${r.checkIn !== '-' ? 'text-slate-800' : 'text-slate-400'}`}>
                         {formatTime(r.checkIn)}
                       </span>
                     </td>
-                    <td className="px-4 py-4 text-center">
+                    <td className="px-4 py-2 text-center">
                       <span className={`text-sm font-semibold ${r.checkOut !== '-' ? 'text-slate-800' : 'text-slate-400'}`}>
                         {formatTime(r.checkOut)}
                       </span>
                     </td>
-                    <td className="px-4 py-4 text-center">
+                    <td className="px-4 py-2 text-center">
                       {r.status?.toUpperCase() === 'LATE' && r.lateMinutes > 0 ? (
                         <div className="flex items-center justify-center gap-1.5">
                           <div className="w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse" />
@@ -340,8 +340,8 @@ const DirectorAttendance = () => {
                         <span className="text-slate-300 font-bold">—</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 md:sticky right-0 z-20 bg-white group-hover:bg-blue-50/50 transition-colors border-l border-slate-100 text-center shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.02)]">
-                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-semibold border ${cfg.color}`}>
+                    <td className="px-6 py-2 md:sticky right-0 z-20 bg-white group-hover:bg-blue-50/50 transition-colors border-l border-slate-100 text-center shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.02)]">
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-0.5 rounded-lg text-[10px] font-semibold border ${cfg.color}`}>
                         {cfg.label}
                       </span>
                     </td>

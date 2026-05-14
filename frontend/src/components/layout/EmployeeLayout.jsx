@@ -78,7 +78,7 @@ const EmployeeLayout = () => {
       </main>
 
       {/* Bottom Nav */}
-      <nav className="fixed bottom-4 left-4 right-4 h-16 bg-white border border-slate-200 flex items-center justify-around px-4 z-50 rounded-2xl shadow-lg shadow-slate-200/50">
+      <nav className="fixed bottom-6 left-4 right-4 h-20 bg-white border border-slate-200 flex items-center justify-around px-2 z-50 rounded-3xl shadow-xl shadow-blue-900/5">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.path;
@@ -88,9 +88,9 @@ const EmployeeLayout = () => {
               <Link 
                 key={item.name} 
                 to={item.path}
-                className="relative -top-8 w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-600/30 text-white transition-all active:scale-90 group hover:bg-blue-700"
+                className="relative -top-10 w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center shadow-xl shadow-blue-600/40 text-white transition-all active:scale-95 group hover:bg-blue-700 ring-4 ring-[#f7f8fc]"
               >
-                <Icon className="w-7 h-7" />
+                <Icon className="w-8 h-8" />
               </Link>
             );
           }
@@ -99,16 +99,18 @@ const EmployeeLayout = () => {
             <Link 
               key={item.name} 
               to={item.path}
-              className={`flex flex-col items-center gap-1 w-14 transition-all duration-300 ${
+              className={`flex flex-col items-center justify-center gap-1.5 w-16 h-full transition-all duration-300 relative ${
                 isActive ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'
               }`}
             >
-              <Icon className={`w-5 h-5 transition-all ${isActive ? '' : ''}`} />
-              <span className={`text-[9px] font-bold uppercase tracking-wide ${isActive ? 'opacity-100' : 'opacity-0'}`}>
+              <div className={`p-2 rounded-xl transition-all duration-300 ${isActive ? 'bg-blue-50' : ''}`}>
+                <Icon className={`w-5 h-5`} />
+              </div>
+              <span className={`text-[10px] font-bold uppercase tracking-widest transition-all duration-300 ${isActive ? 'opacity-100' : 'opacity-60'}`}>
                 {item.name}
               </span>
               {isActive && (
-                <div className="absolute -bottom-0.5 w-1 h-1 bg-blue-600 rounded-full"></div>
+                <div className="absolute bottom-2 w-1.5 h-1.5 bg-blue-600 rounded-full animate-in zoom-in duration-300"></div>
               )}
             </Link>
           );
