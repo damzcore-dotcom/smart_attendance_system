@@ -57,13 +57,13 @@ const Scan = () => {
         setIsScanning(true);
         let progress = 0;
         const interval = setInterval(() => {
-          progress += 5;
+          progress += 20;
           setScanProgress(progress);
           if (progress >= 100) {
             clearInterval(interval);
             mutation.mutate('Face ID');
           }
-        }, 30);
+        }, 10);
       },
       (error) => {
         let msg = "Please enable location services to check in.";
@@ -152,7 +152,7 @@ const Scan = () => {
             {isScanning ? 'Hold Still' : 'Identity Verification'}
           </h3>
           <p className="text-sm text-slate-500 leading-relaxed">
-            Align your face within the frame. Authentication requires a <span className="text-blue-600 font-semibold">98%+ match</span> score.
+            Posisikan wajah di tengah bingkai. Jika gagal, pastikan <span className="text-blue-600 font-semibold">pencahayaan terang</span>, wajah tidak tertutup, dan kamera dalam kondisi <span className="text-blue-600 font-semibold">fokus/stabil</span>.
           </p>
         </div>
       </div>

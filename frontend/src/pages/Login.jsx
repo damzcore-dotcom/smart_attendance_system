@@ -84,8 +84,8 @@ const Login = () => {
           image.onerror = () => reject(new Error('Failed to load captured image'));
         });
 
-        // Detect face and get descriptor
-        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+        // Detect face and get descriptor (Optimized for speed)
+        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.4 }))
           .withFaceLandmarks()
           .withFaceDescriptor();
         
@@ -378,6 +378,28 @@ const Login = () => {
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* Scanning Instructions/Tips */}
+            <div className="mx-8 mb-2 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+              <div className="flex items-center gap-2 mb-2 text-blue-600">
+                <ShieldCheck className="w-4 h-4" />
+                <span className="text-[10px] font-bold uppercase tracking-widest">Tips Pemindaian</span>
+              </div>
+              <ul className="text-[10px] text-slate-500 space-y-1.5 font-medium">
+                <li className="flex items-start gap-2">
+                  <div className="w-1 h-1 rounded-full bg-blue-400 mt-1" />
+                  Posisikan wajah tepat di tengah bingkai biru.
+                </li>
+                <li className="flex items-start gap-2">
+                  <div className="w-1 h-1 rounded-full bg-blue-400 mt-1" />
+                  Pastikan pencahayaan cukup terang dan wajah tidak gelap.
+                </li>
+                <li className="flex items-start gap-2">
+                  <div className="w-1 h-1 rounded-full bg-blue-400 mt-1" />
+                  Diam sejenak dan jaga kamera agar tetap fokus/stabil.
+                </li>
+              </ul>
             </div>
 
             {/* Status Indicator */}
