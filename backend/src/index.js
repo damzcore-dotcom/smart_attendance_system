@@ -67,6 +67,7 @@ app.use('/api/manager', require('./routes/managerRoutes'));
 app.use('/api/direktur', require('./routes/direkturRoutes'));
 app.use('/api/devices', deviceRoutes);
 app.use('/api/audit-logs', require('./routes/auditLogRoutes'));
+app.use('/api/payroll', require('./routes/payrollRoutes'));
 
 // Global error handler
 app.use((err, req, res, next) => {

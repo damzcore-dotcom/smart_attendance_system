@@ -1,0 +1,475 @@
+# Payroll System — Implementation Plan
+
+Menambahkan modul Payroll lengkap ke Smart Attendance System, mencakup: **Setting Gaji (Manual/Otomatis)**, **Setting PKWT (Kontrak Karyawan)**, **Setting Lembur**, dan **Setting Karyawan Harian**.
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Mata Uang & Format:** Sistem akan menggunakan Rupiah (IDR) dengan format Indonesia. Apakah ini sesuai?
+
+> [!IMPORTANT]
+> **Komponen Gaji Default:** Rencana saat ini mencakup komponen: Gaji Pokok, Tunjangan Transport, Tunjangan Makan, BPJS TK (potongan), BPJS Kesehatan (potongan), PPh 21. Apakah ada komponen tambahan yang diperlukan?
+
+> [!WARNING]
+> **Kalkulasi PPh 21:** Untuk versi awal, PPh 21 akan disimpan sebagai nilai manual (admin input). Kalkulasi otomatis PPh 21 berdasarkan PTKP status memerlukan modul pajak terpisah — apakah diperlukan di fase ini?
+
+## Open Questions
+
+1. **Tarif Lembur:** Apakah mengikuti standar UU Cipta Kerja (1.5x jam pertama, 2x jam berikutnya untuk hari kerja; 2x-4x untuk hari libur)? Atau ada tarif khusus perusahaan?
+2. **Karyawan Harian:** Apakah gaji harian dihitung berdasarkan kehadiran aktual saja, atau ada minimum hari kerja per bulan?
+3. **Approval Flow:** Apakah payroll perlu approval dari Direktur sebelum finalisasi, atau cukup Admin/Super Admin yang generate?
+4. **Slip Gaji Karyawan:** Apakah karyawan perlu melihat slip gaji mereka di portal Employee?
+
+---
+
+## Proposed Changes
+
+### Database Schema (Prisma)
+
+Menambahkan 7 model baru dan 1 enum baru ke schema.prisma.
+
+#### [MODIFY] [schema.prisma](file:///c:/ADAM/smart_attendance_system/backend/prisma/schema.prisma)
+
+**Enum baru:**
+```prisma
+enum PayrollStatus {
+  DRAFT
+  PROCESSING
+  COMPLETED
+  CANCELLED
+}
+
+enum EmploymentType {
+  TETAP       // Karyawan Tetap (PKWTT)
+  KONTRAK     // Karyawan Kontrak (PKWT)
+  HARIAN      // Karyawan Harian Lepas
+}
+
+enum SalaryType {
+  MONTHLY     // Gaji Bulanan
+  DAILY       // Gaji Harian
+}
+```
+
+**Model baru:**
+
+```prisma
+// ─── Payroll Configuration ────────────────────────
+// Master konfigurasi payroll global
+
+model PayrollConfig {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique   // e.g. "overtimeEnabled", "dailyWorkerRate", "pkwtAlertDays"
+  value       String              // JSON string for complex values
+  description String?
+  updatedAt   DateTime @updatedAt
+}
+
+// ─── Salary Components ────────────────────────────
+// Komponen gaji yang bisa di-customize (tunjangan, potongan)
+
+model SalaryComponent {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique  // "Gaji Pokok", "Tunj. Transport", "BPJS TK"
+  type        String   // "ALLOWANCE" | "DEDUCTION"
+  isFixed     Boolean  @default(true)  // true = nominal tetap, false = persentase
+  defaultValue Float   @default(0)     // Nominal default atau persentase
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ─── Overtime Rules ───────────────────────────────
+// Aturan tarif lembur bertingkat
+
+model OvertimeRule {
+  id            Int      @id @default(autoincrement())
+  name          String   // "Hari Kerja Jam 1", "Hari Libur Jam 1-8"
+  dayType       String   // "WORKDAY" | "WEEKEND" | "HOLIDAY"
+  hourFrom      Float    // Jam mulai (e.g. 1 = jam pertama)
+  hourTo        Float    // Jam akhir (e.g. 1 = sampai jam ke-1)
+  multiplier    Float    // 1.5, 2.0, 3.0, 4.0
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+}
+
+// ─── Employee Salary ──────────────────────────────
+// Gaji individu per karyawan (bisa manual atau template)
+
+model EmployeeSalary {
+  id              Int       @id @default(autoincrement())
+  employeeId      Int       @unique
+  employee        Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employmentType  String    @default("TETAP")    // TETAP, KONTRAK, HARIAN
+  salaryType      String    @default("MONTHLY")  // MONTHLY, DAILY
+  baseSalary      Float     @default(0)           // Gaji pokok bulanan/harian
+  components      Json?     // JSON array: [{componentId, name, type, value}]
+  // PKWT Fields
+  contractNumber  String?   // Nomor kontrak PKWT
+  contractStart   DateTime? @db.Date
+  contractEnd     DateTime? @db.Date
+  contractDuration String?  // "6 Bulan", "1 Tahun"
+  contractRenewalCount Int  @default(0)  // Jumlah perpanjangan
+  // Daily Worker Fields
+  dailyRate       Float?    // Tarif per hari untuk karyawan harian
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// ─── Payroll (Monthly Run) ────────────────────────
+// Record proses payroll bulanan
+
+model Payroll {
+  id            Int            @id @default(autoincrement())
+  period        String         // "2026-05" (YYYY-MM)
+  periodName    String         // "Mei 2026"
+  status        PayrollStatus  @default(DRAFT)
+  totalEmployees Int           @default(0)
+  totalGross    Float          @default(0)
+  totalDeductions Float        @default(0)
+  totalNet      Float          @default(0)
+  totalOvertime Float          @default(0)
+  generatedBy   String?        // Username yang generate
+  notes         String?
+  details       PayrollDetail[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([period])
+}
+
+// ─── Payroll Detail (Per Employee) ────────────────
+// Detail gaji per karyawan per bulan
+
+model PayrollDetail {
+  id              Int      @id @default(autoincrement())
+  payrollId       Int
+  payroll         Payroll  @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+  employeeId      Int
+  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeName    String   // Snapshot nama saat generate
+  employeeCode    String   // Snapshot NIK
+  department      String   // Snapshot dept
+  employmentType  String   // TETAP/KONTRAK/HARIAN
+  salaryType      String   // MONTHLY/DAILY
+  // Attendance Summary
+  workingDays     Int      @default(0)   // Hari kerja di bulan ini
+  daysPresent     Int      @default(0)   // Hari hadir
+  daysAbsent      Int      @default(0)   // Hari tidak hadir
+  daysLate        Int      @default(0)   // Hari terlambat
+  totalLateMinutes Int     @default(0)   // Total menit terlambat
+  // Salary Breakdown
+  baseSalary      Float    @default(0)
+  proRatedSalary  Float    @default(0)   // Gaji setelah pro-rata (harian/mangkir)
+  allowances      Json?    // [{name, value}]
+  deductions      Json?    // [{name, value}]
+  overtimeHours   Float    @default(0)
+  overtimePay     Float    @default(0)
+  // Totals
+  grossPay        Float    @default(0)
+  totalDeduction  Float    @default(0)
+  netPay          Float    @default(0)
+  notes           String?
+  createdAt       DateTime @default(now())
+}
+```
+
+**Relasi baru di Employee model:**
+```prisma
+model Employee {
+  // ... existing fields ...
+  salary         EmployeeSalary?
+  payrollDetails PayrollDetail[]
+}
+```
+
+---
+
+### Backend — Payroll Config Controller
+
+#### [NEW] [payrollConfigController.js](file:///c:/ADAM/smart_attendance_system/backend/src/controllers/payrollConfigController.js)
+
+Menangani semua setting payroll:
+
+| Endpoint | Method | Deskripsi |
+|----------|--------|-----------|
+| `/api/payroll/config` | GET | Get semua payroll config |
+| `/api/payroll/config` | PUT | Update payroll config (batch) |
+| `/api/payroll/components` | GET | Get semua salary components |
+| `/api/payroll/components` | POST | Create salary component |
+| `/api/payroll/components/:id` | PUT | Update salary component |
+| `/api/payroll/components/:id` | DELETE | Delete salary component |
+| `/api/payroll/overtime-rules` | GET | Get semua overtime rules |
+| `/api/payroll/overtime-rules` | POST | Create overtime rule |
+| `/api/payroll/overtime-rules/:id` | PUT | Update overtime rule |
+| `/api/payroll/overtime-rules/:id` | DELETE | Delete overtime rule |
+| `/api/payroll/employee-salary` | GET | Get semua employee salary configs |
+| `/api/payroll/employee-salary/:empId` | GET | Get salary config per employee |
+| `/api/payroll/employee-salary/:empId` | PUT | Set/update salary per employee |
+| `/api/payroll/employee-salary/batch` | PUT | Batch set salary (otomatis dari template) |
+| `/api/payroll/pkwt-alerts` | GET | Get daftar kontrak yang akan expire |
+
+**Fitur utama:**
+- **Setting Gaji Manual:** Admin set gaji per karyawan satu-satu melalui form
+- **Setting Gaji Otomatis:** Admin set template berdasarkan grade/posisi, lalu batch-apply ke semua karyawan yang match
+- **PKWT Management:** Track kontrak, tanggal berakhir, perpanjangan, alert H-30 sebelum expire
+- **Overtime Rules:** Konfigurasi tarif lembur bertingkat sesuai UU atau custom
+- **Daily Worker:** Setting tarif harian, kalkulasi otomatis berdasarkan hari kehadiran
+
+---
+
+### Backend — Payroll Controller
+
+#### [NEW] [payrollController.js](file:///c:/ADAM/smart_attendance_system/backend/src/controllers/payrollController.js)
+
+Menangani proses generate dan manage payroll bulanan:
+
+| Endpoint | Method | Deskripsi |
+|----------|--------|-----------|
+| `/api/payroll` | GET | List semua payroll periods |
+| `/api/payroll/:id` | GET | Get payroll detail (with all employee details) |
+| `/api/payroll/generate` | POST | Generate payroll untuk bulan tertentu |
+| `/api/payroll/:id/finalize` | PUT | Finalize payroll (lock) |
+| `/api/payroll/:id/cancel` | PUT | Cancel payroll |
+| `/api/payroll/:id/export-excel` | GET | Export payroll ke Excel |
+| `/api/payroll/:id/export-pdf` | GET | Export payroll ke PDF |
+| `/api/payroll/:id/slip/:empId` | GET | Generate slip gaji individual |
+
+**Logika Generate Payroll:**
+
+```
+1. Ambil semua karyawan ACTIVE dengan EmployeeSalary
+2. Untuk setiap karyawan:
+   a. Hitung kehadiran bulan tersebut dari tabel Attendance
+   b. Hitung gaji pokok:
+      - MONTHLY: baseSalary (pro-rata jika ada mangkir/absent)
+      - DAILY: dailyRate × daysPresent
+   c. Hitung tunjangan dari components (allowance)
+   d. Hitung potongan dari components (deduction)
+   e. Hitung lembur:
+      - Ambil jam kerja > shift endTime per hari
+      - Apply overtime rules berdasarkan tier
+      - overtimePay = Σ(hours × multiplier × hourlyRate)
+   f. grossPay = proRatedSalary + allowances + overtimePay
+   g. netPay = grossPay - totalDeductions
+3. Simpan ke Payroll + PayrollDetail
+```
+
+---
+
+### Backend — Routes
+
+#### [NEW] [payrollRoutes.js](file:///c:/ADAM/smart_attendance_system/backend/src/routes/payrollRoutes.js)
+
+Mendaftarkan semua endpoint payroll config + payroll operations.
+
+#### [MODIFY] [index.js](file:///c:/ADAM/smart_attendance_system/backend/src/index.js)
+
+Tambah route mounting:
+```js
+app.use('/api/payroll', require('./routes/payrollRoutes'));
+```
+
+---
+
+### Frontend — Payroll Settings Page
+
+#### [NEW] [PayrollSettings.jsx](file:///c:/ADAM/smart_attendance_system/frontend/src/pages/admin/PayrollSettings.jsx)
+
+Halaman setting payroll di admin panel dengan **5 tab**:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  ⚙️ Payroll Settings                                    │
+├──────────┬──────────────────────────────────────────────┤
+│          │                                              │
+│ 💰 Gaji  │  ┌─ Komponen Gaji ─────────────────────┐   │
+│          │  │ + Gaji Pokok      ALLOWANCE  Rp 5.0M │   │
+│ 📋 PKWT  │  │ + Tunj. Transport ALLOWANCE  Rp 500K │   │
+│          │  │ + Tunj. Makan     ALLOWANCE  Rp 300K │   │
+│ ⏱️ Lembur │  │ - BPJS TK        DEDUCTION  2%      │   │
+│          │  │ - BPJS Kes       DEDUCTION  1%      │   │
+│ 📅 Harian │  └────────────────────────────────────────┘   │
+│          │                                              │
+│ 👥 Assign│  [+ Tambah Komponen]                        │
+│          │                                              │
+└──────────┴──────────────────────────────────────────────┘
+```
+
+**Tab 1 — Komponen Gaji:**
+- CRUD komponen gaji (tunjangan & potongan)
+- Set sebagai fixed amount atau persentase dari gaji pokok
+- Drag to reorder
+
+**Tab 2 — PKWT (Kontrak):**
+- Tabel daftar karyawan PKWT
+- Alert kontrak yang akan expire (H-30, H-14, H-7)
+- Form perpanjangan kontrak
+- Badge status: Aktif, Segera Berakhir, Expired
+
+**Tab 3 — Setting Lembur:**
+- CRUD overtime rules
+- Tabel tarif bertingkat per tipe hari
+- Toggle enable/disable overtime calculation
+- Preview kalkulasi (simulator)
+
+**Tab 4 — Karyawan Harian:**
+- Setting tarif default per hari
+- Daftar karyawan harian dengan tarif masing-masing
+- Quick assign tarif
+
+**Tab 5 — Assign Gaji:**
+- Tabel semua karyawan dengan kolom gaji
+- Mode Manual: edit per karyawan
+- Mode Otomatis: set template berdasarkan grade → batch apply
+- Filter by dept/grade/employment type
+
+---
+
+### Frontend — Payroll Management Page
+
+#### [NEW] [Payroll.jsx](file:///c:/ADAM/smart_attendance_system/frontend/src/pages/admin/Payroll.jsx)
+
+Halaman utama generate dan manage payroll bulanan:
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  💰 Payroll Management                    [Generate ▼]   │
+│                                                          │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐   │
+│  │ Total    │ │ Gross    │ │ Deduction│ │ Net Pay  │   │
+│  │ 156 Emp  │ │ 1.2B IDR │ │ 180M IDR │ │ 1.02B    │   │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘   │
+│                                                          │
+│  Period: [Mei 2026 ▼]  Status: ● DRAFT                  │
+│                                                          │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │ NIK  │ Nama     │ Dept │ Type  │ Gross  │ Net    │  │
+│  │ 1001 │ Ahmad    │ Prod │ Tetap │ 8.5M   │ 7.2M   │  │
+│  │ 1002 │ Budi     │ QC   │ PKWT  │ 6.0M   │ 5.1M   │  │
+│  │ 1003 │ Citra    │ Prod │ Harian│ 3.2M   │ 3.0M   │  │
+│  └────────────────────────────────────────────────────┘  │
+│                                                          │
+│  [📄 Export Excel]  [📑 Export PDF]  [✅ Finalize]       │
+└──────────────────────────────────────────────────────────┘
+```
+
+**Fitur:**
+- Generate payroll per bulan (otomatis tarik attendance data)
+- Detail breakdown per karyawan (click to expand)
+- Slip gaji individual (modal + print/PDF)
+- Export ke Excel & PDF
+- Status flow: DRAFT → COMPLETED → (CANCELLED)
+- Summary cards dengan total gross, deductions, net
+
+---
+
+### Frontend — Layout & Routing Updates
+
+#### [MODIFY] [AdminLayout.jsx](file:///c:/ADAM/smart_attendance_system/frontend/src/components/layout/AdminLayout.jsx)
+
+Tambah 2 menu item baru di sidebar:
+```js
+{ name: 'Payroll', path: '/admin/payroll', icon: Banknote, key: 'payroll' },
+{ name: 'Payroll Settings', path: '/admin/payroll-settings', icon: Receipt, key: 'payroll-settings' },
+```
+
+#### [MODIFY] [App.jsx](file:///c:/ADAM/smart_attendance_system/frontend/src/App.jsx)
+
+Tambah 2 route baru di admin routes:
+```jsx
+<Route path="payroll" element={<PermissionRoute menuKey="payroll"><Payroll /></PermissionRoute>} />
+<Route path="payroll-settings" element={<PermissionRoute menuKey="payroll-settings"><PayrollSettings /></PermissionRoute>} />
+```
+
+#### [MODIFY] [api.js](file:///c:/ADAM/smart_attendance_system/frontend/src/services/api.js)
+
+Tambah `payrollAPI` section:
+```js
+export const payrollAPI = {
+  // Config
+  getConfig: () => apiFetch('/payroll/config'),
+  updateConfig: (data) => apiFetch('/payroll/config', { method: 'PUT', body: JSON.stringify(data) }),
+  // Components
+  getComponents: () => apiFetch('/payroll/components'),
+  createComponent: (data) => apiFetch('/payroll/components', { method: 'POST', body: JSON.stringify(data) }),
+  updateComponent: (id, data) => apiFetch(`/payroll/components/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteComponent: (id) => apiFetch(`/payroll/components/${id}`, { method: 'DELETE' }),
+  // Overtime Rules
+  getOvertimeRules: () => apiFetch('/payroll/overtime-rules'),
+  createOvertimeRule: (data) => apiFetch('/payroll/overtime-rules', { method: 'POST', body: JSON.stringify(data) }),
+  updateOvertimeRule: (id, data) => apiFetch(`/payroll/overtime-rules/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteOvertimeRule: (id) => apiFetch(`/payroll/overtime-rules/${id}`, { method: 'DELETE' }),
+  // Employee Salary
+  getEmployeeSalaries: (params) => apiFetch(`/payroll/employee-salary?${new URLSearchParams(params)}`),
+  getEmployeeSalary: (empId) => apiFetch(`/payroll/employee-salary/${empId}`),
+  setEmployeeSalary: (empId, data) => apiFetch(`/payroll/employee-salary/${empId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  batchSetSalary: (data) => apiFetch('/payroll/employee-salary/batch', { method: 'PUT', body: JSON.stringify(data) }),
+  // PKWT
+  getPkwtAlerts: () => apiFetch('/payroll/pkwt-alerts'),
+  // Payroll Operations
+  getAll: (params) => apiFetch(`/payroll?${new URLSearchParams(params)}`),
+  getById: (id) => apiFetch(`/payroll/${id}`),
+  generate: (data) => apiFetch('/payroll/generate', { method: 'POST', body: JSON.stringify(data) }),
+  finalize: (id) => apiFetch(`/payroll/${id}/finalize`, { method: 'PUT' }),
+  cancel: (id) => apiFetch(`/payroll/${id}/cancel`, { method: 'PUT' }),
+  exportExcel: (id) => /* blob download */,
+  exportPdf: (id) => /* blob download */,
+  getSlip: (id, empId) => apiFetch(`/payroll/${id}/slip/${empId}`),
+};
+```
+
+---
+
+### Director Dashboard Enhancement
+
+#### [MODIFY] [DirectorDashboard.jsx](file:///c:/ADAM/smart_attendance_system/frontend/src/pages/director/DirectorDashboard.jsx)
+
+Tambah widget ringkasan payroll:
+- Total payroll bulan ini
+- Perbandingan dengan bulan sebelumnya
+- Top 5 departemen by payroll cost
+
+---
+
+## File Summary
+
+| Action | File | Deskripsi |
+|--------|------|-----------|
+| MODIFY | `schema.prisma` | +7 models, +3 enums, relasi baru di Employee |
+| NEW | `payrollConfigController.js` | Controller setting payroll (komponen, lembur, PKWT, harian) |
+| NEW | `payrollController.js` | Controller generate & manage payroll bulanan |
+| NEW | `payrollRoutes.js` | Route definitions untuk semua payroll endpoints |
+| MODIFY | `index.js` | Mount payroll routes |
+| NEW | `PayrollSettings.jsx` | Halaman setting payroll (5 tabs) |
+| NEW | `Payroll.jsx` | Halaman manage payroll bulanan |
+| MODIFY | `AdminLayout.jsx` | +2 menu items di sidebar |
+| MODIFY | `App.jsx` | +2 routes |
+| MODIFY | `api.js` | +payrollAPI service |
+| MODIFY | `DirectorDashboard.jsx` | +payroll summary widget |
+
+---
+
+## Verification Plan
+
+### Automated Tests
+1. **Database Migration:** `npx prisma migrate dev --name add_payroll_system` — memastikan schema valid
+2. **API Testing:**
+   - CRUD salary components via Postman/curl
+   - CRUD overtime rules
+   - Set employee salary (manual)
+   - Batch set salary (otomatis)
+   - Generate payroll → verify calculations
+   - Export Excel/PDF → verify file downloads
+3. **Frontend Testing:**
+   - Navigate semua 5 tabs di PayrollSettings
+   - Generate payroll dan verify summary totals
+   - Export dan verify file output
+
+### Manual Verification
+1. **Scenario Karyawan Tetap:** Set gaji pokok + tunjangan → generate → verify net pay
+2. **Scenario PKWT:** Set kontrak → verify alert muncul di H-30
+3. **Scenario Lembur:** Karyawan dengan checkout > endTime → verify overtime calculation
+4. **Scenario Harian:** Karyawan harian hadir 22 hari → verify dailyRate × 22
+5. **UI Polish:** Verify semua halaman responsive dan consistent dengan design system existing

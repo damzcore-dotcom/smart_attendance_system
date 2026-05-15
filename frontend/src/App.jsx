@@ -22,6 +22,8 @@ import Settings from './pages/admin/Settings';
 import AdminCorrections from './pages/admin/Corrections';
 import DeviceSettings from './pages/admin/DeviceSettings';
 import AuditLog from './pages/admin/AuditLog';
+import Payroll from './pages/admin/Payroll';
+import PayrollSettings from './pages/admin/PayrollSettings';
 import EmployeeHome from './pages/employee/EmployeeHome';
 import History from './pages/employee/History';
 import Profile from './pages/employee/Profile';
@@ -98,6 +100,8 @@ function App() {
             <Route path="employees" element={<PermissionRoute menuKey="employees"><Employees /></PermissionRoute>} />
             <Route path="users" element={<PermissionRoute menuKey="users"><Users /></PermissionRoute>} />
             <Route path="attendance" element={<PermissionRoute menuKey="attendance"><Attendance /></PermissionRoute>} />
+            <Route path="payroll" element={<PermissionRoute menuKey="payroll"><Payroll /></PermissionRoute>} />
+            <Route path="payroll-settings" element={<PermissionRoute menuKey="payroll-settings"><PayrollSettings /></PermissionRoute>} />
             <Route path="leave-requests" element={<PermissionRoute menuKey="leave-requests"><AdminLeaveRequests /></PermissionRoute>} />
             <Route path="backup" element={<PermissionRoute menuKey="backup"><Backup /></PermissionRoute>} />
             <Route path="announcements" element={<PermissionRoute menuKey="announcements"><Announcements /></PermissionRoute>} />

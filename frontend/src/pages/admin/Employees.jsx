@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { employeeAPI, settingsAPI } from '../../services/api';
+import { employeeAPI, settingsAPI, payrollAPI } from '../../services/api';
 import CreatableSelect from 'react-select/creatable';
 import Webcam from 'react-webcam';
 import * as faceapi from '@vladmandic/face-api';
 import * as XLSX from 'xlsx';
 import { 
   Search, Filter, CheckCircle2, Clock, UserPlus, FileSpreadsheet, Upload, X, Download, Save, Camera,
-  ScanFace, Loader2, AlertCircle, RefreshCw, ShieldCheck, ChevronRight, ChevronUp, ChevronDown
+  ScanFace, Loader2, AlertCircle, RefreshCw, ShieldCheck, ChevronRight, ChevronUp, ChevronDown, FileText, Banknote
 } from 'lucide-react';
 
 const emptyEmployee = { 
@@ -15,7 +15,7 @@ const emptyEmployee = {
   name: '', dept: '', division: '', locationId: '', idNumber: '', cardNo: '', verifyCode: 'Face ID', 
   email: '', phone: '', position: '', grade: '', section: '', employmentStatus: '', contractDuration: '', 
   faceId: '', facePhoto: '', faceDescriptor: null, bpjsTk: '', bpjsKesehatan: '', npwp: '', ptkpStatus: '', kkNumber: '', 
-  birthPlace: '', address: '', education: '', major: '', religion: '', numberOfChildren: 0, 
+  birthPlace: '', address: '', education: '', major: '', religion: '', maritalStatus: '', numberOfChildren: 0, 
   fatherName: '', motherName: '', spouseName: '', emergencyContact: '', notes: '',
   joinDate: '', contractEnd: '', birthDate: '',
   leaveQuota: 12, remainingLeave: 12,
@@ -27,7 +27,9 @@ const Employees = () => {
   const [deptFilter, setDeptFilter] = useState('');
   const [sectionFilter, setSectionFilter] = useState('');
   const [positionFilter, setPositionFilter] = useState('');
+  const [empStatusFilter, setEmpStatusFilter] = useState('');
   const [isImportModalOpen, setImportModalOpen] = useState(false);
+  const [isPkwtModalOpen, setPkwtModalOpen] = useState(false);
   const [importResult, setImportResult] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -35,6 +37,7 @@ const Employees = () => {
   const [newEmployee, setNewEmployee] = useState(emptyEmployee);
   const [activeTab, setActiveTab] = useState('basic');
   const [isQuickShiftModalOpen, setQuickShiftModalOpen] = useState(false);
+  const [isSyncGajiModalOpen, setSyncGajiModalOpen] = useState(false);
   const [quickShiftForm, setQuickShiftForm] = useState({ departmentId: '', shiftId: '' });
   const [page, setPage] = useState(1);
   const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
@@ -72,8 +75,8 @@ const Employees = () => {
   }, []);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['employees', { search: searchTerm, dept: deptFilter, section: sectionFilter, position: positionFilter, page, sortBy: sortConfig.key, order: sortConfig.direction }],
-    queryFn: () => employeeAPI.getAll({ search: searchTerm, dept: deptFilter, section: sectionFilter, position: positionFilter, page, limit: PAGE_SIZE, sortBy: sortConfig.key, order: sortConfig.direction }),
+    queryKey: ['employees', { search: searchTerm, dept: deptFilter, section: sectionFilter, position: positionFilter, empStatus: empStatusFilter, page, sortBy: sortConfig.key, order: sortConfig.direction }],
+    queryFn: () => employeeAPI.getAll({ search: searchTerm, dept: deptFilter, section: sectionFilter, position: positionFilter, empStatus: empStatusFilter, page, limit: PAGE_SIZE, sortBy: sortConfig.key, order: sortConfig.direction }),
     keepPreviousData: true,
   });
 
@@ -259,6 +262,13 @@ const Employees = () => {
   };
 
 
+  const { data: pkwtAlertsData } = useQuery({
+    queryKey: ['pkwt-alerts'],
+    queryFn: () => payrollAPI.getPkwtAlerts(),
+  });
+  const pkwtAlerts = pkwtAlertsData?.data || [];
+  const criticalAlertsCount = pkwtAlerts.filter(a => a.daysLeft <= 30).length;
+
   return (
     <div className="space-y-8 pb-12 animate-in fade-in duration-500">
       {/* 1. Page Header */}
@@ -283,6 +293,18 @@ const Employees = () => {
 
         <div className="flex flex-wrap items-center gap-3">
           <button 
+            onClick={() => setPkwtModalOpen(true)} 
+            className="flex items-center gap-2 bg-white hover:bg-slate-50 px-5 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:text-slate-800 transition-all border border-slate-200 shadow-sm active:scale-95 group relative"
+          >
+            <FileText className="w-4 h-4 text-orange-500 group-hover:scale-110 transition-transform" />
+            PKWT Alerts
+            {criticalAlertsCount > 0 && (
+              <span className="absolute -top-2 -right-2 bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full animate-bounce shadow-sm">
+                {criticalAlertsCount}
+              </span>
+            )}
+          </button>
+          <button 
             onClick={() => setImportModalOpen(true)} 
             className="flex items-center gap-2 bg-white hover:bg-slate-50 px-5 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:text-slate-800 transition-all border border-slate-200 shadow-sm active:scale-95 group"
           >
@@ -297,6 +319,13 @@ const Employees = () => {
             Batch Sync
           </button>
           <button 
+            onClick={() => setSyncGajiModalOpen(true)} 
+            className="flex items-center gap-2 bg-emerald-50 hover:bg-emerald-100 px-5 py-2.5 rounded-xl text-sm font-semibold text-emerald-700 hover:text-emerald-800 transition-all border border-emerald-200 shadow-sm active:scale-95 group"
+          >
+            <Banknote className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
+            Sync Gaji Normal
+          </button>
+          <button 
             onClick={() => setAddModalOpen(true)} 
             className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.98]"
           >
@@ -307,7 +336,7 @@ const Employees = () => {
 
       {/* 2. Global Filter Matrix */}
       <div className="bg-white p-6 border border-slate-200 rounded-2xl shadow-sm mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-5">
           <div className="space-y-2">
             <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">Search Personnel</label>
             <div className="relative group">
@@ -366,6 +395,23 @@ const Employees = () => {
               >
                 <option value="">All Ranks</option>
                 {masterOptions.positions.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+              <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                <Filter className="w-4 h-4 text-slate-400" />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">Emp. Status</label>
+            <div className="relative">
+              <select 
+                value={empStatusFilter} 
+                onChange={e => setEmpStatusFilter(e.target.value)} 
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 cursor-pointer appearance-none transition-all"
+              >
+                <option value="">All Statuses</option>
+                {masterOptions.employmentStatuses.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
               <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
                 <Filter className="w-4 h-4 text-slate-400" />
@@ -488,6 +534,9 @@ const Employees = () => {
                   <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">PTKP</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Marital</span>
+                </th>
+                <th className="px-6 py-4 border-b border-slate-200">
                   <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">No. KK</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
@@ -607,6 +656,7 @@ const Employees = () => {
                   <td className="px-6 py-3 text-xs text-slate-600">{emp.bpjsKesehatan || '-'}</td>
                   <td className="px-6 py-3 text-xs text-slate-600">{emp.npwp || '-'}</td>
                   <td className="px-6 py-3 text-xs text-slate-600">{emp.ptkpStatus || '-'}</td>
+                  <td className="px-6 py-3 text-xs text-slate-600">{emp.maritalStatus || '-'}</td>
                   <td className="px-6 py-3 text-xs text-slate-600">{emp.kkNumber || '-'}</td>
                   <td className="px-6 py-3 text-xs text-slate-600">{emp.idNumber || '-'}</td>
                   <td className="px-6 py-3 text-xs text-slate-600">{emp.birthDate ? new Date(emp.birthDate).toLocaleDateString() : '-'}</td>
@@ -724,6 +774,7 @@ const Employees = () => {
                     <div>
                       <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">Department</label>
                       <CreatableSelect 
+                        menuPortalTarget={document.body}
                         styles={customSelectStyles} 
                         isClearable 
                         placeholder="Select..."
@@ -735,6 +786,7 @@ const Employees = () => {
                     <div>
                       <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">Position</label>
                       <CreatableSelect 
+                        menuPortalTarget={document.body}
                         styles={customSelectStyles} 
                         isClearable 
                         placeholder="Select..."
@@ -746,6 +798,7 @@ const Employees = () => {
                     <div>
                       <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">Section</label>
                       <CreatableSelect 
+                        menuPortalTarget={document.body}
                         styles={customSelectStyles} 
                         isClearable 
                         placeholder="Select..."
@@ -863,24 +916,78 @@ const Employees = () => {
                     </div>
                     <div>
                       <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Grade</label>
-                      <CreatableSelect styles={customSelectStyles} isClearable options={toSelectOptions(masterOptions.grades)} value={newEmployee.grade ? {label: newEmployee.grade, value: newEmployee.grade} : null} onChange={(val) => setNewEmployee({...newEmployee, grade: val ? val.value : ''})} />
+                      <CreatableSelect menuPortalTarget={document.body} styles={customSelectStyles} isClearable options={toSelectOptions(masterOptions.grades)} value={newEmployee.grade ? {label: newEmployee.grade, value: newEmployee.grade} : null} onChange={(val) => setNewEmployee({...newEmployee, grade: val ? val.value : ''})} />
                     </div>
                     <div>
                       <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Employment Status</label>
-                      <CreatableSelect styles={customSelectStyles} isClearable options={toSelectOptions(masterOptions.employmentStatuses)} value={newEmployee.employmentStatus ? {label: newEmployee.employmentStatus, value: newEmployee.employmentStatus} : null} onChange={(val) => setNewEmployee({...newEmployee, employmentStatus: val ? val.value : ''})} />
+                      <CreatableSelect menuPortalTarget={document.body} styles={customSelectStyles} isClearable options={toSelectOptions(masterOptions.employmentStatuses)} value={newEmployee.employmentStatus ? {label: newEmployee.employmentStatus, value: newEmployee.employmentStatus} : null} onChange={(val) => setNewEmployee({...newEmployee, employmentStatus: val ? val.value : ''})} />
                     </div>
                     <div>
-                      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Contract Duration</label>
-                      <CreatableSelect styles={customSelectStyles} isClearable options={toSelectOptions(masterOptions.contractDurations)} value={newEmployee.contractDuration ? {label: newEmployee.contractDuration, value: newEmployee.contractDuration} : null} onChange={(val) => setNewEmployee({...newEmployee, contractDuration: val ? val.value : ''})} />
+                      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Type Gaji</label>
+                      <select 
+                        value={newEmployee.salaryCategory || 'UMK/UMR'} 
+                        onChange={e => setNewEmployee({...newEmployee, salaryCategory: e.target.value})} 
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all appearance-none cursor-pointer"
+                      >
+                        <option value="UMK/UMR">UMK / UMR</option>
+                        <option value="ALL IN">ALL IN</option>
+                        <option value="HARIAN">HARIAN</option>
+                      </select>
                     </div>
-                    <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Join Date</label><input type="date" value={newEmployee.joinDate} onChange={e => setNewEmployee({...newEmployee, joinDate: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
-                    <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Contract End</label><input type="date" value={newEmployee.contractEnd} onChange={e => setNewEmployee({...newEmployee, contractEnd: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
+                    <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Join Date</label><input type="date" value={newEmployee.joinDate} onChange={e => {
+                      const newJoinDate = e.target.value;
+                      let newEnd = newEmployee.contractEnd;
+                      if (newJoinDate && newEmployee.contractDuration && (newEmployee.employmentStatus?.toUpperCase() === 'PKWT' || newEmployee.employmentStatus?.toUpperCase() === 'KONTRAK')) {
+                        const start = new Date(newJoinDate);
+                        if (!isNaN(start.getTime())) {
+                          const match = newEmployee.contractDuration.match(/(\d+)\s*(Bulan|Month|Tahun|Year)/i);
+                          if (match) {
+                            const num = parseInt(match[1]);
+                            const unit = match[2].toLowerCase();
+                            let end = new Date(start);
+                            if (unit === 'bulan' || unit === 'month') end.setMonth(end.getMonth() + num);
+                            else if (unit === 'tahun' || unit === 'year') end.setFullYear(end.getFullYear() + num);
+                            newEnd = end.toISOString().split('T')[0];
+                          }
+                        }
+                      }
+                      setNewEmployee({...newEmployee, joinDate: newJoinDate, contractEnd: newEnd});
+                    }} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
+                    {(newEmployee.employmentStatus?.toUpperCase() === 'PKWT' || newEmployee.employmentStatus?.toUpperCase() === 'KONTRAK') && (
+                      <>
+                        <div>
+                          <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Contract Duration</label>
+                          <CreatableSelect menuPortalTarget={document.body} styles={customSelectStyles} isClearable options={toSelectOptions(masterOptions.contractDurations)} value={newEmployee.contractDuration ? {label: newEmployee.contractDuration, value: newEmployee.contractDuration} : null} onChange={(val) => {
+                            const duration = val ? val.value : '';
+                            let newEnd = newEmployee.contractEnd;
+                            if (duration && newEmployee.joinDate) {
+                              const start = new Date(newEmployee.joinDate);
+                              if (!isNaN(start.getTime())) {
+                                const match = duration.match(/(\d+)\s*(Bulan|Month|Tahun|Year)/i);
+                                if (match) {
+                                  const num = parseInt(match[1]);
+                                  const unit = match[2].toLowerCase();
+                                  let end = new Date(start);
+                                  if (unit === 'bulan' || unit === 'month') end.setMonth(end.getMonth() + num);
+                                  else if (unit === 'tahun' || unit === 'year') end.setFullYear(end.getFullYear() + num);
+                                  newEnd = end.toISOString().split('T')[0];
+                                }
+                              }
+                            }
+                            setNewEmployee({...newEmployee, contractDuration: duration, contractEnd: newEnd});
+                          }} />
+                        </div>
+                        <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Contract End</label><input type="date" value={newEmployee.contractEnd} onChange={e => setNewEmployee({...newEmployee, contractEnd: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
+                      </>
+                    )}
                     <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">BPJS Ketenagakerjaan</label><input value={newEmployee.bpjsTk} onChange={e => setNewEmployee({...newEmployee, bpjsTk: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
                     <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">BPJS Kesehatan</label><input value={newEmployee.bpjsKesehatan} onChange={e => setNewEmployee({...newEmployee, bpjsKesehatan: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
                     <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">NPWP</label><input value={newEmployee.npwp} onChange={e => setNewEmployee({...newEmployee, npwp: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
                     <div className="grid grid-cols-2 gap-4">
-                      <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Leave Quota</label><input type="number" value={newEmployee.leaveQuota} onChange={e => setNewEmployee({...newEmployee, leaveQuota: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
-                      <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Remaining</label><input type="number" value={newEmployee.remainingLeave} onChange={e => setNewEmployee({...newEmployee, remainingLeave: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
+                      <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Leave Quota</label><input type="number" readOnly={!!newEmployee.dbId} value={newEmployee.leaveQuota} onChange={e => setNewEmployee({...newEmployee, leaveQuota: e.target.value})} className={`w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 ${newEmployee.dbId ? 'bg-slate-100 cursor-not-allowed text-slate-500' : 'text-slate-800'}`} /></div>
+                      {!!newEmployee.dbId && (
+                        <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Remaining</label><input type="number" readOnly value={newEmployee.remainingLeave} className="w-full bg-slate-100 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-500 cursor-not-allowed" /></div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -890,14 +997,50 @@ const Employees = () => {
                     <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Family Card (KK)</label><input value={newEmployee.kkNumber} onChange={e => setNewEmployee({...newEmployee, kkNumber: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
                     <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Date of Birth</label><input type="date" value={newEmployee.birthDate} onChange={e => setNewEmployee({...newEmployee, birthDate: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
                     <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Place of Birth</label><input value={newEmployee.birthPlace} onChange={e => setNewEmployee({...newEmployee, birthPlace: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
-                    <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Religion</label><input value={newEmployee.religion} onChange={e => setNewEmployee({...newEmployee, religion: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
-                    <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Education</label><input value={newEmployee.education} onChange={e => setNewEmployee({...newEmployee, education: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Religion</label>
+                      <select 
+                        value={newEmployee.religion || ''} 
+                        onChange={e => setNewEmployee({...newEmployee, religion: e.target.value})} 
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all appearance-none cursor-pointer"
+                      >
+                        <option value="">Select Religion...</option>
+                        {['Islam', 'Kristen', 'Katolik', 'Hindu', 'Buddha', 'Konghucu'].map(rel => (
+                          <option key={rel} value={rel}>{rel}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Education</label>
+                      <select 
+                        value={newEmployee.education || ''} 
+                        onChange={e => setNewEmployee({...newEmployee, education: e.target.value})} 
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all appearance-none cursor-pointer"
+                      >
+                        <option value="">Select Education...</option>
+                        {['SD', 'SMP', 'SMA', 'D1', 'D2', 'D3', 'S1', 'S2', 'S3'].map(edu => (
+                          <option key={edu} value={edu}>{edu}</option>
+                        ))}
+                      </select>
+                    </div>
                     <div className="lg:col-span-2"><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Address</label><input value={newEmployee.address} onChange={e => setNewEmployee({...newEmployee, address: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
                     <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Major</label><input value={newEmployee.major} onChange={e => setNewEmployee({...newEmployee, major: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
                   </div>
                 )}
                 {activeTab === 'family' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Marital Status</label>
+                      <select 
+                        value={newEmployee.maritalStatus || ''} 
+                        onChange={e => setNewEmployee({...newEmployee, maritalStatus: e.target.value})}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all appearance-none cursor-pointer"
+                      >
+                        <option value="">Select Status...</option>
+                        <option value="Menikah">Menikah</option>
+                        <option value="Belum Menikah">Belum Menikah</option>
+                      </select>
+                    </div>
                     <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Number of Children</label><input type="number" value={newEmployee.numberOfChildren} onChange={e => setNewEmployee({...newEmployee, numberOfChildren: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
                     <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Father's Name</label><input value={newEmployee.fatherName} onChange={e => setNewEmployee({...newEmployee, fatherName: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
                     <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Mother's Name</label><input value={newEmployee.motherName} onChange={e => setNewEmployee({...newEmployee, motherName: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
@@ -1114,6 +1257,82 @@ const Employees = () => {
         </div>
       )}
 
+      {/* PKWT Alerts Modal */}
+      {isPkwtModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setPkwtModalOpen(false)}></div>
+          <div className="bg-white w-full max-w-2xl relative z-10 overflow-hidden border border-slate-200 shadow-2xl animate-in zoom-in-95 duration-300 rounded-3xl">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-orange-50 rounded-xl flex items-center justify-center border border-orange-100">
+                  <FileText className="w-6 h-6 text-orange-500" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 text-xl tracking-tight">PKWT Contract Alerts</h3>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">Expiring employment contracts</p>
+                </div>
+              </div>
+              <button onClick={() => setPkwtModalOpen(false)}>
+                <X className="w-5 h-5 text-slate-400 hover:text-slate-600 transition-colors" />
+              </button>
+            </div>
+            <div className="p-6 max-h-[60vh] overflow-y-auto bg-slate-50">
+              <div className="space-y-4">
+                {pkwtAlerts.length === 0 ? (
+                  <div className="text-center py-12 text-slate-500 bg-white rounded-2xl border border-slate-200 shadow-sm">
+                    <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto mb-3" />
+                    <p className="font-bold text-slate-700">No Pending Contracts</p>
+                    <p className="text-xs mt-1">All employee contracts are up to date.</p>
+                  </div>
+                ) : pkwtAlerts.map(alert => (
+                  <div key={alert.id} className={`p-4 rounded-2xl border flex items-center justify-between shadow-sm transition-all hover:scale-[1.01] ${
+                    alert.alertLevel === 'expired' ? 'bg-rose-50 border-rose-200' : 
+                    alert.alertLevel === 'critical' ? 'bg-orange-50 border-orange-200' :
+                    'bg-amber-50 border-amber-200'
+                  }`}>
+                    <div className="flex items-center">
+                      <AlertCircle className={`mr-4 ${
+                        alert.alertLevel === 'expired' ? 'text-rose-500' : 
+                        alert.alertLevel === 'critical' ? 'text-orange-500' : 'text-amber-500'
+                      }`} size={24} />
+                      <div>
+                        <h4 className="font-bold text-slate-800">{alert.employeeName} <span className="text-xs font-semibold text-slate-500 bg-white/50 px-2 py-0.5 rounded-md ml-2 border border-slate-200/50">{alert.employeeCode}</span></h4>
+                        <p className="text-xs text-slate-600 mt-1 font-medium">Ends: {new Date(alert.contractEnd).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric'})}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider shadow-sm border ${
+                        alert.alertLevel === 'expired' ? 'bg-white border-rose-200 text-rose-700' : 
+                        alert.alertLevel === 'critical' ? 'bg-white border-orange-200 text-orange-700' : 'bg-white border-amber-200 text-amber-700'
+                      }`}>
+                        {alert.daysLeft <= 0 ? 'Expired' : `${alert.daysLeft} Days Left`}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="p-6 bg-white border-t border-slate-100 flex justify-end">
+              <button 
+                onClick={() => setPkwtModalOpen(false)}
+                className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-sm transition-all"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sync Gaji Normal Modal */}
+      {isSyncGajiModalOpen && (
+        <SyncGajiNormalModal 
+          departments={masterOptions.departments}
+          onClose={() => setSyncGajiModalOpen(false)}
+          onDone={() => { setSyncGajiModalOpen(false); queryClient.invalidateQueries(['employees']); }}
+        />
+      )}
+
       <style>{`
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -1125,6 +1344,180 @@ const Employees = () => {
           50% { top: 85%; }
         }
       `}</style>
+    </div>
+  );
+};
+
+const SyncGajiNormalModal = ({ departments, onClose, onDone }) => {
+  const [selectedDept, setSelectedDept] = useState('');
+  const [employees, setEmployees] = useState([]);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  useEffect(() => {
+    if (selectedDept) {
+      fetchDeptEmployees(selectedDept);
+    } else {
+      setEmployees([]);
+      setSelectedIds([]);
+    }
+  }, [selectedDept]);
+
+  const fetchDeptEmployees = async (dept) => {
+    setLoading(true);
+    try {
+      const res = await employeeAPI.getAll({ dept, limit: 1000 });
+      setEmployees(res.data || []);
+      // Auto-select all by default
+      setSelectedIds((res.data || []).map(e => e.id));
+    } catch (err) {
+      alert('Gagal mengambil data karyawan');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleToggleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedIds(employees.map(emp => emp.id));
+    } else {
+      setSelectedIds([]);
+    }
+  };
+
+  const handleToggleEmployee = (id) => {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(e => e !== id) : [...prev, id]
+    );
+  };
+
+  const handleSync = async () => {
+    if (selectedIds.length === 0) return alert('Pilih minimal 1 karyawan');
+    if (!window.confirm(`Yakin ingin menyamakan tipe gaji ${selectedIds.length} karyawan menjadi UMK/UMR? Gaji Pokok & Tunjangan mereka akan otomatis terisi sesuai setting Matriks/Global.`)) return;
+    
+    setSyncing(true);
+    try {
+      await employeeAPI.batchUpdateSalaryCategory({ 
+        employeeIds: selectedIds, 
+        salaryCategory: 'UMK/UMR' 
+      });
+      alert('Sinkronisasi gaji normal berhasil!');
+      onDone();
+    } catch (err) {
+      alert('Terjadi kesalahan saat sinkronisasi');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose}></div>
+      <div className="bg-white rounded-2xl w-full max-w-2xl relative z-10 flex flex-col max-h-[90vh] shadow-2xl overflow-hidden">
+        
+        {/* Header */}
+        <div className="p-6 border-b border-slate-100 bg-emerald-50/30 flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center border border-emerald-200">
+              <Banknote className="w-6 h-6 text-emerald-600" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-800 text-xl">Sync Gaji Normal (UMK/UMR)</h3>
+              <p className="text-xs text-slate-500 mt-1">Ubah kategori gaji secara massal berdasarkan departemen</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-10 h-10 flex items-center justify-center hover:bg-slate-100 rounded-xl transition-all">
+            <X className="w-5 h-5 text-slate-500" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 flex-1 overflow-y-auto">
+          <div className="mb-6">
+            <label className="block text-sm font-semibold text-slate-700 mb-2">1. Pilih Departemen</label>
+            <select
+              value={selectedDept}
+              onChange={e => setSelectedDept(e.target.value)}
+              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+            >
+              <option value="">-- Pilih Departemen --</option>
+              {departments.map(d => (
+                <option key={d.id} value={d.name}>{d.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {selectedDept && (
+            <div>
+              <div className="flex justify-between items-center mb-3">
+                <label className="block text-sm font-semibold text-slate-700">2. Pilih Karyawan ({selectedIds.length} / {employees.length} terpilih)</label>
+              </div>
+              
+              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                {loading ? (
+                  <div className="p-8 flex flex-col items-center text-slate-400">
+                    <Loader2 className="w-8 h-8 animate-spin text-emerald-500 mb-2" />
+                    <span className="text-sm">Memuat data karyawan...</span>
+                  </div>
+                ) : employees.length === 0 ? (
+                  <div className="p-8 text-center text-slate-500 text-sm">
+                    Tidak ada karyawan di departemen ini.
+                  </div>
+                ) : (
+                  <>
+                    <div className="bg-slate-50 p-3 border-b border-slate-200 flex items-center gap-3">
+                      <input 
+                        type="checkbox" 
+                        id="selectAll"
+                        checked={selectedIds.length === employees.length && employees.length > 0}
+                        onChange={handleToggleSelectAll}
+                        className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <label htmlFor="selectAll" className="text-sm font-bold text-slate-700 cursor-pointer">Pilih Semua Karyawan</label>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto divide-y divide-slate-100">
+                      {employees.map(emp => (
+                        <label key={emp.id} className="flex items-center gap-4 p-3 hover:bg-slate-50 cursor-pointer transition-colors">
+                          <input 
+                            type="checkbox" 
+                            checked={selectedIds.includes(emp.id)}
+                            onChange={() => handleToggleEmployee(emp.id)}
+                            className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <div>
+                            <p className="text-sm font-semibold text-slate-800">{emp.name}</p>
+                            <p className="text-xs text-slate-500">{emp.employeeCode} • {emp.position || 'No Position'}</p>
+                          </div>
+                          <div className="ml-auto">
+                            <span className="px-2 py-1 bg-slate-100 text-slate-600 text-[10px] font-bold rounded-md uppercase">
+                              {emp.salaryCategory || 'BLM DISET'}
+                            </span>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+          <button onClick={onClose} className="px-5 py-2.5 rounded-xl font-semibold text-slate-600 hover:bg-slate-200 transition-all text-sm">
+            Batal
+          </button>
+          <button 
+            onClick={handleSync} 
+            disabled={syncing || selectedIds.length === 0}
+            className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold text-sm shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {syncing ? <><Loader2 className="w-4 h-4 animate-spin" /> Menyinkronkan...</> : <><Save className="w-4 h-4" /> Terapkan Gaji Normal</>}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
@@ -1180,7 +1573,8 @@ const customSelectStyles = {
     color: '#94a3b8',
     fontSize: '14px',
     fontWeight: '500'
-  })
+  }),
+  menuPortal: (base) => ({ ...base, zIndex: 9999 })
 };
 
 export default Employees;

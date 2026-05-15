@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Users, Clock, CalendarCheck, FileCheck, 
   TrendingUp, TrendingDown, UserX, ChevronRight,
-  Loader2, ShieldCheck
+  Loader2, ShieldCheck, Banknote
 } from 'lucide-react';
 import api from '../../services/api';
 
@@ -41,7 +41,14 @@ const DirectorDashboard = () => {
     refetchInterval: 60000,
   });
 
+  const { data: payrollData } = useQuery({
+    queryKey: ['director-payroll'],
+    queryFn: () => api.get('/payroll/summary').then(r => r.data),
+    refetchInterval: 60000,
+  });
+
   const stats = statsData?.data || {};
+  const payrollStats = payrollData?.data || {};
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-5 duration-500">
@@ -99,6 +106,14 @@ const DirectorDashboard = () => {
             sub="Awaiting"
             icon={FileCheck} 
             color="bg-violet-50 border-violet-100 text-violet-600"
+          />
+          <StatCard 
+            title="Total Payroll" 
+            value={payrollStats.currentPeriod?.totalNet ? `Rp ${(payrollStats.currentPeriod.totalNet / 1000000).toFixed(1)}M` : 'Rp 0'} 
+            sub={payrollStats.currentPeriod?.period || 'This Month'}
+            icon={Banknote} 
+            color="bg-slate-50 border-slate-200 text-slate-700"
+            trend={payrollStats.change > 0 ? "warn" : "up"}
           />
         </div>
       )}

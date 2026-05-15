@@ -176,6 +176,7 @@ export const employeeAPI = {
     return apiFetch(`/employees/master-options${q ? `?${q}` : ''}`);
   },
   batchUpdateShift: (data) => apiFetch('/employees/batch-shift', { method: 'PUT', body: JSON.stringify(data) }),
+  batchUpdateSalaryCategory: (data) => apiFetch('/employees/batch-salary-category', { method: 'PUT', body: JSON.stringify(data) }),
 };
 
 // ─── Attendance API ──────────────────────────────
@@ -364,6 +365,65 @@ export const direkturAPI = {
     const q = new URLSearchParams(params).toString();
     return apiFetch(`/direktur/attendance-options${q ? `?${q}` : ''}`);
   },
+};
+
+// ─── Payroll API ─────────────────────────────────
+export const payrollAPI = {
+  // Config
+  getConfig: () => apiFetch('/payroll/config'),
+  updateConfig: (data) => apiFetch('/payroll/config', { method: 'PUT', body: JSON.stringify(data) }),
+  // Salary Components
+  getComponents: () => apiFetch('/payroll/components'),
+  createComponent: (data) => apiFetch('/payroll/components', { method: 'POST', body: JSON.stringify(data) }),
+  updateComponent: (id, data) => apiFetch(`/payroll/components/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteComponent: (id) => apiFetch(`/payroll/components/${id}`, { method: 'DELETE' }),
+  // Overtime Rules
+  getOvertimeRules: () => apiFetch('/payroll/overtime-rules'),
+  createOvertimeRule: (data) => apiFetch('/payroll/overtime-rules', { method: 'POST', body: JSON.stringify(data) }),
+  updateOvertimeRule: (id, data) => apiFetch(`/payroll/overtime-rules/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteOvertimeRule: (id) => apiFetch(`/payroll/overtime-rules/${id}`, { method: 'DELETE' }),
+  // Employee Salary
+  getEmployeeSalaries: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return apiFetch(`/payroll/employee-salary${q ? `?${q}` : ''}`);
+  },
+  getEmployeeSalary: (empId) => apiFetch(`/payroll/employee-salary/${empId}`),
+  setEmployeeSalary: (empId, data) => apiFetch(`/payroll/employee-salary/${empId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  batchSetSalary: (data) => apiFetch('/payroll/employee-salary/batch', { method: 'PUT', body: JSON.stringify(data) }),
+  // PKWT
+  getPkwtAlerts: () => apiFetch('/payroll/pkwt-alerts'),
+  // Position Allowance Matrix
+  getPositionAllowances: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return apiFetch(`/payroll/position-allowances${q ? `?${q}` : ''}`);
+  },
+  getPositionAllowanceMatrix: () => apiFetch('/payroll/position-allowance-matrix'),
+  upsertPositionAllowance: (data) => apiFetch('/payroll/position-allowances', { method: 'PUT', body: JSON.stringify(data) }),
+  batchUpsertPositionAllowances: (data) => apiFetch('/payroll/position-allowances/batch', { method: 'PUT', body: JSON.stringify(data) }),
+  deletePositionAllowance: (id) => apiFetch(`/payroll/position-allowances/${id}`, { method: 'DELETE' }),
+  // Payroll Operations
+  getAll: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return apiFetch(`/payroll/list${q ? `?${q}` : ''}`);
+  },
+  getById: (id) => apiFetch(`/payroll/detail/${id}`),
+  generate: (data) => apiFetch('/payroll/generate', { method: 'POST', body: JSON.stringify(data) }),
+  submitForApproval: (id) => apiFetch(`/payroll/${id}/submit`, { method: 'PUT' }),
+  approve: (id) => apiFetch(`/payroll/${id}/approve`, { method: 'PUT' }),
+  reject: (id, data) => apiFetch(`/payroll/${id}/reject`, { method: 'PUT', body: JSON.stringify(data) }),
+  finalize: (id) => apiFetch(`/payroll/${id}/finalize`, { method: 'PUT' }),
+  cancel: (id) => apiFetch(`/payroll/${id}/cancel`, { method: 'PUT' }),
+  exportExcel: async (id) => {
+    const token = localStorage.getItem('accessToken');
+    const res = await fetch(`/api/payroll/${id}/export-excel`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error('Export failed');
+    return { data: await res.blob(), filename: res.headers.get('content-disposition')?.split('filename=')[1] || `payroll.xlsx` };
+  },
+  getSlip: (payrollId, empId) => apiFetch(`/payroll/${payrollId}/slip/${empId}`),
+  getMySlips: (empId) => apiFetch(`/payroll/my-slips/${empId}`),
+  getSummary: () => apiFetch('/payroll/summary'),
 };
 
 // ─── Default API helper (axios-like interface) ────

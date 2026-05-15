@@ -5,7 +5,7 @@ const { recordAuditLog } = require('./auditLogController');
 
 const getAll = async (req, res) => {
   try {
-    const { search, dept, section, position, status, page = 1, limit = 20, sortBy = 'createdAt', order = 'desc' } = req.query;
+    const { search, dept, section, position, status, empStatus, page = 1, limit = 20, sortBy = 'createdAt', order = 'desc' } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const where = {};
@@ -20,6 +20,7 @@ const getAll = async (req, res) => {
     if (section && section !== 'All') where.section = section;
     if (position && position !== 'All') where.position = position;
     if (status && status !== 'All') where.status = status;
+    if (empStatus && empStatus !== 'All') where.employmentStatus = empStatus;
 
     let orderBy = {};
     if (sortBy === 'dept') {
@@ -60,12 +61,14 @@ const getAll = async (req, res) => {
         contractDuration: emp.contractDuration,
         joinDate: emp.joinDate,
         contractEnd: emp.contractEnd,
+        salaryCategory: emp.salaryCategory,
         faceId: emp.faceId || (emp.faceStatus === 'ENROLLED' ? 'Enrolled' : 'Pending'),
         facePhoto: emp.facePhoto,
         bpjsTk: emp.bpjsTk,
         bpjsKesehatan: emp.bpjsKesehatan,
         npwp: emp.npwp,
         ptkpStatus: emp.ptkpStatus,
+        maritalStatus: emp.maritalStatus,
         kkNumber: emp.kkNumber,
         birthDate: emp.birthDate,
         birthPlace: emp.birthPlace,
@@ -139,11 +142,11 @@ const create = async (req, res) => {
       verifyCode: rest.verifyCode, grade: rest.grade, section: rest.section, employmentStatus: rest.employmentStatus,
       contractDuration: rest.contractDuration, faceId: rest.faceId, facePhoto: rest.facePhoto, faceDescriptor: rest.faceDescriptor ? JSON.parse(rest.faceDescriptor) : null,
       bpjsTk: rest.bpjsTk, bpjsKesehatan: rest.bpjsKesehatan,
-      npwp: rest.npwp, ptkpStatus: rest.ptkpStatus, kkNumber: rest.kkNumber, birthPlace: rest.birthPlace,
+      npwp: rest.npwp, ptkpStatus: rest.ptkpStatus, maritalStatus: rest.maritalStatus, kkNumber: rest.kkNumber, birthPlace: rest.birthPlace,
       address: rest.address, education: rest.education, major: rest.major, religion: rest.religion,
       numberOfChildren: rest.numberOfChildren ? parseInt(rest.numberOfChildren) : null,
       fatherName: rest.fatherName, motherName: rest.motherName, spouseName: rest.spouseName,
-      emergencyContact: rest.emergencyContact, notes: rest.notes,
+      emergencyContact: rest.emergencyContact, notes: rest.notes, salaryCategory: rest.salaryCategory || 'UMK/UMR',
       joinDate: rest.joinDate ? new Date(rest.joinDate) : null,
       contractEnd: rest.contractEnd ? new Date(rest.contractEnd) : null,
       birthDate: rest.birthDate ? new Date(rest.birthDate) : null,
@@ -430,4 +433,33 @@ const checkDuplicate = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, create, update, remove, importExcel, getProgress, getMasterOptions, batchUpdateShift, checkDuplicate };
+const batchUpdateSalaryCategory = async (req, res) => {
+  try {
+    const { employeeIds, salaryCategory } = req.body;
+    
+    if (!employeeIds || !Array.isArray(employeeIds) || employeeIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'Employee IDs are required' });
+    }
+
+    if (!salaryCategory) {
+      return res.status(400).json({ success: false, message: 'Salary Category is required' });
+    }
+
+    const result = await prisma.employee.updateMany({
+      where: {
+        id: { in: employeeIds.map(id => parseInt(id)) }
+      },
+      data: { salaryCategory },
+    });
+
+    res.json({ 
+      success: true, 
+      message: `Updated salary category for ${result.count} employees`,
+      data: result 
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getAll, getById, create, update, remove, importExcel, getProgress, getMasterOptions, batchUpdateShift, batchUpdateSalaryCategory, checkDuplicate };

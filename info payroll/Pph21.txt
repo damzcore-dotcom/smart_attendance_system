@@ -1,0 +1,10 @@
+Mengenai PPh 21, Anda dapat menyetel potongan tersebut dengan cara yang sangat fleksibel:
+
+Buka halaman Payroll Settings di Admin Panel.
+Pada tab Komponen Gaji, klik tombol + Tambah Komponen.
+Buat komponen baru dengan nama "PPh 21" dan atur tipenya sebagai Potongan.
+Anda dapat memilih metode perhitungannya:
+Nominal Tetap: Jika PPh 21 diinput berupa angka pasti (misal: Rp 150.000) oleh Accounting setelah dihitung di sistem pajak eksternal.
+Persentase (%): Jika potongannya berupa persentase tetap dari Gaji Pokok karyawan.
+Setelah selesai dibuat, komponen tersebut akan secara otomatis diterapkan. Jika Anda menyetelnya sebagai "Nominal Tetap", saat berada di tab Assign Gaji untuk seorang karyawan, Anda bisa memasukkan nominal potongan "PPh 21" spesifik untuk karyawan tersebut.
+Nantinya, pada saat Anda menekan tombol Generate Payroll, potongan PPh 21 tersebut akan langsung mengurangi komponen Gross Pay untuk mendapatkan Net Pay yang akurat. Silakan dicoba kembali!

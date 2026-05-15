@@ -45,6 +45,15 @@ enum ReqStatus {
   REJECTED
 }
 
+enum PayrollStatus {
+  DRAFT
+  AWAITING_APPROVAL
+  APPROVED
+  COMPLETED
+  REJECTED
+  CANCELLED
+}
+
 // ─── Models ─────────────────────────────────────────
 
 model User {
@@ -107,6 +116,7 @@ model Employee {
   bpjsKesehatan     String?
   npwp              String?
   ptkpStatus        String?
+  maritalStatus     String?
   kkNumber          String?
   birthDate         DateTime?
   birthPlace        String?
@@ -120,6 +130,7 @@ model Employee {
   spouseName        String?
   emergencyContact  String?
   notes             String?
+  salaryCategory    String?    @default("UMK/UMR")
   status        EmpStatus  @default(ACTIVE)
   faceStatus    FaceStatus @default(PENDING)
   leaveQuota     Int        @default(12)
@@ -133,6 +144,8 @@ model Employee {
   leaveRequests LeaveRequest[]
   notifications Notification[]
   user          User?
+  salary         EmployeeSalary?
+  payrollDetails PayrollDetail[]
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 }
@@ -265,4 +278,127 @@ model AuditLog {
   details     String?  // JSON or text describing what changed
   ipAddress   String?
   createdAt   DateTime @default(now())
+}
+
+// ─── Payroll System ─────────────────────────────────
+
+model PayrollConfig {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt
+}
+
+model SalaryComponent {
+  id           Int      @id @default(autoincrement())
+  name         String   @unique
+  type         String   // "ALLOWANCE" | "DEDUCTION"
+  isFixed      Boolean  @default(true)   // true = nominal, false = % of base
+  defaultValue Float    @default(0)
+  calculationType String @default("FIXED_MONTHLY") // "FIXED_MONTHLY" | "PER_ATTENDANCE" | "CONDITIONAL"
+  isTaxable    Boolean  @default(false)
+  isActive     Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  positionAllowances PositionAllowance[]
+}
+
+model PositionAllowance {
+  id                Int             @id @default(autoincrement())
+  position          String          // E.g., "Manager", "Staff", "Supervisor"
+  salaryComponentId Int
+  salaryComponent   SalaryComponent @relation(fields: [salaryComponentId], references: [id], onDelete: Cascade)
+  nominal           Float           @default(0)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@unique([position, salaryComponentId])
+}
+
+model OvertimeRule {
+  id         Int      @id @default(autoincrement())
+  name       String
+  dayType    String   // "WORKDAY" | "WEEKEND" | "HOLIDAY"
+  hourFrom   Float    // e.g. 0 = from hour 0
+  hourTo     Float    // e.g. 1 = up to hour 1
+  multiplier Float    // 1.5, 2.0, 3.0, 4.0
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+}
+
+model EmployeeSalary {
+  id                   Int       @id @default(autoincrement())
+  employeeId           Int       @unique
+  employee             Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employmentType       String    @default("TETAP")    // TETAP, KONTRAK, HARIAN
+  salaryType           String    @default("MONTHLY")  // MONTHLY, DAILY
+  baseSalary           Float     @default(0)
+  components           Json?     // [{componentId, name, type, value}]
+  // PKWT Fields
+  contractNumber       String?
+  contractStart        DateTime? @db.Date
+  contractEnd          DateTime? @db.Date
+  contractDuration     String?
+  contractRenewalCount Int       @default(0)
+  // Daily Worker Fields
+  dailyRate            Float?    // Tarif per hari
+  minWorkingDays       Int?      // Minimum hari kerja per bulan (configurable)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+}
+
+model Payroll {
+  id              Int            @id @default(autoincrement())
+  period          String         @unique // "2026-05"
+  periodName      String         // "Mei 2026"
+  status          PayrollStatus  @default(DRAFT)
+  totalEmployees  Int            @default(0)
+  totalGross      Float          @default(0)
+  totalDeductions Float          @default(0)
+  totalNet        Float          @default(0)
+  totalOvertime   Float          @default(0)
+  generatedBy     String?
+  approvedBy      String?
+  approvedAt      DateTime?
+  rejectedBy      String?
+  rejectionNote   String?
+  notes           String?
+  details         PayrollDetail[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+model PayrollDetail {
+  id               Int      @id @default(autoincrement())
+  payrollId        Int
+  payroll          Payroll  @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+  employeeId       Int
+  employee         Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeName     String
+  employeeCode     String
+  department       String
+  employmentType   String   // TETAP/KONTRAK/HARIAN
+  salaryType       String   // MONTHLY/DAILY
+  // Attendance Summary
+  workingDays      Int      @default(0)
+  daysPresent      Int      @default(0)
+  daysAbsent       Int      @default(0)
+  daysLate         Int      @default(0)
+  totalLateMinutes Int      @default(0)
+  // Salary Breakdown
+  baseSalary       Float    @default(0)
+  proRatedSalary   Float    @default(0)
+  allowances       Json?    // [{name, value}]
+  deductions       Json?    // [{name, value}]
+  attendancePenalty Float   @default(0) // Potongan kehadiran dari keterlambatan
+  overtimeHours    Float    @default(0)
+  overtimePay      Float    @default(0)
+  // Totals
+  grossPay         Float    @default(0)
+  totalDeduction   Float    @default(0)
+  netPay           Float    @default(0)
+  notes            String?
+  createdAt        DateTime @default(now())
 }

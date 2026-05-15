@@ -16,7 +16,9 @@ import {
   ScanFace,
   Database,
   Fingerprint,
-  Shield
+  Shield,
+  Banknote,
+  Receipt
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -38,6 +40,8 @@ const AdminLayout = () => {
     { name: 'Announcements', path: '/admin/announcements', icon: Megaphone, key: 'announcements' },
     { name: 'Face Check', path: '/admin/face-check', icon: ScanFace, key: 'face-check' },
     { name: 'Cuti & Kalender', path: '/admin/leave-requests', icon: CalendarCheck, key: 'leave-requests' },
+    { name: 'Payroll', path: '/admin/payroll', icon: Banknote, key: 'payroll' },
+    { name: 'Payroll Settings', path: '/admin/payroll-settings', icon: Receipt, key: 'payroll-settings' },
     { name: 'Backup', path: '/admin/backup', icon: Database, key: 'backup' },
     { name: 'Corrections', path: '/admin/corrections', icon: Edit3, key: 'corrections' },
     { name: 'Mesin Finger', path: '/admin/devices', icon: Fingerprint, key: 'settings' },

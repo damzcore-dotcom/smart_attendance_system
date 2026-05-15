@@ -1,0 +1,61 @@
+# Rencana Arsitektur & Implementasi Sistem Tunjangan Dinamis (Flexible Payroll System)
+
+Untuk membangun sistem *Payroll* yang *scalable* dan *compatible* dengan berbagai kebijakan perusahaan (Multi-Company/Multi-Policy), kita tidak bisa melakukan *hardcode* pada jenis atau besaran tunjangan. Sistem harus dirancang berbasis **Aturan (Rules) dan Hierarki**.
+
+Berikut adalah rancangan (plan) eksekusi sistem tunjangan yang sangat fleksibel:
+
+## 1. Konsep Dasar: 3 Pilar Tunjangan
+Sistem harus membagi tunjangan menjadi 3 pilar utama berdasarkan cara penghitungannya:
+
+*   **Tunjangan Tetap (Fixed Allowance):** Diberikan *full* setiap bulan terlepas dari kehadiran (Contoh: Tunjangan Jabatan, Tunjangan Komunikasi).
+*   **Tunjangan Berbasis Kehadiran (Attendance-Based):** Dihitung berdasarkan jumlah hari hadir / *Days Present* (Contoh: Uang Makan Harian, Uang Transport Harian).
+*   **Tunjangan Bersyarat (Conditional/Formula-Based):** Diberikan jika syarat tertentu terpenuhi (Contoh: Tunjangan Kehadiran Penuh / *Perfect Attendance Bonus*, Bonus Lembur).
+
+## 2. Hierarki Penetapan Nominal (Matrix Tunjangan)
+Karena besaran tunjangan berbeda-beda (misal: Tunjangan Jabatan Manager vs Staff), kita membutuhkan sistem **Hierarki Nilai**. Sistem akan mencari nominal dari tingkat paling spesifik ke tingkat paling umum:
+
+1.  **Level Individu (Employee Level):** Jika diatur khusus di menu *Assign Gaji* untuk orang tersebut (Override).
+2.  **Level Jabatan/Grade (Position Level):** (BARU) Setting matriks tunjangan berdasarkan Jabatan/Departemen. (Contoh: Semua "Manager" mendapat Tunjangan Jabatan Rp 2.000.000).
+3.  **Level Perusahaan (Global Level):** Nilai *default* jika tidak diatur di level individu atau jabatan (Contoh: Uang Makan Rp 15.000/hari untuk semua karyawan).
+
+## 3. Langkah-Langkah Pengerjaan (Action Plan)
+
+### Fase 1: Perluasan Skema Database (Master Data)
+Kita perlu memodifikasi `SalaryComponent` di database agar memiliki pengaturan perhitungan yang lebih cerdas.
+*   Tambahkan field `calculationType`: `FIXED_MONTHLY` (Tetap) atau `PER_ATTENDANCE` (Harian).
+*   Tambahkan field `isTaxable`: Apakah tunjangan ini kena pajak PPh21 atau tidak.
+*   **Buat Tabel Baru `PositionAllowance`:** Tabel matriks untuk menghubungkan Jabatan (Position/Grade) dengan `SalaryComponent` beserta nominalnya.
+
+### Fase 2: Pembuatan Menu "Matriks Tunjangan" (UI/UX)
+Kita akan menambahkan sub-menu baru di *Payroll Settings*: **"Setting Matriks Tunjangan"**.
+*   **Fitur:** HR/Accounting dapat memilih Jabatan (misal: Supervisor), lalu memilih jenis tunjangan (misal: Tunjangan Transport), dan memasukkan nominalnya.
+*   **Tujuan:** Mencegah HR memasukkan tunjangan satu per satu secara manual ke ribuan karyawan. Cukup atur di level Jabatan, semua karyawan di jabatan tersebut otomatis mendapatkan tunjangan yang sesuai.
+
+### Fase 3: Integrasi dengan "Sync Gaji Normal (UMK/UMR)"
+Ketika tombol **"Sync Gaji Normal"** (yang sebelumnya Anda minta) ditekan:
+*   Karyawan yang dipilih akan di-set `typeGaji`-nya menjadi `UMK/UMR`.
+*   Gaji Pokok mereka akan otomatis mengikuti Setting Global UMK.
+*   **Tunjangan:** Sistem akan membaca Jabatan/Grade mereka, lalu otomatis menarik data dari *Matriks Tunjangan* dan menyimpannya ke profil karyawan tersebut tanpa perlu di-input manual.
+
+### Fase 4: Penyesuaian Modul "Assign Gaji" (ALL IN / HARIAN)
+Menu *Assign Gaji* saat ini (yang sudah saya filter hanya untuk ALL IN dan HARIAN) akan berfungsi sebagai **Individual Override**.
+*   **Karyawan ALL IN:** Biasanya Gaji Pokok sudah mencakup semuanya. Jika perusahaan ingin payslip-nya tetap dijabarkan (misal: Gaji Pokok 80%, Tunj. Tetap 20%), kita bisa buat fitur *Auto-Split* atau biarkan HR meng-input nominal pastinya secara spesifik untuk individu tersebut.
+
+### Fase 5: Mesin Penghitung Payroll (Payroll Engine Update)
+Pada saat men-generate slip gaji bulan berjalan:
+1. Engine membaca tipe gaji karyawan (UMK / ALL IN / HARIAN).
+2. Engine membaca daftar tunjangan karyawan tersebut.
+3. Jika tunjangan berstatus `PER_ATTENDANCE`, sistem akan mengalikan nominal tunjangan dengan total hari hadir dari modul absensi.
+4. Jika berstatus `FIXED_MONTHLY`, sistem memasukkan nominal penuh (dengan prorata jika ada aturan masuk pertengahan bulan).
+
+---
+
+## Kesimpulan & Rekomendasi Saat Ini
+
+Struktur di atas menjamin aplikasi Anda akan **100% kompatibel** dijual ke perusahaan logistik, pabrik, maupun startup, karena mereka cukup membuat formula tunjangannya sendiri di Master Data.
+
+**Apakah Anda setuju dengan rancangan (Plan) ini?** 
+Jika setuju, saya akan mulai melakukan:
+1. Update database Prisma untuk mendukung *Matriks Tunjangan* dan *Calculation Type*.
+2. Membuat UI "Matriks Tunjangan" di *Payroll Settings*.
+3. Menyelesaikan fitur "Sync Gaji Normal" yang mengintegrasikan matriks ini.
