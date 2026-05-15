@@ -26,7 +26,8 @@ const verifyToken = (req, res, next) => {
  * Require ADMIN or SUPER_ADMIN role
  */
 const requireAdmin = (req, res, next) => {
-  if (req.user.role !== 'ADMIN' && req.user.role !== 'SUPER_ADMIN') {
+  const allowed = ['ADMIN', 'SUPER_ADMIN', 'ACCOUNTING'];
+  if (!allowed.includes(req.user.role)) {
     return res.status(403).json({ success: false, message: 'Admin access required' });
   }
   next();

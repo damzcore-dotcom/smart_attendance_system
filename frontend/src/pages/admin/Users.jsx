@@ -317,6 +317,7 @@ const Users = () => {
               <option value="ALL">All Roles</option>
               <option value="SUPER_ADMIN">Super Admin</option>
               <option value="ADMIN">Admin</option>
+              <option value="ACCOUNTING">Admin Accounting</option>
               <option value="DIREKTUR">Direktur</option>
               <option value="MANAGER">Manager</option>
               <option value="EMPLOYEE">Employee</option>
@@ -379,11 +380,12 @@ const Users = () => {
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border transition-all ${
                       user.role === 'SUPER_ADMIN' ? 'bg-purple-50 text-purple-600 border-purple-200' :
                       user.role === 'ADMIN' ? 'bg-blue-50 text-blue-600 border-blue-200' :
+                      user.role === 'ACCOUNTING' ? 'bg-amber-50 text-amber-600 border-amber-200' :
                       user.role === 'DIREKTUR' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' :
-                      user.role === 'MANAGER' ? 'bg-amber-50 text-amber-600 border-amber-200' :
+                      user.role === 'MANAGER' ? 'bg-orange-50 text-orange-600 border-orange-200' :
                       'bg-slate-50 text-slate-600 border-slate-200'
                     }`}>
-                      {user.role === 'SUPER_ADMIN' || user.role === 'ADMIN' ? <Shield className="w-3 h-3" /> : <User className="w-3 h-3" />}
+                      {user.role === 'SUPER_ADMIN' || user.role === 'ADMIN' || user.role === 'ACCOUNTING' ? <Shield className="w-3 h-3" /> : <User className="w-3 h-3" />}
                       {user.role.replace('_', ' ')}
                     </span>
                   </td>
@@ -393,7 +395,7 @@ const Users = () => {
                   </td>
                    <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      {(user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') && (
+                      {(user.role === 'ADMIN' || user.role === 'SUPER_ADMIN' || user.role === 'ACCOUNTING') && (
                         <button 
                           onClick={() => handlePermissionClick(user)}
                           className="w-8 h-8 rounded-lg flex items-center justify-center bg-white border border-slate-200 text-amber-500 hover:bg-amber-50 hover:border-amber-200 hover:shadow-sm transition-all"
@@ -643,11 +645,12 @@ const AddUserModal = ({ isOpen, onClose, employees, departments, onSave, isPendi
                 <option value="EMPLOYEE">Employee</option>
                 <option value="MANAGER">Manager</option>
                 <option value="DIREKTUR">Direktur</option>
+                <option value="ACCOUNTING">Admin Accounting</option>
                 <option value="ADMIN">Admin</option>
                 <option value="SUPER_ADMIN">Super Admin</option>
               </select>
             </div>
-            {formData.role === 'MANAGER' || formData.role === 'ADMIN' || formData.role === 'SUPER_ADMIN' ? (
+            {formData.role === 'MANAGER' || formData.role === 'ADMIN' || formData.role === 'SUPER_ADMIN' || formData.role === 'ACCOUNTING' ? (
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Managed Department</label>
                 <select 
@@ -765,11 +768,12 @@ const EditUserModal = ({ isOpen, onClose, user, departments, onSave, isPending }
                 <option value="EMPLOYEE">Employee</option>
                 <option value="MANAGER">Manager</option>
                 <option value="DIREKTUR">Direktur</option>
+                <option value="ACCOUNTING">Admin Accounting</option>
                 <option value="ADMIN">Admin</option>
                 <option value="SUPER_ADMIN">Super Admin</option>
               </select>
             </div>
-            {(role === 'MANAGER' || role === 'ADMIN' || role === 'SUPER_ADMIN') && (
+            {(role === 'MANAGER' || role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'ACCOUNTING') && (
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Managed Department</label>
                 <select 

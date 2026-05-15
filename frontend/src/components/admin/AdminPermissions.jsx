@@ -14,7 +14,7 @@ const AdminPermissions = () => {
     queryFn: () => userAPI.getAll(),
   });
 
-  const admins = usersData?.data?.filter(u => u.role === 'ADMIN') || [];
+  const admins = usersData?.data?.filter(u => u.role === 'ADMIN' || u.role === 'ACCOUNTING') || [];
 
   const handleSelectAdmin = async (adminId) => {
     setSelectedAdminId(adminId);
@@ -27,7 +27,7 @@ const AdminPermissions = () => {
     try {
       const res = await userAPI.getPermissions(adminId);
       const permMap = {};
-      const menus = ['dashboard', 'employees', 'attendance', 'users', 'leave-requests', 'face-check', 'backup', 'announcements', 'settings', 'corrections'];
+      const menus = ['dashboard', 'employees', 'attendance', 'users', 'leave-requests', 'face-check', 'backup', 'announcements', 'settings', 'corrections', 'payroll', 'payroll-settings'];
       
       // Initialize with false
       menus.forEach(m => {
