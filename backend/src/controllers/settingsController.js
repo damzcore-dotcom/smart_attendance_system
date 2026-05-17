@@ -22,7 +22,11 @@ const getPublicInfo = async (req, res) => {
 
 const getAll = async (req, res) => {
   try {
-    const settings = await prisma.settings.findMany();
+    const settings = await prisma.settings.findMany({
+      where: {
+        key: { not: 'appLogo' }
+      }
+    });
     const obj = {};
     settings.forEach(s => { obj[s.key] = s.value; });
     res.json({ success: true, data: obj });

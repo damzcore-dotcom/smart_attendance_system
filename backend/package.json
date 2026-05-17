@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
+    "build": "node build.js",
+    "start:prod": "node dist/index.js",
     "db:migrate": "npx prisma migrate dev",
     "db:seed": "node prisma/seed.js",
     "db:studio": "npx prisma studio",
@@ -24,6 +26,8 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "esbuild": "^0.28.0",
+    "javascript-obfuscator": "^5.4.2",
     "nodemon": "^3.1.0",
     "prisma": "^6.9.0"
   }

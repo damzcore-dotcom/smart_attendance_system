@@ -51,7 +51,7 @@ const PermissionRoute = ({ menuKey, children }) => {
 
 const DirectorRoute = ({ children }) => {
   const user = JSON.parse(localStorage.getItem('user') || '{}');
-  if (user?.role !== 'DIREKTUR' && user?.role !== 'ADMIN' && user?.role !== 'SUPER_ADMIN') {
+  if (user?.role !== 'DIREKTUR' && user?.role !== 'ADMIN' && user?.role !== 'SUPER_ADMIN' && user?.role !== 'ACCOUNTING') {
     return <Navigate to="/login" replace />;
   }
   return children;
@@ -61,7 +61,7 @@ const EmployeeRoute = ({ children }) => {
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const role = user?.role;
   
-  if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
+  if (role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'ACCOUNTING') {
     return <Navigate to="/admin" replace />;
   } else if (role === 'MANAGER') {
     return <Navigate to="/manager" replace />;
@@ -76,7 +76,7 @@ const ManagerRoute = ({ children }) => {
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const role = user?.role;
   
-  if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
+  if (role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'ACCOUNTING') {
     return <Navigate to="/admin" replace />;
   } else if (role === 'EMPLOYEE') {
     return <Navigate to="/employee" replace />;

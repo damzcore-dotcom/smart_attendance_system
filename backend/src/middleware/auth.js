@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const { verifyLicense } = require('./license');
 
 /**
  * Verify JWT access token
@@ -13,7 +14,9 @@ const verifyToken = (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded;
-    next();
+    
+    // Call verifyLicense before proceeding
+    return verifyLicense(req, res, next);
   } catch (err) {
     if (err.name === 'TokenExpiredError') {
       return res.status(401).json({ success: false, message: 'Token expired', code: 'TOKEN_EXPIRED' });
@@ -91,7 +94,7 @@ const requireDirektur = (req, res, next) => {
  * Require ADMIN, SUPER_ADMIN, or MANAGER role
  */
 const requireAdminOrManager = (req, res, next) => {
-  const allowed = ['ADMIN', 'SUPER_ADMIN', 'MANAGER'];
+  const allowed = ['ADMIN', 'SUPER_ADMIN', 'MANAGER', 'ACCOUNTING'];
   if (!allowed.includes(req.user.role)) {
     return res.status(403).json({ success: false, message: 'Access denied' });
   }

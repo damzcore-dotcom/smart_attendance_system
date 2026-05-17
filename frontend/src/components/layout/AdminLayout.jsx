@@ -23,7 +23,7 @@ import {
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { authAPI, dashboardAPI } from '../../services/api';
-import { IgaLogo } from '../IgaLogo';
+import { AppLogo } from '../AppLogo';
 
 const AdminLayout = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(true);
@@ -97,8 +97,11 @@ const AdminLayout = () => {
       >
         <div className="p-6 flex items-center justify-center border-b border-slate-100 min-h-[88px]">
           {isSidebarOpen ? (
-            <div className="h-10 animate-in fade-in slide-in-from-left-2 duration-500">
-              <IgaLogo className="w-full h-full text-slate-800" />
+            <div className="flex flex-col items-center animate-in fade-in slide-in-from-left-2 duration-500 w-full">
+              <div className="h-10 w-full mb-1">
+                <AppLogo className="w-full h-full text-slate-800" />
+              </div>
+              <span className="text-[9px] font-bold text-slate-400 tracking-widest uppercase">Smart Attendance Pro</span>
             </div>
           ) : (
             <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center shrink-0 shadow-md">

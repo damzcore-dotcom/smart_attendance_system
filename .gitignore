@@ -1,2 +1,7 @@
 .vercel
 .env*.local
+
+CLIENT_RELEASE/
+CLIENT_RELEASE.rar
+backend/dist/
+CLIENT_RELEASE.zip

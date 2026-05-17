@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { authAPI, notificationAPI } from '../../services/api';
-import { IgaLogo } from '../IgaLogo';
+import { AppLogo } from '../AppLogo';
 
 const EmployeeLayout = () => {
   const location = useLocation();
@@ -55,7 +55,7 @@ const EmployeeLayout = () => {
       <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-50 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="w-16 h-8 flex items-center justify-center">
-            <IgaLogo className="w-full h-full" />
+            <AppLogo className="w-full h-full" />
           </div>
           <div className="flex flex-col">
             <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Welcome</span>

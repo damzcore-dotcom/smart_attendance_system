@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogIn, ShieldCheck, Fingerprint, Camera, X, Loader2, ScanFace, CheckCircle2, AlertCircle, User } from 'lucide-react';
-import { IgaLogo } from '../components/IgaLogo';
+import { AppLogo } from '../components/AppLogo';
 import Webcam from 'react-webcam';
 import * as faceapi from '@vladmandic/face-api';
 import { authAPI } from '../services/api';
@@ -54,7 +54,7 @@ const Login = () => {
     setIsLoggingIn(true);
     try {
       const result = await authAPI.login(username, password);
-      if (result.user.role === 'ADMIN' || result.user.role === 'SUPER_ADMIN') {
+      if (result.user.role === 'ADMIN' || result.user.role === 'SUPER_ADMIN' || result.user.role === 'ACCOUNTING') {
         navigate('/admin');
       } else if (result.user.role === 'MANAGER') {
         navigate('/manager');
@@ -98,7 +98,7 @@ const Login = () => {
           if (result.success) {
             setScanStatus('success');
             setTimeout(() => {
-              if (result.user.role === 'ADMIN' || result.user.role === 'SUPER_ADMIN') {
+              if (result.user.role === 'ADMIN' || result.user.role === 'SUPER_ADMIN' || result.user.role === 'ACCOUNTING') {
                 navigate('/admin');
               } else if (result.user.role === 'MANAGER') {
                 navigate('/manager');
@@ -180,7 +180,7 @@ const Login = () => {
           {/* Logo */}
           <div className="mb-8 flex flex-col items-center text-center">
             <div className="h-14 sm:h-16 mb-6">
-              <IgaLogo className="w-full h-full text-slate-800" />
+              <AppLogo className="w-full h-full text-slate-800" />
             </div>
             <h1 className="text-2xl font-bold text-slate-800 tracking-tight">{publicSettings.companyName}</h1>
             <p className="text-slate-400 text-xs mt-2 font-medium uppercase tracking-widest">Management Portal</p>

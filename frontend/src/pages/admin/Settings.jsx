@@ -14,7 +14,9 @@ import {
   Loader2,
   X,
   Shield,
-  CalendarCheck
+  CalendarCheck,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { settingsAPI, authAPI } from '../../services/api';
@@ -188,6 +190,7 @@ const Settings = () => {
 
   if (user?.role === 'SUPER_ADMIN') {
     tabs.push({ id: 'Permissions', icon: Shield, label: 'Hak Akses Admin' });
+    tabs.push({ id: 'License', icon: ShieldCheck, label: 'System License' });
   }
 
   if (settingsLoading || locationsLoading || shiftsLoading) {
@@ -289,6 +292,48 @@ const Settings = () => {
                   <div>
                     <h3 className="text-xl font-bold text-slate-800 tracking-tight">Enterprise Identity</h3>
                     <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">Core Organizational Metadata</p>
+                  </div>
+                </div>
+
+                <div className="mb-8 p-6 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col md:flex-row gap-6 items-center">
+                  <div className="w-24 h-24 rounded-xl border border-slate-200 bg-white flex items-center justify-center overflow-hidden shrink-0 shadow-sm relative group">
+                    {formData.appLogo ? (
+                      <img src={formData.appLogo} alt="App Logo" className="w-full h-full object-contain p-2" />
+                    ) : (
+                      <Building2 className="w-8 h-8 text-slate-300" />
+                    )}
+                    {formData.appLogo && (
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <button 
+                          onClick={() => handleInputChange('appLogo', '')}
+                          className="w-8 h-8 rounded-full bg-white/20 hover:bg-rose-500 text-white flex items-center justify-center backdrop-blur-sm transition-colors"
+                          title="Remove Logo"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-2 flex-1 w-full text-center md:text-left">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Enterprise App Logo</label>
+                    <input 
+                      type="file" 
+                      accept="image/png, image/jpeg, image/svg+xml"
+                      onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (file) {
+                          if (file.size > 2 * 1024 * 1024) {
+                            alert('Logo file size must be less than 2MB');
+                            return;
+                          }
+                          const reader = new FileReader();
+                          reader.onloadend = () => handleInputChange('appLogo', reader.result);
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="block w-full text-sm text-slate-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:uppercase file:tracking-wider file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-colors cursor-pointer"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">Recommended: PNG transparent, max 2MB.</p>
                   </div>
                 </div>
 
@@ -706,6 +751,77 @@ const Settings = () => {
           )}
           {activeTab === 'Permissions' && (
             <AdminPermissions />
+          )}
+
+          {activeTab === 'License' && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="bg-white p-8 md:p-10 border border-slate-200 rounded-3xl shadow-sm relative overflow-hidden">
+                <div className="flex items-center gap-5 mb-10">
+                  <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shadow-sm">
+                    <ShieldCheck className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-slate-800 tracking-tight">System License</h3>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">Software Activation Key</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">License Key (Provided by Vendor)</label>
+                  <textarea 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-5 text-sm font-mono text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder:text-slate-400 min-h-[120px] resize-none"
+                    value={formData.licenseKey || ''}
+                    onChange={(e) => handleInputChange('licenseKey', e.target.value)}
+                    placeholder="Paste your license key here..."
+                  ></textarea>
+                  
+                  {(() => {
+                    if (!formData.licenseKey) return null;
+                    try {
+                      const parts = formData.licenseKey.split('.');
+                      if (parts.length !== 2) throw new Error();
+                      const payload = JSON.parse(atob(parts[0]));
+                      const isExpired = new Date() > new Date(payload.expiry);
+                      return (
+                        <div className={`mt-6 p-6 rounded-2xl border ${isExpired ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-200'}`}>
+                          <div className="flex items-center gap-3 mb-4">
+                            {isExpired ? <AlertCircle className="w-6 h-6 text-red-600" /> : <CheckCircle2 className="w-6 h-6 text-emerald-600" />}
+                            <h4 className={`text-sm font-bold ${isExpired ? 'text-red-900' : 'text-emerald-900'}`}>
+                              {isExpired ? 'License Expired' : 'License Valid'}
+                            </h4>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <p className="text-[10px] uppercase font-bold text-slate-500 mb-1">Licensed To</p>
+                              <p className="text-sm font-semibold text-slate-800">{payload.client}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase font-bold text-slate-500 mb-1">Expiration Date</p>
+                              <p className={`text-sm font-semibold ${isExpired ? 'text-red-600' : 'text-slate-800'}`}>{payload.expiry}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase font-bold text-slate-500 mb-1">Max Employees</p>
+                              <p className="text-sm font-semibold text-slate-800">{payload.limit} Personnel</p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    } catch (err) {
+                      return (
+                        <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-sm flex items-center gap-3">
+                          <AlertCircle className="w-5 h-5" />
+                          Invalid license key format.
+                        </div>
+                      );
+                    }
+                  })()}
+                  
+                  <p className="text-xs text-slate-500 mt-2">
+                    Enter the license key provided by the software vendor to activate the product and verify your employee limits and expiration dates.
+                  </p>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </div>
