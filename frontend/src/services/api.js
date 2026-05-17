@@ -125,6 +125,11 @@ export const authAPI = {
     return data;
   },
 
+  changePassword: (currentPassword, newPassword) => apiFetch('/auth/change-password', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  }),
+
   getMe: () => apiFetch('/auth/me'),
 
   logout: async () => {
@@ -226,7 +231,6 @@ export const attendanceAPI = {
     if (!res.ok) throw new Error('Download failed');
     return { data: await res.blob() };
   },
-  recalculate: (startDate, endDate) => apiFetch('/attendance/recalculate', { method: 'POST', body: JSON.stringify({ startDate, endDate }) }),
   update: (id, data) => apiFetch(`/attendance/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 };
 
@@ -262,6 +266,7 @@ export const settingsAPI = {
   createShift: (data) => apiFetch('/shifts', { method: 'POST', body: JSON.stringify(data) }),
   updateShift: (id, data) => apiFetch(`/shifts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteShift: (id) => apiFetch(`/shifts/${id}`, { method: 'DELETE' }),
+  getLicenseInfo: () => apiFetch('/settings/license-info'),
 };
 
 // ─── Users API ───────────────────────────────────

@@ -14,6 +14,7 @@ import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { authAPI } from '../../services/api';
 import { AppLogo } from '../AppLogo';
+import LicenseFooter from '../LicenseFooter';
 
 const DirectorLayout = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(window.innerWidth > 1024);
@@ -40,6 +41,7 @@ const DirectorLayout = () => {
     { name: 'Dashboard', path: '/director', icon: LayoutDashboard },
     { name: 'Leave Approval', path: '/director/leave', icon: Users },
     { name: 'Attendance', path: '/director/attendance', icon: CalendarCheck },
+    { name: 'Payroll Approval', path: '/director/payroll', icon: Building2 },
   ];
 
   const { data: userData } = useQuery({
@@ -55,7 +57,7 @@ const DirectorLayout = () => {
   };
 
   return (
-    <div className="flex h-screen relative overflow-hidden font-sans bg-[#f7f8fc]">
+    <div className="flex h-screen print:h-auto relative overflow-hidden print:overflow-visible font-sans bg-[#f7f8fc] print:bg-white">
 
       {/* Mobile Backdrop */}
       {isMobile && isSidebarOpen && (
@@ -69,7 +71,7 @@ const DirectorLayout = () => {
       <aside 
         className={`
           fixed inset-y-0 left-0 z-50 transition-all duration-500 flex flex-col bg-white border-r border-slate-200 shadow-lg
-          lg:relative lg:translate-x-0 lg:shadow-none
+          lg:relative lg:translate-x-0 lg:shadow-none print:hidden
           ${isSidebarOpen ? 'translate-x-0 w-72' : '-translate-x-full w-0 lg:w-20 lg:translate-x-0'}
         `}
       >
@@ -143,9 +145,9 @@ const DirectorLayout = () => {
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0 print:overflow-visible">
         {/* Top Navbar */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6 z-20 shrink-0 shadow-sm">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6 z-20 shrink-0 shadow-sm print:hidden">
           <div className="flex items-center gap-4">
             <button 
               onClick={() => setSidebarOpen(!isSidebarOpen)}
@@ -171,11 +173,14 @@ const DirectorLayout = () => {
         </header>
 
         {/* Page Container */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">
-          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-6">
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 print:p-0 print:overflow-visible">
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-6 print:pb-0 print:animate-none">
             <Outlet />
           </div>
         </main>
+        <div className="print:hidden">
+          <LicenseFooter />
+        </div>
       </div>
     </div>
   );

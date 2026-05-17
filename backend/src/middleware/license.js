@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const prisma = require('../prismaClient');
 
-const MASTER_SECRET = 'IGA_SUPER_SECRET_KEY_2026_DO_NOT_SHARE';
+const MASTER_SECRET = process.env.LICENSE_SECRET || 'CHANGE_THIS_SECRET_IN_ENV';
 
 let cachedLicenseStatus = null;
 let lastCheckTime = 0;

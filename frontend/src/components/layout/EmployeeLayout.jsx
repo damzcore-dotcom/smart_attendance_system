@@ -11,6 +11,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { authAPI, notificationAPI } from '../../services/api';
 import { AppLogo } from '../AppLogo';
+import LicenseFooter from '../LicenseFooter';
 
 const EmployeeLayout = () => {
   const location = useLocation();
@@ -49,10 +50,10 @@ const EmployeeLayout = () => {
   }
 
   return (
-    <div className="flex flex-col h-screen relative overflow-hidden font-sans bg-[#f7f8fc]">
+    <div className="flex flex-col h-screen print:h-auto relative overflow-hidden print:overflow-visible font-sans bg-[#f7f8fc] print:bg-white">
 
       {/* Top Bar */}
-      <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-50 shadow-sm">
+      <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-50 shadow-sm print:hidden">
         <div className="flex items-center gap-3">
           <div className="w-16 h-8 flex items-center justify-center">
             <AppLogo className="w-full h-full" />
@@ -71,14 +72,18 @@ const EmployeeLayout = () => {
       </header>
 
       {/* Content */}
-      <main className="flex-1 overflow-y-auto pb-28 pt-2">
-        <div className="max-w-md mx-auto min-h-full px-4">
+      <main className="flex-1 overflow-y-auto pb-28 pt-2 print:p-0 print:overflow-visible">
+        <div className="max-w-md mx-auto min-h-full px-4 print:p-0 print:max-w-none">
           <Outlet />
         </div>
       </main>
 
+      <div className="print:hidden">
+        <LicenseFooter />
+      </div>
+
       {/* Bottom Nav */}
-      <nav className="fixed bottom-6 left-4 right-4 h-20 bg-white border border-slate-200 flex items-center justify-around px-2 z-50 rounded-3xl shadow-xl shadow-blue-900/5">
+      <nav className="fixed bottom-6 left-4 right-4 h-20 bg-white border border-slate-200 flex items-center justify-around px-2 z-50 rounded-3xl shadow-xl shadow-blue-900/5 print:hidden">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.path;

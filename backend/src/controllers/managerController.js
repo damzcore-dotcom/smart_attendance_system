@@ -330,10 +330,10 @@ const getLeaveRequests = async (req, res) => {
 const updateLeaveRequest = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, adminNotes } = req.body;
+    const { status, reviewNote } = req.body;
     const request = await prisma.leaveRequest.update({
       where: { id: parseInt(id) },
-      data: { status, adminNotes, processedBy: req.user.username, processedAt: new Date() }
+      data: { status, reviewNote }
     });
     res.json({ success: true, message: 'Leave request updated successfully', data: request });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }

@@ -48,34 +48,55 @@ try {
   };
   fs.writeFileSync(path.join(releaseDir, 'frontend', 'package.json'), JSON.stringify(frontendPackage, null, 2));
 
-  // 5. Copy Setup Script
+  // 5. Copy Setup & Config Templates
   fs.copyFileSync(path.join(rootDir, 'setup-client.js'), path.join(releaseDir, 'setup-client.js'));
+  fs.copyFileSync(path.join(rootDir, 'generate-license.js'), path.join(releaseDir, 'generate-license.js'));
+  fs.copyFileSync(path.join(rootDir, 'PANDUAN_INSTALASI.txt'), path.join(releaseDir, 'PANDUAN_INSTALASI.txt'));
+  fs.copyFileSync(path.join(rootDir, 'backend', '.env.example'), path.join(releaseDir, 'backend', '.env.example'));
+  if (fs.existsSync(path.join(rootDir, 'frontend', '.env.example'))) {
+    fs.copyFileSync(path.join(rootDir, 'frontend', '.env.example'), path.join(releaseDir, 'frontend', '.env.example'));
+  }
 
   // 6. Create START.bat for Client
   const batContent = `@echo off
+title Smart Attendance Pro
+color 0A
 echo ===================================================
-echo 🚀 Memulai Smart Attendance Pro
+echo    Smart Attendance Pro - Installer
 echo ===================================================
+echo.
+
+REM Check if .env exists
+if not exist "backend\\.env" (
+  echo [!] File backend\\.env belum ada!
+  echo     Jalankan setup terlebih dahulu:
+  echo     node setup-client.js
+  echo.
+  pause
+  exit /b
+)
 
 cd backend
-echo Menginstall modul backend...
+echo [1/4] Menginstall modul backend...
 call npm install --production --quiet
-echo Mengaktifkan Database...
+echo [2/4] Menyiapkan database...
 call npx prisma generate
 call npx prisma db push
 
 cd ../frontend
-echo Menginstall modul frontend...
+echo [3/4] Menginstall modul frontend...
 call npm install serve --quiet
 
 cd ..
-echo Menyala...
-start cmd /k "cd backend && npm run start:prod"
-start cmd /k "cd frontend && npm start"
+echo [4/4] Memulai sistem...
+start "Backend" cmd /k "cd backend && npm run start:prod"
+start "Frontend" cmd /k "cd frontend && npm start"
 
 echo.
-echo ✅ Sistem Berhasil Dijalankan!
-echo Buka browser dan ketik: http://localhost:5173
+echo ===================================================
+echo   Sistem berhasil dijalankan!
+echo   Buka browser dan akses alamat di bawah ini.
+echo   (Port sesuai konfigurasi .env)
 echo ===================================================
 pause
 `;

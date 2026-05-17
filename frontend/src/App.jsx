@@ -8,6 +8,7 @@ import DirectorLayout from './components/layout/DirectorLayout';
 import DirectorDashboard from './pages/director/DirectorDashboard';
 import DirectorAttendance from './pages/director/DirectorAttendance';
 import DirectorLeave from './pages/director/DirectorLeave';
+import DirectorPayroll from './pages/director/DirectorPayroll';
 import ManagerDashboard from './pages/manager/ManagerDashboard';
 import ManagerAttendance from './pages/manager/ManagerAttendance';
 import ManagerLeave from './pages/manager/ManagerLeave';
@@ -33,8 +34,11 @@ import Schedule from './pages/employee/Schedule';
 import Scan from './pages/employee/Scan';
 import FaceCheck from './pages/employee/FaceCheck';
 import Leave from './pages/employee/Leave';
+import MySlips from './pages/employee/MySlips';
 import Users from './pages/admin/Users';
 import Login from './pages/Login';
+import NotFound from './pages/NotFound';
+import ErrorBoundary from './components/ErrorBoundary';
 
 import { usePermission } from './hooks/usePermission';
 
@@ -89,10 +93,11 @@ const ManagerRoute = ({ children }) => {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <Router>
-        <Routes>
-          <Route path="/login" element={<Login />} />
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <Router>
+          <Routes>
+            <Route path="/login" element={<Login />} />
           
           {/* Admin Routes */}
           <Route path="/admin" element={<AdminLayout />}>
@@ -105,11 +110,11 @@ function App() {
             <Route path="leave-requests" element={<PermissionRoute menuKey="leave-requests"><AdminLeaveRequests /></PermissionRoute>} />
             <Route path="backup" element={<PermissionRoute menuKey="backup"><Backup /></PermissionRoute>} />
             <Route path="announcements" element={<PermissionRoute menuKey="announcements"><Announcements /></PermissionRoute>} />
-            <Route path="face-check" element={<PermissionRoute menuKey="announcements"><AdminFaceCheck /></PermissionRoute>} />
+            <Route path="face-check" element={<PermissionRoute menuKey="face-check"><AdminFaceCheck /></PermissionRoute>} />
             <Route path="settings" element={<PermissionRoute menuKey="settings"><Settings /></PermissionRoute>} />
             <Route path="devices" element={<PermissionRoute menuKey="settings"><DeviceSettings /></PermissionRoute>} />
             <Route path="corrections" element={<PermissionRoute menuKey="corrections"><AdminCorrections /></PermissionRoute>} />
-            <Route path="audit-log" element={<AuditLog />} />
+            <Route path="audit-log" element={<PermissionRoute menuKey="audit-log"><AuditLog /></PermissionRoute>} />
           </Route>
 
           {/* Director Routes */}
@@ -117,6 +122,7 @@ function App() {
             <Route index element={<DirectorDashboard />} />
             <Route path="attendance" element={<DirectorAttendance />} />
             <Route path="leave" element={<DirectorLeave />} />
+            <Route path="payroll" element={<DirectorPayroll />} />
           </Route>
 
           {/* Manager Routes */}
@@ -137,13 +143,18 @@ function App() {
             <Route path="scan" element={<Scan />} />
             <Route path="face-check" element={<FaceCheck />} />
             <Route path="leave" element={<Leave />} />
+            <Route path="slips" element={<MySlips />} />
           </Route>
 
           {/* Redirects */}
           <Route path="/" element={<Navigate to="/login" replace />} />
+          
+          {/* 404 Catch-all */}
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </Router>
     </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 

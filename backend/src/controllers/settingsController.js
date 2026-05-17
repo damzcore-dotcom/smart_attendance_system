@@ -1,4 +1,7 @@
 const prisma = require('../prismaClient');
+const crypto = require('crypto');
+
+const MASTER_SECRET = process.env.LICENSE_SECRET || 'CHANGE_THIS_SECRET_IN_ENV';
 
 /**
  * GET /api/settings
@@ -22,11 +25,7 @@ const getPublicInfo = async (req, res) => {
 
 const getAll = async (req, res) => {
   try {
-    const settings = await prisma.settings.findMany({
-      where: {
-        key: { not: 'appLogo' }
-      }
-    });
+    const settings = await prisma.settings.findMany();
     const obj = {};
     settings.forEach(s => { obj[s.key] = s.value; });
     res.json({ success: true, data: obj });
@@ -99,4 +98,36 @@ const deleteLocation = async (req, res) => {
   }
 };
 
-module.exports = { getAll, update, getLocations, createLocation, updateLocation, deleteLocation, getPublicInfo };
+/**
+ * GET /api/settings/license-info
+ * Returns license status (client, expiry, limit) for display in UI footer
+ */
+const getLicenseInfo = async (req, res) => {
+  try {
+    const setting = await prisma.settings.findUnique({ where: { key: 'licenseKey' } });
+    if (!setting?.value) {
+      return res.json({ success: true, data: { valid: false, message: 'Belum ada lisensi' } });
+    }
+    const [payloadB64, signature] = setting.value.split('.');
+    const expectedSig = crypto.createHmac('sha256', MASTER_SECRET).update(payloadB64).digest('hex');
+    if (signature !== expectedSig) {
+      return res.json({ success: true, data: { valid: false, message: 'Lisensi tidak valid' } });
+    }
+    const payload = JSON.parse(Buffer.from(payloadB64, 'base64').toString('utf8'));
+    const expired = new Date() > new Date(payload.expiry);
+    res.json({
+      success: true,
+      data: {
+        valid: !expired,
+        client: payload.client,
+        expiry: payload.expiry,
+        limit: payload.limit,
+        expired
+      }
+    });
+  } catch (err) {
+    res.json({ success: true, data: { valid: false, message: 'Error membaca lisensi' } });
+  }
+};
+
+module.exports = { getAll, update, getLocations, createLocation, updateLocation, deleteLocation, getPublicInfo, getLicenseInfo };

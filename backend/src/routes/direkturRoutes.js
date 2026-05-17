@@ -167,8 +167,8 @@ router.get('/attendance', async (req, res) => {
     });
 
     // Fetch working days for holiday check
-    const settings = await prisma.settings.findFirst();
-    const workingDays = settings?.workingDays ? settings.workingDays.split(',').map(d => d.trim()) : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+    const workingDaysSetting = await prisma.settings.findUnique({ where: { key: 'workingDays' } });
+    const workingDays = workingDaysSetting ? JSON.parse(workingDaysSetting.value) : [1, 2, 3, 4, 5];
 
     const summary = {
       hadir: 0, telat: 0, mangkir: 0, absen: 0, holiday: 0, cuti: 0, sakit: 0, izin: 0, totalLate: 0, uniqueEmployeeCount: 0

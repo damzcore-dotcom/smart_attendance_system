@@ -65,17 +65,19 @@ const update = async (req, res) => {
     if (role === 'MANAGER' || role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'ACCOUNTING') {
       const parsedDeptId = parseInt(managedDeptId);
       const isAll = parsedDeptId === 0;
-      const deptVal = (isAll || isNaN(parsedDeptId) || managedDeptId === 'null' || managedDeptId === null) ? 'NULL' : parsedDeptId;
-      const allDeptsVal = isAll ? 'TRUE' : 'FALSE';
 
-      // Raw SQL Upsert for ManagerAccess
-      await prisma.$executeRawUnsafe(`
-        INSERT INTO "ManagerAccess" ("userId", "managedDeptId", "manageAllDepts")
-        VALUES (${user.id}, ${deptVal}, ${allDeptsVal})
-        ON CONFLICT ("userId") DO UPDATE SET
-        "managedDeptId" = EXCLUDED."managedDeptId",
-        "manageAllDepts" = EXCLUDED."manageAllDepts"
-      `);
+      await prisma.managerAccess.upsert({
+        where: { userId: user.id },
+        update: {
+          managedDeptId: isAll ? null : (isNaN(parsedDeptId) ? null : parsedDeptId),
+          manageAllDepts: isAll,
+        },
+        create: {
+          userId: user.id,
+          managedDeptId: isAll ? null : (isNaN(parsedDeptId) ? null : parsedDeptId),
+          manageAllDepts: isAll,
+        },
+      });
     }
 
     res.json({ success: true, message: 'User updated successfully' });
@@ -122,19 +124,21 @@ const create = async (req, res) => {
         password: hashedPassword,
         role,
         employeeId: employeeId ? parseInt(employeeId) : null,
+        mustChangePassword: true,
       },
     });
 
     if (role === 'MANAGER' || role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'ACCOUNTING') {
       const parsedDeptId = parseInt(managedDeptId);
       const isAll = parsedDeptId === 0;
-      const deptVal = (isAll || isNaN(parsedDeptId) || managedDeptId === 'null' || managedDeptId === null) ? 'NULL' : parsedDeptId;
-      const allDeptsVal = isAll ? 'TRUE' : 'FALSE';
 
-      await prisma.$executeRawUnsafe(`
-        INSERT INTO "ManagerAccess" ("userId", "managedDeptId", "manageAllDepts")
-        VALUES (${user.id}, ${deptVal}, ${allDeptsVal})
-      `);
+      await prisma.managerAccess.create({
+        data: {
+          userId: user.id,
+          managedDeptId: isAll ? null : (isNaN(parsedDeptId) ? null : parsedDeptId),
+          manageAllDepts: isAll,
+        },
+      });
     }
 
     if (role === 'ADMIN' || role === 'SUPER_ADMIN') {

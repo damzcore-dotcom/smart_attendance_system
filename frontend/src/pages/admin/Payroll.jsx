@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Banknote, Download, FileText, CheckCircle, XCircle, Search, Calendar, ChevronDown, Filter 
+  Banknote, Download, FileText, CheckCircle, XCircle, Search, Calendar, ChevronDown, Filter, Printer 
 } from 'lucide-react';
-import { payrollAPI } from '../../services/api';
+import { payrollAPI, settingsAPI, attendanceAPI } from '../../services/api';
+import PrintableSlip from '../../components/payroll/PrintableSlip';
 
 const Payroll = () => {
   const [payrolls, setPayrolls] = useState([]);
@@ -10,10 +11,32 @@ const Payroll = () => {
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState('');
   const [selectedPayroll, setSelectedPayroll] = useState(null);
+  const [printDetail, setPrintDetail] = useState(null);
+  const [companySettings, setCompanySettings] = useState({});
+  const [slipConfig, setSlipConfig] = useState(null);
 
   useEffect(() => {
     fetchPayrolls();
+    fetchSettings();
   }, []);
+
+  const fetchSettings = async () => {
+    try {
+      const res = await settingsAPI.getAll();
+      setCompanySettings(res.data);
+      if (res.data.slipConfig) {
+        setSlipConfig(JSON.parse(res.data.slipConfig));
+      } else {
+        setSlipConfig({
+          themeStyle: 'modern', showCompanyLogo: true, showAttendanceStats: true,
+          hideZeroAllowances: true, showOvertimeDetails: true,
+          watermarkText: 'CONFIDENTIAL', footerNote: 'Dokumen ini rahasia.'
+        });
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const fetchPayrolls = async () => {
     setLoading(true);
@@ -57,6 +80,28 @@ const Payroll = () => {
     }
   };
 
+  const handleSubmitForApproval = async (id) => {
+    if (!window.confirm('Kirim draft ini ke Direktur untuk disetujui?')) return;
+    try {
+      await payrollAPI.submitForApproval(id);
+      alert('Payroll berhasil diajukan untuk persetujuan.');
+      fetchPayrolls();
+    } catch (err) {
+      alert('Gagal mengajukan persetujuan: ' + err.message);
+    }
+  };
+
+  const handleFinalize = async (id) => {
+    if (!window.confirm('Finalisasi payroll ini? Setelah difinalisasi, slip gaji akan tersedia untuk karyawan.')) return;
+    try {
+      await payrollAPI.finalize(id);
+      alert('Payroll berhasil difinalisasi.');
+      fetchPayrolls();
+    } catch (err) {
+      alert('Gagal memfinalisasi: ' + err.message);
+    }
+  };
+
   const loadDetail = async (id) => {
     try {
       const res = await payrollAPI.getById(id);
@@ -66,9 +111,17 @@ const Payroll = () => {
     }
   };
 
+  const handlePrint = (detail) => {
+    setPrintDetail(detail);
+    setTimeout(() => {
+      window.print();
+    }, 500);
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <div className="flex justify-between items-center bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="print:hidden space-y-6">
+        <div className="flex justify-between items-center bg-white p-6 rounded-xl shadow-sm border border-gray-100">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
             <Banknote className="text-blue-600" />
@@ -96,7 +149,7 @@ const Payroll = () => {
         <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
           <div className="text-sm font-medium text-gray-500 mb-1">Awaiting Approval</div>
           <div className="text-2xl font-bold text-yellow-600">
-            {payrolls.filter(p => p.status === 'AWAITING_APPROVAL').length}
+            {payrolls.filter(p => p.status === 'PENDING_APPROVAL').length}
           </div>
           <div className="text-xs text-gray-500 mt-2 font-medium">Butuh Persetujuan</div>
         </div>
@@ -139,6 +192,22 @@ const Payroll = () => {
                   </span>
                 </td>
                 <td className="px-6 py-4 flex justify-end gap-2">
+                  {p.status === 'DRAFT' && (
+                    <button 
+                      onClick={() => handleSubmitForApproval(p.id)}
+                      className="px-3 py-1.5 text-xs font-semibold bg-yellow-100 text-yellow-700 hover:bg-yellow-200 rounded-lg transition-colors flex items-center gap-1"
+                    >
+                      Ajukan Approval
+                    </button>
+                  )}
+                  {p.status === 'APPROVED' && (
+                    <button 
+                      onClick={() => handleFinalize(p.id)}
+                      className="px-3 py-1.5 text-xs font-semibold bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-lg transition-colors flex items-center gap-1"
+                    >
+                      Finalisasi
+                    </button>
+                  )}
                   <button 
                     onClick={() => loadDetail(p.id)}
                     className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -169,7 +238,7 @@ const Payroll = () => {
 
       {/* Generate Modal */}
       {generateModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 print:hidden">
           <div className="bg-white rounded-xl p-6 w-full max-w-md">
             <h2 className="text-xl font-bold mb-4">Generate Payroll</h2>
             <div className="mb-4">
@@ -202,7 +271,7 @@ const Payroll = () => {
       
       {/* Detail Modal (Simplified for UI display) */}
       {selectedPayroll && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 print:hidden">
           <div className="bg-white rounded-xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center">
               <div>
@@ -224,6 +293,7 @@ const Payroll = () => {
                     <th className="p-3 text-right">Lembur</th>
                     <th className="p-3 text-right">Potongan</th>
                     <th className="p-3 text-right font-bold">Net Pay</th>
+                    <th className="p-3 text-center">Print</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -242,12 +312,35 @@ const Payroll = () => {
                       <td className="p-3 text-right">Rp {d.overtimePay.toLocaleString('id-ID')}</td>
                       <td className="p-3 text-right text-red-600">Rp {d.totalDeduction.toLocaleString('id-ID')}</td>
                       <td className="p-3 text-right font-bold text-blue-600">Rp {d.netPay.toLocaleString('id-ID')}</td>
+                      <td className="p-3 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <button 
+                            onClick={() => handlePrint(d)}
+                            className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                            title="Print Slip Gaji"
+                          >
+                            <Printer className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           </div>
+        </div>
+      )}
+      </div>
+
+      {/* Hidden Print Container for Slip */}
+      {printDetail && (
+        <div className="hidden print:block fixed inset-0 bg-white z-[9999]">
+          <PrintableSlip 
+            detail={printDetail} 
+            company={companySettings} 
+            config={slipConfig} 
+          />
         </div>
       )}
     </div>

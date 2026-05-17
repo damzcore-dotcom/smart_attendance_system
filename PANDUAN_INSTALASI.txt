@@ -1,0 +1,290 @@
+
+╔═══════════════════════════════════════════════════════════════╗
+║                                                               ║
+║         SMART ATTENDANCE PRO — PANDUAN INSTALASI              ║
+║         Sistem Absensi & Payroll Profesional                  ║
+║                                                               ║
+╚═══════════════════════════════════════════════════════════════╝
+
+
+══════════════════════════════════════════════════════════════════
+ DAFTAR ISI
+══════════════════════════════════════════════════════════════════
+
+ 1. Persyaratan Sistem (Software yang Harus Diinstall)
+ 2. Instalasi Software Pendukung
+ 3. Instalasi PostgreSQL (Database)
+ 4. Konfigurasi Smart Attendance Pro
+ 5. Menjalankan Sistem
+ 6. Memasukkan License Key
+ 7. Login Pertama Kali
+ 8. Troubleshooting (Masalah Umum)
+
+
+══════════════════════════════════════════════════════════════════
+ 1. PERSYARATAN SISTEM
+══════════════════════════════════════════════════════════════════
+
+ Komputer Server:
+ ─────────────────
+ • OS        : Windows 10/11 (64-bit)
+ • RAM       : Minimal 4 GB (direkomendasikan 8 GB)
+ • Storage   : Minimal 2 GB ruang kosong
+ • Jaringan  : Terhubung ke jaringan lokal (LAN)
+
+ Software yang WAJIB diinstall:
+ ──────────────────────────────
+ ┌──────────────────────┬───────────────────────────────────────┐
+ │ Software             │ Link Download                         │
+ ├──────────────────────┼───────────────────────────────────────┤
+ │ 1. Node.js (v18+)    │ https://nodejs.org/en/download        │
+ │ 2. PostgreSQL (v15+) │ https://www.postgresql.org/download   │
+ └──────────────────────┴───────────────────────────────────────┘
+
+ Hanya 2 software saja yang perlu diinstall!
+
+
+══════════════════════════════════════════════════════════════════
+ 2. INSTALASI SOFTWARE PENDUKUNG
+══════════════════════════════════════════════════════════════════
+
+ A. Install Node.js
+ ───────────────────
+ 1. Buka https://nodejs.org
+ 2. Download versi LTS (Long Term Support)
+ 3. Jalankan installer, klik Next terus sampai selesai
+ 4. Verifikasi instalasi:
+    • Buka Command Prompt (Win + R, ketik "cmd", Enter)
+    • Ketik: node --version
+    • Harus muncul versi seperti: v18.x.x atau v20.x.x
+
+ B. Install PostgreSQL
+ ─────────────────────
+ 1. Buka https://www.postgresql.org/download/windows/
+ 2. Download installer dari EDB
+ 3. Jalankan installer:
+
+    ⚠️  CATAT PASSWORD YANG ANDA BUAT!
+    ─────────────────────────────────
+    Saat diminta "Password for superuser postgres",
+    masukkan password yang MUDAH DIINGAT.
+    Password ini akan digunakan pada langkah konfigurasi.
+
+    • Port biarkan default: 5432
+    • Locale biarkan default
+    • Klik Next sampai selesai
+
+ 4. Verifikasi:
+    • Buka Command Prompt
+    • Ketik: psql -U postgres
+    • Masukkan password yang tadi dibuat
+    • Jika berhasil, keluar dengan ketik: \q
+
+
+══════════════════════════════════════════════════════════════════
+ 3. MEMBUAT DATABASE
+══════════════════════════════════════════════════════════════════
+
+ Setelah PostgreSQL terinstall:
+
+ 1. Buka Command Prompt
+ 2. Ketik perintah berikut:
+
+    psql -U postgres
+
+ 3. Masukkan password PostgreSQL Anda
+ 4. Buat database baru:
+
+    CREATE DATABASE smart_attendance;
+
+ 5. Keluar dari psql:
+
+    \q
+
+ ✅ Database siap digunakan!
+
+
+══════════════════════════════════════════════════════════════════
+ 4. KONFIGURASI SMART ATTENDANCE PRO
+══════════════════════════════════════════════════════════════════
+
+ 1. Extract file ZIP yang diberikan ke folder manapun
+    Contoh: C:\SmartAttendancePro
+
+ 2. Buka Command Prompt, navigasi ke folder tersebut:
+
+    cd C:\SmartAttendancePro
+
+ 3. Jalankan Setup Wizard:
+
+    node setup-client.js
+
+ 4. Ikuti pertanyaan yang muncul:
+
+    ┌─────────────────────────────────────────────────────────┐
+    │  STEP 1: Informasi Klien                                │
+    │  Nama perusahaan klien : PT Contoh Sejahtera            │
+    │                                                         │
+    │  STEP 2: Konfigurasi Database                           │
+    │  Database host [localhost]  : (tekan Enter)              │
+    │  Database port [5432]       : (tekan Enter)              │
+    │  Database user [postgres]   : (tekan Enter)              │
+    │  Database password          : (isi password PostgreSQL)  │
+    │  Database name              : (tekan Enter)              │
+    │                                                         │
+    │  STEP 3: Konfigurasi Server                             │
+    │  Backend port [5000]        : (tekan Enter)              │
+    │  Frontend URL(s)            : (tekan Enter)              │
+    │  Frontend port [5173]       : (tekan Enter)              │
+    │  Backend API URL            : (tekan Enter)              │
+    │                                                         │
+    │  STEP 4: Konfigurasi Lisensi                            │
+    │  Maksimal karyawan [100]    : (sesuai lisensi)           │
+    │  Tanggal expired            : (sesuai lisensi)           │
+    └─────────────────────────────────────────────────────────┘
+
+    ⚠️  CATATAN UNTUK AKSES DARI KOMPUTER LAIN:
+    ────────────────────────────────────────────
+    Jika sistem akan diakses dari komputer lain dalam
+    jaringan LAN, pada pertanyaan "Frontend URL(s)",
+    isi dengan IP server. Contoh:
+
+    Frontend URL(s) : http://192.168.1.100:5173
+
+    Dan pada "Backend API URL":
+    Backend API URL  : http://192.168.1.100:5000
+
+    Untuk mengetahui IP server, buka CMD dan ketik: ipconfig
+    Lihat bagian "IPv4 Address"
+
+ 5. Setup selesai! File konfigurasi otomatis dibuat.
+
+
+══════════════════════════════════════════════════════════════════
+ 5. MENJALANKAN SISTEM
+══════════════════════════════════════════════════════════════════
+
+ CARA CEPAT (Otomatis):
+ ──────────────────────
+ Klik 2x file START_APP.bat
+
+ Tunggu proses instalasi modul (hanya pertama kali).
+ Setelah selesai, buka browser dan ketik:
+
+   http://localhost:5173
+
+ Atau dari komputer lain di jaringan:
+
+   http://(IP-SERVER):5173
+
+
+ CARA MANUAL (jika diperlukan):
+ ──────────────────────────────
+ Terminal 1 — Backend:
+   cd backend
+   npm install --production
+   npx prisma generate
+   npx prisma db push
+   npm run start:prod
+
+ Terminal 2 — Frontend:
+   cd frontend
+   npm install serve
+   npm start
+
+
+══════════════════════════════════════════════════════════════════
+ 6. MEMASUKKAN LICENSE KEY
+══════════════════════════════════════════════════════════════════
+
+ 1. Buka aplikasi di browser
+ 2. Login sebagai Admin (lihat langkah 7)
+ 3. Klik menu Settings (⚙️) di sidebar kiri
+ 4. Cari bagian "License"
+ 5. Masukkan License Key dari file:
+
+    LICENSE_KEY_[NAMA_PERUSAHAAN].txt
+
+    File ini ada di folder utama Smart Attendance Pro.
+    Buka file tersebut, copy teks license key, paste
+    ke kolom License di Settings.
+
+ 6. Klik Simpan
+
+
+══════════════════════════════════════════════════════════════════
+ 7. LOGIN PERTAMA KALI
+══════════════════════════════════════════════════════════════════
+
+ Akun default yang tersedia:
+ ┌──────────┬──────────────┬───────────────┐
+ │ Role     │ Username     │ Password      │
+ ├──────────┼──────────────┼───────────────┤
+ │ Admin    │ admin        │ admin123      │
+ └──────────┴──────────────┴───────────────┘
+
+ ⚠️  PENTING:
+ Setelah login pertama kali, Anda WAJIB mengganti
+ password default. Sistem akan otomatis meminta
+ Anda membuat password baru.
+
+ Setelah login sebagai Admin:
+ 1. Buat departemen di menu Settings
+ 2. Tambahkan karyawan di menu Employees
+ 3. Setiap karyawan otomatis mendapat akun login
+    dengan format: username = Kode Karyawan
+
+
+══════════════════════════════════════════════════════════════════
+ 8. TROUBLESHOOTING (MASALAH UMUM)
+══════════════════════════════════════════════════════════════════
+
+ ❌ "node is not recognized"
+ → Node.js belum terinstall atau belum di-restart CMD
+ → Solusi: Install Node.js, tutup CMD, buka CMD baru
+
+ ❌ "psql: could not connect to server"
+ → PostgreSQL belum jalan
+ → Solusi: Buka Services (Win + R, ketik services.msc)
+   Cari "postgresql", klik kanan → Start
+
+ ❌ "ECONNREFUSED" saat buka browser
+ → Backend belum jalan
+ → Solusi: Pastikan START_APP.bat sudah dijalankan
+   dan tidak ada error di jendela terminal backend
+
+ ❌ "License invalid"
+ → License key salah atau expired
+ → Solusi: Pastikan copy-paste license key dengan benar
+   dari file LICENSE_KEY_*.txt (tanpa spasi tambahan)
+
+ ❌ Tidak bisa diakses dari komputer lain
+ → Firewall memblokir port
+ → Solusi:
+   1. Buka Windows Firewall
+   2. Klik "Allow an app through firewall"
+   3. Klik "Allow another app"
+   4. Browse ke lokasi node.exe
+   5. Centang Private dan Public
+   Atau jalankan di CMD (Administrator):
+   netsh advfirewall firewall add rule name="Smart Attendance Backend" dir=in action=allow protocol=TCP localport=5000
+   netsh advfirewall firewall add rule name="Smart Attendance Frontend" dir=in action=allow protocol=TCP localport=5173
+
+ ❌ Database error setelah update
+ → Jalankan ulang migrasi:
+   cd backend
+   npx prisma db push
+
+
+══════════════════════════════════════════════════════════════════
+ KONTAK SUPPORT
+══════════════════════════════════════════════════════════════════
+
+ Jika membutuhkan bantuan teknis, hubungi:
+ • Tim Technical Support
+ • Email: (isi email support Anda)
+ • WhatsApp: (isi nomor WA support Anda)
+
+══════════════════════════════════════════════════════════════════
+ © 2026 Smart Attendance Pro — All Rights Reserved
+══════════════════════════════════════════════════════════════════

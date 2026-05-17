@@ -48,24 +48,71 @@ const Login = () => {
     loadModels();
   }, []);
 
+  // Force password change state
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [loginResult, setLoginResult] = useState(null);
+
   const handleCredentialLogin = async (e) => {
     e.preventDefault();
     setError(null);
     setIsLoggingIn(true);
     try {
       const result = await authAPI.login(username, password);
-      if (result.user.role === 'ADMIN' || result.user.role === 'SUPER_ADMIN' || result.user.role === 'ACCOUNTING') {
-        navigate('/admin');
-      } else if (result.user.role === 'MANAGER') {
-        navigate('/manager');
-      } else if (result.user.role === 'DIREKTUR') {
-        navigate('/director');
-      } else {
-        navigate('/employee');
+      
+      // Check if user must change password before accessing system
+      if (result.mustChangePassword) {
+        setLoginResult(result);
+        setShowChangePassword(true);
+        setIsLoggingIn(false);
+        return;
       }
+      
+      navigateByRole(result.user.role);
     } catch (err) {
       setError(err.message || 'Login failed. Please check your credentials.');
       setIsLoggingIn(false);
+    }
+  };
+
+  const navigateByRole = (role) => {
+    if (role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'ACCOUNTING') {
+      navigate('/admin');
+    } else if (role === 'MANAGER') {
+      navigate('/manager');
+    } else if (role === 'DIREKTUR') {
+      navigate('/director');
+    } else {
+      navigate('/employee');
+    }
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setError(null);
+
+    if (newPassword.length < 6) {
+      setError('Password baru minimal 6 karakter.');
+      return;
+    }
+    if (newPassword === password) {
+      setError('Password baru harus berbeda dari password lama.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Konfirmasi password tidak cocok.');
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      await authAPI.changePassword(password, newPassword);
+      navigateByRole(loginResult.user.role);
+    } catch (err) {
+      setError(err.message || 'Gagal mengganti password.');
+      setChangingPassword(false);
     }
   };
 
@@ -98,14 +145,12 @@ const Login = () => {
           if (result.success) {
             setScanStatus('success');
             setTimeout(() => {
-              if (result.user.role === 'ADMIN' || result.user.role === 'SUPER_ADMIN' || result.user.role === 'ACCOUNTING') {
-                navigate('/admin');
-              } else if (result.user.role === 'MANAGER') {
-                navigate('/manager');
-              } else if (result.user.role === 'DIREKTUR') {
-                navigate('/director');
+              if (result.mustChangePassword) {
+                setLoginResult(result);
+                setShowChangePassword(true);
+                setIsScanning(false);
               } else {
-                navigate('/employee');
+                navigateByRole(result.user.role);
               }
             }, 1200);
           } else {
@@ -446,6 +491,72 @@ const Login = () => {
                 </button>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Force Password Change Modal ─── */}
+      {showChangePassword && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)' }}>
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-8 animate-in fade-in zoom-in-95 duration-300">
+            {/* Header */}
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <ShieldCheck className="w-8 h-8" />
+              </div>
+              <h2 className="text-xl font-bold text-slate-800">Ubah Password Anda</h2>
+              <p className="text-sm text-slate-500 mt-2">Demi keamanan, Anda wajib mengganti password default sebelum melanjutkan.</p>
+            </div>
+
+            <form onSubmit={handleChangePassword} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-2 ml-1">Password Baru</label>
+                <input
+                  type="password"
+                  placeholder="Minimal 6 karakter"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 text-slate-800 placeholder:text-slate-400 transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-2 ml-1">Konfirmasi Password Baru</label>
+                <input
+                  type="password"
+                  placeholder="Ketik ulang password baru"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 text-slate-800 placeholder:text-slate-400 transition-all"
+                />
+              </div>
+
+              {error && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm font-medium flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={changingPassword}
+                className="w-full bg-amber-500 hover:bg-amber-600 text-white py-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-amber-500/20 disabled:opacity-70 mt-2"
+              >
+                {changingPassword ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Menyimpan...</>
+                ) : (
+                  <><ShieldCheck className="w-4 h-4" /> Simpan Password Baru</>
+                )}
+              </button>
+            </form>
+
+            <p className="text-[10px] text-slate-400 text-center mt-4">
+              Password lama Anda tidak akan bisa digunakan lagi setelah diubah.
+            </p>
           </div>
         </div>
       )}

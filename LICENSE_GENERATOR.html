@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>License Generator — Smart Attendance Pro</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;min-height:100vh;background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);display:flex;align-items:center;justify-content:center;padding:24px;color:#e2e8f0}
+.container{width:100%;max-width:520px}
+.header{text-align:center;margin-bottom:32px}
+.logo{width:64px;height:64px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);border-radius:20px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:28px;font-weight:900;color:#fff;box-shadow:0 12px 40px rgba(99,102,241,0.3)}
+.header h1{font-size:22px;font-weight:800;color:#fff;letter-spacing:-0.5px}
+.header p{font-size:13px;color:#64748b;margin-top:4px}
+.card{background:rgba(255,255,255,0.05);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:32px;box-shadow:0 25px 60px rgba(0,0,0,0.3)}
+.form-group{margin-bottom:20px}
+.form-group label{display:block;font-size:12px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px}
+.form-group input,.form-group select{width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:14px 16px;color:#fff;font-size:15px;font-family:inherit;transition:all 0.2s;outline:none}
+.form-group input:focus{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,0.15)}
+.form-group input::placeholder{color:#475569}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.btn{width:100%;padding:16px;border:none;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;transition:all 0.2s;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn-primary{background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;box-shadow:0 8px 30px rgba(99,102,241,0.3);margin-top:8px}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 12px 40px rgba(99,102,241,0.4)}
+.btn-primary:active{transform:translateY(0)}
+.divider{height:1px;background:rgba(255,255,255,0.08);margin:28px 0}
+.result{display:none}
+.result.show{display:block}
+.result-header{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.result-header .check{width:36px;height:36px;background:linear-gradient(135deg,#22c55e,#16a34a);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px}
+.result-header h3{font-size:16px;font-weight:700;color:#fff}
+.result-header p{font-size:12px;color:#64748b}
+.license-box{background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;margin:12px 0;position:relative}
+.license-box code{word-break:break-all;font-size:11px;color:#38bdf8;line-height:1.6;display:block}
+.btn-copy{position:absolute;top:8px;right:8px;padding:6px 12px;background:rgba(59,130,246,0.2);border:1px solid rgba(59,130,246,0.3);border-radius:8px;color:#60a5fa;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.2s}
+.btn-copy:hover{background:rgba(59,130,246,0.3)}
+.btn-copy.copied{background:rgba(34,197,94,0.2);border-color:rgba(34,197,94,0.3);color:#4ade80}
+.summary{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:16px 0}
+.summary-item{background:rgba(255,255,255,0.04);border-radius:10px;padding:12px;font-size:12px}
+.summary-item .label{color:#64748b;font-weight:500}.summary-item .value{color:#fff;font-weight:700;margin-top:2px;font-size:14px}
+.btn-download{width:100%;padding:14px;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.25);border-radius:12px;color:#4ade80;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:12px;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn-download:hover{background:rgba(34,197,94,0.25)}
+.footer{text-align:center;margin-top:24px;font-size:11px;color:#475569}
+.history{margin-top:20px}.history h4{font-size:13px;color:#94a3b8;margin-bottom:8px}
+.history-item{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:12px;margin:6px 0;display:flex;justify-content:space-between;align-items:center;font-size:12px;cursor:pointer;transition:all 0.15s}
+.history-item:hover{background:rgba(255,255,255,0.06)}
+.history-item .hi-name{color:#e2e8f0;font-weight:600}.history-item .hi-meta{color:#64748b}
+.empty-state{text-align:center;padding:20px;color:#475569;font-size:12px}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+<div class="logo">🔑</div>
+<h1>License Generator</h1>
+<p>Smart Attendance Pro — Internal Tool</p>
+</div>
+
+<div class="card">
+<form id="licenseForm">
+<div class="form-group">
+<label>🔐 Master License Secret <span style="font-weight:400;color:#475569;text-transform:none">(sudah terisi otomatis)</span></label>
+<input type="password" id="secret" value="d94795ad7e96949a882a1f45a4206a69184172efc14f226f4c49def1bf9bdfc1" required>
+</div>
+<div class="divider"></div>
+<div class="form-group">
+<label>🏢 Nama Perusahaan Client</label>
+<input type="text" id="clientName" placeholder="Contoh: PT Maju Sejahtera" required>
+</div>
+<div class="row">
+<div class="form-group">
+<label>👥 Limit Karyawan</label>
+<input type="number" id="maxEmployees" value="100" min="1" max="99999" required>
+</div>
+<div class="form-group">
+<label>📅 Masa Aktif Sampai</label>
+<input type="date" id="expiryDate" required>
+</div>
+</div>
+<button type="submit" class="btn btn-primary">⚡ Generate License Key</button>
+</form>
+
+<div class="divider"></div>
+
+<div class="result" id="result">
+<div class="result-header">
+<div class="check">✅</div>
+<div>
+<h3>License Berhasil Dibuat!</h3>
+<p id="resultClient"></p>
+</div>
+</div>
+
+<div class="summary">
+<div class="summary-item"><div class="label">Perusahaan</div><div class="value" id="sumClient">-</div></div>
+<div class="summary-item"><div class="label">Limit Karyawan</div><div class="value" id="sumLimit">-</div></div>
+<div class="summary-item"><div class="label">Masa Aktif</div><div class="value" id="sumExpiry">-</div></div>
+<div class="summary-item"><div class="label">Dibuat</div><div class="value" id="sumDate">-</div></div>
+</div>
+
+<div class="license-box">
+<button class="btn-copy" id="copyBtn" onclick="copyLicense()">📋 Copy</button>
+<code id="licenseOutput"></code>
+</div>
+
+<button class="btn-download" onclick="downloadLicense()">📥 Download License Key (.txt)</button>
+</div>
+
+<div class="history" id="historySection">
+<h4>📜 Riwayat Generate</h4>
+<div id="historyList"><div class="empty-state">Belum ada lisensi yang di-generate</div></div>
+</div>
+</div>
+
+<div class="footer">© 2026 Adam Rizky — Internal Use Only</div>
+</div>
+
+<script>
+// Set default expiry to 1 year from now
+const d = new Date(); d.setFullYear(d.getFullYear()+1);
+document.getElementById('expiryDate').value = d.toISOString().split('T')[0];
+
+let currentLicense = {};
+const history = JSON.parse(localStorage.getItem('licenseHistory')||'[]');
+renderHistory();
+
+document.getElementById('licenseForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const secret = document.getElementById('secret').value;
+  const clientName = document.getElementById('clientName').value.trim();
+  const maxEmp = parseInt(document.getElementById('maxEmployees').value);
+  const expiry = document.getElementById('expiryDate').value;
+
+  const payload = { client: clientName, expiry: expiry, limit: maxEmp };
+  const payloadB64 = btoa(JSON.stringify(payload));
+
+  // HMAC-SHA256
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(secret);
+  const msgData = encoder.encode(payloadB64);
+  const cryptoKey = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', cryptoKey, msgData);
+  const sigHex = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2,'0')).join('');
+
+  const licenseKey = payloadB64 + '.' + sigHex;
+
+  currentLicense = { clientName, maxEmp, expiry, key: licenseKey, date: new Date().toLocaleString('id-ID') };
+
+  document.getElementById('licenseOutput').textContent = licenseKey;
+  document.getElementById('resultClient').textContent = clientName;
+  document.getElementById('sumClient').textContent = clientName;
+  document.getElementById('sumLimit').textContent = maxEmp.toLocaleString() + ' orang';
+  document.getElementById('sumExpiry').textContent = expiry;
+  document.getElementById('sumDate').textContent = currentLicense.date;
+  document.getElementById('result').classList.add('show');
+  document.getElementById('copyBtn').textContent = '📋 Copy';
+  document.getElementById('copyBtn').classList.remove('copied');
+
+  // Save to history
+  history.unshift({ client: clientName, limit: maxEmp, expiry, date: currentLicense.date, key: licenseKey });
+  if (history.length > 20) history.pop();
+  localStorage.setItem('licenseHistory', JSON.stringify(history));
+  renderHistory();
+});
+
+function copyLicense() {
+  navigator.clipboard.writeText(currentLicense.key);
+  const btn = document.getElementById('copyBtn');
+  btn.textContent = '✅ Copied!';
+  btn.classList.add('copied');
+  setTimeout(() => { btn.textContent = '📋 Copy'; btn.classList.remove('copied'); }, 2000);
+}
+
+function downloadLicense() {
+  const content = [
+    '═══════════════════════════════════════════════════',
+    'SMART ATTENDANCE PRO — LICENSE KEY',
+    '═══════════════════════════════════════════════════',
+    'Client        : ' + currentLicense.clientName,
+    'Max Employees : ' + currentLicense.maxEmp,
+    'Expiry Date   : ' + currentLicense.expiry,
+    'Generated     : ' + currentLicense.date,
+    '═══════════════════════════════════════════════════','',
+    'LICENSE KEY:', currentLicense.key, '',
+    '═══════════════════════════════════════════════════',
+    'Masukkan key di atas ke menu Settings → License',
+    'pada aplikasi Smart Attendance Pro.',
+    '═══════════════════════════════════════════════════',
+    '', '© 2026 Adam Rizky'
+  ].join('\n');
+  const blob = new Blob([content], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'LICENSE_KEY_' + currentLicense.clientName.replace(/\s+/g,'_').toUpperCase() + '.txt';
+  a.click();
+}
+
+function renderHistory() {
+  const el = document.getElementById('historyList');
+  if (history.length === 0) { el.innerHTML = '<div class="empty-state">Belum ada lisensi</div>'; return; }
+  el.innerHTML = history.map((h,i) => `<div class="history-item" onclick="loadHistory(${i})"><div><span class="hi-name">${h.client}</span></div><div class="hi-meta">${h.limit} emp · ${h.expiry}</div></div>`).join('');
+}
+
+function loadHistory(i) {
+  const h = history[i];
+  currentLicense = { clientName: h.client, maxEmp: h.limit, expiry: h.expiry, key: h.key, date: h.date };
+  document.getElementById('licenseOutput').textContent = h.key;
+  document.getElementById('resultClient').textContent = h.client;
+  document.getElementById('sumClient').textContent = h.client;
+  document.getElementById('sumLimit').textContent = h.limit + ' orang';
+  document.getElementById('sumExpiry').textContent = h.expiry;
+  document.getElementById('sumDate').textContent = h.date;
+  document.getElementById('result').classList.add('show');
+}
+</script>
+</body>
+</html>

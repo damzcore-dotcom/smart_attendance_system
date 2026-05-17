@@ -33,7 +33,8 @@ async function build() {
         'node-cron', 
         'node-zklib', 
         'xlsx',
-        'crypto'
+        'crypto',
+        'express-rate-limit'
       ],
       minify: false, // We will use obfuscator next
     });

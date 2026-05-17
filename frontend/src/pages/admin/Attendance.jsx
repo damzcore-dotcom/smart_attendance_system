@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { attendanceAPI, employeeAPI } from '../../services/api';
+import { attendanceAPI, employeeAPI, payrollAPI, settingsAPI } from '../../services/api';
+import PrintableAttendanceReport from '../../components/payroll/PrintableAttendanceReport';
 import { 
   Calendar, Search, Download, Filter, CheckCircle2, XCircle, Clock, 
   ArrowRight, Scan, Upload, FileSpreadsheet, X, Loader2, AlertCircle, RefreshCw,
   FileText, ChevronLeft, ChevronRight, LayoutDashboard, Edit2, ArrowUpDown,
-  ArrowUp, ArrowDown
+  ArrowUp, ArrowDown, Printer
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -55,6 +56,173 @@ const Attendance = () => {
     sortBy: 'date',
     order: 'desc'
   });
+
+  const [isReportModalOpen, setReportModalOpen] = useState(false);
+  const [reportEmployees, setReportEmployees] = useState(null);
+  const [reportSearch, setReportSearch] = useState('');
+  const [reportDept, setReportDept] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [companySettings, setCompanySettings] = useState({});
+  const [attendanceReportConfig, setAttendanceReportConfig] = useState(null);
+  const [printReport, setPrintReport] = useState(null);
+  const [printLogs, setPrintLogs] = useState([]);
+
+  const fetchReportSettings = async () => {
+    try {
+      const res = await settingsAPI.getAll();
+      setCompanySettings(res.data);
+      if (res.data.attendanceReportConfig) {
+        setAttendanceReportConfig(JSON.parse(res.data.attendanceReportConfig));
+      } else if (res.data.slipConfig) {
+        setAttendanceReportConfig(JSON.parse(res.data.slipConfig));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const openReportModal = async () => {
+    setReportModalOpen(true);
+    setReportEmployees(null);
+    setReportSearch('');
+    setReportDept('');
+    fetchReportSettings();
+    try {
+      const res = await employeeAPI.getAll({ limit: 10000 });
+      setReportEmployees(res.data || []);
+    } catch (err) {
+      console.error(err);
+      setReportEmployees([]);
+    }
+  };
+
+
+      
+  const [printReports, setPrintReports] = useState([]);
+  
+  const handlePrintAllReports = async () => {
+    try {
+      const filteredEmps = reportEmployees.filter(emp => {
+        const searchLower = reportSearch.toLowerCase();
+        const matchSearch = emp.name.toLowerCase().includes(searchLower) || 
+                            (emp.id || '').toLowerCase().includes(searchLower);
+        const matchDept = reportDept ? (emp.dept || 'UMUM') === reportDept : true;
+        return matchSearch && matchDept;
+      });
+
+      if (filteredEmps.length === 0) {
+        alert('Tidak ada data karyawan yang sesuai filter.');
+        return;
+      }
+      
+      if (filteredEmps.length > 50) {
+         if(!window.confirm(`Anda akan mencetak ${filteredEmps.length} laporan sekaligus. Proses ini mungkin memakan waktu. Lanjutkan?`)) return;
+      }
+
+      const year = parseInt(selectedMonth.split('-')[0]);
+      const monthIdx = parseInt(selectedMonth.split('-')[1]) - 1;
+      const startDate = new Date(year, monthIdx, 1).toISOString().split('T')[0];
+      const endDate = new Date(year, monthIdx + 1, 0).toISOString().split('T')[0];
+      const monthNames = ["JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI", "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"];
+      const periodName = `${monthNames[monthIdx]} ${year}`;
+
+      const reportsArray = [];
+      for(const emp of filteredEmps) {
+        const res = await attendanceAPI.getHistory(emp.dbId, { startDate, endDate });
+        const logs = res.data || [];
+        
+        let daysPresent = 0;
+        let totalLateMinutes = 0;
+        logs.forEach(log => {
+          if (log.status === 'PRESENT' || log.status === 'LATE' || log.status === 'Hadir' || log.status === 'Terlambat') {
+             daysPresent++;
+          }
+          if (log.status === 'LATE' || log.status === 'Terlambat') {
+             totalLateMinutes += (log.lateMinutes || 0);
+          }
+          if (log.status === 'MANGKIR' || log.status === 'MISSING' || log.status === 'ABSENT' || log.status === 'Tanpa Keterangan (Alpa)') {
+             totalLateMinutes += 30;
+          }
+        });
+        
+        reportsArray.push({
+          detail: {
+            employeeId: emp.dbId,
+            employeeName: emp.name,
+            employeeCode: emp.id,
+            department: emp.dept || 'UMUM',
+            employmentType: emp.employmentStatus || 'TETAP',
+            daysPresent,
+            totalLateMinutes,
+            payroll: { periodName }
+          },
+          logs
+        });
+      }
+      
+      setPrintReports(reportsArray);
+      
+      setTimeout(() => {
+        window.print();
+        setTimeout(() => { setPrintReports([]); }, 1000);
+      }, 1000);
+    } catch (err) {
+      console.error(err);
+      alert('Gagal mengambil rincian absensi masal');
+    }
+  };
+
+  const handlePrintReport = async (emp) => {
+    try {
+      const year = parseInt(selectedMonth.split('-')[0]);
+      const monthIdx = parseInt(selectedMonth.split('-')[1]) - 1;
+      
+      const startDate = new Date(year, monthIdx, 1).toISOString().split('T')[0];
+      const endDate = new Date(year, monthIdx + 1, 0).toISOString().split('T')[0];
+      
+      const res = await attendanceAPI.getHistory(emp.dbId, { startDate, endDate });
+      const logs = res.data || [];
+      
+      let daysPresent = 0;
+      let totalLateMinutes = 0;
+      
+      logs.forEach(log => {
+        if (log.status === 'PRESENT' || log.status === 'LATE' || log.status === 'Hadir' || log.status === 'Terlambat') {
+           daysPresent++;
+        }
+        if (log.status === 'LATE' || log.status === 'Terlambat') {
+           totalLateMinutes += (log.lateMinutes || 0);
+        }
+        if (log.status === 'MANGKIR' || log.status === 'MISSING' || log.status === 'ABSENT' || log.status === 'Tanpa Keterangan (Alpa)') {
+           totalLateMinutes += 30;
+        }
+      });
+      
+      const monthNames = ["JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI", "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"];
+      const periodName = `${monthNames[monthIdx]} ${year}`;
+
+      const detail = {
+        employeeId: emp.dbId,
+        employeeName: emp.name,
+        employeeCode: emp.id,
+        department: emp.dept || 'UMUM',
+        employmentType: emp.employmentStatus || 'TETAP',
+        daysPresent,
+        totalLateMinutes,
+        payroll: { periodName }
+      };
+      
+      setPrintReports([{ detail, logs }]);
+      
+      setTimeout(() => {
+        window.print();
+        setTimeout(() => { setPrintReports([]); }, 1000);
+      }, 500);
+    } catch (err) {
+      console.error(err);
+      alert('Gagal mengambil rincian absensi');
+    }
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: ['attendance', appliedFilters],
@@ -253,6 +421,7 @@ const Attendance = () => {
 
   return (
     <div className="space-y-8 pb-12 animate-in fade-in duration-500">
+      <div className="print:hidden space-y-8">
       {/* Header */}
       <div className="px-1 space-y-3">
         <div className="flex items-center gap-3 text-slate-500">
@@ -264,7 +433,7 @@ const Attendance = () => {
           <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Hardware Sync Hub</span>
         </div>
         
-        <div className="flex flex-row items-center justify-between w-full gap-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between w-full gap-4">
           <h1 className="text-2xl xl:text-3xl font-bold text-slate-800 tracking-tight flex items-center gap-3 whitespace-nowrap">
             <span>Attendance Archive</span>
             <div className="px-3 py-1 rounded-lg bg-blue-50 border border-blue-100 text-blue-600 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
@@ -274,8 +443,8 @@ const Attendance = () => {
           </h1>
 
           {/* Right Actions - Inline */}
-          <div className="flex flex-row items-center gap-3 whitespace-nowrap overflow-x-auto pb-1 xl:pb-0">
-            <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="flex flex-row flex-wrap md:flex-nowrap items-center gap-3 w-full md:w-auto">
+            <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-2xl border border-slate-200 shadow-sm shrink-0">
               <button 
                 onClick={() => setRecalcModalOpen(true)}
                 disabled={isRecalculating}
@@ -294,6 +463,13 @@ const Attendance = () => {
             </div>
             
             <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-2xl border border-slate-200 shadow-sm">
+              <button 
+                onClick={openReportModal}
+                className="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-600 transition-all group shadow-sm"
+                title="Cetak Laporan Absen (Individu)"
+              >
+                <Printer className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500 group-hover:text-emerald-600 transition-all" />
+              </button>
               <button 
                 onClick={handleExportPDF}
                 className="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 transition-all group shadow-sm"
@@ -570,7 +746,7 @@ const Attendance = () => {
 
       {/* Terminal Sync Modal */}
       {isImportOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 print:hidden">
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => !isUploading && setImportOpen(false)} />
           
           <div className="bg-white w-full max-w-xl relative z-10 overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300 rounded-3xl">
@@ -716,7 +892,7 @@ const Attendance = () => {
 
       {/* Audit Reconstruction Modal */}
       {isRecalcModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 print:hidden">
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => !isRecalculating && setRecalcModalOpen(false)}></div>
           <div className="bg-white w-full max-w-md relative z-10 overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300 rounded-3xl">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
@@ -776,7 +952,7 @@ const Attendance = () => {
       )}
       {/* Correction Modal */}
       {correctionModal.isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 print:hidden">
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => !isCorrecting && setCorrectionModal(prev => ({ ...prev, isOpen: false }))} />
           
           <div className="bg-white w-full max-w-md relative z-10 overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300 rounded-3xl">
@@ -858,6 +1034,147 @@ const Attendance = () => {
           </div>
         </div>
       )}
+
+      {/* Cetak Laporan Absen (Individu) Modal */}
+      {isReportModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 print:hidden">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setReportModalOpen(false)}></div>
+          <div className="bg-white w-full max-w-4xl relative z-10 overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300 rounded-3xl flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center border border-emerald-100 shadow-sm">
+                  <Printer className="w-6 h-6 text-emerald-600" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 text-lg tracking-tight">Cetak Laporan Absensi</h3>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">Laporan Rekapitulasi per Individu</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={handlePrintAllReports} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-sm active:scale-95">
+                  <Printer className="w-3.5 h-3.5" /> Cetak Semua
+                </button>
+                <button onClick={() => setReportModalOpen(false)} className="w-10 h-10 flex items-center justify-center hover:bg-slate-200 rounded-xl transition-all">
+                  <X className="w-5 h-5 text-slate-500" />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 border-b border-slate-100 flex flex-col gap-4 bg-white shrink-0">
+              <div className="flex flex-col md:flex-row items-center gap-4">
+                <div className="w-full md:w-1/3">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Pilih Periode Bulan</label>
+                  <input 
+                    type="month"
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 uppercase"
+                  />
+                </div>
+                <div className="w-full md:w-2/3 bg-blue-50 border border-blue-100 p-3 rounded-xl flex items-start gap-3 mt-4 md:mt-0">
+                  <AlertCircle className="w-5 h-5 text-blue-600 shrink-0" />
+                  <p className="text-xs text-blue-800 font-medium leading-relaxed">
+                    Laporan akan ditarik secara <span className="font-bold">Real-Time</span> dari riwayat absensi pada bulan terpilih, lengkap dengan format A4 dan detail keterlambatan.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col md:flex-row gap-3">
+                <div className="w-full md:w-1/2 relative">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input 
+                    type="text"
+                    placeholder="Cari Nama / NIK Karyawan..."
+                    value={reportSearch}
+                    onChange={(e) => setReportSearch(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-[11px] font-bold text-slate-700 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-400"
+                  />
+                </div>
+                <div className="w-full md:w-1/2 relative">
+                  <select 
+                    value={reportDept}
+                    onChange={(e) => setReportDept(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl pl-4 pr-10 py-2 text-[11px] font-bold text-slate-700 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 appearance-none uppercase"
+                  >
+                    <option value="">SEMUA DEPARTEMEN</option>
+                    {reportEmployees && Array.from(new Set(reportEmployees.map(e => e.dept || 'UMUM'))).sort().map(dept => (
+                      <option key={dept} value={dept}>{dept}</option>
+                    ))}
+                  </select>
+                  <Filter className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-auto bg-slate-50/50 p-6">
+              {reportEmployees ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {reportEmployees.filter(emp => {
+                    const searchLower = reportSearch.toLowerCase();
+                    const matchSearch = emp.name.toLowerCase().includes(searchLower) || 
+                                        (emp.id || '').toLowerCase().includes(searchLower);
+                    const matchDept = reportDept ? (emp.dept || 'UMUM') === reportDept : true;
+                    return matchSearch && matchDept;
+                  }).map(emp => (
+                    <div key={emp.id} className="bg-white border border-slate-200 rounded-2xl p-4 hover:border-emerald-300 transition-all shadow-sm flex flex-col gap-4">
+                      <div>
+                        <h4 className="font-bold text-slate-800 text-sm truncate" title={emp.name}>{emp.name}</h4>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">{emp.id} | {emp.dept || 'UMUM'}</p>
+                      </div>
+                      
+                      <div className="flex justify-between items-end mt-auto">
+                        <div>
+                          <p className="text-[9px] font-bold text-slate-400 inline-block uppercase tracking-wider">
+                            {selectedMonth}
+                          </p>
+                        </div>
+                        <button 
+                          onClick={() => handlePrintReport(emp)}
+                          className="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all active:scale-95 shadow-sm"
+                        >
+                          <Printer className="w-3 h-3" /> Cetak
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {reportEmployees.filter(emp => {
+                    const searchLower = reportSearch.toLowerCase();
+                    const matchSearch = emp.name.toLowerCase().includes(searchLower) || 
+                                        (emp.id || '').toLowerCase().includes(searchLower);
+                    const matchDept = reportDept ? (emp.dept || 'UMUM') === reportDept : true;
+                    return matchSearch && matchDept;
+                  }).length === 0 && (
+                    <div className="col-span-full py-12 text-center text-slate-500 font-medium text-sm">Tidak ada karyawan yang sesuai filter.</div>
+                  )}
+                </div>
+              ) : (
+                <div className="py-24 text-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-slate-300 mx-auto" />
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-4 animate-pulse">Memuat Data Karyawan...</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      </div>
+
+      {/* Hidden Print Container for Attendance Report */}
+      {printReports && printReports.length > 0 && (
+        <div className="hidden print:block fixed inset-0 bg-white z-[9999]">
+          {printReports.map((report, idx) => (
+            <div key={idx} style={{ pageBreakAfter: idx < printReports.length - 1 ? 'always' : 'auto' }}>
+              <PrintableAttendanceReport 
+                detail={report.detail} 
+                logs={report.logs}
+                company={companySettings} 
+                config={attendanceReportConfig} 
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
     </div>
   );
 };

@@ -13,7 +13,8 @@ import {
   X,
   Briefcase,
   Hash,
-  Clock as ClockIcon
+  Clock as ClockIcon,
+  Banknote
 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -39,6 +40,7 @@ const Profile = () => {
 
   const menuItems = [
     { name: 'Personal Information', icon: User, color: 'blue', action: () => setShowPersonalInfo(true) },
+    { name: 'Slip Gaji Saya', icon: Banknote, color: 'blue', path: '/employee/slips' },
     { name: 'Face ID Enrollment', icon: Camera, color: 'emerald', path: '/employee/face-check' },
   ];
 

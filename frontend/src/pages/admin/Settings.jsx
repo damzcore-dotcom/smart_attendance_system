@@ -16,12 +16,17 @@ import {
   Shield,
   CalendarCheck,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  FileText,
+  CreditCard
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { settingsAPI, authAPI } from '../../services/api';
 import LocationMapModal from '../../components/modals/LocationMapModal';
 import AdminPermissions from '../../components/admin/AdminPermissions';
+import SlipTemplateBuilder from '../../components/admin/SlipTemplateBuilder';
+import AttendanceTemplateBuilder from '../../components/admin/AttendanceTemplateBuilder';
+import IDCardTemplateBuilder from '../../components/admin/IDCardTemplateBuilder';
 
 const Settings = () => {
   const queryClient = useQueryClient();
@@ -63,6 +68,8 @@ const Settings = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
       alert('Settings saved successfully!');
+      // Reload halaman agar LicenseFooter dan cache lisensi terupdate
+      window.location.reload();
     },
   });
 
@@ -186,6 +193,9 @@ const Settings = () => {
     { id: 'Location', icon: MapPin, label: 'Geofencing' },
     { id: 'Shifts', icon: Clock, label: 'Shift Rules' },
     { id: 'Security', icon: ShieldCheck, label: 'Biometrics' },
+    { id: 'SlipBuilder', icon: FileText, label: 'Slip Configuration' },
+    { id: 'AttendanceBuilder', icon: CalendarCheck, label: 'Attendance Report' },
+    { id: 'IDCardBuilder', icon: CreditCard, label: 'ID Card Template' },
   ];
 
   if (user?.role === 'SUPER_ADMIN') {
@@ -280,8 +290,19 @@ const Settings = () => {
           </div>
         </aside>
 
-        {/* Content Area */}
         <div className="flex-1 min-w-0">
+          {activeTab === 'SlipBuilder' && (
+            <SlipTemplateBuilder formData={formData} handleInputChange={handleInputChange} />
+          )}
+
+          {activeTab === 'AttendanceBuilder' && (
+            <AttendanceTemplateBuilder formData={formData} handleInputChange={handleInputChange} />
+          )}
+
+          {activeTab === 'IDCardBuilder' && (
+            <IDCardTemplateBuilder formData={formData} handleInputChange={handleInputChange} />
+          )}
+
           {activeTab === 'General' && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="bg-white p-8 md:p-10 border border-slate-200 rounded-3xl shadow-sm relative overflow-hidden">
@@ -616,6 +637,19 @@ const Settings = () => {
                 <div className="bg-white p-8 border border-slate-200 shadow-sm rounded-3xl">
                   <h3 className="text-xs font-bold text-slate-800 uppercase tracking-widest mb-6 border-l-4 border-blue-500 pl-4">Default Compliance</h3>
                   <div className="space-y-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Payroll Cut-Off Date (Tgl Tutup Buku)</label>
+                      <input 
+                        type="number" 
+                        min="0"
+                        max="31"
+                        placeholder="e.g. 25 (0 for End of Month)"
+                        value={formData.payrollCutoffDate || '0'} 
+                        onChange={(e) => handleInputChange('payrollCutoffDate', e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                      />
+                      <p className="text-[10px] text-slate-400 ml-1">Isi 0 untuk tanggal 1 s/d Akhir Bulan. Isi 25 untuk tgl 26 bulan lalu s/d 25 bulan ini.</p>
+                    </div>
                     <div className="space-y-2">
                       <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Global Grace Period (Minutes)</label>
                       <input 

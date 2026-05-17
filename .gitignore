@@ -1,7 +1,23 @@
+# Git Ignore — Smart Attendance Pro
+node_modules/
 .vercel
-.env*.local
+.env
+.env.*
+!.env.example
 
+# Build artifacts
 CLIENT_RELEASE/
 CLIENT_RELEASE.rar
-backend/dist/
 CLIENT_RELEASE.zip
+backend/dist/
+
+# License keys (generated per-client)
+LICENSE_KEY_*.txt
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+RELEASE_*

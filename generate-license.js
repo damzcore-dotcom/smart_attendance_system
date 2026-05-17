@@ -1,8 +1,9 @@
 const crypto = require('crypto');
+require('dotenv').config({ path: './backend/.env' });
 
 // ⚠️ WARNING: Keep this secret safe! Do not share it with clients.
-// In a real production system, store this in a secure vault or environment variable.
-const MASTER_SECRET = 'IGA_SUPER_SECRET_KEY_2026_DO_NOT_SHARE';
+// Secret is loaded from backend/.env — never hardcode in source!
+const MASTER_SECRET = process.env.LICENSE_SECRET || 'CHANGE_THIS_SECRET_IN_ENV';
 
 function generateLicense(clientName, expiryDateStr, maxEmployees) {
   const payload = {

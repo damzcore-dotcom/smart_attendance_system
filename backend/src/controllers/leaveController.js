@@ -106,81 +106,92 @@ const review = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Request not found' });
     }
 
-    const updated = await prisma.leaveRequest.update({
-      where: { id },
-      data: { status, reviewNote }
-    });
-
-    // AUTO ATTENDANCE LOGIC & QUOTA DEDUCTION
-    if (status === 'APPROVED') {
-      const start = new Date(leave.startDate);
-      const end = new Date(leave.endDate);
-      
-      // Calculate duration in days
-      const diffTime = Math.abs(end - start);
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-
-      // Deduct from quota if type is 'Cuti'
-      if (leave.type === 'Cuti') {
-        const employee = await prisma.employee.findUnique({ where: { id: leave.employeeId } });
-        if (employee.remainingLeave < diffDays) {
-          return res.status(400).json({ success: false, message: `Insufficient leave quota. Remaining: ${employee.remainingLeave} days.` });
-        }
-
-        await prisma.employee.update({
-          where: { id: leave.employeeId },
-          data: { remainingLeave: { decrement: diffDays } }
-        });
+    // Use transaction to prevent race condition on quota deduction
+    const updated = await prisma.$transaction(async (tx) => {
+      // Re-fetch inside transaction to get latest state
+      const freshLeave = await tx.leaveRequest.findUnique({ where: { id } });
+      if (freshLeave.status !== 'PENDING') {
+        throw new Error('This request has already been processed');
       }
 
-      // Mapping leave type to database AttStatus enum
-      const statusMap = {
-        'CUTI': 'CUTI',
-        'SAKIT': 'SAKIT',
-        'IZIN': 'IZIN'
-      };
-      const attStatus = statusMap[leave.type.toUpperCase()] || 'IZIN';
+      const result = await tx.leaveRequest.update({
+        where: { id },
+        data: { status, reviewNote }
+      });
 
-      let curr = new Date(start);
-      while (curr <= end) {
-        const dateKey = new Date(curr);
-        dateKey.setHours(0, 0, 0, 0);
+      // AUTO ATTENDANCE LOGIC & QUOTA DEDUCTION
+      if (status === 'APPROVED') {
+        const start = new Date(leave.startDate);
+        const end = new Date(leave.endDate);
+        
+        // Calculate duration in days
+        const diffTime = Math.abs(end - start);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
-        const existingAtt = await prisma.attendance.findUnique({
-          where: { 
-            employeeId_date: { 
-              employeeId: leave.employeeId, 
-              date: dateKey 
-            } 
+        // Deduct from quota if type is 'Cuti'
+        if (leave.type === 'Cuti') {
+          const employee = await tx.employee.findUnique({ where: { id: leave.employeeId } });
+          if (employee.remainingLeave < diffDays) {
+            throw new Error(`Insufficient leave quota. Remaining: ${employee.remainingLeave} days.`);
           }
-        });
 
-        const attData = {
-          status: attStatus,
-          mode: 'Leave System',
-          notes: `Approved ${leave.type}: ${leave.reason}`
-        };
-
-        if (existingAtt) {
-          await prisma.attendance.update({
-            where: { id: existingAtt.id },
-            data: attData
+          await tx.employee.update({
+            where: { id: leave.employeeId },
+            data: { remainingLeave: { decrement: diffDays } }
           });
-        } else {
-          await prisma.attendance.create({
-            data: {
-              ...attData,
-              employeeId: leave.employeeId,
-              date: dateKey
+        }
+
+        // Mapping leave type to database AttStatus enum
+        const statusMap = {
+          'CUTI': 'CUTI',
+          'SAKIT': 'SAKIT',
+          'IZIN': 'IZIN'
+        };
+        const attStatus = statusMap[leave.type.toUpperCase()] || 'IZIN';
+
+        let curr = new Date(start);
+        while (curr <= end) {
+          const dateKey = new Date(curr);
+          dateKey.setHours(0, 0, 0, 0);
+
+          const existingAtt = await tx.attendance.findUnique({
+            where: { 
+              employeeId_date: { 
+                employeeId: leave.employeeId, 
+                date: dateKey 
+              } 
             }
           });
+
+          const attData = {
+            status: attStatus,
+            mode: 'Leave System',
+            notes: `Approved ${leave.type}: ${leave.reason}`
+          };
+
+          if (existingAtt) {
+            await tx.attendance.update({
+              where: { id: existingAtt.id },
+              data: attData
+            });
+          } else {
+            await tx.attendance.create({
+              data: {
+                ...attData,
+                employeeId: leave.employeeId,
+                date: dateKey
+              }
+            });
+          }
+
+          curr.setDate(curr.getDate() + 1);
         }
-
-        curr.setDate(curr.getDate() + 1);
       }
-    }
 
-    // Notify employee
+      return result;
+    });
+
+    // Notify employee (outside transaction — non-critical)
     await prisma.notification.create({
       data: {
         employeeId: leave.employeeId,

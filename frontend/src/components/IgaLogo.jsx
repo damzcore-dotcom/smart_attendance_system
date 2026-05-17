@@ -1,16 +1,19 @@
-export const IgaLogo = ({ className = "w-full h-full" }) => (
-  <svg viewBox="0 0 145 65" xmlns="http://www.w3.org/2000/svg" className={className}>
-    <defs>
-      <linearGradient id="igaGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="#1e3a8a" /> {/* blue-900 */}
-        <stop offset="50%" stopColor="#312e81" /> {/* indigo-900 */}
-        <stop offset="100%" stopColor="#0f172a" /> {/* slate-900 */}
-      </linearGradient>
-      
-      <filter id="igaGlow" x="-20%" y="-20%" width="140%" height="140%">
-        <feDropShadow dx="0" dy="2" stdDeviation="2" floodColor="#0f172a" floodOpacity="0.15" />
-      </filter>
-    </defs>
+export const IgaLogo = ({ className = "w-full h-full", color }) => {
+  const themeColor = color || "#1e3a8a";
+  
+  return (
+    <svg viewBox="0 0 145 65" xmlns="http://www.w3.org/2000/svg" className={className}>
+      <defs>
+        <linearGradient id="igaGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor={themeColor} /> 
+          <stop offset="60%" stopColor={themeColor} /> 
+          <stop offset="100%" stopColor="#0f172a" /> 
+        </linearGradient>
+        
+        <filter id="igaGlow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="2" stdDeviation="2" floodColor="#0f172a" floodOpacity="0.15" />
+        </filter>
+      </defs>
 
     <g fill="url(#igaGradient)" stroke="url(#igaGradient)" filter="url(#igaGlow)">
       {/* I - Hollow geometric rectangle */}
@@ -44,4 +47,5 @@ export const IgaLogo = ({ className = "w-full h-full" }) => (
       <path d="M 0 58 Q 72.5 55 145 58 Q 72.5 61 0 58 Z" fill="url(#igaGradient)" stroke="none" />
     </g>
   </svg>
-);
+  );
+};

@@ -44,6 +44,7 @@ const login = async (req, res) => {
       success: true,
       accessToken,
       refreshToken,
+      mustChangePassword: user.mustChangePassword || false,
       user: {
         id: user.id,
         username: user.username,
@@ -290,4 +291,46 @@ const getMe = async (req, res) => {
   }
 };
 
-module.exports = { login, refresh, verifyFace, logout, getMe };
+/**
+ * POST /api/auth/change-password
+ * Force password change on first login
+ */
+const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Current and new passwords are required' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: 'New password must be at least 6 characters' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const isValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isValid) {
+      return res.status(401).json({ success: false, message: 'Current password is incorrect' });
+    }
+
+    if (currentPassword === newPassword) {
+      return res.status(400).json({ success: false, message: 'New password must be different from current password' });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { password: hashedPassword, mustChangePassword: false },
+    });
+
+    res.json({ success: true, message: 'Password changed successfully' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { login, refresh, verifyFace, logout, getMe, changePassword };

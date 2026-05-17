@@ -86,9 +86,8 @@ const getAll = async (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
     const skip = (page - 1) * limit;
 
-    // 3. Dynamic Summary Calculation
-    // Use aggregate logic to get counts for different statuses
-    const [total, records, allRecords] = await Promise.all([
+    // 3. Optimized Summary Calculation (O(1) Memory footprint via DB Aggregation)
+    const [total, records, groupStats, uniqueEmpRecords, absentRecords] = await Promise.all([
       prisma.attendance.count({ where }),
       prisma.attendance.findMany({
         where,
@@ -97,38 +96,49 @@ const getAll = async (req, res) => {
         skip,
         take: limit,
       }),
+      prisma.attendance.groupBy({
+        by: ['status'],
+        where,
+        _count: { _all: true },
+        _sum: { lateMinutes: true }
+      }),
       prisma.attendance.findMany({
         where,
-        select: { date: true, checkIn: true, checkOut: true, status: true, lateMinutes: true, employeeId: true }
+        distinct: ['employeeId'],
+        select: { employeeId: true }
+      }),
+      prisma.attendance.findMany({
+        where: { ...where, status: 'ABSENT' },
+        select: { date: true }
       })
     ]);
 
     let hadirCount = 0, telatCount = 0, mangkirCount = 0, absenCount = 0, holidayCount = 0, cutiCount = 0, sakitCount = 0, izinCount = 0, totalLate = 0;
-    const uniqueEmployees = new Set();
-    
-    allRecords.forEach(r => {
-      uniqueEmployees.add(r.employeeId);
-      const recordDay = new Date(r.date).getDay();
-      const isWorkingDay = workingDays.includes(recordDay);
-      let finalStatus = r.status;
-      
-      if (!isWorkingDay && !r.checkIn && !r.checkOut && r.status === 'ABSENT') {
-        finalStatus = 'HOLIDAY';
-      }
-      
-      const resolved = resolveStatus(r.checkIn, r.checkOut, finalStatus, r.date);
-      if (resolved === 'PRESENT') hadirCount++;
-      else if (resolved === 'LATE') telatCount++;
-      else if (resolved === 'MANGKIR') mangkirCount++;
-      else if (resolved === 'HOLIDAY') holidayCount++;
-      else if (resolved === 'CUTI') cutiCount++;
-      else if (resolved === 'SAKIT') sakitCount++;
-      else if (resolved === 'IZIN') izinCount++;
-      else absenCount++;
 
-      // Penalty logic: +30 for Mangkir
-      const penalty = (resolved === 'MANGKIR') ? 30 : 0;
-      totalLate += (r.lateMinutes || 0) + penalty;
+    groupStats.forEach(stat => {
+      const s = stat.status;
+      const count = stat._count._all;
+      const late = stat._sum.lateMinutes || 0;
+
+      if (s === 'PRESENT') hadirCount += count;
+      else if (s === 'LATE') telatCount += count;
+      else if (s === 'MANGKIR') mangkirCount += count;
+      else if (s === 'HOLIDAY') holidayCount += count;
+      else if (s === 'CUTI') cutiCount += count;
+      else if (s === 'SAKIT') sakitCount += count;
+      else if (s === 'IZIN') izinCount += count;
+      else absenCount += count;
+
+      totalLate += late + (s === 'MANGKIR' ? count * 30 : 0);
+    });
+
+    // Dynamically resolve HOLIDAY for ABSENT records based on working days settings
+    absentRecords.forEach(r => {
+      const recordDay = new Date(r.date).getDay();
+      if (!workingDays.includes(recordDay)) {
+        holidayCount++;
+        absenCount--;
+      }
     });
 
     const summary = {
@@ -142,7 +152,7 @@ const getAll = async (req, res) => {
       sakit: sakitCount,
       izin: izinCount,
       totalLate: totalLate,
-      uniqueEmployeeCount: uniqueEmployees.size,
+      uniqueEmployeeCount: uniqueEmpRecords.length,
     };
 
     res.json({
@@ -402,7 +412,7 @@ const getHistory = async (req, res) => {
 
     const records = await prisma.attendance.findMany({
       where,
-      orderBy: { date: 'desc' },
+      orderBy: { date: 'asc' },
       take: 31,
     });
 
@@ -420,7 +430,7 @@ const getHistory = async (req, res) => {
                 r.status === 'CUTI' ? 'Cuti' : 
                 r.status === 'SAKIT' ? 'Sakit' : 
                 r.status === 'IZIN' ? 'Izin' : 'Tanpa Keterangan (Alpa)',
-        lateMinutes: r.lateMinutes,
+        lateMinutes: (r.status === 'MANGKIR' || r.status === 'ABSENT' || r.status === 'MISSING') ? 30 : r.lateMinutes,
       })),
     });
   } catch (err) {

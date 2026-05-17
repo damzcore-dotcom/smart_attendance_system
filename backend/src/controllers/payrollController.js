@@ -89,16 +89,33 @@ const generate = async (req, res) => {
     const month = parseInt(monthStr);
     const periodName = `${monthNames[month - 1]} ${year}`;
 
-    // Date range for attendance
-    const startDate = new Date(Date.UTC(year, month - 1, 1));
-    const endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
-
-    // Get working days config
+    // Get global settings
     const settingsList = await prisma.settings.findMany();
     const workingDaysSetting = settingsList.find(s => s.key === 'workingDays')?.value || '[1,2,3,4,5]';
     const workingDaysOfWeek = JSON.parse(workingDaysSetting);
+    
+    // CUT-OFF DATE LOGIC
+    const cutoffDateSetting = settingsList.find(s => s.key === 'payrollCutoffDate')?.value || '0';
+    const cutoffDay = parseInt(cutoffDateSetting);
 
-    // Calculate working days in month
+    let startDate, endDate;
+    if (cutoffDay > 0 && cutoffDay <= 31) {
+      // e.g. Cutoff = 25. Period May 2026 is from 26 April to 25 May.
+      let prevMonth = month - 1;
+      let prevYear = year;
+      if (prevMonth === 0) {
+        prevMonth = 12;
+        prevYear -= 1;
+      }
+      startDate = new Date(Date.UTC(prevYear, prevMonth - 1, cutoffDay + 1));
+      endDate = new Date(Date.UTC(year, month - 1, cutoffDay, 23, 59, 59, 999));
+    } else {
+      // Default: Date range for attendance (1st to end of month)
+      startDate = new Date(Date.UTC(year, month - 1, 1));
+      endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+    }
+
+    // Calculate total working days in period
     let totalWorkingDays = 0;
     for (let d = new Date(startDate); d <= endDate; d.setUTCDate(d.getUTCDate() + 1)) {
       if (workingDaysOfWeek.includes(d.getUTCDay())) totalWorkingDays++;
@@ -117,9 +134,14 @@ const generate = async (req, res) => {
     // Get overtime rules
     const overtimeRules = overtimeEnabled ? await prisma.overtimeRule.findMany({ where: { isActive: true }, orderBy: { hourFrom: 'asc' } }) : [];
 
-    // Get all active employees with salary config
+    // Get employees: ACTIVE + TERMINATED (who have attendance in this period for pending salary)
     const employees = await prisma.employee.findMany({
-      where: { status: 'ACTIVE' },
+      where: {
+        OR: [
+          { status: 'ACTIVE' },
+          { attendance: { some: { date: { gte: startDate, lte: endDate } } } }
+        ]
+      },
       include: {
         department: true,
         shift: true,
@@ -131,6 +153,20 @@ const generate = async (req, res) => {
     const components = await prisma.salaryComponent.findMany({ where: { isActive: true }, orderBy: { sortOrder: 'asc' } });
     const positionAllowances = await prisma.positionAllowance.findMany();
 
+    // PRE-FETCH ALL ATTENDANCE (O(1) lookup map to avoid N+1 queries)
+    const allAttendances = await prisma.attendance.findMany({
+      where: {
+        date: { gte: startDate, lte: endDate },
+        employeeId: { in: employees.map(e => e.id) }
+      }
+    });
+
+    const attendanceMap = {};
+    allAttendances.forEach(a => {
+      if (!attendanceMap[a.employeeId]) attendanceMap[a.employeeId] = [];
+      attendanceMap[a.employeeId].push(a);
+    });
+
     const details = [];
     let totalGross = 0, totalDeductions = 0, totalNet = 0, totalOvertimePay = 0;
 
@@ -138,13 +174,8 @@ const generate = async (req, res) => {
       const salary = emp.salary;
       if (!salary) continue; // Skip employees without salary config
 
-      // Get attendance for this employee in the period
-      const attendanceRecords = await prisma.attendance.findMany({
-        where: {
-          employeeId: emp.id,
-          date: { gte: startDate, lte: endDate },
-        },
-      });
+      // Get attendance for this employee in the period from Memory Map (O(1))
+      const attendanceRecords = attendanceMap[emp.id] || [];
 
       // Calculate attendance stats
       let daysPresent = 0, daysAbsent = 0, daysLate = 0, totalLateMinutes = 0;
@@ -186,7 +217,10 @@ const generate = async (req, res) => {
         proRatedSalary = rate * daysPresent;
       } else {
         // Monthly worker: full salary if present enough, pro-rata if absent
-        if (totalWorkingDays > 0 && daysAbsent > 0) {
+        if (emp.status !== 'ACTIVE' && totalWorkingDays > 0) {
+          // Gaji Gantung (Resign/Keluar): Dibayar pro-rata sesuai hari kehadiran aktual
+          proRatedSalary = (baseSalary / totalWorkingDays) * daysPresent;
+        } else if (totalWorkingDays > 0 && daysAbsent > 0) {
           proRatedSalary = baseSalary * (1 - (daysAbsent / totalWorkingDays));
         } else {
           proRatedSalary = baseSalary;
@@ -576,6 +610,11 @@ const getSlip = async (req, res) => {
 const getMySlips = async (req, res) => {
   try {
     const empId = parseInt(req.params.empId);
+
+    // Security: Validate that the requesting user owns this employee record
+    if (req.user.role === 'EMPLOYEE' && req.user.employeeId !== empId) {
+      return res.status(403).json({ success: false, message: 'You can only view your own payslips' });
+    }
 
     const slips = await prisma.payrollDetail.findMany({
       where: {

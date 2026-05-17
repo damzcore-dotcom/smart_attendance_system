@@ -1,0 +1,305 @@
+# 🔍 AUDIT SISTEM - Smart Attendance Pro
+### Laporan Evaluasi Kesiapan Komersial
+**Tanggal:** 17 Mei 2026 | **Auditor:** AI System Analyst
+
+---
+
+## 📊 Ringkasan Eksekutif
+
+| Aspek | Skor | Status |
+|---|---|---|
+| Database Schema & Relasi | ⭐⭐⭐⭐ | Baik |
+| Autentikasi & Keamanan | ⭐⭐⭐ | Perlu Perbaikan |
+| Backend Logic & API | ⭐⭐⭐⭐ | Baik |
+| Frontend UI/UX | ⭐⭐⭐⭐ | Baik |
+| Payroll System | ⭐⭐⭐⭐ | Baik |
+| Role-Based Access Control | ⭐⭐⭐ | Perlu Perbaikan |
+| Error Handling | ⭐⭐⭐ | Perlu Perbaikan |
+| Commercial Readiness | ⭐⭐⭐ | Perlu Perbaikan |
+
+**Verdict:** Sistem ini memiliki fondasi yang **sangat kuat** dan fitur yang komprehensif. Namun ada beberapa masalah keamanan dan logika yang HARUS diperbaiki sebelum dijual secara komersial.
+
+---
+
+## 🔴 CRITICAL ISSUES (Harus Diperbaiki Segera)
+
+### 1. SQL Injection pada `userController.js`
+**File:** [userController.js](file:///c:/ADAM/smart_attendance_system/backend/src/controllers/userController.js#L72-L78)
+
+```javascript
+// ❌ BERBAHAYA: Menggunakan $executeRawUnsafe dengan interpolasi string
+await prisma.$executeRawUnsafe(`
+  INSERT INTO "ManagerAccess" ("userId", "managedDeptId", "manageAllDepts")
+  VALUES (${user.id}, ${deptVal}, ${allDeptsVal})
+  ON CONFLICT ("userId") DO UPDATE SET ...
+`);
+```
+
+> [!CAUTION]
+> Ini adalah kerentanan **SQL Injection**. Parameter `deptVal` bisa dimanipulasi. Harus diganti dengan Prisma ORM native atau `$executeRaw` (dengan template literal yang aman).
+
+**Solusi:**
+```javascript
+// ✅ AMAN: Gunakan Prisma upsert
+await prisma.managerAccess.upsert({
+  where: { userId: user.id },
+  update: { managedDeptId: isAll ? null : parsedDeptId, manageAllDepts: isAll },
+  create: { userId: user.id, managedDeptId: isAll ? null : parsedDeptId, manageAllDepts: isAll }
+});
+```
+
+---
+
+### 2. Hardcoded Secret Key pada License System
+**File:** [license.js](file:///c:/ADAM/smart_attendance_system/backend/src/middleware/license.js#L4)
+
+```javascript
+// ❌ Secret key di-hardcode di source code
+const MASTER_SECRET = 'IGA_SUPER_SECRET_KEY_2026_DO_NOT_SHARE';
+```
+
+> [!CAUTION]
+> Secret key yang hardcoded di source code sangat mudah di-reverse engineer. Ini berarti siapa pun yang melihat source code bisa membuat license key sendiri. Harus dipindahkan ke environment variable atau mekanisme obfuscation.
+
+---
+
+### 3. Default Password Tidak Aman
+**File:** [employeeController.js](file:///c:/ADAM/smart_attendance_system/backend/src/controllers/employeeController.js#L159)
+
+```javascript
+// ❌ Password default hardcoded
+const hashedPassword = await bcrypt.hash('password123', 10);
+```
+
+> [!WARNING]
+> Setiap karyawan baru dibuat dengan password `password123`. Ini harus bisa dikonfigurasi melalui Settings, atau sistem harus memaksa user mengganti password saat login pertama.
+
+---
+
+### 4. Employee Slip Tidak Diproteksi Kepemilikan
+**File:** [payrollRoutes.js](file:///c:/ADAM/smart_attendance_system/backend/src/routes/payrollRoutes.js#L53)
+
+```javascript
+// ❌ Siapa saja yang terautentikasi bisa melihat slip orang lain
+router.get('/my-slips/:empId', auth, payrollCtrl.getMySlips);
+```
+
+> [!WARNING]
+> Tidak ada validasi bahwa `empId` yang diminta sesuai dengan user yang sedang login. Karyawan A bisa melihat slip gaji karyawan B hanya dengan mengganti parameter URL.
+
+---
+
+### 5. Payroll Routes Tanpa Role Check
+**File:** [payrollRoutes.js](file:///c:/ADAM/smart_attendance_system/backend/src/routes/payrollRoutes.js)
+
+> [!WARNING]
+> Semua route payroll hanya menggunakan `auth` (verifyToken) tanpa `requireAdmin`. Artinya, karyawan biasa (EMPLOYEE) yang terautentikasi bisa:
+> - Meng-generate payroll
+> - Meng-approve payroll
+> - Melihat seluruh data gaji semua karyawan
+> - Membatalkan payroll
+
+---
+
+## 🟡 IMPORTANT ISSUES (Prioritas Tinggi)
+
+### 6. CORS Hardcoded
+**File:** [index.js](file:///c:/ADAM/smart_attendance_system/backend/src/index.js#L33-L44)
+
+Origin CORS di-hardcode dengan IP internal IGA. Untuk produk komersial, ini harus dikonfigurasi dari environment variable.
+
+```diff
+- origin: ['http://localhost:5173', 'http://192.168.13.190:5173', ...],
++ origin: (process.env.CORS_ORIGINS || 'http://localhost:5173').split(','),
+```
+
+---
+
+### 7. Face-Check Route Menggunakan Permission `announcements`
+**File:** [App.jsx](file:///c:/ADAM/smart_attendance_system/frontend/src/App.jsx#L109)
+
+```jsx
+// ❌ Permission salah
+<Route path="face-check" element={
+  <PermissionRoute menuKey="announcements">  {/* Harusnya "face-check" */}
+    <AdminFaceCheck />
+  </PermissionRoute>
+} />
+```
+
+---
+
+### 8. Audit Log Route Tanpa Permission Check
+**File:** [App.jsx](file:///c:/ADAM/smart_attendance_system/frontend/src/App.jsx#L113)
+
+```jsx
+// ❌ Tidak ada PermissionRoute
+<Route path="audit-log" element={<AuditLog />} />
+```
+
+Semua role yang masuk ke admin layout bisa mengakses audit log tanpa pengecekan permission.
+
+---
+
+### 9. Manager Leave Update Menggunakan Field yang Tidak Ada di Schema
+**File:** [managerController.js](file:///c:/ADAM/smart_attendance_system/backend/src/controllers/managerController.js#L334-L336)
+
+```javascript
+// ❌ Field `adminNotes` dan `processedBy` tidak ada di LeaveRequest schema
+data: { status, adminNotes, processedBy: req.user.username, processedAt: new Date() }
+```
+
+Schema `LeaveRequest` hanya punya: `status`, `reviewNote`. Ini akan menyebabkan error Prisma.
+
+---
+
+### 10. Director Attendance: Working Days Setting Dibaca Salah
+**File:** [direkturRoutes.js](file:///c:/ADAM/smart_attendance_system/backend/src/routes/direkturRoutes.js#L170-L171)
+
+```javascript
+// ❌ Menggunakan findFirst (semua settings), bukan mencari key tertentu
+const settings = await prisma.settings.findFirst();
+const workingDays = settings?.workingDays ? settings.workingDays.split(',').map(...) : [...];
+```
+
+`Settings` model menggunakan key-value pair, bukan field langsung. Seharusnya:
+```javascript
+const s = await prisma.settings.findUnique({ where: { key: 'workingDays' } });
+const workingDays = s ? JSON.parse(s.value) : [1,2,3,4,5];
+```
+
+---
+
+### 11. Duplicate `recalculate` Function di API Service
+**File:** [api.js](file:///c:/ADAM/smart_attendance_system/frontend/src/services/api.js#L196)
+
+```javascript
+// Fungsi ini didefinisikan 2x di attendanceAPI
+recalculate: (startDate, endDate) => ... // Line 196
+recalculate: (startDate, endDate) => ... // Line 229 (overrides)
+```
+
+---
+
+## 🟢 LOGIC ISSUES (Prioritas Sedang)
+
+### 12. Leave Review Tidak Sinkron dengan Kuota (Race Condition)
+**File:** [leaveController.js](file:///c:/ADAM/smart_attendance_system/backend/src/controllers/leaveController.js#L91-L196)
+
+Proses approval tidak menggunakan `$transaction`. Jika 2 admin meng-approve request cuti yang sama secara bersamaan, kuota bisa terpotong 2x.
+
+---
+
+### 13. Payroll Generate Tidak Mengecek Double Run
+Jika 2 user menekan tombol "Generate" secara bersamaan untuk periode yang sama, bisa terjadi race condition. Solusi: gunakan database lock atau transaction isolation.
+
+---
+
+### 14. Dashboard Weekly Trends Menggunakan N+1 Query
+**File:** [dashboardController.js](file:///c:/ADAM/smart_attendance_system/backend/src/controllers/dashboardController.js#L70-L99)
+
+Loop 7 hari × 1 query per hari = 7 queries. Bisa dioptimasi menjadi 1 query dengan `groupBy`.
+
+---
+
+### 15. Employee Delete Cascade Tidak Lengkap
+Ketika karyawan dihapus, `User` relation menggunakan `onDelete: SetNull`. Ini berarti user account tetap ada tapi kehilangan referensi karyawan. Sebaiknya, ketika karyawan dihapus, user account juga ikut terhapus.
+
+---
+
+## 📋 HAL YANG SUDAH BAIK
+
+| ✅ Fitur | Detail |
+|---|---|
+| JWT + Refresh Token | Implementasi standard dengan auto-refresh di frontend |
+| Multi-Role System | 6 role (SUPER_ADMIN, ADMIN, ACCOUNTING, DIREKTUR, MANAGER, EMPLOYEE) |
+| Menu Permissions | Granular CRUD permission per menu per user |
+| Payroll Workflow | DRAFT → AWAITING_APPROVAL → APPROVED → COMPLETED |
+| Attendance Logic | Hadir, Terlambat, Mangkir, Izin, Sakit, Cuti, Holiday |
+| Cut-off Date Payroll | Mendukung periode potong gaji custom |
+| Pro-Rata Calculation | Gaji proporsional untuk resign/kontrak |
+| Overtime Tiered Rules | Aturan lembur bertingkat (1.5x, 2x, 3x) |
+| Position Allowance Matrix | Tunjangan per jabatan per komponen |
+| PKWT/Harian Support | Mendukung karyawan kontrak dan harian |
+| License Protection | Sistem lisensi berbasis HMAC dengan expiry |
+| Audit Logging | Setiap aksi CRUD tercatat |
+| Excel Import/Export | Import data karyawan & absensi dari Excel |
+| Geofencing | Absensi berbasis lokasi GPS |
+| Face Recognition | Login & absensi via biometrik wajah |
+| Mass Leave | Penerapan libur massal |
+| Notification System | Notifikasi real-time untuk karyawan |
+
+---
+
+## 🔧 RENCANA PERBAIKAN
+
+### FASE 1: Security Critical (Estimasi: 1-2 jam)
+
+| No | Task | File | Prioritas |
+|---|---|---|---|
+| 1.1 | Ganti `$executeRawUnsafe` → Prisma `upsert` di userController | userController.js | 🔴 CRITICAL |
+| 1.2 | Tambahkan `requireAdmin` ke semua payroll routes | payrollRoutes.js | 🔴 CRITICAL |
+| 1.3 | Validasi kepemilikan `empId` pada endpoint `/my-slips` | payrollController.js | 🔴 CRITICAL |
+| 1.4 | Pindahkan `MASTER_SECRET` ke env variable | license.js | 🔴 CRITICAL |
+| 1.5 | Buat default password dapat dikonfigurasi dari Settings | employeeController.js | 🟡 HIGH |
+
+### FASE 2: Logic & Bug Fixes (Estimasi: 1-2 jam)
+
+| No | Task | File | Prioritas |
+|---|---|---|---|
+| 2.1 | Fix permission key `announcements` → `face-check` di App.jsx | App.jsx | 🟡 HIGH |
+| 2.2 | Tambahkan PermissionRoute ke audit-log | App.jsx | 🟡 HIGH |
+| 2.3 | Fix Manager leave update fields yang tidak ada di schema | managerController.js | 🟡 HIGH |
+| 2.4 | Fix Director attendance working days parsing | direkturRoutes.js | 🟡 HIGH |
+| 2.5 | Bungkus leave approval dalam `$transaction` | leaveController.js | 🟡 HIGH |
+| 2.6 | Hapus duplicate `recalculate` di API service | api.js | 🟢 MEDIUM |
+| 2.7 | Perbaiki CORS agar dinamis dari env | index.js | 🟡 HIGH |
+
+### FASE 3: Performance & Quality (Estimasi: 2-3 jam)
+
+| No | Task | File | Prioritas |
+|---|---|---|---|
+| 3.1 | Optimasi dashboard weekly trends (N+1 → groupBy) | dashboardController.js | 🟢 MEDIUM |
+| 3.2 | Tambahkan `force password change` pada login pertama | authController.js, Login.jsx | 🟢 MEDIUM |
+| 3.3 | Tambahkan rate limiting pada endpoint login & face-verify | index.js | 🟢 MEDIUM |
+| 3.4 | Tambahkan input validation library (zod/joi) | Semua controller | 🟢 MEDIUM |
+| 3.5 | Buat error boundary global di frontend | App.jsx | 🟢 MEDIUM |
+
+### FASE 4: Commercial Polish (Estimasi: 2-3 jam)
+
+| No | Task | File | Prioritas |
+|---|---|---|---|
+| 4.1 | Hilangkan semua referensi hardcoded "IGA" | Seluruh codebase | 🟡 HIGH |
+| 4.2 | Buat halaman 404 & error page yang proper | Frontend | 🟢 MEDIUM |
+| 4.3 | Implementasi multi-language support (i18n) | Frontend | 🔵 LOW |
+| 4.4 | Buat setup wizard saat instalasi pertama | Frontend + Backend | 🔵 LOW |
+| 4.5 | Dokumentasi API (Swagger/OpenAPI) | Backend | 🔵 LOW |
+
+---
+
+> [!IMPORTANT]
+> **Rekomendasi:** Selesaikan **FASE 1** dan **FASE 2** terlebih dahulu sebelum menjual sistem ini. FASE 3 dan 4 bisa dilakukan bertahap setelah deployment pertama.
+
+---
+
+## 📐 Diagram Relasi Database (Current)
+
+```mermaid
+erDiagram
+    User ||--o| Employee : "has"
+    User ||--o| ManagerAccess : "has"
+    User ||--o{ MenuPermission : "has"
+    Employee }o--|| Department : "belongs to"
+    Employee }o--o| Shift : "assigned"
+    Employee ||--o{ Attendance : "records"
+    Employee ||--o{ CorrectionRequest : "submits"
+    Employee ||--o{ LeaveRequest : "submits"
+    Employee ||--o{ Notification : "receives"
+    Employee ||--o| EmployeeSalary : "has"
+    Employee ||--o{ PayrollDetail : "included in"
+    Payroll ||--o{ PayrollDetail : "contains"
+    SalaryComponent ||--o{ PositionAllowance : "has"
+```
+
+> [!NOTE]
+> Relasi database sudah cukup baik dan konsisten. Unique constraints diterapkan dengan benar pada field-field kunci (employeeCode, email, username, attendance employeeId+date).

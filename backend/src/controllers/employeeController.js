@@ -157,7 +157,7 @@ const create = async (req, res) => {
     const employee = await prisma.$transaction(async (tx) => {
       const emp = await tx.employee.create({ data: dataObj, include: { department: true } });
       const hashedPassword = await bcrypt.hash('password123', 10);
-      await tx.user.create({ data: { username: employeeCode, password: hashedPassword, role: 'EMPLOYEE', employeeId: emp.id } });
+      await tx.user.create({ data: { username: employeeCode, password: hashedPassword, role: 'EMPLOYEE', employeeId: emp.id, mustChangePassword: true } });
       return emp;
     });
 
@@ -255,6 +255,14 @@ const importExcel = async (req, res) => {
     let employeesSkipped = 0;
     const totalRows = rawData.length;
 
+    // PRE-FETCH DATA: Optimization to avoid N+1 Query problem (O(1) lookups)
+    const existingEmployees = await prisma.employee.findMany({ select: { employeeCode: true } });
+    const existingNikSet = new Set(existingEmployees.map(e => e.employeeCode.trim()));
+
+    const existingDepts = await prisma.department.findMany();
+    const deptMap = new Map();
+    existingDepts.forEach(d => deptMap.set(d.name.toLowerCase().trim(), d.id));
+
     for (let i = 0; i < totalRows; i++) {
       const row = rawData[i];
       // Update progress
@@ -268,24 +276,30 @@ const importExcel = async (req, res) => {
       
       if (!empCode || !name) continue;
 
-      // Logic 1: Pengecekan NIK tunggal untuk menghindari duplikasi
-      let employee = await prisma.employee.findUnique({ where: { employeeCode: empCode } });
-      
-      // Logic 2: Jika sudah ada, ABAIKAN (Skip) sesuai permintaan user
-      if (employee) {
+      // Logic 1: Pengecekan NIK tunggal untuk menghindari duplikasi via Memory Set
+      if (existingNikSet.has(empCode)) {
         employeesSkipped++;
         continue;
       }
+      
+      // Tambahkan ke Set agar data duplikat di file yang sama juga diabaikan
+      existingNikSet.add(empCode);
 
       // Jika data baru, lanjutkan pendaftaran
       let deptName = String(row['Departemen'] || row['Department'] || 'General').trim();
-      let department = await prisma.department.findUnique({ where: { name: deptName } });
-      if (!department) department = await prisma.department.create({ data: { name: deptName } });
+      let deptKey = deptName.toLowerCase();
+      
+      let departmentId = deptMap.get(deptKey);
+      if (!departmentId) {
+        const newDept = await prisma.department.create({ data: { name: deptName } });
+        departmentId = newDept.id;
+        deptMap.set(deptKey, departmentId);
+      }
 
       const createData = {
         employeeCode: empCode,
         name,
-        departmentId: department.id,
+        departmentId: departmentId,
         grade: String(row['Grade'] || ''),
         position: String(row['Jabatan'] || row['Position'] || ''),
         section: String(row['Bagian'] || ''),

@@ -66,33 +66,47 @@ const getStats = async (req, res) => {
 
 /**
  * GET /api/dashboard/weekly-trends
+ * Optimized: Single query with groupBy instead of 7 sequential queries
  */
 const getWeeklyTrends = async (req, res) => {
   try {
     const now = new Date();
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const data = [];
+    const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+    // Calculate date range: 7 days ago → today
+    const weekStart = new Date(now);
+    weekStart.setDate(weekStart.getDate() - 6);
+    weekStart.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(now);
+    weekEnd.setDate(weekEnd.getDate() + 1);
+    weekEnd.setHours(0, 0, 0, 0);
+
+    // Single query: fetch all records in the 7-day range
+    const records = await prisma.attendance.findMany({
+      where: { date: { gte: weekStart, lt: weekEnd } },
+      select: { date: true, status: true },
+    });
+
+    // Group in memory (O(n) single pass)
+    const dayMap = {};
     for (let i = 6; i >= 0; i--) {
       const d = new Date(now);
       d.setDate(d.getDate() - i);
-      const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-      const dayEnd = new Date(dayStart);
-      dayEnd.setDate(dayEnd.getDate() + 1);
-
-      const records = await prisma.attendance.findMany({
-        where: { date: { gte: dayStart, lt: dayEnd } },
-      });
-
-      data.push({
-        name: days[dayStart.getDay()],
-        present: records.filter(r => r.status === 'PRESENT').length,
-        late: records.filter(r => r.status === 'LATE').length,
-        leave: records.filter(r => ['IZIN', 'SAKIT', 'CUTI'].includes(r.status)).length,
-      });
+      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      dayMap[key] = { name: dayLabels[d.getDay()], present: 0, late: 0, leave: 0 };
     }
 
-    res.json({ success: true, data });
+    records.forEach(r => {
+      const d = new Date(r.date);
+      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      if (dayMap[key]) {
+        if (r.status === 'PRESENT') dayMap[key].present++;
+        else if (r.status === 'LATE') dayMap[key].late++;
+        else if (['IZIN', 'SAKIT', 'CUTI'].includes(r.status)) dayMap[key].leave++;
+      }
+    });
+
+    res.json({ success: true, data: Object.values(dayMap) });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

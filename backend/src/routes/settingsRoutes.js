@@ -1,8 +1,11 @@
 const router = require('express').Router();
-const { getAll, update, getLocations, createLocation, updateLocation, deleteLocation, getPublicInfo } = require('../controllers/settingsController');
+const { getAll, update, getLocations, createLocation, updateLocation, deleteLocation, getPublicInfo, getLicenseInfo } = require('../controllers/settingsController');
 const { verifyToken, requireAdmin } = require('../middleware/auth');
 
 router.get('/public', getPublicInfo);
+
+// License info — accessible by any logged-in user (for footer display)
+router.get('/license-info', verifyToken, getLicenseInfo);
 
 router.use(verifyToken, requireAdmin);
 

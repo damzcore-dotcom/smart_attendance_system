@@ -7,24 +7,20 @@ echo       Smart Attendance Pro - Launcher
 echo  ============================================
 echo.
 
-echo [1/2] Starting Backend Server (Port 5000)...
+echo [1/2] Starting Backend Server...
 cd /d "%~dp0backend"
 start "Smart Attendance - Backend" cmd /k "npm run dev"
 
-echo [2/2] Starting Frontend Server (Port 5173)...
+echo [2/2] Starting Frontend Server...
 cd /d "%~dp0frontend"
-start "Smart Attendance - Frontend" cmd /k "npm run dev -- --host 0.0.0.0 --port 5173"
+start "Smart Attendance - Frontend" cmd /k "npm run dev -- --host 0.0.0.0"
 
 echo.
 echo  --- Kedua server sedang berjalan! ---
-echo  - Backend:  http://192.168.13.190:5000/api/health
-echo  - Frontend: http://192.168.13.190:5173
-echo  - Public:   http://103.188.170.104:5173
+echo  - Backend:  http://localhost:5000/api/health
+echo  - Frontend: http://localhost:5173
 echo.
-echo  Akun Login Riil:
-echo  1. Admin:    user=admin, pass=admin123
-echo  2. Employee: user=EMP007 (Adam), pass=password123
-echo.
-echo  Note: Cek jendela terminal Vite untuk port yang aktif.
+echo  Note: Port aktual tergantung konfigurasi .env
+echo  Login via browser di alamat Frontend di atas.
 echo.
 pause

@@ -7,8 +7,9 @@ import * as faceapi from '@vladmandic/face-api';
 import * as XLSX from 'xlsx';
 import { 
   Search, Filter, CheckCircle2, Clock, UserPlus, FileSpreadsheet, Upload, X, Download, Save, Camera,
-  ScanFace, Loader2, AlertCircle, RefreshCw, ShieldCheck, ChevronRight, ChevronUp, ChevronDown, FileText, Banknote
+  ScanFace, Loader2, AlertCircle, RefreshCw, ShieldCheck, ChevronRight, ChevronUp, ChevronDown, FileText, Banknote, Printer
 } from 'lucide-react';
+import PrintableIDCard from '../../components/admin/PrintableIDCard';
 
 const emptyEmployee = { 
   employeeCode: '',
@@ -41,6 +42,9 @@ const Employees = () => {
   const [quickShiftForm, setQuickShiftForm] = useState({ departmentId: '', shiftId: '' });
   const [page, setPage] = useState(1);
   const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
+  const [printIDCardEmp, setPrintIDCardEmp] = useState(null);
+  const [companySettings, setCompanySettings] = useState({});
+  const [idCardConfig, setIdCardConfig] = useState(null);
   const PAGE_SIZE = 25;
   
   const webcamRef = useRef(null);
@@ -72,6 +76,17 @@ const Employees = () => {
       }
     };
     loadModels();
+    
+    const fetchSettings = async () => {
+      try {
+        const res = await settingsAPI.getAll();
+        setCompanySettings(res.data);
+        if (res.data.idCardConfig) {
+           setIdCardConfig(JSON.parse(res.data.idCardConfig));
+        }
+      } catch(e) {}
+    };
+    fetchSettings();
   }, []);
 
   const { data, isLoading } = useQuery({
@@ -271,6 +286,7 @@ const Employees = () => {
 
   return (
     <div className="space-y-8 pb-12 animate-in fade-in duration-500">
+      <div className="print:hidden space-y-8">
       {/* 1. Page Header */}
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 px-1">
         <div className="space-y-1">
@@ -456,6 +472,9 @@ const Employees = () => {
                   </div>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center block">Photo</span>
+                </th>
+                <th className="px-6 py-4 border-b border-slate-200">
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Status</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
@@ -596,12 +615,27 @@ const Employees = () => {
               ) : filteredEmployees.map((emp) => (
                 <tr key={emp.dbId} className="group hover:bg-blue-50/50 transition-colors duration-200">
                   <td className="px-6 py-3 sticky left-0 z-10 bg-white group-hover:bg-blue-50/50 transition-colors border-r border-slate-100 text-center shadow-[2px_0_5px_-2px_rgba(0,0,0,0.02)]">
-                    <button 
-                      onClick={() => handleEditEmployee(emp)} 
-                      className="px-4 py-1.5 bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border border-blue-100 hover:border-blue-600 shadow-sm"
-                    >
-                      Edit
-                    </button>
+                    <div className="flex justify-center gap-2">
+                      <button 
+                        onClick={() => handleEditEmployee(emp)} 
+                        className="px-4 py-1.5 bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border border-blue-100 hover:border-blue-600 shadow-sm"
+                      >
+                        Edit
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setPrintIDCardEmp(emp);
+                          setTimeout(() => {
+                            window.print();
+                            setTimeout(() => { setPrintIDCardEmp(null); }, 1000);
+                          }, 500);
+                        }} 
+                        className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-600 text-emerald-600 hover:text-white rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border border-emerald-100 hover:border-emerald-600 shadow-sm flex items-center gap-1"
+                        title="Print ID Card"
+                      >
+                        <Printer className="w-3 h-3" />
+                      </button>
+                    </div>
                   </td>
                   <td className="px-6 py-3 sticky left-[120px] z-10 bg-white group-hover:bg-blue-50/50 transition-colors border-r border-slate-100 text-center text-xs font-semibold text-slate-700">
                     {emp.id}
@@ -610,6 +644,17 @@ const Employees = () => {
                     <div className="flex flex-col min-w-[200px]">
                       <span className="text-sm font-bold text-slate-800 truncate">{emp.name || "Unknown"}</span>
                       <span className="text-[10px] text-slate-400 font-medium">{emp.email || "No Email"}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-3 text-center">
+                    <div className="w-10 h-10 rounded-full border-2 border-white shadow-sm overflow-hidden bg-slate-200 flex items-center justify-center mx-auto">
+                      {emp.facePhoto ? (
+                        <img src={emp.facePhoto} alt={emp.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-xs font-bold text-slate-400">
+                          {emp.name ? emp.name.charAt(0).toUpperCase() : '?'}
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="px-6 py-3">
@@ -704,7 +749,7 @@ const Employees = () => {
 
       {/* Tabbed Add Modal */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 print:hidden">
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setAddModalOpen(false)}></div>
           <div className="bg-white w-full max-w-5xl relative z-10 overflow-hidden flex flex-col max-h-[90vh] shadow-2xl animate-in zoom-in-95 duration-300 rounded-3xl">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
@@ -1069,7 +1114,7 @@ const Employees = () => {
 
       {/* Professional Import Modal */}
       {isImportModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 print:hidden">
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => !isUploading && setImportModalOpen(false)}></div>
           <div className="bg-white w-full max-w-xl relative z-10 overflow-hidden border border-slate-200 shadow-2xl animate-in zoom-in-95 duration-300 rounded-3xl">
             <div className="px-8 py-6 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
@@ -1179,7 +1224,7 @@ const Employees = () => {
 
       {/* Quick Shift Modal */}
       {isQuickShiftModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 print:hidden">
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setQuickShiftModalOpen(false)}></div>
           <div className="bg-white w-full max-w-md relative z-10 overflow-hidden animate-in zoom-in-95 duration-300 border border-slate-200 rounded-3xl shadow-2xl">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
@@ -1259,7 +1304,7 @@ const Employees = () => {
 
       {/* PKWT Alerts Modal */}
       {isPkwtModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 print:hidden">
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setPkwtModalOpen(false)}></div>
           <div className="bg-white w-full max-w-2xl relative z-10 overflow-hidden border border-slate-200 shadow-2xl animate-in zoom-in-95 duration-300 rounded-3xl">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
@@ -1331,6 +1376,18 @@ const Employees = () => {
           onClose={() => setSyncGajiModalOpen(false)}
           onDone={() => { setSyncGajiModalOpen(false); queryClient.invalidateQueries(['employees']); }}
         />
+      )}
+      </div>
+
+      {/* Hidden Print Container for ID Card */}
+      {printIDCardEmp && (
+        <div className="hidden print:block fixed inset-0 bg-white z-[9999]">
+          <PrintableIDCard 
+            employee={printIDCardEmp} 
+            company={companySettings} 
+            config={idCardConfig} 
+          />
+        </div>
       )}
 
       <style>{`
