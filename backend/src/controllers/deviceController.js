@@ -393,7 +393,14 @@ const syncAttendance = async (req, res) => {
       // Skip records outside of filter range
       if (recordTime < filterStart || recordTime > filterEnd) continue;
 
-      const dateKey = recordTime.toISOString().split('T')[0];
+      // FIX TIMEZONE BUG:
+      // toISOString() uses UTC. In WIB (UTC+7), 06:58 AM on May 1st becomes 23:58 PM on April 30th!
+      // This caused morning scans to be grouped into the PREVIOUS day, causing flipped check-ins.
+      // We must construct the date string using LOCAL TIME instead.
+      const year = recordTime.getFullYear();
+      const month = String(recordTime.getMonth() + 1).padStart(2, '0');
+      const day = String(recordTime.getDate()).padStart(2, '0');
+      const dateKey = `${year}-${month}-${day}`;
       
       const emp = empByFingerPrint[pinStr] || empByCode[pinStr];
       if (!emp) continue;

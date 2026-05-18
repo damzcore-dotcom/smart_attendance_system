@@ -62,6 +62,7 @@ const getAll = async (req, res) => {
         joinDate: emp.joinDate,
         contractEnd: emp.contractEnd,
         salaryCategory: emp.salaryCategory,
+        fingerPrintId: emp.fingerPrintId,
         faceId: emp.faceId || (emp.faceStatus === 'ENROLLED' ? 'Enrolled' : 'Pending'),
         facePhoto: emp.facePhoto,
         bpjsTk: emp.bpjsTk,
