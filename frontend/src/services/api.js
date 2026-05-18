@@ -1,4 +1,6 @@
-const API_BASE = '/api';
+const API_BASE = (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL !== '/')
+  ? (import.meta.env.VITE_API_URL.endsWith('/api') ? import.meta.env.VITE_API_URL : `${import.meta.env.VITE_API_URL}/api`)
+  : `${window.location.protocol}//${window.location.hostname}:5000/api`;
 
 /**
  * Smart Attendance Pro - API Service
