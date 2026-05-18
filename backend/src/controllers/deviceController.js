@@ -77,6 +77,121 @@ const testConnection = async (req, res) => {
 };
 
 /**
+ * FUZZY NAME MATCHING UTILITIES
+ * Menangani perbedaan penulisan nama antara mesin fingerprint dan database HRD
+ * Contoh: "M.Faizal Akbar" (mesin) ↔ "Muhammad Faizal Akbar" (database)
+ */
+
+// Daftar singkatan umum nama Indonesia
+const NAME_ABBREVIATIONS = {
+  'm': ['muhammad', 'muhamad', 'muh', 'moch', 'mochamad', 'mohamad', 'mohammad'],
+  'a': ['ahmad', 'achmad', 'achmat', 'ahmat'],
+  'abd': ['abdul', 'abdu'],
+  'muh': ['muhammad', 'muhamad'],
+  'moch': ['mochamad', 'mohamad'],
+  'r': ['rizky', 'rizki', 'risky', 'ricky'],
+  'h': ['haji', 'hajjah'],
+  'siti': ['siti'],
+  'sri': ['sri'],
+  'nur': ['nur', 'nuru', 'nurul'],
+  'dw': ['dwi'],
+};
+
+/**
+ * Normalisasi nama: lowercase, hapus titik/koma, pecah jadi kata-kata
+ */
+function normalizeName(name) {
+  return name
+    .toLowerCase()
+    .replace(/[.,\-_'"]/g, ' ')   // Ganti tanda baca dengan spasi
+    .replace(/\s+/g, ' ')          // Hapus spasi ganda
+    .trim()
+    .split(' ')
+    .filter(w => w.length > 0);
+}
+
+/**
+ * Cek apakah dua kata cocok (termasuk singkatan)
+ */
+function wordsMatch(wordA, wordB) {
+  if (wordA === wordB) return true;
+  
+  // Cek apakah salah satu adalah singkatan dari yang lain
+  // Contoh: "m" cocok dengan "muhammad"
+  for (const [abbr, fullNames] of Object.entries(NAME_ABBREVIATIONS)) {
+    if ((wordA === abbr && fullNames.includes(wordB)) ||
+        (wordB === abbr && fullNames.includes(wordA))) {
+      return true;
+    }
+  }
+  
+  // Cek prefix matching (minimal 3 huruf)
+  // Contoh: "muh" cocok dengan "muhammad"
+  if (wordA.length >= 3 && wordB.startsWith(wordA)) return true;
+  if (wordB.length >= 3 && wordA.startsWith(wordB)) return true;
+  
+  return false;
+}
+
+/**
+ * Hitung skor kecocokan antara nama mesin dan nama database (0-100)
+ */
+function calculateNameScore(machineWords, dbWords) {
+  if (machineWords.length === 0 || dbWords.length === 0) return 0;
+  
+  let matchCount = 0;
+  const usedDbIndexes = new Set();
+  
+  for (const mWord of machineWords) {
+    for (let i = 0; i < dbWords.length; i++) {
+      if (usedDbIndexes.has(i)) continue;
+      if (wordsMatch(mWord, dbWords[i])) {
+        matchCount++;
+        usedDbIndexes.add(i);
+        break;
+      }
+    }
+  }
+  
+  // Skor = persentase kata yang cocok dari total kata terpendek
+  const minWords = Math.min(machineWords.length, dbWords.length);
+  const maxWords = Math.max(machineWords.length, dbWords.length);
+  
+  // Hitung berdasarkan total kata terpanjang agar lebih akurat
+  return Math.round((matchCount / maxWords) * 100);
+}
+
+/**
+ * Cari nama karyawan terbaik dari database yang cocok dengan nama mesin
+ * Return: Employee object atau null jika tidak ada yang cocok
+ */
+function findBestNameMatch(machineName, employeeList) {
+  const machineWords = normalizeName(machineName);
+  if (machineWords.length === 0) return null;
+  
+  let bestMatch = null;
+  let bestScore = 0;
+  
+  for (const emp of employeeList) {
+    const dbWords = normalizeName(emp.name);
+    const score = calculateNameScore(machineWords, dbWords);
+    
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = emp;
+    }
+  }
+  
+  // Threshold: minimal 60% kata cocok untuk dianggap match
+  // Untuk nama 3 kata, minimal 2 kata harus cocok
+  if (bestScore >= 60) {
+    return bestMatch;
+  }
+  
+  return null;
+}
+
+/**
  * Sync Users (Enrollment dari Mesin ke Sistem)
  */
 const syncUsers = async (req, res) => {
@@ -99,6 +214,11 @@ const syncUsers = async (req, res) => {
       defaultDept = await prisma.department.create({ data: { name: 'General' } });
     }
 
+    // Preload all unlinked employees for fuzzy matching
+    const unlinkedEmployees = await prisma.employee.findMany({
+      where: { fingerPrintId: null }
+    });
+
     for (const u of users.data) {
       // AC No. dari mesin (deviceUserId / PIN)
       const fingerPrintId = String(u.userId).trim();
@@ -108,27 +228,26 @@ const syncUsers = async (req, res) => {
       let existing = await prisma.employee.findFirst({ where: { fingerPrintId } });
       
       if (existing) {
-        // Sudah terlink — update nama jika perlu
+        // Sudah terlink — skip
         updateCount++;
         continue;
       }
       
-      // 2. Coba cocokkan dengan nama karyawan yang sudah ada tapi belum punya fingerPrintId
+      // 2. FUZZY NAME MATCHING — cocokkan nama mesin dengan database
       if (machineName) {
-        const byName = await prisma.employee.findFirst({ 
-          where: { 
-            name: { equals: machineName, mode: 'insensitive' },
-            fingerPrintId: null // Hanya yang belum terlink
-          } 
-        });
+        const bestMatch = findBestNameMatch(machineName, unlinkedEmployees);
         
-        if (byName) {
+        if (bestMatch) {
           // Auto-link: isi fingerPrintId dari AC No. mesin
           await prisma.employee.update({
-            where: { id: byName.id },
+            where: { id: bestMatch.id },
             data: { fingerPrintId }
           });
+          // Remove from unlinked list so it won't match again
+          const idx = unlinkedEmployees.findIndex(e => e.id === bestMatch.id);
+          if (idx !== -1) unlinkedEmployees.splice(idx, 1);
           updateCount++;
+          console.log(`[Sync] ✅ Linked "${machineName}" → "${bestMatch.name}" (ID: ${bestMatch.id})`);
           continue;
         }
       }
@@ -145,6 +264,7 @@ const syncUsers = async (req, res) => {
         }
       });
       newCount++;
+      console.log(`[Sync] ➕ New placeholder: "${machineName || 'User Mesin ' + fingerPrintId}" (FP: ${fingerPrintId})`);
     }
 
     // Update device status to ONLINE
@@ -250,11 +370,22 @@ const syncAttendance = async (req, res) => {
     const recordsToCreate = [];
     const entries = Object.values(grouped);
     
+    // Fetch Saturday Half-Day settings
+    const settingsList = await prisma.settings.findMany();
+    const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
+    const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
+    
     for (const entry of entries) {
       const emp = entry.employee;
       const shiftStart = emp.shift?.startTime || '08:00';
-      const shiftEnd = emp.shift?.endTime || '17:00';
+      let shiftEnd = emp.shift?.endTime || '17:00';
       const gracePeriod = emp.shift?.gracePeriod || 15;
+      
+      // Override shiftEnd untuk hari Sabtu jika half-day aktif
+      const dayOfWeek = entry.date.getDay(); // 0=Sun, 6=Sat
+      if (dayOfWeek === 6 && isSaturdayHalfDay) {
+        shiftEnd = satCheckoutTime; // e.g. '13:00'
+      }
       
       // Sort all scans chronologically
       entry.scans.sort((a, b) => a - b);
@@ -272,7 +403,9 @@ const syncAttendance = async (req, res) => {
         const [endH, endM] = shiftEnd.split(':').map(Number);
         const shiftStartMinutes = startH * 60 + startM;
         const shiftEndMinutes = endH * 60 + endM;
-        const midpointMinutes = Math.floor((shiftStartMinutes + shiftEndMinutes) / 2); // e.g. 08:00-17:00 → midpoint = 12:30
+        const midpointMinutes = Math.floor((shiftStartMinutes + shiftEndMinutes) / 2);
+        // e.g. Senin-Jumat 08:00-17:00 → midpoint = 12:30
+        // e.g. Sabtu       08:00-13:00 → midpoint = 10:30
         
         const scanHour = earliest.getHours();
         const scanMinute = earliest.getMinutes();
