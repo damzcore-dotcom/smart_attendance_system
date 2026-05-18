@@ -158,9 +158,9 @@ export const employeeAPI = {
     const formData = new FormData();
     formData.append('file', file);
     
-    // We can't use standard apiFetch because it forces Content-Type: application/json
+    // Use API_BASE to ensure request goes to backend, not frontend
     const token = localStorage.getItem('accessToken');
-    const res = await fetch(`/api/employees/import?jobId=${jobId || ''}`, {
+    const res = await fetch(`${API_BASE}/employees/import?jobId=${jobId || ''}`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` },
       body: formData
@@ -172,7 +172,7 @@ export const employeeAPI = {
   },
   getImportProgress: async (jobId) => {
     const token = localStorage.getItem('accessToken');
-    const res = await fetch(`/api/employees/import-progress?jobId=${jobId}`, {
+    const res = await fetch(`${API_BASE}/employees/import-progress?jobId=${jobId}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     return await res.json();
