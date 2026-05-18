@@ -82,6 +82,9 @@ const getAll = async (req, res) => {
         spouseName: emp.spouseName,
         emergencyContact: emp.emergencyContact,
         notes: emp.notes,
+        gender: emp.gender,
+        bankName: emp.bankName,
+        bankAccountNumber: emp.bankAccountNumber,
         status: emp.status === 'ACTIVE' ? 'Active' : emp.status === 'ON_LEAVE' ? 'On Leave' : 'Terminated',
         shift: emp.shift ? { id: emp.shift.id, name: emp.shift.name } : null,
         shiftId: emp.shiftId,
@@ -147,6 +150,9 @@ const create = async (req, res) => {
       numberOfChildren: rest.numberOfChildren ? parseInt(rest.numberOfChildren) : null,
       fatherName: rest.fatherName, motherName: rest.motherName, spouseName: rest.spouseName,
       emergencyContact: rest.emergencyContact, notes: rest.notes, salaryCategory: rest.salaryCategory || 'UMK/UMR',
+      gender: rest.gender || null,
+      bankName: rest.bankName || null,
+      bankAccountNumber: rest.bankAccountNumber || null,
       joinDate: rest.joinDate ? new Date(rest.joinDate) : null,
       contractEnd: rest.contractEnd ? new Date(rest.contractEnd) : null,
       birthDate: rest.birthDate ? new Date(rest.birthDate) : null,
@@ -195,7 +201,9 @@ const update = async (req, res) => {
     if ('contractEnd' in data) data.contractEnd = data.contractEnd ? new Date(data.contractEnd) : null;
     if ('birthDate' in data) data.birthDate = data.birthDate ? new Date(data.birthDate) : null;
     if (faceDescriptor) data.faceDescriptor = JSON.parse(faceDescriptor);
-    if (data.shiftId) data.shiftId = parseInt(data.shiftId);
+    if ('shiftId' in data) {
+      data.shiftId = data.shiftId ? parseInt(data.shiftId) : null;
+    }
     if (data.leaveQuota !== undefined) data.leaveQuota = parseInt(data.leaveQuota);
     if (data.remainingLeave !== undefined) data.remainingLeave = parseInt(data.remainingLeave);
     // Remove read-only fields and relation objects that shouldn't be updated directly
@@ -296,40 +304,45 @@ const importExcel = async (req, res) => {
         deptMap.set(deptKey, departmentId);
       }
 
+      // Helper to convert empty strings to null for optional fields
+      const ns = (val) => { const s = String(val || '').trim(); return s || null; };
+
       const createData = {
         employeeCode: empCode,
         name,
         departmentId: departmentId,
-        grade: String(row['Grade'] || ''),
-        position: String(row['Jabatan'] || row['Position'] || ''),
-        section: String(row['Bagian'] || ''),
-        employmentStatus: String(row['Status Kerja'] || ''),
-        contractDuration: String(row['Lama Kontrak'] || ''),
-        faceId: String(row['Face ID'] || ''),
-        bpjsTk: String(row['BPJS TK'] || ''),
-        bpjsKesehatan: String(row['BPJS Kesehatan'] || ''),
-        npwp: String(row['NPWP'] || ''),
-        ptkpStatus: String(row['Status PTKP (Pajak)'] || ''),
-        kkNumber: String(row['No Kartu Keluarga'] || ''),
-        idNumber: String(row['NIK KTP'] || row['ID Number'] || ''),
-        birthPlace: String(row['Tempat Lahir'] || ''),
-        address: String(row['Alamat'] || ''),
-        education: String(row['Pendidikan Terakhir'] || ''),
-        major: String(row['Jurusan'] || ''),
-        religion: String(row['Agama'] || ''),
-        phone: String(row['No HP'] || ''),
+        grade: ns(row['Grade']),
+        position: ns(row['Jabatan'] || row['Position']),
+        section: ns(row['Bagian']),
+        employmentStatus: ns(row['Status Kerja']),
+        contractDuration: ns(row['Lama Kontrak']),
+        bpjsTk: ns(row['BPJS TK']),
+        bpjsKesehatan: ns(row['BPJS Kesehatan']),
+        npwp: ns(row['NPWP']),
+        ptkpStatus: ns(row['Status PTKP (Pajak)']),
+        kkNumber: ns(row['No Kartu Keluarga']),
+        idNumber: ns(row['NIK KTP'] || row['ID Number']),
+        birthPlace: ns(row['Tempat Lahir']),
+        address: ns(row['Alamat']),
+        education: ns(row['Pendidikan Terakhir']),
+        major: ns(row['Jurusan']),
+        religion: ns(row['Agama']),
+        phone: ns(row['No HP']),
         numberOfChildren: row['Jumlah Anak'] ? parseInt(row['Jumlah Anak']) : null,
-        fatherName: String(row['Nama Ayah Kandung'] || ''),
-        motherName: String(row['Nama Ibu Kandung'] || ''),
-        spouseName: String(row['Nama Suami/Istri'] || ''),
-        emergencyContact: String(row['KONTAK DARURAT'] || ''),
-        email: String(row['Email'] || `${empCode.toLowerCase()}@company.com`),
-        notes: String(row['Keterangan'] || ''),
+        fatherName: ns(row['Nama Ayah Kandung']),
+        motherName: ns(row['Nama Ibu Kandung']),
+        spouseName: ns(row['Nama Suami/Istri']),
+        emergencyContact: ns(row['KONTAK DARURAT']),
+        email: ns(row['Email']) || `${empCode.toLowerCase()}@company.com`,
+        notes: ns(row['Keterangan']),
+        gender: ns(row['Jenis Kelamin']),
+        bankName: ns(row['Nama Bank']),
+        bankAccountNumber: ns(row['Nomor Rekening']),
       };
       
-      if (row['Tanggal Masuk']) createData.joinDate = new Date(row['Tanggal Masuk']);
-      if (row['Sisa Tanggal Kontrak']) createData.contractEnd = new Date(row['Sisa Tanggal Kontrak']);
-      if (row['Tanggal Lahir']) createData.birthDate = new Date(row['Tanggal Lahir']);
+      if (row['Tanggal Masuk']) { try { const d = new Date(row['Tanggal Masuk']); if (!isNaN(d)) createData.joinDate = d; } catch(e) {} }
+      if (row['Sisa Tanggal Kontrak']) { try { const d = new Date(row['Sisa Tanggal Kontrak']); if (!isNaN(d)) createData.contractEnd = d; } catch(e) {} }
+      if (row['Tanggal Lahir']) { try { const d = new Date(row['Tanggal Lahir']); if (!isNaN(d)) createData.birthDate = d; } catch(e) {} }
 
       const hashedPassword = await bcrypt.hash('password123', 10);
       const newEmployee = await prisma.employee.create({

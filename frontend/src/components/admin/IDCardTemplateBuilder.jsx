@@ -7,6 +7,7 @@ const IDCardTemplateBuilder = ({ formData, handleInputChange }) => {
     primaryColor: '#1e40af',
     orientation: 'vertical',
     backgroundStyle: 'gradient',
+    designTemplate: 'classic',
     showQR: true,
     showLogo: true
   });
@@ -59,7 +60,39 @@ const IDCardTemplateBuilder = ({ formData, handleInputChange }) => {
               <Palette className="w-4 h-4 text-blue-500" /> Theme & Layout
             </h3>
             
-            <div className="space-y-4">
+            <div className="space-y-6">
+              {/* Quick Themes */}
+              <div>
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-3 block">Theme Presets</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { name: 'Corporate', color: '#1e40af', style: 'gradient', bgClass: 'bg-blue-800' },
+                    { name: 'Midnight', color: '#0f172a', style: 'solid', bgClass: 'bg-slate-900' },
+                    { name: 'Ruby', color: '#9f1239', style: 'gradient', bgClass: 'bg-rose-800' },
+                    { name: 'Emerald', color: '#065f46', style: 'gradient', bgClass: 'bg-emerald-800' }
+                  ].map((preset) => (
+                    <button
+                      key={preset.name}
+                      type="button"
+                      onClick={() => {
+                        updateConfig('primaryColor', preset.color);
+                        updateConfig('backgroundStyle', preset.style);
+                      }}
+                      className={`flex flex-col items-center gap-1.5 p-2 rounded-xl border transition-all ${
+                        config.primaryColor === preset.color 
+                          ? 'border-blue-500 bg-blue-50 shadow-sm' 
+                          : 'border-slate-200 bg-white hover:border-blue-300'
+                      }`}
+                    >
+                      <div className={`w-6 h-6 rounded-full ${preset.bgClass} shadow-inner`}></div>
+                      <span className="text-[9px] font-bold text-slate-600 uppercase">{preset.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="h-px w-full bg-slate-200"></div>
+
               <div>
                 <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2 block">Primary Color</label>
                 <div className="flex items-center gap-3">
@@ -99,7 +132,52 @@ const IDCardTemplateBuilder = ({ formData, handleInputChange }) => {
               </div>
               
               <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2 block">Background Style</label>
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2 block">Card Layout Design</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => updateConfig('designTemplate', 'classic')}
+                    className={`py-2 px-2 rounded-xl text-[10px] font-bold tracking-wider uppercase border transition-all ${config.designTemplate === 'classic' || !config.designTemplate ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                  >
+                    Classic
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateConfig('designTemplate', 'modern')}
+                    className={`py-2 px-2 rounded-xl text-[10px] font-bold tracking-wider uppercase border transition-all ${config.designTemplate === 'modern' ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                  >
+                    Modern
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateConfig('designTemplate', 'minimalist')}
+                    className={`py-2 px-2 rounded-xl text-[10px] font-bold tracking-wider uppercase border transition-all ${config.designTemplate === 'minimalist' ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                  >
+                    Minimalist
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateConfig('designTemplate', 'professional')}
+                    className={`py-2 px-2 rounded-xl text-[10px] font-bold tracking-wider uppercase border transition-all ${config.designTemplate === 'professional' ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                  >
+                    Professional
+                  </button>
+                </div>
+                
+                <div className="mt-3 p-3 bg-blue-50/50 rounded-xl border border-blue-100/50">
+                  <p className="text-[9.5px] text-slate-600 leading-relaxed font-medium">
+                    {(!config.designTemplate || config.designTemplate === 'classic') && <><strong className="text-blue-700">Classic:</strong> Desain standar dengan lengkungan warna di bagian atas. Memberikan kesan ramah dan cocok untuk staf lapangan atau ritel.</>}
+                    {config.designTemplate === 'modern' && <><strong className="text-blue-700">Modern:</strong> Desain asimetris dan tegas dengan efek potongan diagonal. Cocok untuk perusahaan startup atau tech-agency.</>}
+                    {config.designTemplate === 'minimalist' && <><strong className="text-blue-700">Minimalist:</strong> Bersih, banyak ruang kosong (white space), dengan aksen border halus. Hemat tinta printer dan terlihat sangat elegan.</>}
+                    {config.designTemplate === 'professional' && <><strong className="text-blue-700">Professional:</strong> Struktur kotak grid ketat, font lebih formal, dan mirip standar ISO enterprise. Sangat cocok untuk ID card pabrik atau korporat besar.</>}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="h-px w-full bg-slate-200"></div>
+
+              <div>
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2 block">Background Fill</label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"

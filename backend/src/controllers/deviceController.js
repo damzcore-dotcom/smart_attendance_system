@@ -45,7 +45,7 @@ const deleteDevice = async (req, res) => {
  * Test Connection to device
  */
 const testConnection = async (req, res) => {
-  const { ipAddress, port } = req.body;
+  const { id, ipAddress, port } = req.body;
   
   try {
     const zkInstance = new ZKLib(ipAddress, port || 4370, 10000, 4000);
@@ -55,8 +55,23 @@ const testConnection = async (req, res) => {
     const info = await zkInstance.getInfo();
     await zkInstance.disconnect();
     
+    if (id) {
+      await prisma.device.update({
+        where: { id: parseInt(id) },
+        data: { status: 'ONLINE' }
+      });
+    }
+    
     res.json({ success: true, message: 'Koneksi berhasil!', info });
   } catch (err) {
+    if (id) {
+      try {
+        await prisma.device.update({
+          where: { id: parseInt(id) },
+          data: { status: 'OFFLINE' }
+        });
+      } catch (e) {}
+    }
     res.status(500).json({ success: false, message: 'Gagal menghubungi mesin. Pastikan IP dan Port benar dan mesin menyala.' });
   }
 };
@@ -111,9 +126,21 @@ const syncUsers = async (req, res) => {
       }
     }
 
+    // Update device status to ONLINE
+    await prisma.device.update({
+      where: { id: parseInt(id) },
+      data: { status: 'ONLINE', lastSync: new Date() }
+    });
+
     res.json({ success: true, message: `Sinkronisasi Karyawan berhasil. Menambahkan ${newCount} baru, ${updateCount} sudah ada.` });
   } catch (err) {
     console.error(err);
+    try {
+      await prisma.device.update({
+        where: { id: parseInt(id) },
+        data: { status: 'OFFLINE' }
+      });
+    } catch (e) {}
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -148,21 +175,30 @@ const syncAttendance = async (req, res) => {
     if (!logs || !logs.data || logs.data.length === 0) {
       return res.json({ success: true, message: 'Tidak ada data log baru di mesin.' });
     }
-    const employees = await prisma.employee.findMany({
-      include: { shift: true }
-    });
+    // Cocokkan PIN mesin dengan NIK (employeeCode) sebagai prioritas utama
+    // Fallback ke idNumber untuk data lama
+    const employees = await prisma.employee.findMany({ include: { shift: true } });
     const empByCode = {};
     employees.forEach(e => {
-      if (e.idNumber) empByCode[e.idNumber] = e;
+      if (e.employeeCode) empByCode[e.employeeCode.trim()] = e;
+      if (e.idNumber) empByCode[e.idNumber.trim()] = e;
     });
 
     const { calculateLateness, resolveStatus } = require('../utils/lateCalculator');
     
+    // Set a cutoff date (e.g., last 30 days) to avoid processing ancient records
+    const cutoffTime = new Date();
+    cutoffTime.setDate(cutoffTime.getDate() - 30);
+
     // Group logs by User + Date
     const grouped = {};
     for (const log of logs.data) {
-      const pinStr = String(log.deviceUserId);
+      const pinStr = String(log.deviceUserId).trim();
       const recordTime = new Date(log.recordTime);
+      
+      // Skip records older than cutoff
+      if (recordTime < cutoffTime) continue;
+
       const dateKey = recordTime.toISOString().split('T')[0];
       
       const emp = empByCode[pinStr];
@@ -201,6 +237,32 @@ const syncAttendance = async (req, res) => {
       });
     }
 
+    // Check if it's just a preview request
+    const isPreview = req.query.preview === 'true';
+
+    if (isPreview) {
+      // Map back to a friendlier format for frontend display
+      const previewData = recordsToCreate.map(r => {
+        const emp = empByCode[r.employeeId] || employees.find(e => e.id === r.employeeId);
+        return {
+          employeeName: emp ? emp.name : 'Unknown',
+          employeeCode: emp ? emp.employeeCode : '-',
+          date: r.date,
+          checkIn: r.checkIn,
+          checkOut: r.checkOut,
+          status: r.status,
+          lateMinutes: r.lateMinutes
+        };
+      });
+
+      return res.json({ 
+        success: true, 
+        message: `Ditemukan ${recordsToCreate.length} record absen baru.`,
+        data: previewData,
+        rawRecords: recordsToCreate.length
+      });
+    }
+
     // Bulk Upsert (using individual upserts in a promise pool to be safest for existing data)
     // or createMany with skipDuplicates. Let's use individual upserts to ensure update works.
     let saved = 0;
@@ -230,7 +292,7 @@ const syncAttendance = async (req, res) => {
 
     // Update last sync time
     await prisma.device.update({
-      where: { id: device.id },
+      where: { id: parseInt(id) },
       data: { lastSync: new Date(), status: 'ONLINE' }
     });
 
@@ -246,9 +308,36 @@ const syncAttendance = async (req, res) => {
   }
 };
 
+/**
+ * Update device
+ */
+const updateDevice = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, ipAddress, port, locationId, autoSyncEnabled, autoSyncTime } = req.body;
+    
+    const device = await prisma.device.update({
+      where: { id: parseInt(id) },
+      data: {
+        name,
+        ipAddress,
+        port: parseInt(port) || 4370,
+        locationId: locationId ? parseInt(locationId) : null,
+        autoSyncEnabled: !!autoSyncEnabled,
+        autoSyncTime: autoSyncTime || null
+      }
+    });
+    
+    res.json({ success: true, message: 'Device updated successfully', data: device });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 module.exports = {
   getDevices,
   addDevice,
+  updateDevice,
   deleteDevice,
   testConnection,
   syncUsers,

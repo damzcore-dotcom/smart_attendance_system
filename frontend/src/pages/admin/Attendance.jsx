@@ -40,7 +40,7 @@ const Attendance = () => {
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [importResult, setImportResult] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: 'date', order: 'desc' });
-  const [correctionModal, setCorrectionModal] = useState({ isOpen: false, recordId: null, employeeName: '', currentStatus: '', newStatus: 'CUTI', notes: '' });
+  const [correctionModal, setCorrectionModal] = useState({ isOpen: false, recordId: null, employeeName: '', currentStatus: '', newStatus: 'CUTI', notes: '', overtimeHours: 0 });
   const [isCorrecting, setIsCorrecting] = useState(false);
   const [importProgress, setImportProgress] = useState({ percent: 0, phase: '', detail: '' });
   const [appliedFilters, setAppliedFilters] = useState({
@@ -246,8 +246,8 @@ const Attendance = () => {
     e.preventDefault();
     setIsCorrecting(true);
     try {
-      await attendanceAPI.update(correctionModal.recordId, { status: correctionModal.newStatus, notes: correctionModal.notes });
-      setCorrectionModal({ isOpen: false, recordId: null, employeeName: '', currentStatus: '', newStatus: 'CUTI', notes: '' });
+      await attendanceAPI.update(correctionModal.recordId, { status: correctionModal.newStatus, notes: correctionModal.notes, overtimeHours: correctionModal.overtimeHours });
+      setCorrectionModal({ isOpen: false, recordId: null, employeeName: '', currentStatus: '', newStatus: 'CUTI', notes: '', overtimeHours: 0 });
       await queryClient.invalidateQueries({ queryKey: ['attendance'] });
       alert('Status absensi berhasil dikoreksi!');
     } catch (err) {
@@ -593,6 +593,7 @@ const Attendance = () => {
                   </button>
                 </th>
                 <th className="px-4 py-4 text-center">Terlambat</th>
+                <th className="px-4 py-4 text-center">Lembur (Jam)</th>
                 <th className="px-4 py-4">
                   <button onClick={() => handleSort('dept')} className="flex items-center gap-2 group/btn">
                     Departemen
@@ -684,6 +685,13 @@ const Attendance = () => {
                         <span className="text-slate-400">—</span>
                       )}
                     </td>
+                    <td className="px-4 py-4 text-center">
+                      {row.overtimeHours > 0 ? (
+                        <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">{row.overtimeHours}h</span>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-4">
                       <span className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 text-[10px] font-bold border border-slate-200 uppercase tracking-widest">{row.dept || 'N/A'}</span>
                     </td>
@@ -697,7 +705,8 @@ const Attendance = () => {
                           employeeName: row.name,
                           currentStatus: row.status,
                           newStatus: 'CUTI',
-                          notes: ''
+                          notes: '',
+                          overtimeHours: row.overtimeHours || 0
                         })}
                         className="p-1.5 rounded-lg bg-slate-50 hover:bg-blue-50 text-slate-400 hover:text-blue-600 border border-slate-200 hover:border-blue-200 transition-all"
                         title="Koreksi Status"
@@ -996,6 +1005,20 @@ const Attendance = () => {
                     <option value="HOLIDAY">Libur</option>
                     <option value="PRESENT">Hadir (Manual)</option>
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Jam Lembur Manual (Opsional)</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    value={correctionModal.overtimeHours}
+                    onChange={(e) => setCorrectionModal(prev => ({ ...prev, overtimeHours: parseFloat(e.target.value) || 0 }))}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-bold text-slate-700 outline-none transition-all"
+                    placeholder="Contoh: 2.5 (untuk 2.5 jam)"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-2">Isi angka jika HRD memberikan jam lembur manual pada hari ini.</p>
                 </div>
 
                 <div>

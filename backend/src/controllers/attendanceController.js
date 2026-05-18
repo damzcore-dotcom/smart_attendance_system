@@ -185,6 +185,7 @@ const getAll = async (req, res) => {
           checkOut: r.checkOut ? r.checkOut.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-- : --',
           status: displayStatus,
           lateMinutes: r.lateMinutes,
+          overtimeHours: r.overtimeHours,
           mode: r.mode,
         };
       }),
@@ -906,19 +907,24 @@ const downloadTemplate = async (req, res) => {
 const update = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, notes } = req.body;
+    const { status, notes, overtimeHours } = req.body;
     
     const validStatuses = ['PRESENT', 'LATE', 'ABSENT', 'MANGKIR', 'SAKIT', 'IZIN', 'CUTI', 'HOLIDAY'];
-    if (!validStatuses.includes(status)) {
+    if (status && !validStatuses.includes(status)) {
       return res.status(400).json({ success: false, message: 'Invalid status' });
     }
 
     // Get the old record for audit comparison
     const oldRecord = await prisma.attendance.findUnique({ where: { id: parseInt(id) }, include: { employee: true } });
+    
+    const updateData = {};
+    if (status) updateData.status = status;
+    if (notes !== undefined) updateData.notes = notes || null;
+    if (overtimeHours !== undefined) updateData.overtimeHours = parseFloat(overtimeHours) || 0;
 
     const record = await prisma.attendance.update({
       where: { id: parseInt(id) },
-      data: { status, notes: notes || null }
+      data: updateData
     });
 
     // Audit log

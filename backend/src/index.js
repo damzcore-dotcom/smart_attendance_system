@@ -16,9 +16,13 @@ const announcementRoutes = require('./routes/announcementRoutes');
 const leaveRoutes = require('./routes/leaveRoutes');
 const backupRoutes = require('./routes/backupRoutes');
 const deviceRoutes = require('./routes/deviceRoutes');
+const { startCronJobs } = require('./utils/cronJobs');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Start cron jobs
+startCronJobs();
 
 // Global safety shield to prevent crashes from external libraries
 process.on('unhandledRejection', (reason, promise) => {

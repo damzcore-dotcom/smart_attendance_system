@@ -191,18 +191,26 @@ const generate = async (req, res) => {
             daysLate++;
             totalLateMinutes += a.lateMinutes || 0;
           }
-
-          // Calculate overtime
-          if (overtimeEnabled && a.checkOut && emp.shift) {
-            const otHours = calculateOvertimeHours(a.checkIn, a.checkOut, emp.shift.endTime);
-            if (otHours > 0) overtimeHoursTotal += otHours;
-          }
         } else if (a.status === 'MANGKIR') {
           // Mangkir adds 30 min penalty
           totalLateMinutes += 30;
           daysLate++;
         } else if (['ABSENT'].includes(a.status) && isWorkingDay) {
           daysAbsent++;
+        }
+        
+        // Calculate overtime regardless of status (e.g. they came on HOLIDAY)
+        if (overtimeEnabled && emp.shift) {
+          let otHours = 0;
+          const isAllIn = emp.salaryCategory && emp.salaryCategory.replace(/\s+/g, '').toUpperCase() === 'ALLIN';
+          
+          if (overtimeMode === 'MANUAL' || a.overtimeHours > 0) {
+            otHours = a.overtimeHours || 0;
+          } else if (a.checkOut && !isAllIn && ['PRESENT', 'LATE'].includes(a.status)) {
+            // ALL IN category does not get automatic overtime
+            otHours = calculateOvertimeHours(a.checkIn, a.checkOut, emp.shift.endTime);
+          }
+          if (otHours > 0) overtimeHoursTotal += otHours;
         }
         // SAKIT, IZIN, CUTI, HOLIDAY are not penalized
       });

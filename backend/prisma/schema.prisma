@@ -132,6 +132,9 @@ model Employee {
   spouseName        String?
   emergencyContact  String?
   notes             String?
+  gender            String?    // 'L' (Laki-laki) | 'P' (Perempuan)
+  bankName          String?    // Nama Bank (BCA, BRI, Mandiri, dll)
+  bankAccountNumber String?    // Nomor Rekening
   salaryCategory    String?    @default("UMK/UMR")
   status        EmpStatus  @default(ACTIVE)
   faceStatus    FaceStatus @default(PENDING)
@@ -178,6 +181,7 @@ model Attendance {
   checkOut    DateTime?
   status      AttStatus @default(ABSENT)
   lateMinutes Int       @default(0)
+  overtimeHours Float   @default(0)
   mode        String    @default("Credentials")
   notes       String?
   createdAt   DateTime  @default(now())
@@ -265,6 +269,8 @@ model Device {
   locationId  Int?      
   status      String    @default("OFFLINE")
   lastSync    DateTime? 
+  autoSyncEnabled Boolean @default(false)
+  autoSyncTime    String?  // e.g. "17:00"
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 }

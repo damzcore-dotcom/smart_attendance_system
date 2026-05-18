@@ -43,6 +43,7 @@ const Employees = () => {
   const [page, setPage] = useState(1);
   const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
   const [printIDCardEmp, setPrintIDCardEmp] = useState(null);
+  const [printBulkIDCards, setPrintBulkIDCards] = useState(null);
   const [companySettings, setCompanySettings] = useState({});
   const [idCardConfig, setIdCardConfig] = useState(null);
   const PAGE_SIZE = 25;
@@ -238,10 +239,23 @@ const Employees = () => {
       'Lama Kontrak', 'Tanggal Masuk', 'Sisa Tanggal Kontrak', 'Email', 'No HP',
       'NIK KTP', 'No Kartu Keluarga', 'Tanggal Lahir', 'Tempat Lahir', 'Alamat',
       'Agama', 'Pendidikan Terakhir', 'Jurusan', 'Jumlah Anak', 'Nama Ayah Kandung',
-      'Nama Ibu Kandung', 'Nama Suami/Istri', 'KONTAK DARURAT', 'Keterangan'
+      'Nama Ibu Kandung', 'Nama Suami/Istri', 'KONTAK DARURAT',
+      'Jenis Kelamin', 'Nama Bank', 'Nomor Rekening',
+      'BPJS TK', 'BPJS Kesehatan', 'NPWP', 'Status PTKP (Pajak)', 'Keterangan'
+    ];
+
+    const sampleRow = [
+      '001', 'Contoh Karyawan', 'Produksi', 'Operator', 'Line A', 'Grade 1', 'PKWT',
+      '1 Tahun', '2024-01-01', '2025-01-01', 'contoh@email.com', '08123456789',
+      '3275001234560001', 'KK123456789', '1990-05-15', 'Jakarta', 'Jl. Contoh No. 1',
+      'Islam', 'SMA', '-', '2', 'Bapak Contoh',
+      'Ibu Contoh', 'Pasangan Contoh', '08129999999',
+      'L', 'BCA', '1234567890',
+      'TK-12345678', 'BPJS-12345678', 'NPWP-123456789', 'TK/0', 'Catatan karyawan'
     ];
     
-    const ws = XLSX.utils.aoa_to_sheet([headers]);
+    const ws = XLSX.utils.aoa_to_sheet([headers, sampleRow]);
+    // Style the header row
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Master_Template");
     XLSX.writeFile(wb, "Template_Master_Karyawan.xlsx");
@@ -340,6 +354,22 @@ const Employees = () => {
           >
             <Banknote className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
             Sync Gaji Normal
+          </button>
+          <button 
+            onClick={() => {
+              if (filteredEmployees.length === 0) return alert('Tidak ada karyawan untuk dicetak.');
+              if (filteredEmployees.length > 50) {
+                if(!window.confirm(`Anda akan mencetak ${filteredEmployees.length} ID Card sekaligus. Lanjutkan?`)) return;
+              }
+              setPrintBulkIDCards(filteredEmployees);
+              setTimeout(() => {
+                window.print();
+                setTimeout(() => { setPrintBulkIDCards(null); }, 1000);
+              }, 1000);
+            }} 
+            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 shadow-sm transition-all border border-indigo-200 active:scale-[0.98]"
+          >
+            <Printer className="w-4 h-4" /> Print ID Cards (Bulk)
           </button>
           <button 
             onClick={() => setAddModalOpen(true)} 
@@ -1070,6 +1100,18 @@ const Employees = () => {
                     </div>
                     <div className="lg:col-span-2"><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Address</label><input value={newEmployee.address} onChange={e => setNewEmployee({...newEmployee, address: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
                     <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Major</label><input value={newEmployee.major} onChange={e => setNewEmployee({...newEmployee, major: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Jenis Kelamin</label>
+                      <select
+                        value={newEmployee.gender || ''}
+                        onChange={e => setNewEmployee({...newEmployee, gender: e.target.value})}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all appearance-none cursor-pointer"
+                      >
+                        <option value="">Pilih...</option>
+                        <option value="L">Laki-laki</option>
+                        <option value="P">Perempuan</option>
+                      </select>
+                    </div>
                   </div>
                 )}
                 {activeTab === 'family' && (
@@ -1092,6 +1134,21 @@ const Employees = () => {
                     <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Spouse's Name</label><input value={newEmployee.spouseName} onChange={e => setNewEmployee({...newEmployee, spouseName: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
                     <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Phone Number</label><input value={newEmployee.phone} onChange={e => setNewEmployee({...newEmployee, phone: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
                     <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Emergency Contact</label><input value={newEmployee.emergencyContact} onChange={e => setNewEmployee({...newEmployee, emergencyContact: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
+                    <div className="lg:col-span-3"><div className="border-t border-slate-200 pt-4 mb-2"><p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">💳 Informasi Bank</p></div></div>
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Nama Bank</label>
+                      <select
+                        value={newEmployee.bankName || ''}
+                        onChange={e => setNewEmployee({...newEmployee, bankName: e.target.value})}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all appearance-none cursor-pointer"
+                      >
+                        <option value="">Pilih Bank...</option>
+                        {['BCA', 'BRI', 'BNI', 'Mandiri', 'BTN', 'CIMB Niaga', 'Danamon', 'Permata', 'BSI', 'Lainnya'].map(b => (
+                          <option key={b} value={b}>{b}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Nomor Rekening</label><input value={newEmployee.bankAccountNumber || ''} onChange={e => setNewEmployee({...newEmployee, bankAccountNumber: e.target.value})} placeholder="Contoh: 1234567890" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
                   </div>
                 )}
               </form>
@@ -1387,6 +1444,33 @@ const Employees = () => {
             company={companySettings} 
             config={idCardConfig} 
           />
+        </div>
+      )}
+
+      {printBulkIDCards && (
+        <div className="hidden print:block fixed inset-0 bg-white z-[9999] bg-white">
+          {Array.from({ length: Math.ceil(printBulkIDCards.length / (idCardConfig?.orientation === 'horizontal' ? 10 : 9)) }).map((_, pageIdx) => {
+            const isHorizontal = idCardConfig?.orientation === 'horizontal';
+            const cardsPerPage = isHorizontal ? 10 : 9;
+            const pageCards = printBulkIDCards.slice(pageIdx * cardsPerPage, (pageIdx + 1) * cardsPerPage);
+            
+            return (
+              <div key={pageIdx} style={{ pageBreakAfter: 'always', width: '210mm', height: '290mm', padding: '10mm', margin: '0 auto', boxSizing: 'border-box' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${isHorizontal ? 2 : 3}, 1fr)`, gap: isHorizontal ? '8mm' : '5mm' }}>
+                  {pageCards.map((emp) => (
+                    <div key={emp.id} style={{ display: 'flex', justifyContent: 'center' }}>
+                      <PrintableIDCard 
+                        employee={emp} 
+                        company={companySettings} 
+                        config={idCardConfig} 
+                        isBulk={true}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
