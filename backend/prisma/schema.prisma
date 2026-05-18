@@ -103,6 +103,7 @@ model Employee {
   division      String?
   locationId    String?
   idNumber      String?
+  fingerPrintId String?    // AC No. dari mesin fingerprint (ZKTeco deviceUserId)
   cardNo        String?
   verifyCode    String?
   grade             String?

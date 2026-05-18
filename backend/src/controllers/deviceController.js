@@ -100,30 +100,51 @@ const syncUsers = async (req, res) => {
     }
 
     for (const u of users.data) {
-      // Pendaftaran finger dari mesin akan memiliki userId (PIN angka)
-      const pinStr = String(u.userId);
+      // AC No. dari mesin (deviceUserId / PIN)
+      const fingerPrintId = String(u.userId).trim();
+      const machineName = (u.name || '').trim();
       
-      // Cek apakah karyawan dengan idNumber (PIN) ini sudah ada
-      const existing = await prisma.employee.findFirst({ where: { idNumber: pinStr } });
+      // 1. Cek apakah sudah ada karyawan dengan fingerPrintId ini
+      let existing = await prisma.employee.findFirst({ where: { fingerPrintId } });
       
       if (existing) {
-        // Update nama jika diperlukan (opsional)
+        // Sudah terlink — update nama jika perlu
         updateCount++;
-      } else {
-        // Buat data karyawan baru sebagai placeholder
-        // HR nanti bisa mengupdate data lengkapnya
-        await prisma.employee.create({
-          data: {
-            employeeCode: 'FNG' + pinStr, // Prefix FNG untuk hasil sync
-            name: u.name || 'User Mesin ' + pinStr,
-            idNumber: pinStr, // Ini adalah kunci pencocokan absen
-            email: 'user' + pinStr + '@system.local',
-            departmentId: defaultDept.id,
-            status: 'ACTIVE'
-          }
-        });
-        newCount++;
+        continue;
       }
+      
+      // 2. Coba cocokkan dengan nama karyawan yang sudah ada tapi belum punya fingerPrintId
+      if (machineName) {
+        const byName = await prisma.employee.findFirst({ 
+          where: { 
+            name: { equals: machineName, mode: 'insensitive' },
+            fingerPrintId: null // Hanya yang belum terlink
+          } 
+        });
+        
+        if (byName) {
+          // Auto-link: isi fingerPrintId dari AC No. mesin
+          await prisma.employee.update({
+            where: { id: byName.id },
+            data: { fingerPrintId }
+          });
+          updateCount++;
+          continue;
+        }
+      }
+      
+      // 3. Tidak ditemukan — buat karyawan baru sebagai placeholder
+      await prisma.employee.create({
+        data: {
+          employeeCode: 'FNG' + fingerPrintId,
+          name: machineName || 'User Mesin ' + fingerPrintId,
+          fingerPrintId, // <-- Otomatis terisi dari AC No. mesin
+          email: 'user' + fingerPrintId + '@system.local',
+          departmentId: defaultDept.id,
+          status: 'ACTIVE'
+        }
+      });
+      newCount++;
     }
 
     // Update device status to ONLINE
@@ -175,11 +196,13 @@ const syncAttendance = async (req, res) => {
     if (!logs || !logs.data || logs.data.length === 0) {
       return res.json({ success: true, message: 'Tidak ada data log baru di mesin.' });
     }
-    // Cocokkan PIN mesin dengan NIK (employeeCode) sebagai prioritas utama
-    // Fallback ke idNumber untuk data lama
+    // Cocokkan PIN mesin (AC No.) dengan fingerPrintId sebagai prioritas utama
+    // Fallback ke employeeCode dan idNumber untuk backward compatibility
     const employees = await prisma.employee.findMany({ include: { shift: true } });
+    const empByFingerPrint = {};
     const empByCode = {};
     employees.forEach(e => {
+      if (e.fingerPrintId) empByFingerPrint[e.fingerPrintId.trim()] = e;
       if (e.employeeCode) empByCode[e.employeeCode.trim()] = e;
       if (e.idNumber) empByCode[e.idNumber.trim()] = e;
     });
@@ -213,7 +236,7 @@ const syncAttendance = async (req, res) => {
 
       const dateKey = recordTime.toISOString().split('T')[0];
       
-      const emp = empByCode[pinStr];
+      const emp = empByFingerPrint[pinStr] || empByCode[pinStr];
       if (!emp) continue;
 
       const key = `${emp.id}|${dateKey}`;
