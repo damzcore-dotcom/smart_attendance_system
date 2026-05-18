@@ -7,8 +7,12 @@ let cachedLicenseStatus = null;
 let lastCheckTime = 0;
 
 const verifyLicense = async (req, res, next) => {
-  // Allow login and public endpoints to bypass license check so admin can fix it
-  if (req.path.includes('/api/auth/login') || req.path.includes('/api/settings/public')) {
+  // Allow login, change password, and public endpoints to bypass license check so admin can log in and fix it
+  if (
+    req.path.includes('/api/auth/login') || 
+    req.path.includes('/api/auth/change-password') || 
+    req.path.includes('/api/settings/public')
+  ) {
     return next();
   }
 
