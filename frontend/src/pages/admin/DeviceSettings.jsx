@@ -319,8 +319,9 @@ const DeviceSettings = () => {
                         ) : (
                           <Download className="w-4 h-4" />
                         )}
-                        Sync Attendance Logs
+                      Sync Attendance Logs
                       </button>
+                      </div>
                     </div>
                   </div>
                 ))}
