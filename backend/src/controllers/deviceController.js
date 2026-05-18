@@ -225,7 +225,7 @@ const syncAttendance = async (req, res) => {
       filterEnd = new Date(`${endDateQuery}T23:59:59.999`);
     }
 
-    // Group logs by User + Date
+    // Group logs by User + Date — collect ALL timestamps
     const grouped = {};
     for (const log of logs.data) {
       const pinStr = String(log.deviceUserId).trim();
@@ -241,11 +241,9 @@ const syncAttendance = async (req, res) => {
 
       const key = `${emp.id}|${dateKey}`;
       if (!grouped[key]) {
-        grouped[key] = { employeeId: emp.id, employee: emp, date: new Date(dateKey + 'T00:00:00'), checkIn: recordTime, checkOut: recordTime };
-      } else {
-        if (recordTime < grouped[key].checkIn) grouped[key].checkIn = recordTime;
-        if (recordTime > grouped[key].checkOut) grouped[key].checkOut = recordTime;
+        grouped[key] = { employeeId: emp.id, employee: emp, date: new Date(dateKey + 'T00:00:00'), scans: [] };
       }
+      grouped[key].scans.push(recordTime);
     }
 
     // Process grouped records
@@ -255,17 +253,58 @@ const syncAttendance = async (req, res) => {
     for (const entry of entries) {
       const emp = entry.employee;
       const shiftStart = emp.shift?.startTime || '08:00';
+      const shiftEnd = emp.shift?.endTime || '17:00';
       const gracePeriod = emp.shift?.gracePeriod || 15;
       
-      // Calculate Lateness
-      const calc = calculateLateness(entry.checkIn, shiftStart, gracePeriod);
-      const status = resolveStatus(entry.checkIn, entry.checkIn === entry.checkOut ? null : entry.checkOut, calc.status);
+      // Sort all scans chronologically
+      entry.scans.sort((a, b) => a - b);
+      
+      const earliest = entry.scans[0];
+      const latest = entry.scans[entry.scans.length - 1];
+      
+      let checkIn = null;
+      let checkOut = null;
+      
+      if (entry.scans.length === 1) {
+        // === SMART SINGLE-SCAN DETECTION ===
+        // Calculate shift midpoint to determine if scan is check-in or check-out
+        const [startH, startM] = shiftStart.split(':').map(Number);
+        const [endH, endM] = shiftEnd.split(':').map(Number);
+        const shiftStartMinutes = startH * 60 + startM;
+        const shiftEndMinutes = endH * 60 + endM;
+        const midpointMinutes = Math.floor((shiftStartMinutes + shiftEndMinutes) / 2); // e.g. 08:00-17:00 → midpoint = 12:30
+        
+        const scanHour = earliest.getHours();
+        const scanMinute = earliest.getMinutes();
+        const scanMinutes = scanHour * 60 + scanMinute;
+        
+        if (scanMinutes <= midpointMinutes) {
+          // Scan sebelum/saat tengah shift → ini MASUK (checkIn)
+          checkIn = earliest;
+          checkOut = null;
+        } else {
+          // Scan setelah tengah shift → ini PULANG (checkOut)
+          checkIn = null;
+          checkOut = earliest;
+        }
+      } else {
+        // Multiple scans — paling awal = checkIn, paling akhir = checkOut
+        checkIn = earliest;
+        checkOut = latest;
+      }
+      
+      // Calculate Lateness (only if checkIn exists)
+      const calc = checkIn 
+        ? calculateLateness(checkIn, shiftStart, gracePeriod)
+        : { lateMinutes: 0, status: 'Mangkir' }; // Tidak ada scan masuk = Mangkir
+      
+      const status = resolveStatus(checkIn, checkOut, calc.status);
 
       recordsToCreate.push({
         employeeId: entry.employeeId,
         date: entry.date,
-        checkIn: entry.checkIn,
-        checkOut: entry.checkIn === entry.checkOut ? null : entry.checkOut,
+        checkIn,
+        checkOut,
         status,
         lateMinutes: calc.lateMinutes,
         mode: 'Fingerprint'
