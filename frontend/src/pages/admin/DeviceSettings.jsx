@@ -9,6 +9,12 @@ const DeviceSettings = () => {
   const [syncing, setSyncing] = useState(null);
   const [previewData, setPreviewData] = useState(null);
   const [activeDeviceId, setActiveDeviceId] = useState(null);
+  
+  const today = new Date().toISOString().split('T')[0];
+  const [syncDates, setSyncDates] = useState({
+    startDate: today,
+    endDate: today,
+  });
 
   const fetchDevices = async () => {
     try {
@@ -88,8 +94,8 @@ const DeviceSettings = () => {
   const syncAttendance = async (id) => {
     try {
       setSyncing('attend-' + id);
-      // Fetch preview first
-      const { data } = await api.post(`/devices/${id}/sync-attendance?preview=true`);
+      // Fetch preview first with date filters
+      const { data } = await api.post(`/devices/${id}/sync-attendance?preview=true&start=${syncDates.startDate}&end=${syncDates.endDate}`);
       
       if (data.rawRecords === 0) {
         alert(data.message || 'Tidak ada data log baru di mesin.');
@@ -109,7 +115,7 @@ const DeviceSettings = () => {
     if (!activeDeviceId) return;
     try {
       setSyncing('commit-' + activeDeviceId);
-      const { data } = await api.post(`/devices/${activeDeviceId}/sync-attendance`);
+      const { data } = await api.post(`/devices/${activeDeviceId}/sync-attendance?start=${syncDates.startDate}&end=${syncDates.endDate}`);
       alert(data.message);
       setPreviewData(null);
       setActiveDeviceId(null);
@@ -270,7 +276,26 @@ const DeviceSettings = () => {
                     </div>
                     
                     {/* Aksi Sinkronisasi */}
-                    <div className="flex flex-col sm:flex-row gap-3 pt-5 border-t border-slate-100">
+                    <div className="pt-5 border-t border-slate-100 space-y-4">
+                      {/* Date Filter */}
+                      <div className="flex flex-col sm:flex-row gap-3 items-center bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Tarik Data:</span>
+                        <input 
+                          type="date"
+                          value={syncDates.startDate}
+                          onChange={(e) => setSyncDates({...syncDates, startDate: e.target.value})}
+                          className="w-full text-xs bg-white border border-slate-200 rounded-lg px-3 py-2 font-bold text-slate-700 outline-none focus:border-blue-500"
+                        />
+                        <span className="text-[10px] font-bold text-slate-400">S/D</span>
+                        <input 
+                          type="date"
+                          value={syncDates.endDate}
+                          onChange={(e) => setSyncDates({...syncDates, endDate: e.target.value})}
+                          className="w-full text-xs bg-white border border-slate-200 rounded-lg px-3 py-2 font-bold text-slate-700 outline-none focus:border-blue-500"
+                        />
+                      </div>
+                      
+                      <div className="flex flex-col sm:flex-row gap-3">
                       <button 
                         onClick={() => syncUsers(device.id)}
                         disabled={syncing !== null}

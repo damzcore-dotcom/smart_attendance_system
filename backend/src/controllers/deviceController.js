@@ -186,9 +186,21 @@ const syncAttendance = async (req, res) => {
 
     const { calculateLateness, resolveStatus } = require('../utils/lateCalculator');
     
-    // Set a cutoff date (e.g., last 30 days) to avoid processing ancient records
-    const cutoffTime = new Date();
-    cutoffTime.setDate(cutoffTime.getDate() - 30);
+    // Parse query params for date filtering
+    const startDateQuery = req.query.start;
+    const endDateQuery = req.query.end;
+
+    let filterStart = new Date();
+    filterStart.setDate(filterStart.getDate() - 30); // Default cutoff
+    let filterEnd = new Date();
+    filterEnd.setHours(23, 59, 59, 999);
+
+    if (startDateQuery) {
+      filterStart = new Date(`${startDateQuery}T00:00:00`);
+    }
+    if (endDateQuery) {
+      filterEnd = new Date(`${endDateQuery}T23:59:59.999`);
+    }
 
     // Group logs by User + Date
     const grouped = {};
@@ -196,8 +208,8 @@ const syncAttendance = async (req, res) => {
       const pinStr = String(log.deviceUserId).trim();
       const recordTime = new Date(log.recordTime);
       
-      // Skip records older than cutoff
-      if (recordTime < cutoffTime) continue;
+      // Skip records outside of filter range
+      if (recordTime < filterStart || recordTime > filterEnd) continue;
 
       const dateKey = recordTime.toISOString().split('T')[0];
       
