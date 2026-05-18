@@ -6,6 +6,21 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Seeding Smart Attendance Pro database...\n');
 
+  console.log('🧹 Cleaning existing data...');
+  await prisma.notification.deleteMany({});
+  await prisma.attendance.deleteMany({});
+  await prisma.correctionRequest.deleteMany({});
+  await prisma.leaveRequest.deleteMany({});
+  await prisma.employeeSalary.deleteMany({});
+  await prisma.payrollDetail.deleteMany({});
+  await prisma.payroll.deleteMany({});
+  await prisma.user.deleteMany({});
+  await prisma.employee.deleteMany({});
+  await prisma.shift.deleteMany({});
+  await prisma.department.deleteMany({});
+  await prisma.location.deleteMany({});
+  console.log('🧹 Database cleaned.\n');
+
   // ─── Departments ───────────────────────────────
   const departments = await Promise.all(
     ['Engineering', 'Marketing', 'HR', 'Operations'].map(name =>
