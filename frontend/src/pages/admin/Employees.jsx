@@ -488,6 +488,9 @@ const Employees = () => {
                     )}
                   </div>
                 </th>
+                <th className="px-6 py-4 border-b border-slate-200">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center block">ID Finger</span>
+                </th>
                 <th 
                   className="px-6 py-4 sticky left-[250px] z-30 bg-slate-50 border-b border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] cursor-pointer hover:bg-slate-100 transition-colors group"
                   onClick={() => handleSort('name')}
@@ -670,6 +673,11 @@ const Employees = () => {
                   <td className="px-6 py-3 sticky left-[120px] z-10 bg-white group-hover:bg-blue-50/50 transition-colors border-r border-slate-100 text-center text-xs font-semibold text-slate-700">
                     {emp.id}
                   </td>
+                  <td className="px-6 py-3 border-r border-slate-100 text-center">
+                    <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded-md">
+                      {emp.fingerPrintId || '-'}
+                    </span>
+                  </td>
                   <td className="px-6 py-3 sticky left-[250px] z-10 bg-white group-hover:bg-blue-50/50 transition-colors border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.02)]">
                     <div className="flex flex-col min-w-[200px]">
                       <span className="text-sm font-bold text-slate-800 truncate">{emp.name || "Unknown"}</span>
@@ -837,6 +845,15 @@ const Employees = () => {
                           <AlertCircle className="w-3.5 h-3.5" /> {nikError}
                         </p>
                       )}
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">ID Finger (AC No.)</label>
+                      <input
+                        value={newEmployee.fingerPrintId || ''}
+                        onChange={e => setNewEmployee({...newEmployee, fingerPrintId: e.target.value})}
+                        placeholder="Device User ID"
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 transition-all text-slate-800 placeholder:text-slate-400"
+                      />
                     </div>
                     <div>
                       <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">Full Name</label>
