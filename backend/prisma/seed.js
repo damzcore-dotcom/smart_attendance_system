@@ -97,6 +97,11 @@ async function main() {
     { key: 'autoCheckoutTime', value: '23:59' },
   ];
 
+  if (process.env.INITIAL_LICENSE_KEY) {
+    settingsData.push({ key: 'licenseKey', value: process.env.INITIAL_LICENSE_KEY });
+    console.log('🔑 Auto-injecting License Key from environment...');
+  }
+
   for (const s of settingsData) {
     await prisma.settings.upsert({ where: { key: s.key }, update: { value: s.value }, create: s });
   }

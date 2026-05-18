@@ -60,6 +60,14 @@ console.log('');
     // Ini adalah "cetakan kunci" milik Anda. Jangan pernah bagikan!
     const licenseSecret = 'd94795ad7e96949a882a1f45a4206a69184172efc14f226f4c49def1bf9bdfc1';
 
+    // Auto-generate license key based on wizard inputs
+    const payload = { client: clientName, expiry: licenseExpiry, limit: parseInt(maxEmployees) };
+    const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64');
+    const hmac = crypto.createHmac('sha256', licenseSecret);
+    hmac.update(payloadB64);
+    const signature = hmac.digest('hex');
+    const autoLicenseKey = `${payloadB64}.${signature}`;
+
     // ─── Write backend/.env ───
     const envPath = path.join(__dirname, 'backend', '.env');
     const envContent = [
@@ -82,6 +90,7 @@ console.log('');
       ``,
       `# License System (auto-generated — DO NOT SHARE)`,
       `LICENSE_SECRET="${licenseSecret}"`,
+      `INITIAL_LICENSE_KEY="${autoLicenseKey}"`,
       ``
     ].join('\n');
 
