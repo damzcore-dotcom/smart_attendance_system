@@ -337,9 +337,21 @@ const checkOut = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Already checked out today' });
     }
 
+    // Fetch Settings to check for Saturday Half-Day rules
+    const settingsList = await prisma.settings.findMany();
+    const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
+    const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
+
     // Recalculate status now that we have both checkIn and checkOut
     const shiftStart = attendance.employee?.shift?.startTime || '08:00';
+    let shiftEnd = attendance.employee?.shift?.endTime || '17:00';
     const gracePeriod = attendance.employee?.shift?.gracePeriod || 15;
+    
+    // If today is Saturday (6) and half-day is enabled, override shiftEnd
+    if (now.getDay() === 6 && isSaturdayHalfDay) {
+      shiftEnd = satCheckoutTime;
+    }
+
     let lateStatus = 'PRESENT';
     let lateMinutes = 0;
     
@@ -351,9 +363,20 @@ const checkOut = async (req, res) => {
 
     const finalStatus = resolveStatus(attendance.checkIn, now, lateStatus);
 
+    // Calculate Overtime
+    let overtimeHours = 0;
+    const [endHour, endMinute] = shiftEnd.split(':').map(Number);
+    const expectedEnd = new Date(now);
+    expectedEnd.setHours(endHour, endMinute, 0, 0);
+
+    if (now > expectedEnd) {
+      const diffMs = now.getTime() - expectedEnd.getTime();
+      overtimeHours = parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2));
+    }
+
     const updated = await prisma.attendance.update({
       where: { id: attendance.id },
-      data: { checkOut: now, status: finalStatus },
+      data: { checkOut: now, status: finalStatus, overtimeHours },
     });
 
     res.json({ success: true, message: 'Checked out successfully', data: updated });
