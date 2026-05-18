@@ -48,10 +48,8 @@ function resolveStatus(checkIn, checkOut, currentStatus = 'PRESENT', date = null
   // If it's explicitly marked as HOLIDAY, CUTI, SAKIT, or IZIN (e.g. from Leave System or Mass Leave)
   if (['HOLIDAY', 'CUTI', 'SAKIT', 'IZIN'].includes(currentStatus)) return currentStatus;
   
-  // If it's Sunday and no activity, mark as Holiday
-  if (date && new Date(date).getDay() === 0 && !checkIn && !checkOut) {
-    return 'HOLIDAY';
-  }
+  // Note: Holiday overrides are now handled by the controller using CompanyCalendar and workingDays settings
+
   
   if (!checkIn && !checkOut) return 'ABSENT';
   if (!checkIn || !checkOut) return 'MANGKIR';

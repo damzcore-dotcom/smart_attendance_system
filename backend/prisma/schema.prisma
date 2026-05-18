@@ -411,3 +411,11 @@ model PayrollDetail {
   notes            String?
   createdAt        DateTime @default(now())
 }
+
+model CompanyCalendar {
+  id          Int      @id @default(autoincrement())
+  date        DateTime @db.Date @unique
+  type        String   // "HOLIDAY" or "WORKDAY"
+  description String
+  createdAt   DateTime @default(now())
+}

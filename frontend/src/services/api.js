@@ -449,4 +449,15 @@ const api = {
     apiFetch(endpoint, { method: 'DELETE', ...options }).then(data => ({ data })),
 };
 
+// ─── Calendar API ────────────────────────────────
+
+export const calendarAPI = {
+  getAll: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return apiFetch(`/calendar${q ? `?${q}` : ''}`);
+  },
+  upsert: (data) => apiFetch('/calendar/upsert', { method: 'POST', body: JSON.stringify(data) }),
+  remove: (id) => apiFetch(`/calendar/${id}`, { method: 'DELETE' }),
+};
+
 export default api;

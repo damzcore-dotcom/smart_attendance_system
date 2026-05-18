@@ -87,7 +87,7 @@ const getAll = async (req, res) => {
     const skip = (page - 1) * limit;
 
     // 3. Optimized Summary Calculation (O(1) Memory footprint via DB Aggregation)
-    const [total, records, groupStats, uniqueEmpRecords, absentRecords] = await Promise.all([
+    const [total, records, groupStats, uniqueEmpRecords, absentRecords, calendarOverrides] = await Promise.all([
       prisma.attendance.count({ where }),
       prisma.attendance.findMany({
         where,
@@ -110,6 +110,9 @@ const getAll = async (req, res) => {
       prisma.attendance.findMany({
         where: { ...where, status: 'ABSENT' },
         select: { date: true }
+      }),
+      prisma.companyCalendar.findMany({
+        where: where.date ? { date: where.date } : {}
       })
     ]);
 
@@ -132,10 +135,28 @@ const getAll = async (req, res) => {
       totalLate += late + (s === 'MANGKIR' ? count * 30 : 0);
     });
 
-    // Dynamically resolve HOLIDAY for ABSENT records based on working days settings
+    const overrideMap = {};
+    if (calendarOverrides) {
+      calendarOverrides.forEach(c => {
+        overrideMap[c.date.toISOString().split('T')[0]] = c;
+      });
+    }
+
+    // Dynamically resolve HOLIDAY for ABSENT records based on working days settings & Calendar overrides
     absentRecords.forEach(r => {
+      const dateStr = r.date.toISOString().split('T')[0];
+      const override = overrideMap[dateStr];
       const recordDay = new Date(r.date).getDay();
-      if (!workingDays.includes(recordDay)) {
+      
+      let isLibur = false;
+      if (override) {
+         if (override.type === 'HOLIDAY') isLibur = true;
+         if (override.type === 'WORKDAY') isLibur = false;
+      } else {
+         isLibur = !workingDays.includes(recordDay);
+      }
+
+      if (isLibur) {
         holidayCount++;
         absenCount--;
       }
@@ -153,6 +174,8 @@ const getAll = async (req, res) => {
       izin: izinCount,
       totalLate: totalLate,
       uniqueEmployeeCount: uniqueEmpRecords.length,
+      calendarOverrides: calendarOverrides, // Send to frontend
+      workingDays: workingDays // Send to frontend for accurate padding
     };
 
     res.json({
@@ -162,7 +185,28 @@ const getAll = async (req, res) => {
       totalPages: Math.ceil(total / limit),
       summary,
       data: records.map(r => {
-        const resolved = resolveStatus(r.checkIn, r.checkOut, r.status, r.date);
+        let resolved = resolveStatus(r.checkIn, r.checkOut, r.status, r.date);
+        
+        if (resolved === 'MANGKIR' || resolved === 'ABSENT' || resolved === 'HOLIDAY') {
+          const dateStr = r.date.toISOString().split('T')[0];
+          const override = overrideMap[dateStr];
+          const recordDay = new Date(r.date).getDay();
+          
+          let isLibur = false;
+          if (override) {
+             if (override.type === 'HOLIDAY') isLibur = true;
+             if (override.type === 'WORKDAY') isLibur = false;
+          } else {
+             isLibur = !workingDays.includes(recordDay);
+          }
+          
+          if (isLibur) {
+             resolved = 'HOLIDAY';
+             r.lateMinutes = 0;
+          } else if (resolved === 'ABSENT') {
+             resolved = 'MANGKIR';
+          }
+        }
         
         let displayStatus = 'Tanpa Keterangan (Alpa)';
         if (resolved === 'PRESENT') displayStatus = 'Hadir';

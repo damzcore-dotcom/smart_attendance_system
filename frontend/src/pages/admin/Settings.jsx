@@ -27,6 +27,7 @@ import AdminPermissions from '../../components/admin/AdminPermissions';
 import SlipTemplateBuilder from '../../components/admin/SlipTemplateBuilder';
 import AttendanceTemplateBuilder from '../../components/admin/AttendanceTemplateBuilder';
 import IDCardTemplateBuilder from '../../components/admin/IDCardTemplateBuilder';
+import CompanyCalendarSettings from '../../components/admin/CompanyCalendarSettings';
 
 const Settings = () => {
   const queryClient = useQueryClient();
@@ -192,6 +193,7 @@ const Settings = () => {
     { id: 'General', icon: Building2, label: 'Company Profile' },
     { id: 'Location', icon: MapPin, label: 'Geofencing' },
     { id: 'Shifts', icon: Clock, label: 'Shift Rules' },
+    { id: 'Calendar', icon: CalendarCheck, label: 'Calendar & Holidays' },
     { id: 'Security', icon: ShieldCheck, label: 'Biometrics' },
     { id: 'SlipBuilder', icon: FileText, label: 'Slip Configuration' },
     { id: 'AttendanceBuilder', icon: CalendarCheck, label: 'Attendance Report' },
@@ -512,6 +514,14 @@ const Settings = () => {
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'Calendar' && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="bg-white p-8 md:p-10 border border-slate-200 shadow-sm rounded-3xl">
+                <CompanyCalendarSettings />
               </div>
             </div>
           )}

@@ -76,7 +76,7 @@ app.use('/api/direktur', require('./routes/direkturRoutes'));
 app.use('/api/devices', deviceRoutes);
 app.use('/api/audit-logs', require('./routes/auditLogRoutes'));
 app.use('/api/payroll', require('./routes/payrollRoutes'));
-
+app.use('/api/calendar', require('./routes/calendar'));
 // Global error handler — production-safe (no stack traces leaked)
 app.use((err, req, res, next) => {
   console.error('❌ Error:', err.message, err.stack);

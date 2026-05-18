@@ -254,7 +254,15 @@ const Attendance = () => {
       });
 
       const empRef = filteredData[0]; // Ambil data master karyawan dari row pertama
-      
+      const overrides = data?.summary?.calendarOverrides || [];
+      const overrideMap = {};
+      overrides.forEach(c => {
+         // overrides is array of { date: '2026-05-01T...', type: 'HOLIDAY' }
+         const dStr = c.date.split('T')[0];
+         overrideMap[dStr] = c.type;
+      });
+      const workingDays = data?.summary?.workingDays || [1,2,3,4,5]; // default mon-fri
+
       for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
         // Cocokkan dengan format backend
         const dateStr = d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
@@ -262,7 +270,17 @@ const Attendance = () => {
         if (dataMap[dateStr]) {
           padData.push(dataMap[dateStr]);
         } else {
-          const isSunday = d.getDay() === 0; // 0 = Minggu
+          const isoDate = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().split('T')[0];
+          const dayOfWeek = d.getDay();
+          const overrideType = overrideMap[isoDate];
+          
+          let isLibur = false;
+          if (overrideType) {
+             isLibur = overrideType === 'HOLIDAY';
+          } else {
+             isLibur = !workingDays.includes(dayOfWeek);
+          }
+
           padData.push({
             id: `pad-${d.getTime()}`, // Fake ID untuk key React
             name: empRef.name,
@@ -273,7 +291,7 @@ const Attendance = () => {
             date: dateStr,
             checkIn: '--:--',
             checkOut: '--:--',
-            status: isSunday ? 'Libur' : 'Mangkir',
+            status: isLibur ? 'Libur' : 'Mangkir',
             lateMinutes: 0, // Mangkir sanksi +30m dihitung terpisah di kolom Terlambat
             overtimeHours: 0,
             mode: '-',
