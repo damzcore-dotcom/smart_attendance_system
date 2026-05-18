@@ -340,9 +340,40 @@ const importExcel = async (req, res) => {
         bankAccountNumber: ns(row['Nomor Rekening']),
       };
       
-      if (row['Tanggal Masuk']) { try { const d = new Date(row['Tanggal Masuk']); if (!isNaN(d)) createData.joinDate = d; } catch(e) {} }
-      if (row['Sisa Tanggal Kontrak']) { try { const d = new Date(row['Sisa Tanggal Kontrak']); if (!isNaN(d)) createData.contractEnd = d; } catch(e) {} }
-      if (row['Tanggal Lahir']) { try { const d = new Date(row['Tanggal Lahir']); if (!isNaN(d)) createData.birthDate = d; } catch(e) {} }
+      // Helper: konversi Excel Serial Number ke Date
+      // Excel menyimpan tanggal sebagai angka (hari sejak 1 Jan 1900)
+      // Contoh: 45600 = 4 November 2024
+      const parseExcelDate = (val) => {
+        if (!val) return null;
+        if (typeof val === 'number') {
+          // Excel serial number → JavaScript Date
+          const jsDate = new Date((val - 25569) * 86400000);
+          return isNaN(jsDate.getTime()) ? null : jsDate;
+        }
+        // String format fallback (dd/mm/yyyy, yyyy-mm-dd, etc.)
+        const str = String(val).trim();
+        if (!str) return null;
+        // Coba format dd/mm/yyyy atau dd-mm-yyyy
+        const ddmmyyyy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+        if (ddmmyyyy) {
+          const d = new Date(`${ddmmyyyy[3]}-${ddmmyyyy[2].padStart(2,'0')}-${ddmmyyyy[1].padStart(2,'0')}`);
+          return isNaN(d.getTime()) ? null : d;
+        }
+        // Fallback: coba parse langsung
+        const d = new Date(str);
+        return isNaN(d.getTime()) ? null : d;
+      };
+
+      const joinDate = parseExcelDate(row['Tanggal Masuk']);
+      const contractEnd = parseExcelDate(row['Sisa Tanggal Kontrak']);
+      const birthDate = parseExcelDate(row['Tanggal Lahir']);
+
+      if (joinDate) createData.joinDate = joinDate;
+      if (contractEnd) createData.contractEnd = contractEnd;
+      if (birthDate) createData.birthDate = birthDate;
+
+      // Pastikan fingerPrintId diset null (bukan undefined) agar fuzzy matching sync bisa mendeteksinya
+      createData.fingerPrintId = null;
 
       const hashedPassword = await bcrypt.hash('password123', 10);
       const newEmployee = await prisma.employee.create({
