@@ -229,7 +229,61 @@ const Attendance = () => {
     queryFn: () => attendanceAPI.getAll(appliedFilters),
   });
 
-  const filteredData = data?.data || [];
+  let filteredData = data?.data || [];
+
+  if (!isLoading && data?.summary?.uniqueEmployeeCount === 1 && appliedFilters.search && filteredData.length > 0) {
+    let startDate, endDate;
+    if (appliedFilters.period === 'This Month') {
+      const now = new Date();
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      // Padded to the end of the month
+      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0); 
+    } else if (appliedFilters.period === 'Custom' && appliedFilters.startDate && appliedFilters.endDate) {
+      startDate = new Date(appliedFilters.startDate);
+      endDate = new Date(appliedFilters.endDate);
+    }
+
+    if (startDate && endDate) {
+      const padData = [];
+      const dataMap = {};
+      
+      // Simpan data asli ke map untuk lookup cepat berdasarkan tanggal string
+      filteredData.forEach(r => {
+        // Asumsi format backend: "May 3, 2026"
+        dataMap[r.date] = r; 
+      });
+
+      const empRef = filteredData[0]; // Ambil data master karyawan dari row pertama
+      
+      for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+        // Cocokkan dengan format backend
+        const dateStr = d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        
+        if (dataMap[dateStr]) {
+          padData.push(dataMap[dateStr]);
+        } else {
+          const isSunday = d.getDay() === 0; // 0 = Minggu
+          padData.push({
+            id: `pad-${d.getTime()}`, // Fake ID untuk key React
+            name: empRef.name,
+            employeeCode: empRef.employeeCode,
+            dept: empRef.dept,
+            section: empRef.section,
+            position: empRef.position,
+            date: dateStr,
+            checkIn: '--:--',
+            checkOut: '--:--',
+            status: isSunday ? 'Libur' : 'Mangkir',
+            lateMinutes: 0, // Mangkir sanksi +30m dihitung terpisah di kolom Terlambat
+            overtimeHours: 0,
+            mode: '-',
+          });
+        }
+      }
+      // Kembalikan ke urutan dari terbaru ke terlama (descending)
+      filteredData = padData.reverse(); 
+    }
+  }
 
   const handleSort = (key) => {
     const newOrder = sortConfig.key === key && sortConfig.order === 'asc' ? 'desc' : 'asc';
