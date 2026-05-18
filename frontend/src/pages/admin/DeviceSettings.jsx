@@ -9,6 +9,7 @@ const DeviceSettings = () => {
   const [syncing, setSyncing] = useState(null);
   const [previewData, setPreviewData] = useState(null);
   const [activeDeviceId, setActiveDeviceId] = useState(null);
+  const [syncPersonnelResult, setSyncPersonnelResult] = useState(null);
   
   const today = new Date().toISOString().split('T')[0];
   const [syncDates, setSyncDates] = useState({
@@ -83,7 +84,7 @@ const DeviceSettings = () => {
     try {
       setSyncing('users-' + id);
       const { data } = await api.post(`/devices/${id}/sync-users`);
-      alert(data.message);
+      setSyncPersonnelResult(data);
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to sync users');
     } finally {
@@ -369,10 +370,10 @@ const DeviceSettings = () => {
                           {new Date(record.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
                         </td>
                         <td className="px-6 py-4 font-medium text-slate-700">
-                          {new Date(record.checkIn).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                          {record.checkIn ? new Date(record.checkIn).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : <span className="text-slate-400">—</span>}
                         </td>
                         <td className="px-6 py-4 font-medium text-slate-700">
-                          {record.checkOut ? new Date(record.checkOut).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                          {record.checkOut ? new Date(record.checkOut).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : <span className="text-slate-400">—</span>}
                         </td>
                         <td className="px-6 py-4">
                           <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
@@ -408,6 +409,90 @@ const DeviceSettings = () => {
                   <Download className="w-4 h-4" />
                 )}
                 Simpan {previewData.length} Data Absen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Sync Personnel Result Modal */}
+      {syncPersonnelResult && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">📋 Detail Sync Personnel — Data Mesin Fingerprint</h3>
+                <p className="text-sm text-slate-500 mt-1">{syncPersonnelResult.message}</p>
+              </div>
+              <button 
+                onClick={() => { setSyncPersonnelResult(null); fetchDevices(); }}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Summary Cards */}
+            <div className="p-4 bg-slate-50 border-b border-slate-100 grid grid-cols-4 gap-3">
+              <div className="bg-white rounded-xl p-3 border border-slate-200 text-center">
+                <div className="text-2xl font-black text-slate-800">{syncPersonnelResult.data?.totalMachine || 0}</div>
+                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">Total di Mesin</div>
+              </div>
+              <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-200 text-center">
+                <div className="text-2xl font-black text-emerald-600">{syncPersonnelResult.data?.linked || 0}</div>
+                <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mt-1">Auto-Link</div>
+              </div>
+              <div className="bg-blue-50 rounded-xl p-3 border border-blue-200 text-center">
+                <div className="text-2xl font-black text-blue-600">{syncPersonnelResult.data?.new || 0}</div>
+                <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wider mt-1">Baru</div>
+              </div>
+              <div className="bg-slate-100 rounded-xl p-3 border border-slate-200 text-center">
+                <div className="text-2xl font-black text-slate-500">{syncPersonnelResult.data?.skipped || 0}</div>
+                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">Sudah Terlink</div>
+              </div>
+            </div>
+            
+            <div className="flex-1 overflow-auto p-6 bg-slate-50">
+              <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      <th className="px-4 py-3">No</th>
+                      <th className="px-4 py-3">AC No. (Mesin)</th>
+                      <th className="px-4 py-3">Nama di Mesin</th>
+                      <th className="px-4 py-3">Nama di Database</th>
+                      <th className="px-4 py-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-sm divide-y divide-slate-100">
+                    {(syncPersonnelResult.data?.details || []).map((item, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-4 py-3 text-slate-500 font-medium">{idx + 1}</td>
+                        <td className="px-4 py-3 font-bold text-slate-800 font-mono">{item.acNo}</td>
+                        <td className="px-4 py-3 text-slate-700 font-medium">{item.machineName || '-'}</td>
+                        <td className="px-4 py-3 text-slate-700">{item.dbName}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                            item.status === 'linked' ? 'bg-emerald-100 text-emerald-700' :
+                            item.status === 'new' ? 'bg-blue-100 text-blue-700' :
+                            'bg-slate-100 text-slate-600'
+                          }`}>
+                            {item.statusText}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-100 bg-white flex justify-end shrink-0">
+              <button 
+                onClick={() => { setSyncPersonnelResult(null); fetchDevices(); }}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 shadow-sm transition-all"
+              >
+                <CheckCircle className="w-4 h-4" />
+                Selesai
               </button>
             </div>
           </div>

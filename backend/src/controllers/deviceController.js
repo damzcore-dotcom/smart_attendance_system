@@ -206,7 +206,9 @@ const syncUsers = async (req, res) => {
     await zkInstance.disconnect();
 
     let newCount = 0;
-    let updateCount = 0;
+    let linkedCount = 0;
+    let skippedCount = 0;
+    const syncDetails = []; // Detail data dari mesin
 
     // Default department for new unsynced employees
     let defaultDept = await prisma.department.findFirst({ where: { name: 'General' } });
@@ -215,8 +217,14 @@ const syncUsers = async (req, res) => {
     }
 
     // Preload all unlinked employees for fuzzy matching
+    // FIX: cek BOTH null AND empty string ''
     const unlinkedEmployees = await prisma.employee.findMany({
-      where: { fingerPrintId: null }
+      where: { 
+        OR: [
+          { fingerPrintId: null },
+          { fingerPrintId: '' }
+        ]
+      }
     });
 
     for (const u of users.data) {
@@ -229,7 +237,14 @@ const syncUsers = async (req, res) => {
       
       if (existing) {
         // Sudah terlink — skip
-        updateCount++;
+        skippedCount++;
+        syncDetails.push({
+          acNo: fingerPrintId,
+          machineName,
+          dbName: existing.name,
+          status: 'already_linked',
+          statusText: 'Sudah Terlink'
+        });
         continue;
       }
       
@@ -246,7 +261,14 @@ const syncUsers = async (req, res) => {
           // Remove from unlinked list so it won't match again
           const idx = unlinkedEmployees.findIndex(e => e.id === bestMatch.id);
           if (idx !== -1) unlinkedEmployees.splice(idx, 1);
-          updateCount++;
+          linkedCount++;
+          syncDetails.push({
+            acNo: fingerPrintId,
+            machineName,
+            dbName: bestMatch.name,
+            status: 'linked',
+            statusText: 'Auto-Link Berhasil'
+          });
           console.log(`[Sync] ✅ Linked "${machineName}" → "${bestMatch.name}" (ID: ${bestMatch.id})`);
           continue;
         }
@@ -257,13 +279,20 @@ const syncUsers = async (req, res) => {
         data: {
           employeeCode: 'FNG' + fingerPrintId,
           name: machineName || 'User Mesin ' + fingerPrintId,
-          fingerPrintId, // <-- Otomatis terisi dari AC No. mesin
+          fingerPrintId,
           email: 'user' + fingerPrintId + '@system.local',
           departmentId: defaultDept.id,
           status: 'ACTIVE'
         }
       });
       newCount++;
+      syncDetails.push({
+        acNo: fingerPrintId,
+        machineName: machineName || 'User Mesin ' + fingerPrintId,
+        dbName: '-',
+        status: 'new',
+        statusText: 'Karyawan Baru (Placeholder)'
+      });
       console.log(`[Sync] ➕ New placeholder: "${machineName || 'User Mesin ' + fingerPrintId}" (FP: ${fingerPrintId})`);
     }
 
@@ -273,7 +302,17 @@ const syncUsers = async (req, res) => {
       data: { status: 'ONLINE', lastSync: new Date() }
     });
 
-    res.json({ success: true, message: `Sinkronisasi Karyawan berhasil. Menambahkan ${newCount} baru, ${updateCount} sudah ada.` });
+    res.json({ 
+      success: true, 
+      message: `Sinkronisasi berhasil! ${linkedCount} auto-link, ${newCount} baru, ${skippedCount} sudah terlink.`,
+      data: {
+        totalMachine: users.data.length,
+        linked: linkedCount,
+        new: newCount,
+        skipped: skippedCount,
+        details: syncDetails
+      }
+    });
   } catch (err) {
     console.error(err);
     try {
