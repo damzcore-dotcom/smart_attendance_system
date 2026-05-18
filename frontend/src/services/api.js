@@ -1,4 +1,12 @@
-const API_BASE = '/api';
+const getApiBase = () => {
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl && envUrl.startsWith('http')) {
+    return `${envUrl}/api`;
+  }
+  return '/api';
+};
+
+const API_BASE = getApiBase();
 
 /**
  * Smart Attendance Pro - API Service
