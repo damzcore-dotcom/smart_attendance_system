@@ -1,12 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const calendarController = require('../controllers/calendarController');
-const { verifyToken, isAdmin } = require('../middleware/authMiddleware');
+const { verifyToken, requireAdmin } = require('../middleware/auth');
 
 router.use(verifyToken);
 
 router.get('/', calendarController.getAll);
-router.post('/upsert', isAdmin, calendarController.upsert);
-router.delete('/:id', isAdmin, calendarController.remove);
+router.post('/upsert', requireAdmin, calendarController.upsert);
+router.delete('/:id', requireAdmin, calendarController.remove);
 
 module.exports = router;
