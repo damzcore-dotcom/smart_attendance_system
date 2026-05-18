@@ -633,6 +633,48 @@ const Settings = () => {
                 </div>
               </div>
 
+              <div className="bg-white p-8 md:p-10 border border-slate-200 shadow-sm rounded-3xl">
+                <div className="flex items-center gap-5 mb-8">
+                  <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
+                    <Clock className="w-5 h-5" />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-800 tracking-tight">Saturday Special Rules</h3>
+                </div>
+                
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between p-6 bg-slate-50 border border-slate-100 rounded-2xl hover:border-blue-200 transition-all duration-300">
+                    <div className="space-y-1">
+                      <p className="text-sm font-bold text-slate-800 tracking-tight">Saturday Half-Day Protocol</p>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Enable special early checkout rules for Saturdays (Sabtu Setengah Hari).</p>
+                    </div>
+                    <div className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        className="sr-only peer" 
+                        checked={formData.saturdayHalfDay === 'true'} 
+                        onChange={(e) => handleInputChange('saturdayHalfDay', String(e.target.checked))}
+                      />
+                      <div className="w-12 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </div>
+                  </div>
+                  
+                  {formData.saturdayHalfDay === 'true' && (
+                    <div className="flex items-center justify-between p-6 bg-slate-50 border border-slate-100 rounded-2xl transition-all duration-300 animate-in fade-in">
+                      <div className="space-y-1">
+                        <p className="text-sm font-bold text-slate-800 tracking-tight">Checkout Deadline</p>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Expected checkout time on Saturdays</p>
+                      </div>
+                      <input
+                        type="time"
+                        value={formData.saturdayCheckoutTime || '13:00'}
+                        onChange={(e) => handleInputChange('saturdayCheckoutTime', e.target.value)}
+                        className="bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                 <div className="bg-white p-8 border border-slate-200 shadow-sm rounded-3xl">
                   <h3 className="text-xs font-bold text-slate-800 uppercase tracking-widest mb-6 border-l-4 border-blue-500 pl-4">Default Compliance</h3>
