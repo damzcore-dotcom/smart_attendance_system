@@ -1,6 +1,30 @@
-require('dotenv').config({ path: './backend/.env' });
-const { Client } = require('pg');
+const fs = require('fs');
+const path = require('path');
 const readline = require('readline');
+
+// Manual env parser to avoid requiring 'dotenv' module on client root
+let dbUrl = '';
+try {
+  const envPath = path.join(__dirname, 'backend', '.env');
+  if (fs.existsSync(envPath)) {
+    const envFile = fs.readFileSync(envPath, 'utf8');
+    const match = envFile.match(/DATABASE_URL="?([^"\n]+)"?/);
+    if (match && match[1]) dbUrl = match[1];
+  }
+} catch (e) {}
+
+// Safe load pg from backend node_modules
+let Client;
+try {
+  Client = require(path.join(__dirname, 'backend', 'node_modules', 'pg')).Client;
+} catch (e) {
+  try {
+    Client = require('pg').Client;
+  } catch (err) {
+    console.error("❌ Pustaka 'pg' tidak ditemukan! Pastikan Anda sudah menjalankan 'npm install' di folder backend atau START_SYSTEM.bat terlebih dahulu.");
+    process.exit(1);
+  }
+}
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const ask = (q) => new Promise(r => rl.question(q, r));
@@ -14,19 +38,19 @@ console.log('');
 
 (async () => {
   try {
-    let dbUrl = process.env.DATABASE_URL;
-    if (!dbUrl) {
+    let connectionString = dbUrl || process.env.DATABASE_URL;
+    if (!connectionString) {
       console.log('⚠️ File .env tidak ditemukan atau DATABASE_URL kosong.');
-      dbUrl = await ask('Masukkan DATABASE_URL (contoh: postgresql://postgres:root@localhost:5432/smart_attendance): ');
+      connectionString = await ask('Masukkan DATABASE_URL (contoh: postgresql://postgres:root@localhost:5432/smart_attendance): ');
     }
 
-    if (!dbUrl) {
+    if (!connectionString) {
       console.log('❌ DATABASE_URL wajib diisi!');
       process.exit(1);
     }
 
     console.log(`\nMenghubungkan ke database...`);
-    const client = new Client({ connectionString: dbUrl });
+    const client = new Client({ connectionString });
     await client.connect();
 
     console.log(`✅ Terhubung ke database.\n`);
