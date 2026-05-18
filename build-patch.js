@@ -44,7 +44,7 @@ console.log('');
     // 3. ZIP THE PATCH
     console.log('\n── [4/4] Membuat File ZIP (Patch_Update.zip) ───────────');
     const output = fs.createWriteStream(patchZipPath);
-    const archive = archiver('zip', { zlib: { level: 9 } });
+    const archive = archiver.create('zip', { zlib: { level: 9 } });
 
     output.on('close', () => {
       // CLEANUP TEMP FOLDER
