@@ -112,18 +112,6 @@ console.log('');
 
     fs.writeFileSync(frontendEnvPath, frontendEnvContent);
 
-    // ─── Generate License Key ───
-    const payload = {
-      client: clientName,
-      expiry: licenseExpiry,
-      limit: parseInt(maxEmployees)
-    };
-    const payloadBase64 = Buffer.from(JSON.stringify(payload)).toString('base64');
-    const hmac = crypto.createHmac('sha256', licenseSecret);
-    hmac.update(payloadBase64);
-    const signature = hmac.digest('hex');
-    const licenseKey = `${payloadBase64}.${signature}`;
-
     // ─── Write license info ───
     const licensePath = path.join(__dirname, `LICENSE_KEY_${clientName.replace(/\s+/g, '_').toUpperCase()}.txt`);
     const licenseContent = [
@@ -137,7 +125,7 @@ console.log('');
       `═══════════════════════════════════════════════════`,
       ``,
       `LICENSE KEY:`,
-      licenseKey,
+      autoLicenseKey,
       ``,
       `═══════════════════════════════════════════════════`,
       `Masukkan key di atas ke menu Settings → License`,
