@@ -285,32 +285,37 @@ const Employees = () => {
       
       let localBlinks = 0;
       let isEyesClosed = false;
+      let isProcessingFrame = false;
 
       livenessIntervalRef.current = setInterval(async () => {
+        if (isProcessingFrame) return;
         if (!webcamRef.current) {
           clearInterval(livenessIntervalRef.current);
           return;
         }
-        const imageSrc = webcamRef.current.getScreenshot();
-        if (!imageSrc) return;
         
-        const img = new Image();
-        img.src = imageSrc;
-        await new Promise(resolve => img.onload = resolve);
-        
-        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.3 }))
-          .withFaceLandmarks();
+        isProcessingFrame = true;
+        try {
+          const imageSrc = webcamRef.current.getScreenshot();
+          if (!imageSrc) { isProcessingFrame = false; return; }
           
-        if (detection) {
-          const landmarks = detection.landmarks;
-          const leftEye = landmarks.getLeftEye();
-          const rightEye = landmarks.getRightEye();
+          const img = new Image();
+          img.src = imageSrc;
+          await new Promise(resolve => img.onload = resolve);
           
-          const leftEAR = getEAR(leftEye);
-          const rightEAR = getEAR(rightEye);
-          const avgEAR = (leftEAR + rightEAR) / 2.0;
-          
-          if (avgEAR < 0.28) {
+          const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.3 }))
+            .withFaceLandmarks();
+            
+          if (detection) {
+            const landmarks = detection.landmarks;
+            const leftEye = landmarks.getLeftEye();
+            const rightEye = landmarks.getRightEye();
+            
+            const leftEAR = getEAR(leftEye);
+            const rightEAR = getEAR(rightEye);
+            const avgEAR = (leftEAR + rightEAR) / 2.0;
+            
+            if (avgEAR < 0.30) {
             isEyesClosed = true;
           } else {
             if (isEyesClosed) {
@@ -344,6 +349,8 @@ const Employees = () => {
               }
             }
           }
+        } finally {
+          isProcessingFrame = false;
         }
       }, 80);
       

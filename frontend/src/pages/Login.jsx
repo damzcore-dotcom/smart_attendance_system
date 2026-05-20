@@ -166,36 +166,38 @@ const Login = () => {
       let localBlinks = 0;
       let localProof = [];
       let isEyesClosed = false;
+      let isProcessingFrame = false;
 
       // Start blink detection loop
       livenessIntervalRef.current = setInterval(async () => {
+        if (isProcessingFrame) return;
         if (!webcamRef.current) {
           clearInterval(livenessIntervalRef.current);
           return;
         }
-        const imageSrc = webcamRef.current.getScreenshot();
-        if (!imageSrc) return;
         
-        const img = new Image();
-        img.src = imageSrc;
-        await new Promise(resolve => img.onload = resolve);
-        
-        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.3 }))
-          .withFaceLandmarks();
+        isProcessingFrame = true;
+        try {
+          const imageSrc = webcamRef.current.getScreenshot();
+          if (!imageSrc) { isProcessingFrame = false; return; }
           
-        if (detection) {
-          const landmarks = detection.landmarks;
-          const leftEye = landmarks.getLeftEye();
-          const rightEye = landmarks.getRightEye();
+          const img = new Image();
+          img.src = imageSrc;
+          await new Promise(resolve => img.onload = resolve);
           
-          const leftEAR = getEAR(leftEye);
-          const rightEAR = getEAR(rightEye);
-          const avgEAR = (leftEAR + rightEAR) / 2.0;
-          
-          // Debugging log for EAR value (can be checked in browser console)
-          // console.log("EAR:", avgEAR.toFixed(3));
-          
-          if (avgEAR < 0.28) { // Threshold for closed eyes (increased for easier detection)
+          const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.3 }))
+            .withFaceLandmarks();
+            
+          if (detection) {
+            const landmarks = detection.landmarks;
+            const leftEye = landmarks.getLeftEye();
+            const rightEye = landmarks.getRightEye();
+            
+            const leftEAR = getEAR(leftEye);
+            const rightEAR = getEAR(rightEye);
+            const avgEAR = (leftEAR + rightEAR) / 2.0;
+            
+            if (avgEAR < 0.30) { // Threshold for closed eyes (increased for easier detection)
             isEyesClosed = true;
           } else {
             if (isEyesClosed) {
@@ -229,8 +231,10 @@ const Login = () => {
               }
             }
           }
+        } finally {
+          isProcessingFrame = false;
         }
-      }, 80); // check every 80ms (faster to catch quick blinks)
+      }, 80); // check every 80ms
       
       // Timeout after 15 seconds
       setTimeout(() => {
