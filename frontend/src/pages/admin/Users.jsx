@@ -25,6 +25,13 @@ import {
   RefreshCw
 } from 'lucide-react';
 
+const getEAR = (eye) => {
+  const v1 = Math.hypot(eye[1].x - eye[5].x, eye[1].y - eye[5].y);
+  const v2 = Math.hypot(eye[2].x - eye[4].x, eye[2].y - eye[4].y);
+  const h = Math.hypot(eye[0].x - eye[3].x, eye[0].y - eye[3].y);
+  return (v1 + v2) / (2.0 * h);
+};
+
 const Users = () => {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
@@ -47,6 +54,18 @@ const Users = () => {
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [faceData, setFaceData] = useState({ photo: '', descriptor: null });
+  const livenessIntervalRef = useRef(null);
+  const [blinkCount, setBlinkCount] = useState(0);
+  const [scanStatus, setScanStatus] = useState('ready');
+  const [publicSettings, setPublicSettings] = useState({});
+
+  useEffect(() => {
+    import('../../services/api').then(({ settingsAPI }) => {
+      settingsAPI.getPublicInfo().then(res => {
+        if (res.success) setPublicSettings(res.data);
+      }).catch(err => console.error(err));
+    });
+  }, []);
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['users'],
@@ -95,13 +114,17 @@ const Users = () => {
   const biometricMutation = useMutation({
     mutationFn: ({ id, data }) => userAPI.updateBiometrics(id, data),
     onSuccess: () => {
+      if (livenessIntervalRef.current) clearInterval(livenessIntervalRef.current);
       setFaceModalOpen(false);
       setFaceData({ photo: '', descriptor: null });
+      setScanStatus('ready');
       queryClient.invalidateQueries({ queryKey: ['users'] });
       setTimeout(() => alert('Biometrik wajah berhasil disimpan!'), 150);
     },
     onError: (err) => {
+      if (livenessIntervalRef.current) clearInterval(livenessIntervalRef.current);
       setFaceModalOpen(false);
+      setScanStatus('ready');
       setTimeout(() => alert(`Error: ${err.message}`), 150);
     },
   });
@@ -192,6 +215,9 @@ const Users = () => {
 
   const handleFaceClick = async (user) => {
     setSelectedUser(user);
+    if (livenessIntervalRef.current) clearInterval(livenessIntervalRef.current);
+    setScanStatus('ready');
+    setBlinkCount(0);
     setFaceData({ photo: '', descriptor: null });
     setFaceModalOpen(true);
     if (!modelsLoaded && !isLoadingModels) {
@@ -217,18 +243,102 @@ const Users = () => {
   const captureFace = async () => {
     const faceapi = faceApiRef.current;
     if (!webcamRef.current || !modelsLoaded || !faceapi) return;
+
+    if (publicSettings.livenessDetection === 'true' && scanStatus !== 'liveness') {
+      setScanStatus('liveness');
+      setBlinkCount(0);
+      setIsCapturing(true);
+      
+      let localBlinks = 0;
+      let isEyesClosed = false;
+
+      livenessIntervalRef.current = setInterval(async () => {
+        if (!webcamRef.current) {
+          clearInterval(livenessIntervalRef.current);
+          return;
+        }
+        const imageSrc = webcamRef.current.getScreenshot();
+        if (!imageSrc) return;
+        
+        const img = new Image();
+        img.src = imageSrc;
+        await new Promise(resolve => img.onload = resolve);
+        
+        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.4 }))
+          .withFaceLandmarks();
+          
+        if (detection) {
+          const landmarks = detection.landmarks;
+          const leftEye = landmarks.getLeftEye();
+          const rightEye = landmarks.getRightEye();
+          
+          const leftEAR = getEAR(leftEye);
+          const rightEAR = getEAR(rightEye);
+          const avgEAR = (leftEAR + rightEAR) / 2.0;
+          
+          if (avgEAR < 0.28) {
+            isEyesClosed = true;
+          } else {
+            if (isEyesClosed) {
+              isEyesClosed = false;
+              localBlinks++;
+              setBlinkCount(localBlinks);
+              
+              if (localBlinks >= 2) {
+                clearInterval(livenessIntervalRef.current);
+                setTimeout(async () => {
+                  const finalSrc = webcamRef.current.getScreenshot();
+                  if (finalSrc) {
+                    setScanStatus('detecting');
+                    const finalImg = new Image();
+                    finalImg.src = finalSrc;
+                    await new Promise(resolve => finalImg.onload = resolve);
+                    const finalDetection = await faceapi.detectSingleFace(finalImg, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+                      .withFaceLandmarks()
+                      .withFaceDescriptor();
+                      
+                    setIsCapturing(false);
+                    setScanStatus('ready');
+                    if (finalDetection) {
+                      setFaceData({ photo: finalSrc, descriptor: Array.from(finalDetection.descriptor) });
+                      setTimeout(() => alert('Wajah berhasil dideteksi!'), 150);
+                    } else {
+                      setTimeout(() => alert('Wajah tidak terdeteksi saat capture final.'), 150);
+                    }
+                  }
+                }, 300);
+              }
+            }
+          }
+        }
+      }, 80);
+      
+      setTimeout(() => {
+        if (livenessIntervalRef.current) {
+          clearInterval(livenessIntervalRef.current);
+          setIsCapturing(false);
+          setScanStatus('ready');
+          setTimeout(() => alert('Liveness detection timeout. Pastikan berkedip 2 kali.'), 150);
+        }
+      }, 15000);
+      
+      return;
+    }
+
     setIsCapturing(true);
+    setScanStatus('detecting');
     const imageSrc = webcamRef.current.getScreenshot();
     try {
       const img = new Image();
       img.src = imageSrc;
       img.onload = async () => {
         const detection = await faceapi
-          .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions())
+          .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
           .withFaceLandmarks()
           .withFaceDescriptor();
         
         setIsCapturing(false);
+        setScanStatus('ready');
         if (detection) {
           setFaceData({ photo: imageSrc, descriptor: Array.from(detection.descriptor) });
           setTimeout(() => alert('Wajah berhasil dideteksi!'), 150);
@@ -238,6 +348,7 @@ const Users = () => {
       };
     } catch (err) {
       setIsCapturing(false);
+      setScanStatus('ready');
       setTimeout(() => alert('Gagal memproses wajah.'), 150);
     }
   };
@@ -499,7 +610,12 @@ const Users = () => {
                   <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">User: {selectedUser?.username}</p>
                 </div>
               </div>
-              <button onClick={() => setFaceModalOpen(false)} className="w-8 h-8 flex items-center justify-center hover:bg-slate-200 rounded-lg transition-colors">
+              <button onClick={() => {
+                if (livenessIntervalRef.current) clearInterval(livenessIntervalRef.current);
+                setScanStatus('ready');
+                setIsCapturing(false);
+                setFaceModalOpen(false);
+              }} className="w-8 h-8 flex items-center justify-center hover:bg-slate-200 rounded-lg transition-colors">
                 <X className="w-4 h-4 text-slate-400" />
               </button>
             </div>
@@ -508,7 +624,17 @@ const Users = () => {
                 {faceData.photo ? (
                   <img src={faceData.photo} alt="Face" className="w-full h-full object-cover" />
                 ) : (
-                  <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg" className="w-full h-full object-cover" videoConstraints={{ facingMode: "user" }} />
+                  <>
+                    <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg" className="w-full h-full object-cover" videoConstraints={{ facingMode: "user" }} />
+                    {scanStatus === 'liveness' && (
+                      <div className="absolute inset-0 bg-indigo-500/10 flex flex-col items-center justify-center backdrop-blur-[1px] z-20">
+                         <div className="bg-indigo-600 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-lg mb-4">
+                           Blink: {blinkCount} / 2
+                         </div>
+                         <div className="w-20 h-20 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                      </div>
+                    )}
+                  </>
                 )}
                 {(isLoadingModels || (!modelsLoaded && !faceData.photo)) && (
                   <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center text-slate-800 p-6 z-10">
@@ -561,7 +687,12 @@ const Users = () => {
 
               <div className="pt-2 flex gap-3">
                 <button 
-                  onClick={() => setFaceModalOpen(false)}
+                  onClick={() => {
+                    if (livenessIntervalRef.current) clearInterval(livenessIntervalRef.current);
+                    setScanStatus('ready');
+                    setIsCapturing(false);
+                    setFaceModalOpen(false);
+                  }}
                   className="flex-1 py-3 text-sm font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-all"
                 >
                   Cancel
