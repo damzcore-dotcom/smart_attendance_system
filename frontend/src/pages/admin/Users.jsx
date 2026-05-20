@@ -21,7 +21,8 @@ import {
   Eye,
   Edit,
   Trash,
-  Plus
+  Plus,
+  RefreshCw
 } from 'lucide-react';
 
 const Users = () => {
