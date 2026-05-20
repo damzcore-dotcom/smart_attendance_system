@@ -16,14 +16,34 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { authAPI, userAPI } from '../../services/api';
 
+const getEAR = (eye) => {
+  const v1 = Math.hypot(eye[1].x - eye[5].x, eye[1].y - eye[5].y);
+  const v2 = Math.hypot(eye[2].x - eye[4].x, eye[2].y - eye[4].y);
+  const h = Math.hypot(eye[0].x - eye[3].x, eye[0].y - eye[3].y);
+  return (v1 + v2) / (2.0 * h);
+};
+
 const FaceCheck = () => {
-  const [scanStatus, setScanStatus] = useState('ready'); // ready, detecting, success, error
+  const [scanStatus, setScanStatus] = useState('ready'); // ready, liveness, detecting, success, error
   const [error, setError] = useState(null);
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [coords, setCoords] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+  
   const webcamRef = useRef(null);
+  const livenessIntervalRef = useRef(null);
+  const [blinkCount, setBlinkCount] = useState(0);
+  
   const navigate = useNavigate();
+  const [publicSettings, setPublicSettings] = useState({});
+
+  useEffect(() => {
+    import('../../services/api').then(({ settingsAPI }) => {
+      settingsAPI.getPublicInfo().then(res => {
+        if (res.success) setPublicSettings(res.data);
+      }).catch(err => console.error(err));
+    });
+  }, []);
 
   const queryClient = useQueryClient();
   const user = authAPI.getStoredUser();
@@ -79,6 +99,94 @@ const FaceCheck = () => {
   const handleCheck = useCallback(async () => {
     if (!webcamRef.current || !modelsLoaded) return;
     
+    // Check if liveness is required
+    if (publicSettings.livenessDetection === 'true' && scanStatus !== 'liveness') {
+      setScanStatus('liveness');
+      setBlinkCount(0);
+      setError(null);
+      
+      let localBlinks = 0;
+      let isEyesClosed = false;
+
+      livenessIntervalRef.current = setInterval(async () => {
+        if (!webcamRef.current) {
+          clearInterval(livenessIntervalRef.current);
+          return;
+        }
+        const imageSrc = webcamRef.current.getScreenshot();
+        if (!imageSrc) return;
+        
+        const img = new Image();
+        img.src = imageSrc;
+        await new Promise(resolve => img.onload = resolve);
+        
+        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.4 }))
+          .withFaceLandmarks();
+          
+        if (detection) {
+          const landmarks = detection.landmarks;
+          const leftEye = landmarks.getLeftEye();
+          const rightEye = landmarks.getRightEye();
+          
+          const leftEAR = getEAR(leftEye);
+          const rightEAR = getEAR(rightEye);
+          const avgEAR = (leftEAR + rightEAR) / 2.0;
+          
+          if (avgEAR < 0.22) { // Threshold for closed eyes
+            isEyesClosed = true;
+          } else {
+            if (isEyesClosed) {
+              // Blink detected
+              isEyesClosed = false;
+              localBlinks++;
+              setBlinkCount(localBlinks);
+              
+              if (localBlinks >= 2) {
+                clearInterval(livenessIntervalRef.current);
+                // After 2 blinks, capture final image for verification
+                setTimeout(async () => {
+                  const finalSrc = webcamRef.current.getScreenshot();
+                  if (finalSrc) {
+                    setScanStatus('detecting');
+                    const finalImg = new Image();
+                    finalImg.src = finalSrc;
+                    await new Promise(resolve => finalImg.onload = resolve);
+                    const finalDetection = await faceapi.detectSingleFace(finalImg, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+                      .withFaceLandmarks()
+                      .withFaceDescriptor();
+                      
+                    if (finalDetection) {
+                      setScanStatus('success');
+                      const descriptor = Array.from(finalDetection.descriptor);
+                      saveBiometricsMutation.mutate({
+                        facePhoto: finalSrc,
+                        faceDescriptor: JSON.stringify(descriptor)
+                      });
+                    } else {
+                      setScanStatus('error');
+                      setError('Wajah tidak terdeteksi saat capture final.');
+                    }
+                  }
+                }, 300);
+              }
+            }
+          }
+        }
+      }, 150);
+      
+      setTimeout(() => {
+        if (livenessIntervalRef.current) {
+          clearInterval(livenessIntervalRef.current);
+          if (scanStatus === 'liveness') {
+            setScanStatus('error');
+            setError('Liveness detection timeout. Pastikan Anda berkedip 2 kali.');
+          }
+        }
+      }, 15000);
+      
+      return;
+    }
+
     const imageSrc = webcamRef.current.getScreenshot();
     if (imageSrc) {
       setScanStatus('detecting');
@@ -112,7 +220,7 @@ const FaceCheck = () => {
         setError('Gagal mendeteksi wajah. Silakan coba lagi.');
       }
     }
-  }, [modelsLoaded, user.id]);
+  }, [modelsLoaded, user.id, publicSettings, scanStatus]);
 
   return (
     <div className="min-h-screen relative overflow-hidden font-sans pb-20">
@@ -167,6 +275,15 @@ const FaceCheck = () => {
               />
             )}
 
+            {scanStatus === 'liveness' && (
+              <div className="absolute inset-0 bg-indigo-500/10 flex items-center justify-center backdrop-blur-[1px]">
+                <div className="absolute top-4 bg-indigo-600 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-lg">
+                  Blink: {blinkCount} / 2
+                </div>
+                <div className="w-20 h-20 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+
             {scanStatus === 'detecting' && (
               <div className="absolute inset-0 bg-blue-500/10 flex items-center justify-center backdrop-blur-[1px]">
                 <div className="w-20 h-20 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -187,13 +304,18 @@ const FaceCheck = () => {
           <div className="mt-8 w-full max-w-[260px] space-y-4">
             <div className={`flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-wider ${
               scanStatus === 'success' ? 'text-emerald-600' : 
-              scanStatus === 'error' ? 'text-rose-600' : 'text-slate-400'
+              scanStatus === 'error' ? 'text-rose-600' : 
+              scanStatus === 'liveness' ? 'text-indigo-600' : 'text-slate-400'
             }`}>
               {scanStatus === 'success' ? <CheckCircle2 className="w-4 h-4" /> : 
-               scanStatus === 'error' ? <AlertCircle className="w-4 h-4" /> : <ScanFace className="w-4 h-4 text-blue-600" />}
+               scanStatus === 'error' ? <AlertCircle className="w-4 h-4" /> : 
+               scanStatus === 'liveness' ? <ScanFace className="w-4 h-4 animate-pulse" /> : 
+               <ScanFace className="w-4 h-4 text-blue-600" />}
               <span>{
                 scanStatus === 'success' ? 'Enrollment Success' : 
-                scanStatus === 'error' ? 'Detection Failed' : 'Ready to Scan'
+                scanStatus === 'error' ? 'Detection Failed' : 
+                scanStatus === 'liveness' ? `Kedipkan mata 2x... (${blinkCount}/2)` : 
+                'Ready to Scan'
               }</span>
             </div>
 
@@ -204,8 +326,16 @@ const FaceCheck = () => {
             )}
 
             <button
-              onClick={scanStatus === 'success' || scanStatus === 'error' ? () => setScanStatus('ready') : handleCheck}
-              disabled={!modelsLoaded || scanStatus === 'detecting'}
+              onClick={() => {
+                if (scanStatus === 'success' || scanStatus === 'error') {
+                  if (livenessIntervalRef.current) clearInterval(livenessIntervalRef.current);
+                  setScanStatus('ready');
+                  setBlinkCount(0);
+                } else {
+                  handleCheck();
+                }
+              }}
+              disabled={!modelsLoaded || scanStatus === 'detecting' || scanStatus === 'liveness'}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-semibold text-sm active:scale-[0.98] transition-all shadow-lg shadow-blue-600/20 disabled:opacity-30"
             >
               {scanStatus === 'success' || scanStatus === 'error' ? 'Try Again' : 'Capture & Enroll'}

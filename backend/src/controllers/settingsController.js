@@ -11,7 +11,7 @@ const MASTER_SECRET = process.env.LICENSE_SECRET || 'CHANGE_THIS_SECRET_IN_ENV';
  */
 const getPublicInfo = async (req, res) => {
   try {
-    const keys = ['companyName', 'appLogo', 'primaryColor'];
+    const keys = ['companyName', 'appLogo', 'primaryColor', 'faceMatchThreshold', 'livenessDetection', 'autoEnrollment'];
     const settings = await prisma.settings.findMany({
       where: { key: { in: keys } }
     });

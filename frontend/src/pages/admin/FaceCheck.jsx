@@ -13,14 +13,34 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
+const getEAR = (eye) => {
+  const v1 = Math.hypot(eye[1].x - eye[5].x, eye[1].y - eye[5].y);
+  const v2 = Math.hypot(eye[2].x - eye[4].x, eye[2].y - eye[4].y);
+  const h = Math.hypot(eye[0].x - eye[3].x, eye[0].y - eye[3].y);
+  return (v1 + v2) / (2.0 * h);
+};
+
 const AdminFaceCheck = () => {
-  const [scanStatus, setScanStatus] = useState('ready'); 
+  const [scanStatus, setScanStatus] = useState('ready'); // ready, liveness, detecting, success, error
   const [error, setError] = useState(null);
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [coords, setCoords] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+  
   const webcamRef = useRef(null);
+  const livenessIntervalRef = useRef(null);
+  const [blinkCount, setBlinkCount] = useState(0);
+  
   const navigate = useNavigate();
+  const [publicSettings, setPublicSettings] = useState({});
+
+  useEffect(() => {
+    import('../../services/api').then(({ settingsAPI }) => {
+      settingsAPI.getPublicInfo().then(res => {
+        if (res.success) setPublicSettings(res.data);
+      }).catch(err => console.error(err));
+    });
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -72,6 +92,88 @@ const AdminFaceCheck = () => {
   const handleCheck = useCallback(async () => {
     if (!webcamRef.current || !modelsLoaded) return;
     
+    // Check if liveness is required
+    if (publicSettings.livenessDetection === 'true' && scanStatus !== 'liveness') {
+      setScanStatus('liveness');
+      setBlinkCount(0);
+      setError(null);
+      
+      let localBlinks = 0;
+      let isEyesClosed = false;
+
+      livenessIntervalRef.current = setInterval(async () => {
+        if (!webcamRef.current) {
+          clearInterval(livenessIntervalRef.current);
+          return;
+        }
+        const imageSrc = webcamRef.current.getScreenshot();
+        if (!imageSrc) return;
+        
+        const img = new Image();
+        img.src = imageSrc;
+        await new Promise(resolve => img.onload = resolve);
+        
+        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.4 }))
+          .withFaceLandmarks();
+          
+        if (detection) {
+          const landmarks = detection.landmarks;
+          const leftEye = landmarks.getLeftEye();
+          const rightEye = landmarks.getRightEye();
+          
+          const leftEAR = getEAR(leftEye);
+          const rightEAR = getEAR(rightEye);
+          const avgEAR = (leftEAR + rightEAR) / 2.0;
+          
+          if (avgEAR < 0.22) { // Threshold for closed eyes
+            isEyesClosed = true;
+          } else {
+            if (isEyesClosed) {
+              // Blink detected
+              isEyesClosed = false;
+              localBlinks++;
+              setBlinkCount(localBlinks);
+              
+              if (localBlinks >= 2) {
+                clearInterval(livenessIntervalRef.current);
+                // After 2 blinks, capture final image for verification
+                setTimeout(async () => {
+                  const finalSrc = webcamRef.current.getScreenshot();
+                  if (finalSrc) {
+                    setScanStatus('detecting');
+                    const finalImg = new Image();
+                    finalImg.src = finalSrc;
+                    await new Promise(resolve => finalImg.onload = resolve);
+                    const finalDetection = await faceapi.detectSingleFace(finalImg, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+                      .withFaceLandmarks();
+                      
+                    if (finalDetection) {
+                      setScanStatus('success');
+                    } else {
+                      setScanStatus('error');
+                      setError('Wajah tidak terdeteksi saat capture final.');
+                    }
+                  }
+                }, 300);
+              }
+            }
+          }
+        }
+      }, 150);
+      
+      setTimeout(() => {
+        if (livenessIntervalRef.current) {
+          clearInterval(livenessIntervalRef.current);
+          if (scanStatus === 'liveness') {
+            setScanStatus('error');
+            setError('Liveness detection timeout. Pastikan Anda berkedip 2 kali.');
+          }
+        }
+      }, 15000);
+      
+      return;
+    }
+
     const imageSrc = webcamRef.current.getScreenshot();
     if (imageSrc) {
       setScanStatus('detecting');
@@ -98,7 +200,7 @@ const AdminFaceCheck = () => {
         setError('Gagal mendeteksi wajah. Silakan coba lagi.');
       }
     }
-  }, [modelsLoaded]);
+  }, [modelsLoaded, publicSettings, scanStatus]);
 
   return (
     <div className="space-y-8 pb-12 max-w-6xl mx-auto animate-in fade-in duration-500">
@@ -169,6 +271,15 @@ const AdminFaceCheck = () => {
               />
             )}
 
+            {scanStatus === 'liveness' && (
+              <div className="absolute inset-0 bg-indigo-600/10 flex items-center justify-center backdrop-blur-sm">
+                <div className="absolute top-4 bg-indigo-600 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-lg">
+                  Blink: {blinkCount} / 2
+                </div>
+                <div className="w-20 h-20 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin shadow-sm" />
+              </div>
+            )}
+
             {scanStatus === 'detecting' && (
               <div className="absolute inset-0 bg-blue-600/10 flex items-center justify-center backdrop-blur-sm">
                 <div className="w-20 h-20 border-4 border-blue-600 border-t-transparent rounded-full animate-spin shadow-sm" />
@@ -221,8 +332,16 @@ const AdminFaceCheck = () => {
               )}
 
               <button
-                onClick={scanStatus === 'success' || scanStatus === 'error' ? () => setScanStatus('ready') : handleCheck}
-                disabled={!modelsLoaded || scanStatus === 'detecting'}
+                onClick={() => {
+                  if (scanStatus === 'success' || scanStatus === 'error') {
+                    if (livenessIntervalRef.current) clearInterval(livenessIntervalRef.current);
+                    setScanStatus('ready');
+                    setBlinkCount(0);
+                  } else {
+                    handleCheck();
+                  }
+                }}
+                disabled={!modelsLoaded || scanStatus === 'detecting' || scanStatus === 'liveness'}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-bold text-xs uppercase tracking-wider shadow-sm active:scale-95 disabled:opacity-50 transition-all flex items-center justify-center gap-3 group"
               >
                 {scanStatus === 'success' || scanStatus === 'error' ? (

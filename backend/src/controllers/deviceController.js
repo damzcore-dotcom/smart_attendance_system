@@ -48,7 +48,7 @@ const testConnection = async (req, res) => {
   const { id, ipAddress, port } = req.body;
   
   try {
-    const zkInstance = new ZKLib(ipAddress, port || 4370, 10000, 4000);
+    const zkInstance = new ZKLib(ipAddress, port || 4370, 60000, 30000);
     await zkInstance.createSocket();
     
     // Test if we can read info
@@ -200,7 +200,7 @@ const syncUsers = async (req, res) => {
     const device = await prisma.device.findUnique({ where: { id: parseInt(id) } });
     if (!device) return res.status(404).json({ success: false, message: 'Device not found' });
 
-    const zkInstance = new ZKLib(device.ipAddress, device.port, 15000, 10000);
+    const zkInstance = new ZKLib(device.ipAddress, device.port, 60000, 30000);
     await zkInstance.createSocket();
     const users = await zkInstance.getUsers();
     
@@ -388,8 +388,8 @@ async function fetchAttendancesWithRetry(ipAddress, port, maxRetries = 3) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     let zk = null;
     try {
-      // Use longer timeouts: 15s connect, 10s intra-packet for large data
-      zk = new ZKLib(ipAddress, port, 15000, 10000);
+      // Use longer timeouts: 60s connect, 30s intra-packet for large data
+      zk = new ZKLib(ipAddress, port, 60000, 30000);
       await zk.createSocket();
       
       console.log(`[Sync] Attempt ${attempt}/${maxRetries}: Fetching attendance logs...`);

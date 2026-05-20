@@ -26,7 +26,7 @@ const startCronJobs = () => {
       for (const device of devices) {
         console.log(`[Cron] Auto-syncing attendance for device ID: ${device.id} (${device.name})`);
         try {
-          const zkInstance = new ZKLib(device.ipAddress, device.port, 5000, 4000);
+          const zkInstance = new ZKLib(device.ipAddress, device.port, 60000, 30000);
           await zkInstance.createSocket();
           const logs = await zkInstance.getAttendances();
           await zkInstance.disconnect();

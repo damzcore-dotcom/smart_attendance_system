@@ -133,6 +133,18 @@ const verifyFace = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Biometric descriptor is required and must be an array' });
     }
 
+    // Load settings for biometrics
+    const settings = await prisma.settings.findMany({
+      where: { key: { in: ['faceMatchThreshold', 'livenessDetection', 'autoEnrollment'] } }
+    });
+    const settingsMap = {};
+    settings.forEach(s => settingsMap[s.key] = s.value);
+
+    const isLivenessEnabled = settingsMap['livenessDetection'] === 'true';
+    if (isLivenessEnabled && !req.body.livenessProof) {
+      return res.status(400).json({ success: false, message: 'Liveness verification failed. Please try again.' });
+    }
+
     // Fetch all employees with enrolled faces and valid users
     const employees = await prisma.employee.findMany({
       where: { 
@@ -152,8 +164,9 @@ const verifyFace = async (req, res) => {
 
     // Match the closest face
     let bestMatch = null;
-    let minDistance = 1.0; // face-api threshold is usually 0.6
-    const THRESHOLD = 0.6;
+    const uiThreshold = parseInt(settingsMap['faceMatchThreshold']) || 85;
+    const THRESHOLD = 1.0 - (uiThreshold / 100.0); // e.g., 85% confidence = 0.15 max distance
+    let minDistance = 1.0;
 
     for (const emp of employees) {
       try {
@@ -185,6 +198,18 @@ const verifyFace = async (req, res) => {
       where: { id: bestMatch.user.id },
       data: { refreshToken },
     });
+
+    // Auto-Enrollment (Update face descriptor with the latest one if enabled)
+    if (settingsMap['autoEnrollment'] === 'true') {
+      try {
+        await prisma.employee.update({
+          where: { id: bestMatch.id },
+          data: { faceDescriptor: JSON.stringify(descriptor) }
+        });
+      } catch (e) {
+        console.error('Auto-enrollment update failed:', e.message);
+      }
+    }
 
     res.json({
       success: true,

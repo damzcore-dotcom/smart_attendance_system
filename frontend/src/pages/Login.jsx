@@ -6,6 +6,13 @@ import Webcam from 'react-webcam';
 import * as faceapi from '@vladmandic/face-api';
 import { authAPI } from '../services/api';
 
+const getEAR = (eye) => {
+  const v1 = Math.hypot(eye[1].x - eye[5].x, eye[1].y - eye[5].y);
+  const v2 = Math.hypot(eye[2].x - eye[4].x, eye[2].y - eye[4].y);
+  const h = Math.hypot(eye[0].x - eye[3].x, eye[0].y - eye[3].y);
+  return (v1 + v2) / (2.0 * h);
+};
+
 const Login = () => {
   const [loginMode, setLoginMode] = useState('credentials');
   const [username, setUsername] = useState('');
@@ -14,9 +21,13 @@ const Login = () => {
   const [isVerifying, setIsVerifying] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [error, setError] = useState(null);
-  const [scanStatus, setScanStatus] = useState('ready'); // ready, detecting, verifying, success, error
+  const [scanStatus, setScanStatus] = useState('ready'); // ready, liveness, detecting, verifying, success, error
   
   const webcamRef = useRef(null);
+  const livenessIntervalRef = useRef(null);
+  const [blinkCount, setBlinkCount] = useState(0);
+  const [livenessProof, setLivenessProof] = useState([]);
+  
   const navigate = useNavigate();
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [publicSettings, setPublicSettings] = useState({ companyName: 'Smart Attend Pro' });
@@ -116,9 +127,123 @@ const Login = () => {
     }
   };
 
+  const doVerify = async (descriptorArray, proof) => {
+    setScanStatus('verifying');
+    try {
+      const result = await authAPI.verifyFace(descriptorArray, proof);
+      if (result.success) {
+        setScanStatus('success');
+        setTimeout(() => {
+          if (result.mustChangePassword) {
+            setLoginResult(result);
+            setShowChangePassword(true);
+            setIsScanning(false);
+          } else {
+            navigateByRole(result.user.role);
+          }
+        }, 1200);
+      } else {
+        setScanStatus('error');
+        setError(result.message || 'Wajah tidak dikenali. Silakan coba lagi.');
+      }
+    } catch (err) {
+      console.error('Face verification error:', err);
+      setScanStatus('error');
+      setError(err.message || 'Verifikasi gagal. Silakan coba lagi.');
+    }
+  };
+
   const capture = useCallback(async () => {
     if (!webcamRef.current || !modelsLoaded) return;
     
+    // Check if liveness is required
+    if (publicSettings.livenessDetection === 'true' && scanStatus !== 'liveness') {
+      setScanStatus('liveness');
+      setBlinkCount(0);
+      setLivenessProof([]);
+      setError(null);
+      
+      let localBlinks = 0;
+      let localProof = [];
+      let isEyesClosed = false;
+
+      // Start blink detection loop
+      livenessIntervalRef.current = setInterval(async () => {
+        if (!webcamRef.current) {
+          clearInterval(livenessIntervalRef.current);
+          return;
+        }
+        const imageSrc = webcamRef.current.getScreenshot();
+        if (!imageSrc) return;
+        
+        const img = new Image();
+        img.src = imageSrc;
+        await new Promise(resolve => img.onload = resolve);
+        
+        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.4 }))
+          .withFaceLandmarks();
+          
+        if (detection) {
+          const landmarks = detection.landmarks;
+          const leftEye = landmarks.getLeftEye();
+          const rightEye = landmarks.getRightEye();
+          
+          const leftEAR = getEAR(leftEye);
+          const rightEAR = getEAR(rightEye);
+          const avgEAR = (leftEAR + rightEAR) / 2.0;
+          
+          if (avgEAR < 0.22) { // Threshold for closed eyes
+            isEyesClosed = true;
+          } else {
+            if (isEyesClosed) {
+              // Blink detected
+              isEyesClosed = false;
+              localBlinks++;
+              localProof.push(Date.now());
+              setBlinkCount(localBlinks);
+              
+              if (localBlinks >= 2) {
+                clearInterval(livenessIntervalRef.current);
+                // After 2 blinks, capture final image for verification
+                setTimeout(async () => {
+                  const finalSrc = webcamRef.current.getScreenshot();
+                  if (finalSrc) {
+                    setScanStatus('detecting');
+                    const finalImg = new Image();
+                    finalImg.src = finalSrc;
+                    await new Promise(resolve => finalImg.onload = resolve);
+                    const finalDetection = await faceapi.detectSingleFace(finalImg, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.4 }))
+                      .withFaceLandmarks()
+                      .withFaceDescriptor();
+                    if (finalDetection) {
+                      doVerify(Array.from(finalDetection.descriptor), localProof);
+                    } else {
+                      setScanStatus('error');
+                      setError('Wajah tidak terdeteksi saat capture final.');
+                    }
+                  }
+                }, 300);
+              }
+            }
+          }
+        }
+      }, 150); // check every 150ms
+      
+      // Timeout after 15 seconds
+      setTimeout(() => {
+        if (livenessIntervalRef.current) {
+          clearInterval(livenessIntervalRef.current);
+          if (scanStatus === 'liveness') {
+            setScanStatus('error');
+            setError('Liveness detection timeout. Pastikan Anda berkedip 2 kali.');
+          }
+        }
+      }, 15000);
+      
+      return;
+    }
+
+    // Standard capture (no liveness)
     const imageSrc = webcamRef.current.getScreenshot();
     if (imageSrc) {
       setScanStatus('detecting');
@@ -131,32 +256,12 @@ const Login = () => {
           image.onerror = () => reject(new Error('Failed to load captured image'));
         });
 
-        // Detect face and get descriptor (Optimized for speed)
         const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.4 }))
           .withFaceLandmarks()
           .withFaceDescriptor();
         
         if (detection) {
-          setScanStatus('verifying');
-          const descriptorArray = Array.from(detection.descriptor);
-          console.log('Face detected, descriptor length:', descriptorArray.length);
-          const result = await authAPI.verifyFace(descriptorArray);
-          
-          if (result.success) {
-            setScanStatus('success');
-            setTimeout(() => {
-              if (result.mustChangePassword) {
-                setLoginResult(result);
-                setShowChangePassword(true);
-                setIsScanning(false);
-              } else {
-                navigateByRole(result.user.role);
-              }
-            }, 1200);
-          } else {
-            setScanStatus('error');
-            setError(result.message || 'Wajah tidak dikenali. Silakan coba lagi.');
-          }
+          doVerify(Array.from(detection.descriptor), []);
         } else {
           setScanStatus('error');
           setError('Wajah tidak terdeteksi. Pastikan posisi wajah di tengah frame.');
@@ -169,16 +274,20 @@ const Login = () => {
     } else {
       setError('Kamera belum siap. Mohon tunggu sebentar.');
     }
-  }, [webcamRef, navigate, modelsLoaded]);
+  }, [webcamRef, navigate, modelsLoaded, publicSettings, scanStatus]);
 
   const resetScan = () => {
+    if (livenessIntervalRef.current) clearInterval(livenessIntervalRef.current);
     setScanStatus('ready');
+    setBlinkCount(0);
     setError(null);
   };
 
   const closeScan = () => {
+    if (livenessIntervalRef.current) clearInterval(livenessIntervalRef.current);
     setIsScanning(false);
     setScanStatus('ready');
+    setBlinkCount(0);
     setError(null);
   };
 
@@ -189,6 +298,7 @@ const Login = () => {
 
   const getStatusRingColor = () => {
     switch (scanStatus) {
+      case 'liveness': return 'border-indigo-400 shadow-indigo-400/30';
       case 'detecting': return 'border-amber-400 shadow-amber-400/30';
       case 'verifying': return 'border-blue-400 shadow-blue-400/30';
       case 'success': return 'border-emerald-400 shadow-emerald-400/40';
@@ -199,6 +309,7 @@ const Login = () => {
 
   const getStatusLabel = () => {
     switch (scanStatus) {
+      case 'liveness': return { text: `Kedipkan mata 2 kali... (${blinkCount}/2)`, color: 'text-indigo-500', icon: <ScanFace className="w-4 h-4 animate-pulse" /> };
       case 'detecting': return { text: 'Mendeteksi Wajah...', color: 'text-amber-500', icon: <Loader2 className="w-4 h-4 animate-spin" /> };
       case 'verifying': return { text: 'Memverifikasi Identitas...', color: 'text-blue-500', icon: <Loader2 className="w-4 h-4 animate-spin" /> };
       case 'success': return { text: 'Identitas Terverifikasi!', color: 'text-emerald-500', icon: <CheckCircle2 className="w-4 h-4" /> };
@@ -406,6 +517,16 @@ const Login = () => {
                   {scanStatus === 'ready' && (
                     <div className="absolute inset-0 pointer-events-none">
                       <div className="face-scan-line" />
+                    </div>
+                  )}
+
+                  {/* Liveness overlay */}
+                  {scanStatus === 'liveness' && (
+                    <div className="absolute inset-0 bg-indigo-500/10 pointer-events-none flex items-center justify-center">
+                      <div className="face-detect-ring" style={{ borderTopColor: '#6366f1' }} />
+                      <div className="absolute top-4 bg-indigo-600 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-lg">
+                        Blink: {blinkCount} / 2
+                      </div>
                     </div>
                   )}
 
