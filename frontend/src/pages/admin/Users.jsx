@@ -264,7 +264,7 @@ const Users = () => {
         img.src = imageSrc;
         await new Promise(resolve => img.onload = resolve);
         
-        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.4 }))
+        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.3 }))
           .withFaceLandmarks();
           
         if (detection) {
@@ -293,7 +293,7 @@ const Users = () => {
                     const finalImg = new Image();
                     finalImg.src = finalSrc;
                     await new Promise(resolve => finalImg.onload = resolve);
-                    const finalDetection = await faceapi.detectSingleFace(finalImg, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+                    const finalDetection = await faceapi.detectSingleFace(finalImg, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 }))
                       .withFaceLandmarks()
                       .withFaceDescriptor();
                       
@@ -333,7 +333,7 @@ const Users = () => {
       img.src = imageSrc;
       img.onload = async () => {
         const detection = await faceapi
-          .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+          .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 }))
           .withFaceLandmarks()
           .withFaceDescriptor();
         
