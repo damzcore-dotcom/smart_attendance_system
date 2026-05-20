@@ -84,7 +84,7 @@ const History = () => {
     if (curr.status === 'Hadir') acc.present++;
     else if (curr.status === 'Terlambat') acc.late++;
     else if (curr.status === 'Mangkir') acc.mangkir++;
-    else if (curr.status === 'Tanpa Keterangan (Alpa)') acc.absent++;
+    else if (curr.status === 'Alpa') acc.absent++;
     return acc;
   }, { present: 0, late: 0, mangkir: 0, absent: 0 });
 
@@ -176,12 +176,12 @@ const History = () => {
                 key={idx} 
                 onClick={() => handleDayClick(item)}
                 className={`bg-white p-5 flex items-center gap-5 group active:scale-[0.98] transition-all duration-300 cursor-pointer border border-slate-200 hover:border-blue-200 hover:shadow-sm rounded-2xl ${
-                  item.status === 'Tanpa Keterangan (Alpa)' ? 'bg-rose-50/50' : ''
+                  item.status === 'Alpa' ? 'bg-rose-50/50' : ''
                 }`}
               >
                 <div className={`w-14 h-14 rounded-xl flex flex-col items-center justify-center shrink-0 border transition-all duration-300 ${
                   item.status === 'Libur' ? 'bg-slate-50 border-slate-200 text-slate-400' : 
-                  item.status === 'Tanpa Keterangan (Alpa)' ? 'bg-rose-50 border-rose-200 text-rose-500' :
+                  item.status === 'Alpa' ? 'bg-rose-50 border-rose-200 text-rose-500' :
                   'bg-blue-50 border-blue-100 text-blue-600 group-hover:bg-blue-600 group-hover:text-white'
                 }`}>
                   <span className="text-[9px] font-bold uppercase">{item.weekday}</span>
@@ -194,7 +194,7 @@ const History = () => {
                       item.status === 'Hadir' ? 'text-emerald-600' :
                       item.status === 'Terlambat' ? 'text-amber-600' :
                       item.status === 'Mangkir' ? 'text-orange-600' :
-                      item.status === 'Tanpa Keterangan (Alpa)' ? 'text-rose-600' :
+                      item.status === 'Alpa' ? 'text-rose-600' :
                       'text-slate-400'
                     }`}>
                       {item.status}
@@ -203,7 +203,7 @@ const History = () => {
                       {item.status === 'Hadir' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
                       {item.status === 'Terlambat' && <Clock className="w-4 h-4 text-amber-500" />}
                       {item.status === 'Mangkir' && <AlertCircle className="w-4 h-4 text-orange-500" />}
-                      {item.status === 'Tanpa Keterangan (Alpa)' && <XCircle className="w-4 h-4 text-rose-500" />}
+                      {item.status === 'Alpa' && <XCircle className="w-4 h-4 text-rose-500" />}
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-6">

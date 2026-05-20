@@ -221,14 +221,15 @@ const Login = () => {
       <div className="w-full max-w-[440px] bg-white rounded-3xl flex flex-col overflow-hidden z-10 p-6 sm:p-8 md:p-10 relative shadow-xl shadow-slate-200/50 border border-slate-100">
         
         <div className="relative z-10 w-full">
-          
           {/* Logo */}
-          <div className="mb-8 flex flex-col items-center text-center">
-            <div className="h-14 sm:h-16 mb-6">
-              <AppLogo className="w-full h-full text-slate-800" />
+          <div className="mb-6 flex flex-col items-center text-center w-full gap-4">
+            <div className="flex justify-center items-center w-full max-w-[240px] sm:max-w-[280px] mx-auto transition-transform hover:scale-105 duration-500">
+              <AppLogo className="w-full h-auto max-h-[100px] object-contain drop-shadow-md" />
             </div>
-            <h1 className="text-2xl font-bold text-slate-800 tracking-tight">{publicSettings.companyName}</h1>
-            <p className="text-slate-400 text-xs mt-2 font-medium uppercase tracking-widest">Management Portal</p>
+            <div className="flex flex-col items-center gap-1">
+              <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-br from-slate-800 to-slate-600 tracking-tight leading-tight">{publicSettings.companyName}</h1>
+              <p className="text-blue-600 text-[10px] font-black uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full border border-blue-100 shadow-sm inline-block relative z-10">Management Portal</p>
+            </div>
           </div>
 
           {/* Segmented Control Tabs */}

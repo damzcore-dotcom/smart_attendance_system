@@ -98,11 +98,11 @@ const AdminLayout = () => {
       >
         <div className="p-6 flex items-center justify-center border-b border-slate-100 min-h-[88px]">
           {isSidebarOpen ? (
-            <div className="flex flex-col items-center animate-in fade-in slide-in-from-left-2 duration-500 w-full">
-              <div className="h-10 w-full mb-1">
-                <AppLogo className="w-full h-full text-slate-800" />
+            <div className="flex flex-col items-center animate-in fade-in slide-in-from-left-2 duration-700 w-full px-4 pt-1 group relative gap-2">
+              <div className="w-full max-w-[200px] flex justify-center transition-transform duration-500 group-hover:scale-105 relative z-0">
+                <AppLogo className="w-full h-auto max-h-[56px] object-contain drop-shadow-sm text-slate-800" />
               </div>
-              <span className="text-[9px] font-bold text-slate-400 tracking-widest uppercase">Smart Attendance Pro</span>
+              <span className="text-xs font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-slate-500 tracking-wider uppercase text-center relative z-10 drop-shadow-sm">Smart Attendance Pro</span>
             </div>
           ) : (
             <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center shrink-0 shadow-md">

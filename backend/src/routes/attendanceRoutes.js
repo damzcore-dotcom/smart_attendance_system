@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const { getAll, checkIn, checkOut, getSummary, getHistory, importFromExcel, getImportProgress, recalculate, getMasterOptions, createManual, downloadTemplate, update } = require('../controllers/attendanceController');
+const { getAll, checkIn, checkOut, getSummary, getHistory, importFromExcel, getImportProgress, recalculate, swapDays, getMasterOptions, createManual, downloadTemplate, update } = require('../controllers/attendanceController');
 const { verifyToken, requireAdmin } = require('../middleware/auth');
 const multer = require('multer');
 
@@ -13,6 +13,7 @@ router.post('/check-out', checkOut);
 router.get('/summary', getSummary);
 router.get('/template', downloadTemplate);
 router.post('/recalculate', requireAdmin, recalculate);
+router.post('/swap-days', requireAdmin, swapDays);
 router.get('/history/:empId', getHistory);
 router.get('/master-options', getMasterOptions);
 router.post('/import', requireAdmin, upload.single('file'), importFromExcel);

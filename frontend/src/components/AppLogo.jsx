@@ -19,7 +19,7 @@ export const AppLogo = ({ className = "w-full h-full" }) => {
   }, []);
 
   if (logoUrl) {
-    return <img src={logoUrl} alt="App Logo" className={className} style={{ objectFit: 'contain' }} />;
+    return <img src={logoUrl} alt="App Logo" className={`object-contain ${className}`} />;
   }
 
   return <DefaultLogo className={className} color={themeColor} name={companyName} />;

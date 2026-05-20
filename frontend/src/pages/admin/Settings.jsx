@@ -319,9 +319,9 @@ const Settings = () => {
                 </div>
 
                 <div className="mb-8 p-6 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col md:flex-row gap-6 items-center">
-                  <div className="w-24 h-24 rounded-xl border border-slate-200 bg-white flex items-center justify-center overflow-hidden shrink-0 shadow-sm relative group">
+                  <div className="h-24 w-auto min-w-[6rem] max-w-[16rem] rounded-xl border border-slate-200 bg-white flex items-center justify-center overflow-hidden shrink-0 shadow-sm relative group px-4">
                     {formData.appLogo ? (
-                      <img src={formData.appLogo} alt="App Logo" className="w-full h-full object-contain p-2" />
+                      <img src={formData.appLogo} alt="App Logo" className="max-h-full max-w-full object-contain p-2" />
                     ) : (
                       <Building2 className="w-8 h-8 text-slate-300" />
                     )}

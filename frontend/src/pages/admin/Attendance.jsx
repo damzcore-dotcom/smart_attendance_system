@@ -15,7 +15,7 @@ import autoTable from 'jspdf-autotable';
 const STATUS_MAP = {
   'PRESENT': 'Hadir',
   'LATE': 'Terlambat',
-  'ABSENT': 'Absen',
+  'ABSENT': 'Alpa',
   'MANGKIR': 'Mangkir',
   'HOLIDAY': 'Libur',
   'CUTI': 'Cuti',
@@ -35,7 +35,10 @@ const Attendance = () => {
   const queryClient = useQueryClient();
   const [isImportOpen, setImportOpen] = useState(false);
   const [isRecalcModalOpen, setRecalcModalOpen] = useState(false);
+  const [isSwapModalOpen, setSwapModalOpen] = useState(false);
+  
   const [recalcRange, setRecalcRange] = useState({ start: '', end: '' });
+  const [swapRange, setSwapRange] = useState({ sourceDate: '', targetDate: '' });
   const [isUploading, setIsUploading] = useState(false);
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [importResult, setImportResult] = useState(null);
@@ -291,8 +294,8 @@ const Attendance = () => {
             date: dateStr,
             checkIn: '--:--',
             checkOut: '--:--',
-            status: isLibur ? 'Libur' : 'Mangkir',
-            lateMinutes: 0, // Mangkir sanksi +30m dihitung terpisah di kolom Terlambat
+            status: isLibur ? 'Libur' : 'Alpa',
+            lateMinutes: 0, // Alpa sanksi +30m dihitung terpisah di kolom Terlambat
             overtimeHours: 0,
             mode: '-',
           });
@@ -343,6 +346,34 @@ const Attendance = () => {
       queryClient.invalidateQueries({ queryKey: ['attendance'] });
     } catch (err) {
       alert(`Error: ${err.message}`);
+    } finally {
+      setIsRecalculating(false);
+    }
+  };
+
+  const handleSwapDays = async () => {
+    if (!swapRange.sourceDate || !swapRange.targetDate) {
+      alert('Pilih Tanggal Sumber dan Tanggal Tujuan');
+      return;
+    }
+    
+    if (swapRange.sourceDate === swapRange.targetDate) {
+      alert('Tanggal Sumber dan Tujuan tidak boleh sama');
+      return;
+    }
+
+    if (!window.confirm(`Peringatan: Aksi ini akan MEMINDAHKAN SELURUH DATA ABSENSI dari ${swapRange.sourceDate} ke ${swapRange.targetDate} secara permanen. Lanjutkan?`)) {
+      return;
+    }
+
+    setIsRecalculating(true);
+    try {
+      const res = await attendanceAPI.swapDays(swapRange.sourceDate, swapRange.targetDate);
+      alert(res.message || 'Berhasil menukar data absensi');
+      setSwapModalOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['attendance'] });
+    } catch (err) {
+      alert(`Gagal menukar data absensi: ${err.message}`);
     } finally {
       setIsRecalculating(false);
     }
@@ -526,6 +557,13 @@ const Attendance = () => {
                 <span>Sync</span>
               </button>
               <button 
+                onClick={() => setSwapModalOpen(true)}
+                className="group flex items-center gap-2 bg-white px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold text-slate-600 hover:text-indigo-600 hover:border-indigo-200 transition-all border border-slate-200 shadow-sm active:scale-95 uppercase tracking-wider"
+              >
+                <RefreshCw className="w-3.5 h-3.5 group-hover:rotate-90 transition-transform duration-500" /> 
+                <span>Geser</span>
+              </button>
+              <button 
                 onClick={() => setImportOpen(true)}
                 className="group flex items-center gap-2 bg-white px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold text-slate-600 hover:text-emerald-600 hover:border-emerald-200 transition-all border border-slate-200 shadow-sm active:scale-95 uppercase tracking-wider"
               >
@@ -576,10 +614,10 @@ const Attendance = () => {
               { label: 'Total Data', value: data.summary.total, color: 'blue', icon: Filter, desc: 'Semua Absen' },
               { label: 'Hadir', value: data.summary.hadir, color: 'emerald', icon: CheckCircle2, desc: 'Tepat Waktu' },
               { label: 'Terlambat', value: data.summary.telat, color: 'amber', icon: Clock, desc: 'Pelanggaran Waktu' },
-              { label: 'Mangkir', value: data.summary.mangkir, color: 'rose', icon: AlertCircle, desc: 'Tidak Ada Keterangan' },
-              { label: 'Libur', value: data.summary.holiday, color: 'indigo', icon: Calendar, desc: 'Hari Minggu / Libur' },
+              { label: 'Mangkir', value: data.summary.mangkir, color: 'rose', icon: AlertCircle, desc: 'Kurang Finger (+30m)' },
+              { label: 'Alpa', value: data.summary.absen, color: 'red', icon: XCircle, desc: 'Tidak Ada Finger' },
               { label: 'Total Terlambat', value: formatDuration(data.summary.totalLate || 0), color: 'rose', icon: Clock, desc: 'Akumulasi Waktu' },
-              { label: 'Lainnya', value: (data.summary.absen || 0) + (data.summary.cuti || 0) + (data.summary.sakit || 0) + (data.summary.izin || 0), color: 'slate', icon: XCircle, desc: 'Cuti/Sakit/Izin' },
+              { label: 'Lainnya', value: (data.summary.holiday || 0) + (data.summary.cuti || 0) + (data.summary.sakit || 0) + (data.summary.izin || 0), color: 'slate', icon: Calendar, desc: 'Libur/Cuti/Sakit' },
             ].map((item) => (
               <div key={item.label} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-3 hover:shadow-md hover:border-blue-200 transition-all group">
                 <div className="flex justify-between items-start">
@@ -613,7 +651,7 @@ const Attendance = () => {
                     </p>
                     <p className="text-[10px] font-bold text-rose-500 uppercase mt-2 flex items-center gap-2">
                       <AlertCircle className="w-3.5 h-3.5" />
-                      Termasuk sanksi mangkir (+30 menit/hari)
+                      Termasuk sanksi alpa (+30 menit/hari)
                     </p>
                   </div>
                 </div>
@@ -738,7 +776,7 @@ const Attendance = () => {
                       <span className={`inline-flex items-center px-3 py-1.5 rounded-md text-[9px] font-bold uppercase tracking-wider border transition-all ${
                         row.status === 'Hadir' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' :
                         row.status === 'Terlambat' ? 'bg-amber-50 text-amber-600 border-amber-200' :
-                        row.status === 'Mangkir' ? 'bg-rose-50 text-rose-600 border-rose-200' :
+                        row.status === 'Alpa' || row.status === 'Mangkir' ? 'bg-rose-50 text-rose-600 border-rose-200' :
                         row.status === 'Libur' ? 'bg-indigo-50 text-indigo-600 border-indigo-200' :
                         row.status === 'Cuti' ? 'bg-cyan-50 text-cyan-600 border-cyan-200' :
                         row.status === 'Sakit' ? 'bg-yellow-50 text-yellow-600 border-yellow-200' :
@@ -1031,6 +1069,75 @@ const Attendance = () => {
           </div>
         </div>
       )}
+
+      {/* Swap Attendance Modal */}
+      {isSwapModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 print:hidden">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => !isRecalculating && setSwapModalOpen(false)}></div>
+          <div className="bg-white w-full max-w-md relative z-10 overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300 rounded-3xl">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center border border-indigo-100 shadow-sm">
+                  <RefreshCw className={`w-5 h-5 text-indigo-600 ${isRecalculating ? 'animate-spin' : 'rotate-90'}`} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 text-lg tracking-tight">Geser Data Absensi</h3>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">Tukar Hari Otomatis</p>
+                </div>
+              </div>
+              <button onClick={() => !isRecalculating && setSwapModalOpen(false)} className="w-10 h-10 flex items-center justify-center hover:bg-slate-200 rounded-xl transition-all">
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+            
+            <div className="p-8 space-y-6">
+              <div className="bg-amber-50 border border-amber-100 p-5 rounded-2xl flex gap-4">
+                <AlertCircle className="w-6 h-6 text-amber-600 shrink-0" />
+                <p className="text-[10px] text-amber-800 leading-relaxed font-bold uppercase tracking-wider">
+                  Fitur ini akan secara massal MEMINDAHKAN jam absensi fisik seluruh karyawan dari Tanggal Sumber ke Tanggal Tujuan. Berguna untuk merapikan laporan akibat "Tukar Hari".
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-5 relative">
+                <div className="space-y-2 relative z-10">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Tanggal Sumber (Ada Data Fisik)</label>
+                  <input 
+                    type="date" 
+                    value={swapRange.sourceDate}
+                    onChange={(e) => setSwapRange({...swapRange, sourceDate: e.target.value})}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all appearance-none"
+                  />
+                  <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-wider">Contoh: 17 Agustus (Karyawan masuk & scan mesin)</p>
+                </div>
+                
+                <div className="absolute left-8 top-1/2 -translate-y-1/2 w-0.5 h-16 bg-slate-200 z-0 border-l border-dashed border-slate-300"></div>
+
+                <div className="space-y-2 relative z-10">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Tanggal Tujuan (Data Akan Dipindah)</label>
+                  <input 
+                    type="date" 
+                    value={swapRange.targetDate}
+                    onChange={(e) => setSwapRange({...swapRange, targetDate: e.target.value})}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all appearance-none"
+                  />
+                  <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-wider">Contoh: 18 Agustus (Hari pengganti, mesin kosong)</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">
+              <button onClick={() => setSwapModalOpen(false)} className="flex-1 py-3 text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-xl uppercase tracking-wider transition-all">Batal</button>
+              <button 
+                disabled={isRecalculating}
+                onClick={handleSwapDays}
+                className="flex-[2] py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-sm disabled:opacity-50 transition-all"
+              >
+                {isRecalculating ? <Loader2 className="w-4 h-4 animate-spin inline mr-2" /> : 'Mulai Pindahkan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Correction Modal */}
       {correctionModal.isOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 print:hidden">
@@ -1072,8 +1179,8 @@ const Attendance = () => {
                     <option value="CUTI">Cuti</option>
                     <option value="SAKIT">Sakit</option>
                     <option value="IZIN">Izin</option>
-                    <option value="ABSENT">Absen (Tanpa Keterangan)</option>
-                    <option value="MANGKIR">Mangkir</option>
+                    <option value="ABSENT">Alpa</option>
+                    <option value="MANGKIR">Mangkir (Kurang Finger)</option>
                     <option value="HOLIDAY">Libur</option>
                     <option value="PRESENT">Hadir (Manual)</option>
                   </select>

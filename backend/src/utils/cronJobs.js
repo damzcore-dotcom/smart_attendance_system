@@ -37,10 +37,17 @@ const startCronJobs = () => {
           }
 
           const employees = await prisma.employee.findMany({ include: { shift: true } });
+          const empByFingerPrint = {};
           const empByCode = {};
           employees.forEach(e => {
-            if (e.idNumber) empByCode[e.idNumber] = e;
+            if (e.fingerPrintId) empByFingerPrint[String(e.fingerPrintId)] = e;
+            if (e.employeeCode) empByCode[String(e.employeeCode)] = e;
           });
+
+          // Fetch Settings to check for Saturday Half-Day rules
+          const settingsList = await prisma.settings.findMany();
+          const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
+          const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
 
           // Only process logs from today (auto-sync is daily, no need to reprocess old data)
           // lastSync is used as a cutoff: process logs since last sync or since start of today
@@ -54,40 +61,90 @@ const startCronJobs = () => {
 
           const grouped = {};
           for (const log of logs.data) {
-            const pinStr = String(log.deviceUserId);
+            const pinStr = String(log.deviceUserId).trim();
             const recordTime = new Date(log.recordTime);
             
             // Skip records older than cutoff (yesterday and before)
             if (recordTime < cutoffTime) continue;
 
-            const dateKey = recordTime.toISOString().split('T')[0];
+            // Extract local date components to avoid timezone shifting
+            const year = recordTime.getFullYear();
+            const month = String(recordTime.getMonth() + 1).padStart(2, '0');
+            const day = String(recordTime.getDate()).padStart(2, '0');
+            const dateKey = `${year}-${month}-${day}`;
             
-            const emp = empByCode[pinStr];
+            const emp = empByFingerPrint[pinStr] || empByCode[pinStr];
             if (!emp) continue;
 
             const key = `${emp.id}|${dateKey}`;
             if (!grouped[key]) {
-              grouped[key] = { employeeId: emp.id, employee: emp, date: new Date(dateKey + 'T00:00:00'), checkIn: recordTime, checkOut: recordTime };
-            } else {
-              if (recordTime < grouped[key].checkIn) grouped[key].checkIn = recordTime;
-              if (recordTime > grouped[key].checkOut) grouped[key].checkOut = recordTime;
+              grouped[key] = { employeeId: emp.id, employee: emp, date: new Date(dateKey + 'T00:00:00.000Z'), scans: [] };
             }
+            grouped[key].scans.push(recordTime);
           }
 
           const recordsToCreate = [];
           for (const entry of Object.values(grouped)) {
             const emp = entry.employee;
             const shiftStart = emp.shift?.startTime || '08:00';
+            let shiftEnd = emp.shift?.endTime || '17:00';
             const gracePeriod = emp.shift?.gracePeriod || 15;
             
-            const calc = calculateLateness(entry.checkIn, shiftStart, gracePeriod);
-            const status = resolveStatus(entry.checkIn, entry.checkIn === entry.checkOut ? null : entry.checkOut, calc.status);
+            // Override shiftEnd for Saturday if half-day is enabled
+            const dayOfWeek = entry.date.getUTCDay(); // 0=Sun, 6=Sat
+            if (dayOfWeek === 6 && isSaturdayHalfDay) {
+              shiftEnd = satCheckoutTime;
+            }
+            
+            // Sort all scans chronologically
+            entry.scans.sort((a, b) => a - b);
+            
+            const earliest = entry.scans[0];
+            const latest = entry.scans[entry.scans.length - 1];
+            
+            let checkIn = null;
+            let checkOut = null;
+            
+            // Treat multiple scans within 60 minutes of each other as a single scan day
+            // to handle duplicate/double-tap scans when arriving or leaving.
+            const timeDiffMinutes = (latest - earliest) / (1000 * 60);
+            const isSingleScan = entry.scans.length === 1 || timeDiffMinutes < 60;
+            
+            if (isSingleScan) {
+              // === SMART SINGLE-SCAN DETECTION ===
+              const [startH, startM] = shiftStart.split(':').map(Number);
+              const [endH, endM] = shiftEnd.split(':').map(Number);
+              const shiftStartMinutes = startH * 60 + startM;
+              const shiftEndMinutes = endH * 60 + endM;
+              const midpointMinutes = Math.floor((shiftStartMinutes + shiftEndMinutes) / 2);
+              
+              const scanHour = earliest.getHours();
+              const scanMinute = earliest.getMinutes();
+              const scanMinutes = scanHour * 60 + scanMinute;
+              
+              if (scanMinutes <= midpointMinutes) {
+                checkIn = earliest;
+                checkOut = null;
+              } else {
+                checkIn = null;
+                checkOut = earliest;
+              }
+            } else {
+              checkIn = earliest;
+              checkOut = latest;
+            }
+            
+            const calc = checkIn 
+              ? calculateLateness(checkIn, shiftStart, gracePeriod)
+              : { lateMinutes: 0, status: 'Mangkir' };
+            
+            const status = resolveStatus(checkIn, checkOut, calc.status);
 
             recordsToCreate.push({
               employeeId: entry.employeeId,
               date: entry.date,
-              checkIn: entry.checkIn,
-              checkOut: entry.checkIn === entry.checkOut ? null : entry.checkOut,
+              checkIn,
+              checkOut,
               status,
               lateMinutes: calc.lateMinutes,
               mode: 'Fingerprint'

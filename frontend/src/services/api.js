@@ -201,6 +201,7 @@ export const attendanceAPI = {
     return apiFetch(`/attendance/history/${empId}${q ? `?${q}` : ''}`);
   },
   recalculate: (startDate, endDate) => apiFetch('/attendance/recalculate', { method: 'POST', body: JSON.stringify({ startDate, endDate }) }),
+  swapDays: (sourceDate, targetDate) => apiFetch('/attendance/swap-days', { method: 'POST', body: JSON.stringify({ sourceDate, targetDate }) }),
   getMasterOptions: (params = {}) => {
     const q = new URLSearchParams(params).toString();
     return apiFetch(`/attendance/master-options${q ? `?${q}` : ''}`);
@@ -209,7 +210,7 @@ export const attendanceAPI = {
     const formData = new FormData();
     formData.append('file', file);
     const token = localStorage.getItem('accessToken');
-    const res = await fetch(`/api/attendance/import${jobId ? `?jobId=${jobId}` : ''}`, {
+    const res = await fetch(`${API_BASE}/attendance/import${jobId ? `?jobId=${jobId}` : ''}`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` },
       body: formData
@@ -220,14 +221,14 @@ export const attendanceAPI = {
   },
   getImportProgress: async (jobId) => {
     const token = localStorage.getItem('accessToken');
-    const res = await fetch(`/api/attendance/import-progress?jobId=${jobId}`, {
+    const res = await fetch(`${API_BASE}/attendance/import-progress?jobId=${jobId}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     return await res.json();
   },
   getTemplate: async () => {
     const token = localStorage.getItem('accessToken');
-    const res = await fetch(`/api/attendance/template`, {
+    const res = await fetch(`${API_BASE}/attendance/template`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if (!res.ok) throw new Error('Download failed');
@@ -422,7 +423,7 @@ export const payrollAPI = {
   cancel: (id) => apiFetch(`/payroll/${id}/cancel`, { method: 'PUT' }),
   exportExcel: async (id) => {
     const token = localStorage.getItem('accessToken');
-    const res = await fetch(`/api/payroll/${id}/export-excel`, {
+    const res = await fetch(`${API_BASE}/payroll/${id}/export-excel`, {
       headers: { 'Authorization': `Bearer ${token}` },
     });
     if (!res.ok) throw new Error('Export failed');

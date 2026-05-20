@@ -97,8 +97,8 @@ const getWeeklyTrends = async (req, res) => {
     }
 
     records.forEach(r => {
-      const d = new Date(r.date);
-      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      const localD = new Date(r.date.getUTCFullYear(), r.date.getUTCMonth(), r.date.getUTCDate());
+      const key = `${localD.getFullYear()}-${localD.getMonth()}-${localD.getDate()}`;
       if (dayMap[key]) {
         if (r.status === 'PRESENT') dayMap[key].present++;
         else if (r.status === 'LATE') dayMap[key].late++;

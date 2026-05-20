@@ -84,7 +84,8 @@ router.get('/attendance', async (req, res) => {
     else orderBy.push({ date: 'desc' }, { employee: { name: 'asc' } });
 
     // Logic for Mangkir (Absent)
-    if (status === 'Mangkir' || status === 'Absent') {
+    // Logic for Absent (Alpa) - Find employees with no attendance record
+    if (status === 'Absent' || status === 'ABSENT') {
       const allEmployees = await prisma.employee.findMany({
         where: empWhere,
         include: { department: true }
@@ -95,26 +96,26 @@ router.get('/attendance', async (req, res) => {
         select: { employeeId: true }
       })).map(a => a.employeeId);
 
-      let mangkirList = allEmployees.filter(e => !attendedIds.includes(e.id));
+      let absentList = allEmployees.filter(e => !attendedIds.includes(e.id));
       
-      // Sort mangkirList in memory
+      // Sort absentList in memory
       if (sortBy === 'name') {
-        mangkirList.sort((a, b) => order === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name));
+        absentList.sort((a, b) => order === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name));
       } else if (sortBy === 'nik') {
-        mangkirList.sort((a, b) => order === 'asc' ? a.employeeCode.localeCompare(b.employeeCode) : b.employeeCode.localeCompare(a.employeeCode));
+        absentList.sort((a, b) => order === 'asc' ? a.employeeCode.localeCompare(b.employeeCode) : b.employeeCode.localeCompare(a.employeeCode));
       } else if (sortBy === 'dept') {
-        mangkirList.sort((a, b) => {
+        absentList.sort((a, b) => {
           const da = a.department?.name || '';
           const db = b.department?.name || '';
           return order === 'asc' ? da.localeCompare(db) : db.localeCompare(da);
         });
       }
 
-      const total = mangkirList.length;
-      const paginated = mangkirList.slice(skip, skip + parseInt(limit));
+      const total = absentList.length;
+      const paginated = absentList.slice(skip, skip + parseInt(limit));
 
       const finalData = paginated.map(e => ({
-        id: `mangkir-${e.id}`,
+        id: `absent-${e.id}`,
         date: dateFilter.gte || new Date(),
         nik: e.employeeCode,
         name: e.name,
@@ -123,7 +124,7 @@ router.get('/attendance', async (req, res) => {
         position: e.position || '-',
         checkIn: '-',
         checkOut: '-',
-        status: 'Mangkir',
+        status: 'ABSENT',
         lateMinutes: 0
       }));
 
@@ -196,11 +197,12 @@ router.get('/attendance', async (req, res) => {
       data: records.map(att => {
         const resolved = resolveStatus(att.checkIn, att.checkOut, att.status, att.date, workingDays);
         
-        let displayStatus = 'Absent';
+        let displayStatus = 'Alpa';
         if (resolved === 'PRESENT') displayStatus = 'Present';
         else if (resolved === 'LATE') displayStatus = 'Late';
         else if (resolved === 'MANGKIR') displayStatus = 'Mangkir';
         else if (resolved === 'HOLIDAY') displayStatus = 'Holiday';
+        else if (resolved === 'ABSENT') displayStatus = 'Alpa';
 
         return {
           id: att.id,

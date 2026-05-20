@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Plus, RefreshCw, Wifi, Download, Users, MonitorSmartphone, Clock, CheckCircle } from 'lucide-react';
+import { Trash2, Plus, RefreshCw, Wifi, Download, Users, MonitorSmartphone, Clock, CheckCircle, AlertTriangle, Info } from 'lucide-react';
 import api from '../../services/api';
 
 const DeviceSettings = () => {
@@ -10,10 +10,14 @@ const DeviceSettings = () => {
   const [previewData, setPreviewData] = useState(null);
   const [activeDeviceId, setActiveDeviceId] = useState(null);
   const [syncPersonnelResult, setSyncPersonnelResult] = useState(null);
+  const [syncPersonnelFilter, setSyncPersonnelFilter] = useState('ALL');
+  const [syncDiagnostics, setSyncDiagnostics] = useState(null);
   
-  const today = new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const today = now.toISOString().split('T')[0];
+  const firstOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
   const [syncDates, setSyncDates] = useState({
-    startDate: today,
+    startDate: firstOfMonth,
     endDate: today,
   });
 
@@ -99,7 +103,16 @@ const DeviceSettings = () => {
       const { data } = await api.post(`/devices/${id}/sync-attendance?preview=true&start=${syncDates.startDate}&end=${syncDates.endDate}`);
       
       if (data.rawRecords === 0) {
-        alert(data.message || 'Tidak ada data log baru di mesin.');
+        const diag = data.diagnostics;
+        if (diag) {
+          // Always show diagnostics modal when we have diagnostic info
+          setSyncDiagnostics({
+            message: data.message,
+            ...diag
+          });
+        } else {
+          alert(data.message || 'Tidak ada data log baru di mesin.');
+        }
         return;
       }
 
@@ -432,22 +445,36 @@ const DeviceSettings = () => {
             </div>
 
             {/* Summary Cards */}
-            <div className="p-4 bg-slate-50 border-b border-slate-100 grid grid-cols-4 gap-3">
-              <div className="bg-white rounded-xl p-3 border border-slate-200 text-center">
+            <div className="p-4 bg-slate-50 border-b border-slate-100 grid grid-cols-5 gap-3">
+              <div 
+                onClick={() => setSyncPersonnelFilter('ALL')}
+                className={`bg-white rounded-xl p-3 border text-center cursor-pointer transition-all ${syncPersonnelFilter === 'ALL' ? 'border-slate-800 shadow-md ring-2 ring-slate-800/20' : 'border-slate-200 hover:border-slate-400 opacity-60 hover:opacity-100'}`}>
                 <div className="text-2xl font-black text-slate-800">{syncPersonnelResult.data?.totalMachine || 0}</div>
                 <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">Total di Mesin</div>
               </div>
-              <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-200 text-center">
+              <div 
+                onClick={() => setSyncPersonnelFilter('linked')}
+                className={`bg-emerald-50 rounded-xl p-3 border text-center cursor-pointer transition-all ${syncPersonnelFilter === 'linked' ? 'border-emerald-500 shadow-md ring-2 ring-emerald-500/20' : 'border-emerald-200 hover:border-emerald-400 opacity-60 hover:opacity-100'}`}>
                 <div className="text-2xl font-black text-emerald-600">{syncPersonnelResult.data?.linked || 0}</div>
                 <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mt-1">Auto-Link</div>
               </div>
-              <div className="bg-blue-50 rounded-xl p-3 border border-blue-200 text-center">
+              <div 
+                onClick={() => setSyncPersonnelFilter('new')}
+                className={`bg-blue-50 rounded-xl p-3 border text-center cursor-pointer transition-all ${syncPersonnelFilter === 'new' ? 'border-blue-500 shadow-md ring-2 ring-blue-500/20' : 'border-blue-200 hover:border-blue-400 opacity-60 hover:opacity-100'}`}>
                 <div className="text-2xl font-black text-blue-600">{syncPersonnelResult.data?.new || 0}</div>
                 <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wider mt-1">Baru</div>
               </div>
-              <div className="bg-slate-100 rounded-xl p-3 border border-slate-200 text-center">
-                <div className="text-2xl font-black text-slate-500">{syncPersonnelResult.data?.skipped || 0}</div>
+              <div 
+                onClick={() => setSyncPersonnelFilter('already_linked')}
+                className={`bg-slate-100 rounded-xl p-3 border text-center cursor-pointer transition-all ${syncPersonnelFilter === 'already_linked' ? 'border-slate-500 shadow-md ring-2 ring-slate-500/20' : 'border-slate-200 hover:border-slate-400 opacity-60 hover:opacity-100'}`}>
+                <div className="text-2xl font-black text-slate-600">{syncPersonnelResult.data?.alreadyLinked || 0}</div>
                 <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">Sudah Terlink</div>
+              </div>
+              <div 
+                onClick={() => setSyncPersonnelFilter('inactive_ignored')}
+                className={`bg-amber-50 rounded-xl p-3 border text-center cursor-pointer transition-all ${syncPersonnelFilter === 'inactive_ignored' ? 'border-amber-500 shadow-md ring-2 ring-amber-500/20' : 'border-amber-200 hover:border-amber-400 opacity-60 hover:opacity-100'}`}>
+                <div className="text-2xl font-black text-amber-600">{syncPersonnelResult.data?.inactive || 0}</div>
+                <div className="text-[10px] font-bold text-amber-600 uppercase tracking-wider mt-1">Diabaikan</div>
               </div>
             </div>
             
@@ -464,7 +491,9 @@ const DeviceSettings = () => {
                     </tr>
                   </thead>
                   <tbody className="text-sm divide-y divide-slate-100">
-                    {(syncPersonnelResult.data?.details || []).map((item, idx) => (
+                    {(syncPersonnelResult.data?.details || [])
+                      .filter(item => syncPersonnelFilter === 'ALL' || item.status === syncPersonnelFilter)
+                      .map((item, idx) => (
                       <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
                         <td className="px-4 py-3 text-slate-500 font-medium">{idx + 1}</td>
                         <td className="px-4 py-3 font-bold text-slate-800 font-mono">{item.acNo}</td>
@@ -493,6 +522,137 @@ const DeviceSettings = () => {
               >
                 <CheckCircle className="w-4 h-4" />
                 Selesai
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Sync Diagnostics Modal */}
+      {syncDiagnostics && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-amber-50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-amber-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800">Sync Gagal — Data Tidak Cocok</h3>
+                  <p className="text-xs text-amber-700 font-semibold mt-0.5">Karyawan di mesin belum terhubung dengan database</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setSyncDiagnostics(null)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-white hover:bg-slate-100 text-slate-500 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Summary Cards */}
+            <div className="p-4 bg-slate-50 border-b border-slate-100 grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="bg-white rounded-xl p-3 border border-slate-200 text-center">
+                <div className="text-2xl font-black text-slate-800">{syncDiagnostics.totalLogsFromDevice || 0}</div>
+                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">Log di Mesin</div>
+              </div>
+              <div className="bg-blue-50 rounded-xl p-3 border border-blue-200 text-center">
+                <div className="text-2xl font-black text-blue-600">{syncDiagnostics.logsInRange || 0}</div>
+                <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wider mt-1">Dalam Range</div>
+              </div>
+              <div className="bg-rose-50 rounded-xl p-3 border border-rose-200 text-center">
+                <div className="text-2xl font-black text-rose-600">{syncDiagnostics.unmatchedPinCount || 0}</div>
+                <div className="text-[10px] font-bold text-rose-600 uppercase tracking-wider mt-1">PIN Tidak Cocok</div>
+              </div>
+              <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-200 text-center">
+                <div className="text-2xl font-black text-emerald-600">{syncDiagnostics.linkedEmployeeCount || 0}</div>
+                <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mt-1">Karyawan Terlink</div>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-auto p-6">
+              {/* Explanation - Dynamic based on scenario */}
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5">
+                <div className="flex items-start gap-3">
+                  <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="text-sm text-amber-900">
+                    <p className="font-bold mb-1">Mengapa tidak ada data yang di-sync?</p>
+                    
+                    {/* Scenario 1: Device has logs but none in date range (old data) */}
+                    {syncDiagnostics.totalLogsFromDevice > 0 && syncDiagnostics.logsInRange === 0 && (
+                      <>
+                        <p className="text-amber-800">Mesin memiliki <strong>{syncDiagnostics.totalLogsFromDevice.toLocaleString()}</strong> log absensi, tapi <strong>tidak ada satupun</strong> yang masuk dalam range tanggal yang dipilih.</p>
+                        {syncDiagnostics.deviceDateRange && (
+                          <div className="mt-2 p-3 bg-white border border-amber-300 rounded-lg">
+                            <p className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-1">Data di Mesin:</p>
+                            <p className="text-amber-900 font-semibold">
+                              {new Date(syncDiagnostics.deviceDateRange.earliest).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}
+                              {' '}s/d{' '}
+                              {new Date(syncDiagnostics.deviceDateRange.latest).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}
+                            </p>
+                          </div>
+                        )}
+                        <p className="mt-2 font-bold text-amber-900">{"→"} Data log di mesin ini sudah lama / tidak sesuai dengan range tanggal yang dipilih. Pastikan mesin menyimpan data absensi terbaru.</p>
+                      </>
+                    )}
+                    
+                    {/* Scenario 2: Logs in range but no employee match */}
+                    {syncDiagnostics.logsInRange > 0 && syncDiagnostics.unmatchedPinCount > 0 && (
+                      <>
+                        <p className="text-amber-800">Mesin memiliki <strong>{syncDiagnostics.logsInRange.toLocaleString()}</strong> log dalam range tanggal, tapi <strong>{syncDiagnostics.unmatchedPinCount}</strong> PIN tidak cocok dengan karyawan manapun.</p>
+                        <p className="mt-2 text-amber-800">Saat ini <strong>{syncDiagnostics.linkedEmployeeCount || 0} dari {syncDiagnostics.totalEmployees || 0}</strong> karyawan yang sudah terhubung.</p>
+                        <p className="mt-2 font-bold text-amber-900">{"→"} Klik tombol <strong>"SYNC PERSONNEL"</strong> terlebih dahulu untuk menghubungkan data karyawan di mesin dengan database!</p>
+                      </>
+                    )}
+
+                    {/* Scenario 3: No logs at all */}
+                    {syncDiagnostics.totalLogsFromDevice === 0 && (
+                      <p className="text-amber-800">Mesin tidak memiliki data log absensi sama sekali. Pastikan mesin berfungsi dan karyawan sudah melakukan scan fingerprint.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Unmatched PINs Table */}
+              {syncDiagnostics.unmatchedPins && syncDiagnostics.unmatchedPins.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">PIN Mesin yang Tidak Cocok (maks. 20)</h4>
+                  <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                          <th className="px-4 py-3">No</th>
+                          <th className="px-4 py-3">PIN (AC No.)</th>
+                          <th className="px-4 py-3">Nama di Mesin</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-sm divide-y divide-slate-100">
+                        {syncDiagnostics.unmatchedPins.map((item, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50/50">
+                            <td className="px-4 py-2.5 text-slate-500">{idx + 1}</td>
+                            <td className="px-4 py-2.5 font-bold text-slate-800 font-mono">{item.pin}</td>
+                            <td className="px-4 py-2.5 text-slate-700">{item.name}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-slate-100 bg-white flex justify-end gap-3 shrink-0">
+              <button 
+                onClick={() => setSyncDiagnostics(null)}
+                className="px-5 py-2.5 rounded-xl font-bold text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-all"
+              >
+                Tutup
+              </button>
+              <button 
+                onClick={() => { setSyncDiagnostics(null); /* Trigger sync personnel for the first device */ if(devices.length > 0) syncUsers(devices[0].id); }}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 shadow-sm transition-all"
+              >
+                <Users className="w-4 h-4" />
+                Jalankan Sync Personnel
               </button>
             </div>
           </div>

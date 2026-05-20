@@ -16,13 +16,13 @@ const STATUS_MAP = {
   'CUTI': 'Cuti',
   'SAKIT': 'Sakit',
   'IZIN': 'Izin',
-  'ABSENT': 'Tanpa Keterangan (Alpa)'
+  'ABSENT': 'Alpa'
 };
 
 const STATUS_CONFIG = {
   'PRESENT': { label: 'Hadir', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500', icon: CheckCircle2 },
   'LATE': { label: 'Terlambat', color: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500', icon: Clock },
-  'ABSENT': { label: 'Absen', color: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-500', icon: XCircle },
+  'ABSENT': { label: 'Alpa', color: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-500', icon: XCircle },
   'MANGKIR': { label: 'Mangkir', color: 'bg-orange-50 text-orange-700 border-orange-200', dot: 'bg-orange-500', icon: AlertCircle },
   'SAKIT': { label: 'Sakit', color: 'bg-blue-50 text-blue-700 border-blue-200', dot: 'bg-blue-500', icon: AlertCircle },
   'IZIN': { label: 'Izin', color: 'bg-sky-50 text-sky-700 border-sky-200', dot: 'bg-sky-500', icon: AlertCircle },

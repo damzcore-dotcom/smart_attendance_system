@@ -148,7 +148,8 @@ const getAttendance = async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
     
     // Logic for Mangkir (Absent) - Find employees with no attendance record
-    if (status === 'Mangkir' || status === 'Absent') {
+    // Logic for Absent (Alpa) - Find employees with no attendance record
+    if (status === 'Absent' || status === 'ABSENT') {
       const allEmployees = await prisma.employee.findMany({
         where: empWhere,
         include: { department: true }
@@ -159,18 +160,18 @@ const getAttendance = async (req, res) => {
         select: { employeeId: true }
       })).map(a => a.employeeId);
 
-      const mangkirList = allEmployees.filter(e => !attendedIds.includes(e.id));
-      const total = mangkirList.length;
+      const absentList = allEmployees.filter(e => !attendedIds.includes(e.id));
+      const total = absentList.length;
 
-      // Sort mangkir list if needed (frontend sort since it's an array)
+      // Sort absent list if needed (frontend sort since it's an array)
       if (sortBy === 'name') {
-        mangkirList.sort((a, b) => order === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name));
+        absentList.sort((a, b) => order === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name));
       }
 
-      const paginated = mangkirList.slice(skip, skip + parseInt(limit));
+      const paginated = absentList.slice(skip, skip + parseInt(limit));
 
       const finalData = paginated.map(e => ({
-        id: `mangkir-${e.id}`,
+        id: `absent-${e.id}`,
         date: dateRange.gte || new Date(),
         nik: e.employeeCode,
         name: e.name,
@@ -179,7 +180,7 @@ const getAttendance = async (req, res) => {
         position: e.position,
         checkIn: '-',
         checkOut: '-',
-        status: 'Mangkir',
+        status: 'ABSENT',
         lateMinutes: 0
       }));
 
@@ -187,7 +188,16 @@ const getAttendance = async (req, res) => {
     }
 
     where.employee = empWhere;
-    if (status) where.status = status;
+    if (status) {
+      const statusMap = {
+        'Present': 'PRESENT',
+        'Late': 'LATE',
+        'Mangkir': 'MANGKIR',
+        'Absent': 'ABSENT',
+        'Alpa': 'ABSENT',
+      };
+      where.status = statusMap[status] || status.toUpperCase();
+    }
 
     // Sorting Logic
     let orderBy = { date: 'desc' };
@@ -228,7 +238,7 @@ const getAttendance = async (req, res) => {
     const uniqueEmployees = new Set();
     allRecords.forEach(r => {
       uniqueEmployees.add(r.employeeId);
-      const recordDay = new Date(r.date).getDay();
+      const recordDay = r.date.getUTCDay();
       const isWorkingDay = workingDays.includes(recordDay);
       let finalStatus = r.status;
       
@@ -260,7 +270,7 @@ const getAttendance = async (req, res) => {
       data: records.map(att => {
         const resolved = resolveStatus(att.checkIn, att.checkOut, att.status, att.date);
         
-        let displayStatus = 'Tanpa Keterangan (Alpa)';
+        let displayStatus = 'Alpa';
         if (resolved === 'PRESENT') displayStatus = 'Hadir';
         else if (resolved === 'LATE') displayStatus = 'Terlambat';
         else if (resolved === 'MANGKIR') displayStatus = 'Mangkir';
@@ -268,6 +278,7 @@ const getAttendance = async (req, res) => {
         else if (resolved === 'CUTI') displayStatus = 'Cuti';
         else if (resolved === 'SAKIT') displayStatus = 'Sakit';
         else if (resolved === 'IZIN') displayStatus = 'Izin';
+        else if (resolved === 'ABSENT') displayStatus = 'Alpa';
 
         return {
           id: att.id,

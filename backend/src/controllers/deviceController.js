@@ -200,14 +200,40 @@ const syncUsers = async (req, res) => {
     const device = await prisma.device.findUnique({ where: { id: parseInt(id) } });
     if (!device) return res.status(404).json({ success: false, message: 'Device not found' });
 
-    const zkInstance = new ZKLib(device.ipAddress, device.port, 10000, 4000);
+    const zkInstance = new ZKLib(device.ipAddress, device.port, 15000, 10000);
     await zkInstance.createSocket();
     const users = await zkInstance.getUsers();
+    
+    // Fetch attendance logs to filter out old, inactive users who haven't fingerprinted in > 30 days
+    let logs = null;
+    try {
+      logs = await zkInstance.getAttendances();
+    } catch (err) {
+      console.warn('[Sync Users] Failed to fetch attendances to filter inactive users:', err.message);
+    }
     await zkInstance.disconnect();
+
+    // Map of deviceUserId -> latest scan date
+    const latestScanMap = {};
+    let globalLatestScan = new Date(0); // Track the most recent log on the machine
+
+    if (logs && logs.data) {
+      for (const log of logs.data) {
+        const pinStr = String(log.deviceUserId).trim();
+        const recordTime = new Date(log.recordTime);
+        if (!latestScanMap[pinStr] || recordTime > latestScanMap[pinStr]) {
+          latestScanMap[pinStr] = recordTime;
+        }
+        if (recordTime > globalLatestScan) {
+          globalLatestScan = recordTime;
+        }
+      }
+    }
 
     let newCount = 0;
     let linkedCount = 0;
-    let skippedCount = 0;
+    let alreadyLinkedCount = 0;
+    let inactiveCount = 0;
     const syncDetails = []; // Detail data dari mesin
 
     // Default department for new unsynced employees
@@ -227,6 +253,10 @@ const syncUsers = async (req, res) => {
       }
     });
 
+    // Hitung ambang batas 60 hari (2 bulan) dari aktivitas TERAKHIR di mesin, bukan dari hari ini
+    const thresholdDate = globalLatestScan.getTime() > 0 ? new Date(globalLatestScan) : new Date();
+    thresholdDate.setDate(thresholdDate.getDate() - 60);
+
     for (const u of users.data) {
       // AC No. dari mesin (deviceUserId / PIN)
       const fingerPrintId = String(u.userId).trim();
@@ -237,7 +267,7 @@ const syncUsers = async (req, res) => {
       
       if (existing) {
         // Sudah terlink — skip
-        skippedCount++;
+        alreadyLinkedCount++;
         syncDetails.push({
           acNo: fingerPrintId,
           machineName,
@@ -245,6 +275,24 @@ const syncUsers = async (req, res) => {
           status: 'already_linked',
           statusText: 'Sudah Terlink'
         });
+        continue;
+      }
+      
+      // Check if employee has fingerprint activity in the last 60 days relative to machine's clock
+      const lastScan = latestScanMap[fingerPrintId];
+      const hasRecentActivity = lastScan && lastScan >= thresholdDate;
+      
+      if (!hasRecentActivity) {
+        // Skip creating this employee because they are inactive
+        inactiveCount++;
+        syncDetails.push({
+          acNo: fingerPrintId,
+          machineName,
+          dbName: '-',
+          status: 'inactive_ignored',
+          statusText: 'Diabaikan (Karyawan Lama / Inaktif > 60 Hari)'
+        });
+        console.log(`[Sync] 🚫 Ignored inactive machine user: "${machineName}" (FP: ${fingerPrintId}), Last Scan: ${lastScan ? lastScan.toISOString().split('T')[0] : 'None'}`);
         continue;
       }
       
@@ -304,12 +352,14 @@ const syncUsers = async (req, res) => {
 
     res.json({ 
       success: true, 
-      message: `Sinkronisasi berhasil! ${linkedCount} auto-link, ${newCount} baru, ${skippedCount} sudah terlink.`,
+      message: `Sinkronisasi berhasil! ${linkedCount} auto-link, ${newCount} baru, ${alreadyLinkedCount} sudah terlink, ${inactiveCount} diabaikan.`,
       data: {
         totalMachine: users.data.length,
         linked: linkedCount,
         new: newCount,
-        skipped: skippedCount,
+        alreadyLinked: alreadyLinkedCount,
+        inactive: inactiveCount,
+        skipped: alreadyLinkedCount + inactiveCount,
         details: syncDetails
       }
     });
@@ -326,13 +376,66 @@ const syncUsers = async (req, res) => {
 };
 
 /**
+ * Helper: Fetch attendance logs from device with retry logic
+ * node-zklib uses UDP which is unreliable for large data transfers.
+ * This function retries multiple times and picks the best (largest) result.
+ */
+async function fetchAttendancesWithRetry(ipAddress, port, maxRetries = 3) {
+  let bestResult = null;
+  let bestCount = 0;
+  const allAttemptCounts = [];
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    let zk = null;
+    try {
+      // Use longer timeouts: 15s connect, 10s intra-packet for large data
+      zk = new ZKLib(ipAddress, port, 15000, 10000);
+      await zk.createSocket();
+      
+      console.log(`[Sync] Attempt ${attempt}/${maxRetries}: Fetching attendance logs...`);
+      const logs = await zk.getAttendances();
+      const count = logs?.data?.length || 0;
+      allAttemptCounts.push(count);
+      console.log(`[Sync] Attempt ${attempt}/${maxRetries}: Got ${count} logs.`);
+
+      if (count > bestCount) {
+        bestCount = count;
+        bestResult = logs;
+      }
+
+      await zk.disconnect();
+
+      // If we got a good amount of data, we can stop early on 2nd+ attempt
+      // only if the count is stable (same as previous best)
+      if (attempt >= 2 && count > 0 && count === bestCount) {
+        console.log(`[Sync] Consistent result after ${attempt} attempts (${count} logs). Using this data.`);
+        break;
+      }
+    } catch (err) {
+      allAttemptCounts.push(0);
+      console.warn(`[Sync] Attempt ${attempt}/${maxRetries} FAILED: ${err.message}`);
+      try { if (zk) await zk.disconnect(); } catch (e) {}
+      
+      // Wait a bit before retrying (exponential backoff)
+      if (attempt < maxRetries) {
+        const waitMs = 1000 * attempt; // 1s, 2s, 3s
+        console.log(`[Sync] Waiting ${waitMs}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, waitMs));
+      }
+    }
+  }
+
+  console.log(`[Sync] All attempt results: [${allAttemptCounts.join(', ')}] logs. Best: ${bestCount}`);
+  return { logs: bestResult, bestCount, allAttemptCounts };
+}
+
+/**
  * Sync Attendance
  */
 const syncAttendance = async (req, res) => {
   const { id } = req.params;
   console.log(`[Sync] Starting attendance sync for device ID: ${id}`);
   
-  let zkInstance = null;
   try {
     const device = await prisma.device.findUnique({ where: { id: parseInt(id) } });
     if (!device) {
@@ -340,21 +443,40 @@ const syncAttendance = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Device not found' });
     }
 
-    console.log(`[Sync] Connecting to device at ${device.ipAddress}:${device.port}...`);
-    zkInstance = new ZKLib(device.ipAddress, device.port, 5000, 4000); // 5s timeout
+    console.log(`[Sync] Connecting to device at ${device.ipAddress}:${device.port} with retry logic...`);
     
-    await zkInstance.createSocket();
-    console.log(`[Sync] Socket created. Fetching logs...`);
+    // Fetch logs with retry — picks the best result from multiple attempts
+    const { logs, bestCount, allAttemptCounts } = await fetchAttendancesWithRetry(
+      device.ipAddress, device.port, 3
+    );
     
-    const logs = await zkInstance.getAttendances();
-    console.log(`[Sync] Successfully fetched ${logs?.data?.length || 0} logs from device.`);
-    
-    await zkInstance.disconnect();
-    console.log(`[Sync] Device disconnected. Processing records...`);
+    console.log(`[Sync] Best fetch result: ${bestCount} logs from ${allAttemptCounts.length} attempt(s).`);
 
     if (!logs || !logs.data || logs.data.length === 0) {
-      return res.json({ success: true, message: 'Tidak ada data log baru di mesin.' });
+      return res.json({ 
+        success: true, 
+        message: `Tidak ada data log di mesin. (${allAttemptCounts.length}x percobaan, hasil: [${allAttemptCounts.join(', ')}])`, 
+        rawRecords: 0, 
+        diagnostics: { 
+          totalLogsFromDevice: 0, logsInRange: 0, logsMatchedEmployee: 0, 
+          unmatchedPinCount: 0, unmatchedPins: [], linkedEmployeeCount: 0, 
+          totalEmployees: 0, deviceDateRange: null,
+          fetchAttempts: allAttemptCounts
+        } 
+      });
     }
+
+    // Sample the date range of device logs for diagnostics
+    let earliestDeviceLog = null;
+    let latestDeviceLog = null;
+    for (const log of logs.data) {
+      const rt = new Date(log.recordTime);
+      if (!isNaN(rt.getTime())) {
+        if (!earliestDeviceLog || rt < earliestDeviceLog) earliestDeviceLog = rt;
+        if (!latestDeviceLog || rt > latestDeviceLog) latestDeviceLog = rt;
+      }
+    }
+    console.log(`[Sync] Device log date range: ${earliestDeviceLog?.toLocaleDateString()} → ${latestDeviceLog?.toLocaleDateString()}`);
     // Cocokkan PIN mesin (AC No.) dengan fingerPrintId sebagai prioritas utama
     // Fallback ke employeeCode dan idNumber untuk backward compatibility
     const employees = await prisma.employee.findMany({ include: { shift: true } });
@@ -374,17 +496,28 @@ const syncAttendance = async (req, res) => {
 
     let filterStart = new Date();
     filterStart.setDate(filterStart.getDate() - 30); // Default cutoff
+    filterStart.setHours(0, 0, 0, 0);
     let filterEnd = new Date();
     filterEnd.setHours(23, 59, 59, 999);
 
     if (startDateQuery) {
+      // FIX TIMEZONE: Parse as LOCAL time (not UTC) to match device timestamps
       filterStart = new Date(`${startDateQuery}T00:00:00`);
     }
     if (endDateQuery) {
+      // FIX TIMEZONE: Parse as LOCAL time (not UTC) to match device timestamps
       filterEnd = new Date(`${endDateQuery}T23:59:59.999`);
     }
 
+    console.log(`[Sync] Date filter: ${filterStart.toLocaleString()} → ${filterEnd.toLocaleString()}`);
+
     // Group logs by User + Date — collect ALL timestamps
+    // Diagnostic counters
+    let totalLogsFromDevice = logs.data.length;
+    let logsInRange = 0;
+    let logsMatchedEmployee = 0;
+    const unmatchedPins = new Map(); // PIN → machine user name
+
     const grouped = {};
     for (const log of logs.data) {
       const pinStr = String(log.deviceUserId).trim();
@@ -392,6 +525,7 @@ const syncAttendance = async (req, res) => {
       
       // Skip records outside of filter range
       if (recordTime < filterStart || recordTime > filterEnd) continue;
+      logsInRange++;
 
       // FIX TIMEZONE BUG:
       // toISOString() uses UTC. In WIB (UTC+7), 06:58 AM on May 1st becomes 23:58 PM on April 30th!
@@ -403,13 +537,25 @@ const syncAttendance = async (req, res) => {
       const dateKey = `${year}-${month}-${day}`;
       
       const emp = empByFingerPrint[pinStr] || empByCode[pinStr];
-      if (!emp) continue;
+      if (!emp) {
+        // Track unmatched PINs for diagnostics
+        if (!unmatchedPins.has(pinStr)) {
+          unmatchedPins.set(pinStr, log.userName || log.name || `User PIN ${pinStr}`);
+        }
+        continue;
+      }
+      logsMatchedEmployee++;
 
       const key = `${emp.id}|${dateKey}`;
       if (!grouped[key]) {
-        grouped[key] = { employeeId: emp.id, employee: emp, date: new Date(dateKey + 'T00:00:00'), scans: [] };
+        grouped[key] = { employeeId: emp.id, employee: emp, date: new Date(dateKey + 'T00:00:00.000Z'), scans: [] };
       }
       grouped[key].scans.push(recordTime);
+    }
+
+    console.log(`[Sync] Diagnostics: ${totalLogsFromDevice} total logs, ${logsInRange} in range, ${logsMatchedEmployee} matched, ${unmatchedPins.size} unmatched PINs`);
+    if (unmatchedPins.size > 0) {
+      console.log(`[Sync] ⚠️ Unmatched PINs (first 10):`, Array.from(unmatchedPins.entries()).slice(0, 10).map(([pin, name]) => `${pin}:${name}`).join(', '));
     }
 
     // Process grouped records
@@ -428,7 +574,7 @@ const syncAttendance = async (req, res) => {
       const gracePeriod = emp.shift?.gracePeriod || 15;
       
       // Override shiftEnd untuk hari Sabtu jika half-day aktif
-      const dayOfWeek = entry.date.getDay(); // 0=Sun, 6=Sat
+      const dayOfWeek = entry.date.getUTCDay(); // 0=Sun, 6=Sat
       if (dayOfWeek === 6 && isSaturdayHalfDay) {
         shiftEnd = satCheckoutTime; // e.g. '13:00'
       }
@@ -442,7 +588,12 @@ const syncAttendance = async (req, res) => {
       let checkIn = null;
       let checkOut = null;
       
-      if (entry.scans.length === 1) {
+      // Treat multiple scans within 60 minutes of each other as a single scan day
+      // to handle duplicate/double-tap scans when arriving or leaving.
+      const timeDiffMinutes = (latest - earliest) / (1000 * 60);
+      const isSingleScan = entry.scans.length === 1 || timeDiffMinutes < 60;
+      
+      if (isSingleScan) {
         // === SMART SINGLE-SCAN DETECTION ===
         // Calculate shift midpoint to determine if scan is check-in or check-out
         const [startH, startM] = shiftStart.split(':').map(Number);
@@ -451,7 +602,7 @@ const syncAttendance = async (req, res) => {
         const shiftEndMinutes = endH * 60 + endM;
         const midpointMinutes = Math.floor((shiftStartMinutes + shiftEndMinutes) / 2);
         // e.g. Senin-Jumat 08:00-17:00 → midpoint = 12:30
-        // e.g. Sabtu       08:00-13:00 → midpoint = 10:30
+        // e.g. Sabtu       08:00-12:00 → midpoint = 10:00
         
         const scanHour = earliest.getHours();
         const scanMinute = earliest.getMinutes();
@@ -508,35 +659,99 @@ const syncAttendance = async (req, res) => {
         };
       });
 
+      // Build diagnostic message
+      let message;
+      if (recordsToCreate.length > 0) {
+        message = `Ditemukan ${recordsToCreate.length} record absen baru. (Terbaik dari ${allAttemptCounts.length}x percobaan: [${allAttemptCounts.join(', ')}] log)`;
+      } else if (totalLogsFromDevice === 0) {
+        message = 'Tidak ada data log di mesin.';
+      } else if (logsInRange === 0) {
+        message = `Ditemukan ${totalLogsFromDevice} log di mesin, tapi tidak ada yang masuk dalam range tanggal ${startDateQuery || 'default'} s/d ${endDateQuery || 'default'}. (${allAttemptCounts.length}x percobaan)`;
+      } else {
+        message = `Ditemukan ${totalLogsFromDevice} log di mesin (${logsInRange} dalam range tanggal), tapi ${unmatchedPins.size} PIN tidak cocok dengan karyawan manapun. Jalankan "Sync Personnel" terlebih dahulu untuk menghubungkan data mesin dengan database karyawan.`;
+      }
+
       return res.json({ 
         success: true, 
-        message: `Ditemukan ${recordsToCreate.length} record absen baru.`,
+        message,
         data: previewData,
-        rawRecords: recordsToCreate.length
+        rawRecords: recordsToCreate.length,
+        diagnostics: {
+          totalLogsFromDevice,
+          logsInRange,
+          logsMatchedEmployee,
+          unmatchedPinCount: unmatchedPins.size,
+          unmatchedPins: Array.from(unmatchedPins.entries()).slice(0, 20).map(([pin, name]) => ({ pin, name })),
+          linkedEmployeeCount: Object.keys(empByFingerPrint).length,
+          totalEmployees: employees.length,
+          deviceDateRange: earliestDeviceLog && latestDeviceLog ? {
+            earliest: earliestDeviceLog.toISOString(),
+            latest: latestDeviceLog.toISOString()
+          } : null,
+          fetchAttempts: allAttemptCounts
+        }
       });
     }
 
-    // Bulk Upsert (using individual upserts in a promise pool to be safest for existing data)
-    // or createMany with skipDuplicates. Let's use individual upserts to ensure update works.
+    // Bulk Upsert (preserves and merges check-in/out times for multi-device support)
     let saved = 0;
     for (const record of recordsToCreate) {
       try {
-        await prisma.attendance.upsert({
+        // Fetch existing record first to merge check-in and check-out times
+        const existingRecord = await prisma.attendance.findUnique({
           where: {
             employeeId_date: {
               employeeId: record.employeeId,
               date: record.date
             }
-          },
-          update: {
-            checkIn: record.checkIn,
-            checkOut: record.checkOut,
-            status: record.status,
-            lateMinutes: record.lateMinutes,
-            mode: 'Fingerprint'
-          },
-          create: record
+          }
         });
+
+        if (existingRecord) {
+          // Merge times:
+          // checkIn should be the earliest of (existing.checkIn, new.checkIn)
+          // checkOut should be the latest of (existing.checkOut, new.checkOut)
+          let finalCheckIn = existingRecord.checkIn;
+          if (record.checkIn) {
+            finalCheckIn = finalCheckIn 
+              ? (record.checkIn < finalCheckIn ? record.checkIn : finalCheckIn) 
+              : record.checkIn;
+          }
+
+          let finalCheckOut = existingRecord.checkOut;
+          if (record.checkOut) {
+            finalCheckOut = finalCheckOut 
+              ? (record.checkOut > finalCheckOut ? record.checkOut : finalCheckOut) 
+              : record.checkOut;
+          }
+
+          // Recalculate status and lateness based on merged times
+          const emp = empByCode[record.employeeId] || employees.find(e => e.id === record.employeeId);
+          const shiftStart = emp?.shift?.startTime || '08:00';
+          const gracePeriod = emp?.shift?.gracePeriod || 15;
+          
+          const calc = finalCheckIn 
+            ? calculateLateness(finalCheckIn, shiftStart, gracePeriod)
+            : { lateMinutes: 0, status: 'Mangkir' };
+          
+          const finalStatus = resolveStatus(finalCheckIn, finalCheckOut, calc.status);
+
+          await prisma.attendance.update({
+            where: { id: existingRecord.id },
+            data: {
+              checkIn: finalCheckIn,
+              checkOut: finalCheckOut,
+              status: finalStatus,
+              lateMinutes: calc.lateMinutes,
+              mode: 'Fingerprint'
+            }
+          });
+        } else {
+          // No existing record, create a new one directly
+          await prisma.attendance.create({
+            data: record
+          });
+        }
         saved++;
       } catch (e) {
         console.error(`[Sync] Failed record for emp ${record.employeeId}:`, e.message);
@@ -549,14 +764,16 @@ const syncAttendance = async (req, res) => {
       data: { lastSync: new Date(), status: 'ONLINE' }
     });
 
-    res.json({ success: true, message: `Sinkronisasi Absen berhasil. ${saved} record absen diperbarui.` });
+    res.json({ success: true, message: `Sinkronisasi Absen berhasil. ${saved} record absen diperbarui. (Terbaik dari ${allAttemptCounts.length}x percobaan: [${allAttemptCounts.join(', ')}] log)` });
   } catch (err) {
     console.error(err);
     // Tandai offline jika gagal
-    await prisma.device.update({
-      where: { id: parseInt(id) },
-      data: { status: 'OFFLINE' }
-    });
+    try {
+      await prisma.device.update({
+        where: { id: parseInt(id) },
+        data: { status: 'OFFLINE' }
+      });
+    } catch (e) {}
     res.status(500).json({ success: false, message: 'Gagal menarik absen: ' + err.message });
   }
 };

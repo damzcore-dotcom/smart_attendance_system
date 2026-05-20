@@ -120,7 +120,7 @@ const PrintableAttendanceReport = ({ detail, logs, company, config }) => {
                   <td className="py-2 px-2 font-semibold">
                     <span className={
                       (log.status === 'LATE' || log.status === 'Terlambat') ? 'text-amber-600' :
-                      (log.status === 'ABSENT' || log.status === 'MANGKIR' || log.status === 'Mangkir' || log.status === 'Tanpa Keterangan (Alpa)') ? 'text-red-600' :
+                      (log.status === 'ABSENT' || log.status === 'MANGKIR' || log.status === 'Mangkir' || log.status === 'Alpa' || log.status === 'Tanpa Keterangan (Alpa)') ? 'text-red-600' :
                       (log.status === 'PRESENT' || log.status === 'Hadir') ? 'text-emerald-600' : 'text-blue-600'
                     }>
                       {log.status}

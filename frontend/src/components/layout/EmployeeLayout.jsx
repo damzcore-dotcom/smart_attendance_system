@@ -55,8 +55,8 @@ const EmployeeLayout = () => {
       {/* Top Bar */}
       <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-50 shadow-sm print:hidden">
         <div className="flex items-center gap-3">
-          <div className="w-16 h-8 flex items-center justify-center">
-            <AppLogo className="w-full h-full" />
+          <div className="w-28 sm:w-36 h-10 flex items-center justify-start">
+            <AppLogo className="w-full h-auto max-h-full object-contain object-left" />
           </div>
           <div className="flex flex-col">
             <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Welcome</span>

@@ -146,7 +146,7 @@ const getAll = async (req, res) => {
     absentRecords.forEach(r => {
       const dateStr = r.date.toISOString().split('T')[0];
       const override = overrideMap[dateStr];
-      const recordDay = new Date(r.date).getDay();
+      const recordDay = r.date.getUTCDay();
       
       let isLibur = false;
       if (override) {
@@ -190,7 +190,7 @@ const getAll = async (req, res) => {
         if (resolved === 'MANGKIR' || resolved === 'ABSENT' || resolved === 'HOLIDAY') {
           const dateStr = r.date.toISOString().split('T')[0];
           const override = overrideMap[dateStr];
-          const recordDay = new Date(r.date).getDay();
+          const recordDay = r.date.getUTCDay();
           
           let isLibur = false;
           if (override) {
@@ -203,12 +203,10 @@ const getAll = async (req, res) => {
           if (isLibur) {
              resolved = 'HOLIDAY';
              r.lateMinutes = 0;
-          } else if (resolved === 'ABSENT') {
-             resolved = 'MANGKIR';
           }
         }
         
-        let displayStatus = 'Tanpa Keterangan (Alpa)';
+        let displayStatus = 'Alpa';
         if (resolved === 'PRESENT') displayStatus = 'Hadir';
         else if (resolved === 'LATE') displayStatus = 'Terlambat';
         else if (resolved === 'MANGKIR') displayStatus = 'Mangkir';
@@ -216,6 +214,7 @@ const getAll = async (req, res) => {
         else if (resolved === 'CUTI') displayStatus = 'Cuti';
         else if (resolved === 'SAKIT') displayStatus = 'Sakit';
         else if (resolved === 'IZIN') displayStatus = 'Izin';
+        else if (resolved === 'ABSENT') displayStatus = 'Alpa';
 
         return {
           id: r.id,
@@ -497,8 +496,9 @@ const getHistory = async (req, res) => {
                 r.status === 'HOLIDAY' ? 'Libur' : 
                 r.status === 'CUTI' ? 'Cuti' : 
                 r.status === 'SAKIT' ? 'Sakit' : 
-                r.status === 'IZIN' ? 'Izin' : 'Tanpa Keterangan (Alpa)',
-        lateMinutes: (r.status === 'MANGKIR' || r.status === 'ABSENT' || r.status === 'MISSING') ? 30 : r.lateMinutes,
+                r.status === 'IZIN' ? 'Izin' : 
+                r.status === 'ABSENT' ? 'Alpa' : 'Alpa',
+        lateMinutes: (r.status === 'MANGKIR' || r.status === 'MISSING') ? 30 : r.lateMinutes,
       })),
     });
   } catch (err) {
@@ -817,6 +817,114 @@ const recalculate = async (req, res) => {
 };
 
 /**
+ * POST /api/attendance/swap-days
+ * Swap/Move attendance data from one date to another date
+ */
+const swapDays = async (req, res) => {
+  try {
+    const { sourceDate, targetDate } = req.body;
+    
+    if (!sourceDate || !targetDate) {
+      return res.status(400).json({ success: false, message: 'Source and Target dates are required' });
+    }
+
+    const sDate = new Date(sourceDate);
+    const tDate = new Date(targetDate);
+    
+    const sStart = new Date(Date.UTC(sDate.getFullYear(), sDate.getMonth(), sDate.getDate()));
+    const sEnd = new Date(sStart);
+    sEnd.setUTCDate(sEnd.getUTCDate() + 1);
+    
+    const tStart = new Date(Date.UTC(tDate.getFullYear(), tDate.getMonth(), tDate.getDate()));
+    const tEnd = new Date(tStart);
+    tEnd.setUTCDate(tEnd.getUTCDate() + 1);
+
+    const sourceRecords = await prisma.attendance.findMany({
+      where: { date: { gte: sStart, lt: sEnd } },
+      include: { employee: { include: { shift: true } } }
+    });
+
+    if (sourceRecords.length === 0) {
+      return res.status(404).json({ success: false, message: 'Tidak ada data absensi pada Tanggal Sumber.' });
+    }
+
+    let movedCount = 0;
+
+    await prisma.$transaction(async (tx) => {
+      for (const src of sourceRecords) {
+        if (!src.checkIn && !src.checkOut) {
+          // If totally empty, just delete it so it stays clean
+          await tx.attendance.delete({ where: { id: src.id } });
+          continue;
+        }
+
+        let newCheckIn = null;
+        let newCheckOut = null;
+        
+        if (src.checkIn) {
+          newCheckIn = new Date(src.checkIn);
+          newCheckIn.setUTCFullYear(tDate.getFullYear(), tDate.getMonth(), tDate.getDate());
+        }
+        
+        if (src.checkOut) {
+          newCheckOut = new Date(src.checkOut);
+          newCheckOut.setUTCFullYear(tDate.getFullYear(), tDate.getMonth(), tDate.getDate());
+        }
+
+        const shiftStart = src.employee.shift?.startTime || '08:00';
+        const gracePeriod = src.employee.shift?.gracePeriod || 15;
+        
+        let lateStatus = 'PRESENT';
+        let lateMinutes = 0;
+        if (newCheckIn) {
+          const calc = calculateLateness(newCheckIn, shiftStart, gracePeriod);
+          lateStatus = calc.status;
+          lateMinutes = calc.lateMinutes;
+        }
+
+        const newStatus = resolveStatus(newCheckIn, newCheckOut, lateStatus);
+
+        // Remove any conflicting records on target date
+        await tx.attendance.deleteMany({
+          where: { employeeId: src.employeeId, date: { gte: tStart, lt: tEnd } }
+        });
+
+        // Insert new moved record
+        await tx.attendance.create({
+          data: {
+            employeeId: src.employeeId,
+            date: tStart,
+            checkIn: newCheckIn,
+            checkOut: newCheckOut,
+            status: newStatus,
+            lateMinutes,
+            overtimeHours: src.overtimeHours,
+            mode: src.mode
+          }
+        });
+
+        // Delete the original
+        await tx.attendance.delete({ where: { id: src.id } });
+
+        movedCount++;
+      }
+    }, {
+      maxWait: 5000,
+      timeout: 20000 // 20s timeout for mass moves
+    });
+
+    res.json({
+      success: true,
+      message: `Berhasil memindahkan ${movedCount} data absensi.`,
+      data: { moved: movedCount }
+    });
+  } catch (err) {
+    console.error('Swap Days Error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
  * GET /api/attendance/master-options
  * Get unique organizational options based on existing attendance records in a date range
  */
@@ -1023,6 +1131,7 @@ module.exports = {
   importFromExcel,
   getImportProgress,
   recalculate,
+  swapDays,
   getMasterOptions,
   createManual,
   downloadTemplate,
