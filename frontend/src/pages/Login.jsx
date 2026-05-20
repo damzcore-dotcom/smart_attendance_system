@@ -180,7 +180,7 @@ const Login = () => {
         img.src = imageSrc;
         await new Promise(resolve => img.onload = resolve);
         
-        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.4 }))
+        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.4 }))
           .withFaceLandmarks();
           
         if (detection) {
@@ -192,7 +192,10 @@ const Login = () => {
           const rightEAR = getEAR(rightEye);
           const avgEAR = (leftEAR + rightEAR) / 2.0;
           
-          if (avgEAR < 0.22) { // Threshold for closed eyes
+          // Debugging log for EAR value (can be checked in browser console)
+          // console.log("EAR:", avgEAR.toFixed(3));
+          
+          if (avgEAR < 0.28) { // Threshold for closed eyes (increased for easier detection)
             isEyesClosed = true;
           } else {
             if (isEyesClosed) {
@@ -227,7 +230,7 @@ const Login = () => {
             }
           }
         }
-      }, 150); // check every 150ms
+      }, 80); // check every 80ms (faster to catch quick blinks)
       
       // Timeout after 15 seconds
       setTimeout(() => {
