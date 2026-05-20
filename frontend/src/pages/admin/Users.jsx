@@ -94,12 +94,15 @@ const Users = () => {
   const biometricMutation = useMutation({
     mutationFn: ({ id, data }) => userAPI.updateBiometrics(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] });
       setFaceModalOpen(false);
       setFaceData({ photo: '', descriptor: null });
-      alert('Biometrik wajah berhasil disimpan!');
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      setTimeout(() => alert('Biometrik wajah berhasil disimpan!'), 150);
     },
-    onError: (err) => alert(`Error: ${err.message}`),
+    onError: (err) => {
+      setFaceModalOpen(false);
+      setTimeout(() => alert(`Error: ${err.message}`), 150);
+    },
   });
 
   const updatePermissionsMutation = useMutation({
@@ -123,9 +126,12 @@ const Users = () => {
 
   const filteredUsers = useMemo(() => {
     return data?.data?.filter(user => {
-      const matchesSearch = user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           user.employeeName.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesRole = roleFilter === 'ALL' || user.role === roleFilter;
+      const searchLower = (searchTerm || '').toLowerCase();
+      const unameLower = (user?.username || '').toLowerCase();
+      const empNameLower = (user?.employeeName || '').toLowerCase();
+      
+      const matchesSearch = unameLower.includes(searchLower) || empNameLower.includes(searchLower);
+      const matchesRole = roleFilter === 'ALL' || user?.role === roleFilter;
       return matchesSearch && matchesRole;
     }) || [];
   }, [data?.data, searchTerm, roleFilter]);
@@ -386,12 +392,12 @@ const Users = () => {
                       'bg-slate-50 text-slate-600 border-slate-200'
                     }`}>
                       {user.role === 'SUPER_ADMIN' || user.role === 'ADMIN' || user.role === 'ACCOUNTING' ? <Shield className="w-3 h-3" /> : <User className="w-3 h-3" />}
-                      {user.role.replace('_', ' ')}
+                      {(user.role || '').replace('_', ' ')}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-xs font-semibold text-slate-600">{user.dept || '-'}</td>
                   <td className="px-6 py-4 text-xs font-semibold text-slate-600">
-                    {new Date(user.lastLogin).toLocaleDateString()}
+                    {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : '-'}
                   </td>
                    <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
