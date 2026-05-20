@@ -226,17 +226,18 @@ const Users = () => {
           .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions())
           .withFaceLandmarks()
           .withFaceDescriptor();
+        
+        setIsCapturing(false);
         if (detection) {
           setFaceData({ photo: imageSrc, descriptor: Array.from(detection.descriptor) });
-          alert('Wajah berhasil dideteksi!');
+          setTimeout(() => alert('Wajah berhasil dideteksi!'), 150);
         } else {
-          alert('Wajah tidak terdeteksi. Pastikan pencahayaan cukup.');
+          setTimeout(() => alert('Wajah tidak terdeteksi. Pastikan pencahayaan cukup.'), 150);
         }
-        setIsCapturing(false);
       };
     } catch (err) {
-      alert('Gagal memproses wajah.');
       setIsCapturing(false);
+      setTimeout(() => alert('Gagal memproses wajah.'), 150);
     }
   };
 
