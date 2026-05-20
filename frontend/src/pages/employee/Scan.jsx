@@ -10,6 +10,7 @@ import {
   Loader2,
   RefreshCcw
 } from 'lucide-react';
+import { verifyRealLocation } from '../../utils/geoUtils';
 
 const Scan = () => {
   const navigate = useNavigate();
@@ -36,26 +37,16 @@ const Scan = () => {
   });
 
   const startScan = () => {
-    if (!navigator.geolocation) {
-      alert("Geolocation is not supported by your browser");
-      return;
-    }
-
     setLocationError(null);
-    navigator.geolocation.getCurrentPosition(
+    setIsScanning(true); // Start scanning state while waiting for GPS (since it takes ~1s now)
+    setScanProgress(5);
+
+    verifyRealLocation(
       (position) => {
         const { accuracy, latitude, longitude } = position.coords;
-        if (accuracy > 50) {
-          const msg = `GPS Accuracy low (${Math.round(accuracy)}m). Please move to an open area for a better signal.`;
-          alert(msg);
-          setLocationError(msg);
-          return;
-        }
-
         setCoords({ lat: latitude, lng: longitude, accuracy, timestamp: position.timestamp });
         
-        setIsScanning(true);
-        let progress = 0;
+        let progress = 5;
         const interval = setInterval(() => {
           progress += 20;
           setScanProgress(progress);
@@ -66,15 +57,11 @@ const Scan = () => {
         }, 10);
       },
       (error) => {
-        let msg = "Please enable location services to check in.";
-        if (error.code === 1) msg = "Permission denied. Please allow location access in your browser settings.";
-        else if (error.code === 2) msg = "Location unavailable. Please check your GPS signal.";
-        else if (error.code === 3) msg = "Location request timed out.";
-        
-        alert(msg);
-        setLocationError(msg);
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        alert(error.message);
+        setLocationError(error.message);
+        setIsScanning(false);
+        setScanProgress(0);
+      }
     );
   };
 

@@ -14,6 +14,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { authAPI, attendanceAPI, announcementAPI } from '../../services/api';
+import { verifyRealLocation } from '../../utils/geoUtils';
 
 const EmployeeHome = () => {
   const navigate = useNavigate();
@@ -42,20 +43,14 @@ const EmployeeHome = () => {
   const checkInMutation = useMutation({
     mutationFn: (mode) => {
       return new Promise((resolve, reject) => {
-        if (!navigator.geolocation) {
-          return reject(new Error("Geolocation is not supported"));
-        }
-        navigator.geolocation.getCurrentPosition(
+        verifyRealLocation(
           (pos) => {
             const { latitude, longitude, accuracy } = pos.coords;
             attendanceAPI.checkIn(empId, mode, latitude, longitude, accuracy, pos.timestamp)
               .then(resolve)
               .catch(reject);
           },
-          (err) => {
-            reject(new Error("Please enable location services to check in."));
-          },
-          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+          (err) => reject(err)
         );
       });
     },
@@ -67,7 +62,21 @@ const EmployeeHome = () => {
   });
 
   const checkOutMutation = useMutation({
-    mutationFn: () => attendanceAPI.checkOut(empId),
+    mutationFn: () => {
+      return new Promise((resolve, reject) => {
+        verifyRealLocation(
+          (pos) => {
+            // Kita bisa juga nge-pass coordinates checkout ke backend kalau backend mendukung,
+            // tapi saat ini API attendanceAPI.checkOut(empId) tidak mengirim lat/lng.
+            // Namun, proses ini memastikan pengguna harus berada di lokasi yang valid (tidak fake) saat checkout.
+            attendanceAPI.checkOut(empId)
+              .then(resolve)
+              .catch(reject);
+          },
+          (err) => reject(err)
+        );
+      });
+    },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['today-attendance'] });
       alert(data.message);
