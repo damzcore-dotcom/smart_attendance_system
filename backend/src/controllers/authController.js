@@ -260,10 +260,18 @@ const verifyFace = async (req, res) => {
       }
     }
 
+    // Calculate confidence score: 100% = perfect match (distance 0), 0% = at threshold boundary
+    const confidence = Math.max(0, Math.round((1 - minDistance / 0.7) * 100));
+
     res.json({
       success: true,
       accessToken,
       refreshToken,
+      match: {
+        distance: parseFloat(minDistance.toFixed(4)),
+        threshold: parseFloat(THRESHOLD.toFixed(4)),
+        confidence,          // 0-100%: how confident the match is
+      },
       user: {
         id: bestMatch.user.id,
         username: bestMatch.user.username,
