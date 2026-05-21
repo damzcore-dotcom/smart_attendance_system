@@ -41,6 +41,55 @@ const EmployeeHome = () => {
   
   const announcements = annData?.data || [];
 
+  // Offline Sync Effect
+  useEffect(() => {
+    const syncOffline = async () => {
+      if (!navigator.onLine) return;
+      const pendingText = localStorage.getItem('pending_sync');
+      if (!pendingText) return;
+      
+      try {
+        const pending = JSON.parse(pendingText);
+        if (pending.length === 0) return;
+        
+        let successCount = 0;
+        for (const record of pending) {
+          try {
+            if (record.type === 'OUT') {
+              await attendanceAPI.checkOut(record.employeeId, record.photoData);
+            } else {
+              await attendanceAPI.checkIn(
+                record.employeeId, 
+                record.mode, 
+                record.lat, 
+                record.lng, 
+                record.accuracy, 
+                record.timestamp, 
+                record.photoData
+              );
+            }
+            successCount++;
+          } catch (e) {
+            console.error('Sync error for record:', e);
+          }
+        }
+        
+        if (successCount > 0) {
+          alert(`Berhasil sinkronisasi ${successCount} rekam absen offline ke server!`);
+          localStorage.removeItem('pending_sync');
+          queryClient.invalidateQueries({ queryKey: ['today-attendance'] });
+        }
+      } catch (err) {
+        console.error('Failed to parse pending auth', err);
+      }
+    };
+    
+    // Attempt sync
+    syncOffline();
+    window.addEventListener('online', syncOffline);
+    return () => window.removeEventListener('online', syncOffline);
+  }, [queryClient]);
+
   const checkInMutation = useMutation({
     mutationFn: (mode) => {
       return new Promise((resolve, reject) => {

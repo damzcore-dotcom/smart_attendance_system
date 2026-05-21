@@ -34,6 +34,8 @@ const Scan = () => {
   const faceGuideRef = useRef(null);
   const stableCountRef = useRef(0);
   const autoCaptureTriggeredRef = useRef(false);
+  const boxHistoryRef = useRef([]);
+  const lastImageSrcRef = useRef(null);
 
   const user = authAPI.getStoredUser();
   const empId = user?.employee?.id;
@@ -83,12 +85,32 @@ const Scan = () => {
 
   // Attendance mutation
   const mutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
+      const snap = lastImageSrcRef.current;
+      
+      // Offline Mode Fallback
+      if (!navigator.onLine) {
+        const pending = JSON.parse(localStorage.getItem('pending_sync') || '[]');
+        const c = coordsRef.current;
+        pending.push({
+          type: isCheckOut ? 'OUT' : 'IN',
+          employeeId: empId,
+          mode: 'Face ID',
+          lat: c?.lat,
+          lng: c?.lng,
+          accuracy: c?.accuracy,
+          timestamp: c?.timestamp || Date.now(),
+          photoData: snap
+        });
+        localStorage.setItem('pending_sync', JSON.stringify(pending));
+        return { message: 'Offline! Absen disimpan di HP. Segera dapatkan sinyal agar data terkirim otomatis.', offline: true };
+      }
+
       if (isCheckOut) {
-        return attendanceAPI.checkOut(empId);
+        return attendanceAPI.checkOut(empId, snap);
       } else {
         const c = coordsRef.current;
-        return attendanceAPI.checkIn(empId, 'Face ID', c?.lat, c?.lng, c?.accuracy, c?.timestamp);
+        return attendanceAPI.checkIn(empId, 'Face ID', c?.lat, c?.lng, c?.accuracy, c?.timestamp, snap);
       }
     },
     onSuccess: (data) => {
@@ -134,6 +156,7 @@ const Scan = () => {
 
     const imageSrc = webcamRef.current.getScreenshot();
     if (!imageSrc) return;
+    lastImageSrcRef.current = imageSrc;
 
     setScanStatus('detecting');
     setStatusText('Menganalisis wajah...');
@@ -192,8 +215,38 @@ const Scan = () => {
         
         if (detection) {
           setFaceGuideStatus('detected');
+          
+          const box = detection.detection.box;
+          boxHistoryRef.current.push({ x: box.x, y: box.y, w: box.width, h: box.height });
+          if (boxHistoryRef.current.length > 5) boxHistoryRef.current.shift();
+
           stableCountRef.current++;
           if (stableCountRef.current >= 5 && !autoCaptureTriggeredRef.current) {
+            // Anti-Spoofing Check (Passive Liveness)
+            // A real human face breathes and inherently has micro-jitters.
+            // A printed photo or mobile screen held steady will yield mathematically identical bounding boxes across frames.
+            let isCompletelyStatic = true;
+            if (boxHistoryRef.current.length >= 5) {
+              const hist = boxHistoryRef.current;
+              for (let i = 1; i < hist.length; i++) {
+                const diffX = Math.abs(hist[i].x - hist[i-1].x);
+                const diffY = Math.abs(hist[i].y - hist[i-1].y);
+                // If diff is >= 0.5 pixels, it's considered natural human movement/breathing
+                if (diffX >= 0.5 || diffY >= 0.5) {
+                  isCompletelyStatic = false;
+                  break;
+                }
+              }
+            }
+
+            if (isCompletelyStatic) {
+              setScanStatus('error');
+              setError('Anti-Spoofing Error: Terdeteksi objek 2D statis atau foto cetak. Harap gunakan wajah hidup.');
+              clearInterval(faceGuideRef.current);
+              faceGuideRef.current = null;
+              return;
+            }
+
             autoCaptureTriggeredRef.current = true;
             clearInterval(faceGuideRef.current);
             faceGuideRef.current = null;
@@ -202,6 +255,7 @@ const Scan = () => {
         } else {
           setFaceGuideStatus('not-detected');
           stableCountRef.current = 0;
+          boxHistoryRef.current = [];
         }
       } catch {
         // silently ignore

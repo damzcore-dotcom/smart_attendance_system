@@ -193,8 +193,8 @@ export const attendanceAPI = {
     const q = new URLSearchParams(params).toString();
     return apiFetch(`/attendance${q ? `?${q}` : ''}`);
   },
-  checkIn: (employeeId, mode, lat, lng, accuracy, timestamp) => apiFetch('/attendance/check-in', { method: 'POST', body: JSON.stringify({ employeeId, mode, lat, lng, accuracy, timestamp }) }),
-  checkOut: (employeeId) => apiFetch('/attendance/check-out', { method: 'POST', body: JSON.stringify({ employeeId }) }),
+  checkIn: (employeeId, mode, lat, lng, accuracy, timestamp, photoData) => apiFetch('/attendance/check-in', { method: 'POST', body: JSON.stringify({ employeeId, mode, lat, lng, accuracy, timestamp, photoData }) }),
+  checkOut: (employeeId, photoData) => apiFetch('/attendance/check-out', { method: 'POST', body: JSON.stringify({ employeeId, photoData }) }),
   getSummary: () => apiFetch('/attendance/summary'),
   getHistory: (empId, params = {}) => {
     const q = new URLSearchParams(params).toString();

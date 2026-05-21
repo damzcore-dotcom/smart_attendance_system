@@ -243,7 +243,7 @@ const getAll = async (req, res) => {
  */
 const checkIn = async (req, res) => {
   try {
-    const { employeeId, mode, lat, lng } = req.body;
+    const { employeeId, mode, lat, lng, photoData } = req.body;
 
     if (mode !== 'Face ID') {
       return res.status(403).json({ 
@@ -333,8 +333,8 @@ const checkIn = async (req, res) => {
 
     const attendance = await prisma.attendance.upsert({
       where: { employeeId_date: { employeeId, date: today } },
-      update: { checkIn: now, status, lateMinutes, mode },
-      create: { employeeId, date: today, checkIn: now, status, lateMinutes, mode },
+      update: { checkIn: now, status, lateMinutes, mode, photoUrl: photoData || existing?.photoUrl },
+      create: { employeeId, date: today, checkIn: now, status, lateMinutes, mode, photoUrl: photoData || null },
     });
 
     // Create notification if late
@@ -363,7 +363,7 @@ const checkIn = async (req, res) => {
  */
 const checkOut = async (req, res) => {
   try {
-    const { employeeId } = req.body;
+    const { employeeId, photoData } = req.body;
     const now = new Date();
     const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
 
@@ -419,7 +419,12 @@ const checkOut = async (req, res) => {
 
     const updated = await prisma.attendance.update({
       where: { id: attendance.id },
-      data: { checkOut: now, status: finalStatus, overtimeHours },
+      data: { 
+        checkOut: now, 
+        status: finalStatus, 
+        overtimeHours,
+        photoUrl: photoData || attendance.photoUrl
+      },
     });
 
     res.json({ success: true, message: 'Checked out successfully', data: updated });

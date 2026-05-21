@@ -184,6 +184,7 @@ model Attendance {
   lateMinutes Int       @default(0)
   overtimeHours Float   @default(0)
   mode        String    @default("Credentials")
+  photoUrl    String?
   notes       String?
   createdAt   DateTime  @default(now())
 
