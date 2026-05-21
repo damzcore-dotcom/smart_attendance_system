@@ -392,6 +392,14 @@ async function fetchAttendancesWithRetry(ipAddress, port, maxRetries = 3) {
       zk = new ZKLib(ipAddress, port, 60000, 30000);
       await zk.createSocket();
       
+      // Auto-Calibrate Device Time to Server Time
+      try {
+        await zk.setTime(new Date());
+        console.log(`[Sync] Device time calibrated successfully.`);
+      } catch (err) {
+        console.warn(`[Sync] Failed to calibrate device time: ${err.message}`);
+      }
+      
       console.log(`[Sync] Attempt ${attempt}/${maxRetries}: Fetching attendance logs...`);
       const logs = await zk.getAttendances();
       const count = logs?.data?.length || 0;
