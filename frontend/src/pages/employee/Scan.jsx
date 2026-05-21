@@ -148,7 +148,7 @@ const Scan = () => {
       });
 
       const detection = await faceapi
-        .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.15 }))
+        .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.35 }))
         .withFaceLandmarks()
         .withFaceDescriptor();
       

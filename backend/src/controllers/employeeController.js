@@ -143,7 +143,7 @@ const create = async (req, res) => {
       // Prioritize user-selected shift over system default
       shiftId: rest.shiftId ? parseInt(rest.shiftId) : (defaultShift?.id || null),
       division: rest.division, locationId: rest.locationId, idNumber: rest.idNumber, cardNo: rest.cardNo,
-      contractDuration: rest.contractDuration, faceId: rest.faceId, facePhoto: rest.facePhoto, faceDescriptor: rest.faceDescriptor ? JSON.parse(rest.faceDescriptor) : null,
+      contractDuration: rest.contractDuration, faceId: rest.faceId, facePhoto: rest.facePhoto, faceDescriptor: rest.faceDescriptor ? [JSON.parse(rest.faceDescriptor)] : null,
       faceStatus: rest.faceDescriptor ? 'ENROLLED' : 'PENDING',
       bpjsTk: rest.bpjsTk, bpjsKesehatan: rest.bpjsKesehatan,
       npwp: rest.npwp, ptkpStatus: rest.ptkpStatus, maritalStatus: rest.maritalStatus, kkNumber: rest.kkNumber, birthPlace: rest.birthPlace,
@@ -202,7 +202,7 @@ const update = async (req, res) => {
     if ('contractEnd' in data) data.contractEnd = data.contractEnd ? new Date(data.contractEnd) : null;
     if ('birthDate' in data) data.birthDate = data.birthDate ? new Date(data.birthDate) : null;
     if (faceDescriptor) {
-      data.faceDescriptor = JSON.parse(faceDescriptor);
+      data.faceDescriptor = [JSON.parse(faceDescriptor)];
       data.faceStatus = 'ENROLLED';
     }
     if ('shiftId' in data) {

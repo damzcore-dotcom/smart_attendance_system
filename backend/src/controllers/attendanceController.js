@@ -272,8 +272,8 @@ const checkIn = async (req, res) => {
         return res.status(400).json({ success: false, message: 'GPS location is required for check-in' });
       }
 
-      // 1. Accuracy Check (Max 50m)
-      if (accuracy && accuracy > 50) {
+      // 1. Accuracy Check (Max 500m — indoor GPS is often low accuracy)
+      if (accuracy && accuracy > 500) {
         return res.status(403).json({ 
           success: false, 
           message: `GPS accuracy too low (${Math.round(accuracy)}m). Please turn off mock locations or move to an open area.` 

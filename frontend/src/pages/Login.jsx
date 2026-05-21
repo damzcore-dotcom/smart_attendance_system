@@ -167,7 +167,7 @@ const Login = () => {
           image.onerror = () => reject(new Error('Failed to load captured image'));
         });
 
-        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.15 }))
+        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.35 }))
           .withFaceLandmarks()
           .withFaceDescriptor();
         

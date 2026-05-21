@@ -168,16 +168,23 @@ const verifyFace = async (req, res) => {
 
     for (const emp of employees) {
       try {
-        const storedDescriptor = Array.isArray(emp.faceDescriptor) 
+        const storedData = Array.isArray(emp.faceDescriptor) 
           ? emp.faceDescriptor 
           : JSON.parse(emp.faceDescriptor);
         
-        if (!storedDescriptor || !Array.isArray(storedDescriptor)) continue;
+        if (!storedData || !Array.isArray(storedData) || storedData.length === 0) continue;
 
-        const distance = getDistance(descriptor, storedDescriptor);
-        if (distance < minDistance) {
-          minDistance = distance;
-          bestMatch = emp;
+        // Support both old format (single flat array) and new format (array of arrays)
+        const isMultiDescriptor = Array.isArray(storedData[0]);
+        const descriptorsToTest = isMultiDescriptor ? storedData : [storedData];
+
+        // Find the absolute closest distance among all stored descriptors for this employee
+        for (const storedDesc of descriptorsToTest) {
+          const distance = getDistance(descriptor, storedDesc);
+          if (distance < minDistance) {
+            minDistance = distance;
+            bestMatch = emp;
+          }
         }
       } catch (err) {
         console.error(`Failed to parse descriptor for employee ${emp.id}:`, err.message);
@@ -197,12 +204,30 @@ const verifyFace = async (req, res) => {
       data: { refreshToken },
     });
 
-    // Auto-Enrollment (Update face descriptor with the latest one if enabled)
+    // Auto-Enrollment (Add new descriptor to the pool, max 5)
     if (settingsMap['autoEnrollment'] === 'true') {
       try {
+        // Get existing descriptors
+        let existingDesc = Array.isArray(bestMatch.faceDescriptor) 
+          ? bestMatch.faceDescriptor 
+          : JSON.parse(bestMatch.faceDescriptor);
+        
+        // Convert to array of arrays if it's the old single flat array format
+        if (existingDesc.length > 0 && !Array.isArray(existingDesc[0])) {
+          existingDesc = [existingDesc];
+        }
+
+        // Add the new high-quality descriptor
+        existingDesc.push(descriptor);
+
+        // Keep only the most recent 5 descriptors to avoid database bloat and drift
+        if (existingDesc.length > 5) {
+          existingDesc = existingDesc.slice(-5);
+        }
+
         await prisma.employee.update({
           where: { id: bestMatch.id },
-          data: { faceDescriptor: JSON.stringify(descriptor) }
+          data: { faceDescriptor: JSON.stringify(existingDesc) }
         });
       } catch (e) {
         console.error('Auto-enrollment update failed:', e.message);
