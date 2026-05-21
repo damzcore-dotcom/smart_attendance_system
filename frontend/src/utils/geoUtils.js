@@ -21,7 +21,7 @@ export const verifyRealLocation = (onSuccess, onError) => {
       const suspiciousAccuracies = [1, 5, 10, 15, 20, 65, 100];
       const isSuspicious = suspiciousAccuracies.includes(accuracy) && altitude === null && speed === null;
 
-      if (accuracy > 50) {
+      if (accuracy > 500) {
         return onError(new Error(`GPS Accuracy terlalu rendah (${Math.round(accuracy)}m). Silakan pindah ke area terbuka.`));
       }
 
