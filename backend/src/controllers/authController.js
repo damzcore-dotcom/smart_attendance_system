@@ -2,6 +2,7 @@ const prisma = require('../prismaClient');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { generateAccessToken, generateRefreshToken } = require('../middleware/auth');
+const { recordAuditLog } = require('./auditLogController');
 
 /**
  * POST /api/auth/login
@@ -193,11 +194,36 @@ const verifyFace = async (req, res) => {
     }
 
     if (!bestMatch || minDistance > THRESHOLD) {
+      if (bestMatch && minDistance <= 1.2) {
+        // Log near-miss attempts
+        recordAuditLog({
+          userId: bestMatch.user.id,
+          username: bestMatch.user.username,
+          role: bestMatch.user.role,
+          action: 'LOGIN_FAILED',
+          entity: 'Biometric',
+          entityId: bestMatch.id,
+          details: { reason: 'Face distance exceeded threshold', distance: minDistance, threshold: THRESHOLD },
+          ipAddress: req.ip
+        }).catch(() => {});
+      }
       return res.status(401).json({ success: false, message: 'Face not recognized' });
     }
 
     const accessToken = generateAccessToken(bestMatch.user);
     const refreshToken = generateRefreshToken(bestMatch.user);
+
+    // Log successful face match
+    recordAuditLog({
+      userId: bestMatch.user.id,
+      username: bestMatch.user.username,
+      role: bestMatch.user.role,
+      action: 'LOGIN',
+      entity: 'Biometric',
+      entityId: bestMatch.id,
+      details: { distance: minDistance, threshold: THRESHOLD },
+      ipAddress: req.ip
+    }).catch(() => {});
 
     await prisma.user.update({
       where: { id: bestMatch.user.id },
