@@ -13,34 +13,22 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-const getEAR = (eye) => {
-  const v1 = Math.hypot(eye[1].x - eye[5].x, eye[1].y - eye[5].y);
-  const v2 = Math.hypot(eye[2].x - eye[4].x, eye[2].y - eye[4].y);
-  const h = Math.hypot(eye[0].x - eye[3].x, eye[0].y - eye[3].y);
-  return (v1 + v2) / (2.0 * h);
-};
-
 const AdminFaceCheck = () => {
-  const [scanStatus, setScanStatus] = useState('ready'); // ready, liveness, detecting, success, error
+  const [scanStatus, setScanStatus] = useState('ready');
   const [error, setError] = useState(null);
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [coords, setCoords] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   
   const webcamRef = useRef(null);
-  const livenessIntervalRef = useRef(null);
-  const [blinkCount, setBlinkCount] = useState(0);
+  
+  // Real-time face guide
+  const [faceGuideStatus, setFaceGuideStatus] = useState('none');
+  const faceGuideRef = useRef(null);
+  const stableCountRef = useRef(0);
+  const autoCaptureTriggeredRef = useRef(false);
   
   const navigate = useNavigate();
-  const [publicSettings, setPublicSettings] = useState({});
-
-  useEffect(() => {
-    import('../../services/api').then(({ settingsAPI }) => {
-      settingsAPI.getPublicInfo().then(res => {
-        if (res.success) setPublicSettings(res.data);
-      }).catch(err => console.error(err));
-    });
-  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -49,25 +37,11 @@ const AdminFaceCheck = () => {
 
   useEffect(() => {
     if (!navigator.geolocation) return;
-
     const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        setCoords({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracy: pos.coords.accuracy
-        });
-      },
-      (err) => {
-        console.error("GPS Error:", err);
-      },
-      { 
-        enableHighAccuracy: true, 
-        timeout: 20000, 
-        maximumAge: 0 
-      }
+      (pos) => setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }),
+      (err) => console.error("GPS Error:", err),
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
     );
-
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
@@ -89,97 +63,9 @@ const AdminFaceCheck = () => {
     loadModels();
   }, []);
 
+  // Direct face capture - no liveness/blink detection
   const handleCheck = useCallback(async () => {
     if (!webcamRef.current || !modelsLoaded) return;
-    
-    // Check if liveness is required
-    if (publicSettings.livenessDetection === 'true' && scanStatus !== 'liveness') {
-      setScanStatus('liveness');
-      setBlinkCount(0);
-      setError(null);
-      
-      let localBlinks = 0;
-      let isEyesClosed = false;
-      let isProcessingFrame = false;
-
-      livenessIntervalRef.current = setInterval(async () => {
-        if (isProcessingFrame) return;
-        if (!webcamRef.current) {
-          clearInterval(livenessIntervalRef.current);
-          return;
-        }
-        
-        isProcessingFrame = true;
-        try {
-          const imageSrc = webcamRef.current.getScreenshot();
-          if (!imageSrc) { isProcessingFrame = false; return; }
-          
-          const img = new Image();
-          img.src = imageSrc;
-          await new Promise(resolve => img.onload = resolve);
-          
-          const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.3 }))
-            .withFaceLandmarks();
-            
-          if (detection) {
-            const landmarks = detection.landmarks;
-            const leftEye = landmarks.getLeftEye();
-            const rightEye = landmarks.getRightEye();
-            
-            const leftEAR = getEAR(leftEye);
-            const rightEAR = getEAR(rightEye);
-            const avgEAR = (leftEAR + rightEAR) / 2.0;
-            
-            if (avgEAR < 0.30) { // Threshold for closed eyes
-            isEyesClosed = true;
-          } else {
-            if (isEyesClosed) {
-              // Blink detected
-              isEyesClosed = false;
-              localBlinks++;
-              setBlinkCount(localBlinks);
-              
-              if (localBlinks >= 2) {
-                clearInterval(livenessIntervalRef.current);
-                // After 2 blinks, capture final image for verification
-                setTimeout(async () => {
-                  const finalSrc = webcamRef.current.getScreenshot();
-                  if (finalSrc) {
-                    setScanStatus('detecting');
-                    const finalImg = new Image();
-                    finalImg.src = finalSrc;
-                    await new Promise(resolve => finalImg.onload = resolve);
-                    const finalDetection = await faceapi.detectSingleFace(finalImg, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 }))
-                      .withFaceLandmarks();
-                      
-                    if (finalDetection) {
-                      setScanStatus('success');
-                    } else {
-                      setScanStatus('error');
-                      setError('Wajah tidak terdeteksi saat capture final.');
-                    }
-                  }
-                }, 300);
-              }
-            }
-          }
-        } finally {
-          isProcessingFrame = false;
-        }
-      }, 80);
-      
-      setTimeout(() => {
-        if (livenessIntervalRef.current) {
-          clearInterval(livenessIntervalRef.current);
-          if (scanStatus === 'liveness') {
-            setScanStatus('error');
-            setError('Liveness detection timeout. Pastikan Anda berkedip 2 kali.');
-          }
-        }
-      }, 15000);
-      
-      return;
-    }
 
     const imageSrc = webcamRef.current.getScreenshot();
     if (imageSrc) {
@@ -193,7 +79,7 @@ const AdminFaceCheck = () => {
           image.onerror = () => reject(new Error('Failed to load image'));
         });
 
-        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 }))
+        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.15 }))
           .withFaceLandmarks();
         
         if (detection) {
@@ -207,7 +93,58 @@ const AdminFaceCheck = () => {
         setError('Gagal mendeteksi wajah. Silakan coba lagi.');
       }
     }
-  }, [modelsLoaded, publicSettings, scanStatus]);
+  }, [modelsLoaded]);
+
+  // Real-time face guide loop - AFTER handleCheck definition
+  useEffect(() => {
+    if (!modelsLoaded || scanStatus !== 'ready') {
+      if (faceGuideRef.current) clearInterval(faceGuideRef.current);
+      faceGuideRef.current = null;
+      return;
+    }
+
+    autoCaptureTriggeredRef.current = false;
+    stableCountRef.current = 0;
+    let isProcessing = false;
+
+    faceGuideRef.current = setInterval(async () => {
+      if (isProcessing || !webcamRef.current || autoCaptureTriggeredRef.current) return;
+      isProcessing = true;
+      try {
+        const screenshot = webcamRef.current.getScreenshot();
+        if (!screenshot) { isProcessing = false; return; }
+
+        const img = new Image();
+        img.src = screenshot;
+        await new Promise(resolve => img.onload = resolve);
+
+        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.2 }));
+        
+        if (detection) {
+          setFaceGuideStatus('detected');
+          stableCountRef.current++;
+          if (stableCountRef.current >= 5 && !autoCaptureTriggeredRef.current) {
+            autoCaptureTriggeredRef.current = true;
+            clearInterval(faceGuideRef.current);
+            faceGuideRef.current = null;
+            handleCheck();
+          }
+        } else {
+          setFaceGuideStatus('not-detected');
+          stableCountRef.current = 0;
+        }
+      } catch {
+        // ignore
+      } finally {
+        isProcessing = false;
+      }
+    }, 500);
+
+    return () => {
+      if (faceGuideRef.current) clearInterval(faceGuideRef.current);
+      faceGuideRef.current = null;
+    };
+  }, [modelsLoaded, scanStatus, handleCheck]);
 
   return (
     <div className="space-y-8 pb-12 max-w-6xl mx-auto animate-in fade-in duration-500">
@@ -263,6 +200,13 @@ const AdminFaceCheck = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 bg-white p-2 rounded-[2.5rem] overflow-hidden shadow-sm border border-slate-200">
           <div className="relative aspect-video rounded-[2rem] overflow-hidden bg-slate-100 shadow-inner">
+            <div className={`absolute inset-0 z-20 pointer-events-none transition-colors duration-500 ${
+              scanStatus === 'success' ? 'bg-emerald-500/10' :
+              scanStatus === 'error' ? 'bg-rose-500/10' :
+              faceGuideStatus === 'detected' ? 'bg-emerald-500/10' :
+              faceGuideStatus === 'not-detected' ? 'bg-orange-500/10' :
+              'bg-blue-500/5'
+            }`} />
             {!modelsLoaded ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 gap-4">
                 <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
@@ -273,18 +217,10 @@ const AdminFaceCheck = () => {
                 audio={false}
                 ref={webcamRef}
                 screenshotFormat="image/jpeg"
+                screenshotQuality={0.92}
                 className="w-full h-full object-cover"
-                videoConstraints={{ facingMode: "user" }}
+                videoConstraints={{ facingMode: "user", width: 640, height: 480, frameRate: { ideal: 30 } }}
               />
-            )}
-
-            {scanStatus === 'liveness' && (
-              <div className="absolute inset-0 bg-indigo-600/10 flex items-center justify-center backdrop-blur-sm">
-                <div className="absolute top-4 bg-indigo-600 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-lg">
-                  Blink: {blinkCount} / 2
-                </div>
-                <div className="w-20 h-20 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin shadow-sm" />
-              </div>
             )}
 
             {scanStatus === 'detecting' && (
@@ -300,15 +236,21 @@ const AdminFaceCheck = () => {
               </div>
             )}
 
-            {/* High-Tech Scan Frame Overlay */}
             <div className="absolute inset-0 border-[40px] border-slate-900/60 pointer-events-none mix-blend-multiply" />
             <div className="absolute inset-6 border-2 border-white/20 rounded-3xl pointer-events-none" />
             
-            {/* Corner Brackets */}
-            <div className="absolute top-10 left-10 w-12 h-12 border-t-4 border-l-4 border-blue-500/80 rounded-tl-2xl pointer-events-none" />
-            <div className="absolute top-10 right-10 w-12 h-12 border-t-4 border-r-4 border-blue-500/80 rounded-tr-2xl pointer-events-none" />
-            <div className="absolute bottom-10 left-10 w-12 h-12 border-b-4 border-l-4 border-blue-500/80 rounded-bl-2xl pointer-events-none" />
-            <div className="absolute bottom-10 right-10 w-12 h-12 border-b-4 border-r-4 border-blue-500/80 rounded-br-2xl pointer-events-none" />
+            <div className={`absolute top-10 left-10 w-12 h-12 border-t-4 border-l-4 rounded-tl-2xl pointer-events-none transition-colors duration-300 ${faceGuideStatus === 'detected' ? 'border-emerald-500' : 'border-blue-500/80'}`} />
+            <div className={`absolute top-10 right-10 w-12 h-12 border-t-4 border-r-4 rounded-tr-2xl pointer-events-none transition-colors duration-300 ${faceGuideStatus === 'detected' ? 'border-emerald-500' : 'border-blue-500/80'}`} />
+            <div className={`absolute bottom-10 left-10 w-12 h-12 border-b-4 border-l-4 rounded-bl-2xl pointer-events-none transition-colors duration-300 ${faceGuideStatus === 'detected' ? 'border-emerald-500' : 'border-blue-500/80'}`} />
+            <div className={`absolute bottom-10 right-10 w-12 h-12 border-b-4 border-r-4 rounded-br-2xl pointer-events-none transition-colors duration-300 ${faceGuideStatus === 'detected' ? 'border-emerald-500' : 'border-blue-500/80'}`} />
+            
+            {scanStatus === 'ready' && faceGuideStatus === 'detected' && stableCountRef.current > 0 && (
+               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center pointer-events-none z-30">
+                 <div className="text-emerald-400 font-bold tracking-widest text-lg drop-shadow-md bg-white/10 px-4 py-1 rounded-full backdrop-blur-sm border border-emerald-400/30">
+                   AUTO-CAPTURE: {stableCountRef.current}/5
+                 </div>
+               </div>
+            )}
           </div>
         </div>
 
@@ -341,14 +283,16 @@ const AdminFaceCheck = () => {
               <button
                 onClick={() => {
                   if (scanStatus === 'success' || scanStatus === 'error') {
-                    if (livenessIntervalRef.current) clearInterval(livenessIntervalRef.current);
+                    if (faceGuideRef.current) clearInterval(faceGuideRef.current);
                     setScanStatus('ready');
-                    setBlinkCount(0);
+                    setFaceGuideStatus('none');
+                    stableCountRef.current = 0;
+                    autoCaptureTriggeredRef.current = false;
                   } else {
                     handleCheck();
                   }
                 }}
-                disabled={!modelsLoaded || scanStatus === 'detecting' || scanStatus === 'liveness'}
+                disabled={!modelsLoaded || scanStatus === 'detecting'}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-bold text-xs uppercase tracking-wider shadow-sm active:scale-95 disabled:opacity-50 transition-all flex items-center justify-center gap-3 group"
               >
                 {scanStatus === 'success' || scanStatus === 'error' ? (

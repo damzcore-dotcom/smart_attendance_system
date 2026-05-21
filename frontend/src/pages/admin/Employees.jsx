@@ -22,13 +22,6 @@ const emptyEmployee = {
   leaveQuota: 12, remainingLeave: 12,
 };
 
-const getEAR = (eye) => {
-  const v1 = Math.hypot(eye[1].x - eye[5].x, eye[1].y - eye[5].y);
-  const v2 = Math.hypot(eye[2].x - eye[4].x, eye[2].y - eye[4].y);
-  const h = Math.hypot(eye[0].x - eye[3].x, eye[0].y - eye[3].y);
-  return (v1 + v2) / (2.0 * h);
-};
-
 const Employees = () => {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
@@ -55,14 +48,19 @@ const Employees = () => {
   const [idCardConfig, setIdCardConfig] = useState(null);
   const PAGE_SIZE = 25;
   
+  const nikErrorRef = useRef(null);
   const webcamRef = useRef(null);
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [nikError, setNikError] = useState('');
-  const livenessIntervalRef = useRef(null);
-  const [blinkCount, setBlinkCount] = useState(0);
   const [scanStatus, setScanStatus] = useState('ready');
+
+  // Phase 5: Real-time face guide
+  const [faceGuideStatus, setFaceGuideStatus] = useState('none');
+  const faceGuideRef = useRef(null);
+  const stableCountRef = useRef(0);
+  const autoCaptureTriggeredRef = useRef(false);
 
   const handleSort = (key) => {
     setSortConfig(prev => ({
@@ -136,13 +134,15 @@ const Employees = () => {
   const createMutation = useMutation({
     mutationFn: employeeAPI.create,
     onSuccess: () => {
-      if (livenessIntervalRef.current) clearInterval(livenessIntervalRef.current);
       setScanStatus('ready');
       queryClient.invalidateQueries({ queryKey: ['employees'] });
       queryClient.invalidateQueries({ queryKey: ['master-options'] });
       setAddModalOpen(false);
       setNewEmployee(emptyEmployee);
       setIsCameraActive(false);
+      setFaceGuideStatus('none');
+      stableCountRef.current = 0;
+      autoCaptureTriggeredRef.current = false;
       alert('Employee added successfully!');
     },
     onError: (err) => alert(`Error: ${err.message}`)
@@ -151,7 +151,6 @@ const Employees = () => {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => employeeAPI.update(id, data),
     onSuccess: () => {
-      if (livenessIntervalRef.current) clearInterval(livenessIntervalRef.current);
       setScanStatus('ready');
       queryClient.invalidateQueries({ queryKey: ['employees'] });
       queryClient.invalidateQueries({ queryKey: ['master-options'] });
@@ -273,98 +272,62 @@ const Employees = () => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Master_Template");
     XLSX.writeFile(wb, "Template_Master_Karyawan.xlsx");
+    XLSX.writeFile(wb, "Template_Master_Karyawan.xlsx");
   };
+
+  // Phase 5: Real-time face guide loop
+  useEffect(() => {
+    if (!modelsLoaded || scanStatus !== 'ready' || !isCameraActive || newEmployee.facePhoto) {
+      if (faceGuideRef.current) clearInterval(faceGuideRef.current);
+      faceGuideRef.current = null;
+      return;
+    }
+
+    autoCaptureTriggeredRef.current = false;
+    stableCountRef.current = 0;
+    let isProcessing = false;
+
+    faceGuideRef.current = setInterval(async () => {
+      if (isProcessing || !webcamRef.current || autoCaptureTriggeredRef.current) return;
+      isProcessing = true;
+      try {
+        const screenshot = webcamRef.current.getScreenshot();
+        if (!screenshot) { isProcessing = false; return; }
+
+        const img = new Image();
+        img.src = screenshot;
+        await new Promise(resolve => img.onload = resolve);
+
+        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.2 }));
+        
+        if (detection) {
+          setFaceGuideStatus('detected');
+          stableCountRef.current++;
+          if (stableCountRef.current >= 5 && !autoCaptureTriggeredRef.current) {
+            autoCaptureTriggeredRef.current = true;
+            clearInterval(faceGuideRef.current);
+            faceGuideRef.current = null;
+            captureFace();
+          }
+        } else {
+          setFaceGuideStatus('not-detected');
+          stableCountRef.current = 0;
+        }
+      } catch {
+        // ignore err
+      } finally {
+        isProcessing = false;
+      }
+    }, 500);
+
+    return () => {
+      if (faceGuideRef.current) clearInterval(faceGuideRef.current);
+      faceGuideRef.current = null;
+    };
+  }, [modelsLoaded, scanStatus, isCameraActive, newEmployee.facePhoto]);
 
   const captureFace = async () => {
     if (!webcamRef.current) return;
-    
-    if (companySettings.livenessDetection === 'true' && scanStatus !== 'liveness') {
-      setScanStatus('liveness');
-      setBlinkCount(0);
-      setIsCapturing(true);
-      
-      let localBlinks = 0;
-      let isEyesClosed = false;
-      let isProcessingFrame = false;
-
-      livenessIntervalRef.current = setInterval(async () => {
-        if (isProcessingFrame) return;
-        if (!webcamRef.current) {
-          clearInterval(livenessIntervalRef.current);
-          return;
-        }
-        
-        isProcessingFrame = true;
-        try {
-          const imageSrc = webcamRef.current.getScreenshot();
-          if (!imageSrc) { isProcessingFrame = false; return; }
-          
-          const img = new Image();
-          img.src = imageSrc;
-          await new Promise(resolve => img.onload = resolve);
-          
-          const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.3 }))
-            .withFaceLandmarks();
-            
-          if (detection) {
-            const landmarks = detection.landmarks;
-            const leftEye = landmarks.getLeftEye();
-            const rightEye = landmarks.getRightEye();
-            
-            const leftEAR = getEAR(leftEye);
-            const rightEAR = getEAR(rightEye);
-            const avgEAR = (leftEAR + rightEAR) / 2.0;
-            
-            if (avgEAR < 0.30) {
-            isEyesClosed = true;
-          } else {
-            if (isEyesClosed) {
-              isEyesClosed = false;
-              localBlinks++;
-              setBlinkCount(localBlinks);
-              
-              if (localBlinks >= 2) {
-                clearInterval(livenessIntervalRef.current);
-                setTimeout(async () => {
-                  const finalSrc = webcamRef.current.getScreenshot();
-                  if (finalSrc) {
-                    setScanStatus('detecting');
-                    const finalImg = new Image();
-                    finalImg.src = finalSrc;
-                    await new Promise(resolve => finalImg.onload = resolve);
-                    const finalDetection = await faceapi.detectSingleFace(finalImg, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 }))
-                      .withFaceLandmarks()
-                      .withFaceDescriptor();
-                      
-                    setIsCapturing(false);
-                    setScanStatus('ready');
-                    if (finalDetection) {
-                      setNewEmployee({...newEmployee, facePhoto: finalSrc, faceDescriptor: JSON.stringify(Array.from(finalDetection.descriptor)), faceId: 'Enrolled' });
-                      alert('Face detected and enrolled successfully!');
-                    } else {
-                      alert('Face not detected at capture. Ensure adequate lighting and clear visibility.');
-                    }
-                  }
-                }, 300);
-              }
-            }
-          }
-        } finally {
-          isProcessingFrame = false;
-        }
-      }, 80);
-      
-      setTimeout(() => {
-        if (livenessIntervalRef.current) {
-          clearInterval(livenessIntervalRef.current);
-          setIsCapturing(false);
-          setScanStatus('ready');
-          setTimeout(() => alert('Liveness detection timeout. Pastikan Anda berkedip 2 kali.'), 150);
-        }
-      }, 15000);
-      
-      return;
-    }
 
     setIsCapturing(true);
     setScanStatus('detecting');
@@ -375,7 +338,7 @@ const Employees = () => {
         const img = new Image();
         img.src = imageSrc;
         img.onload = async () => {
-          const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 })).withFaceLandmarks().withFaceDescriptor();
+          const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.15 })).withFaceLandmarks().withFaceDescriptor();
           setScanStatus('ready');
           if (detection) {
             setNewEmployee({...newEmployee, facePhoto: imageSrc, faceDescriptor: JSON.stringify(Array.from(detection.descriptor)), faceId: 'Enrolled' });
@@ -1049,9 +1012,13 @@ const Employees = () => {
                             <div className="flex gap-2">
                               <button type="button" onClick={() => {
                                 if (livenessIntervalRef.current) clearInterval(livenessIntervalRef.current);
+                                if (faceGuideRef.current) clearInterval(faceGuideRef.current);
                                 setScanStatus('ready');
                                 setIsCapturing(false);
                                 setIsCameraActive(false);
+                                setFaceGuideStatus('none');
+                                stableCountRef.current = 0;
+                                autoCaptureTriggeredRef.current = false;
                               }} 
                                 className="px-4 py-2 bg-white text-slate-500 font-bold uppercase tracking-wider rounded-lg text-[10px] border border-slate-200 hover:bg-slate-50 transition-all">
                                 Cancel
@@ -1097,16 +1064,33 @@ const Employees = () => {
                           {/* HUD Overlay */}
                           {!newEmployee.facePhoto && isCameraActive && (
                             <div className="absolute inset-0 pointer-events-none z-10 p-4">
-                              <div className="absolute top-4 left-4 w-8 h-8 border-t-2 border-l-2 border-blue-500/60 rounded-tl-xl" />
-                              <div className="absolute top-4 right-4 w-8 h-8 border-t-2 border-r-2 border-blue-500/60 rounded-tr-xl" />
-                              <div className="absolute bottom-4 left-4 w-8 h-8 border-b-2 border-l-2 border-blue-500/60 rounded-bl-xl" />
-                              <div className="absolute bottom-4 right-4 w-8 h-8 border-b-2 border-r-2 border-blue-500/60 rounded-br-xl" />
+                              <div className={`absolute top-4 left-4 w-8 h-8 border-t-2 border-l-2 rounded-tl-xl transition-colors duration-300 ${faceGuideStatus === 'detected' ? 'border-emerald-500' : 'border-blue-500/60'}`} />
+                              <div className={`absolute top-4 right-4 w-8 h-8 border-t-2 border-r-2 rounded-tr-xl transition-colors duration-300 ${faceGuideStatus === 'detected' ? 'border-emerald-500' : 'border-blue-500/60'}`} />
+                              <div className={`absolute bottom-4 left-4 w-8 h-8 border-b-2 border-l-2 rounded-bl-xl transition-colors duration-300 ${faceGuideStatus === 'detected' ? 'border-emerald-500' : 'border-blue-500/60'}`} />
+                              <div className={`absolute bottom-4 right-4 w-8 h-8 border-b-2 border-r-2 rounded-br-xl transition-colors duration-300 ${faceGuideStatus === 'detected' ? 'border-emerald-500' : 'border-blue-500/60'}`} />
                               
-                              <div className="absolute inset-0 flex items-center justify-center">
-                                <div className="w-48 h-48 border border-blue-400/30 rounded-full" />
-                              </div>
+                              {/* Guide Indicator */}
+                              {scanStatus === 'ready' && (
+                                <>
+                                  <div className="absolute inset-0 flex items-center justify-center">
+                                    <div className={`w-48 h-48 border rounded-full transition-all duration-300 ${
+                                      faceGuideStatus === 'detected' ? 'border-emerald-500/80 shadow-[0_0_15px_rgba(52,211,153,0.3)] animate-pulse' : 
+                                      faceGuideStatus === 'not-detected' ? 'border-orange-500/60' : 
+                                      'border-blue-400/30'
+                                    }`} />
+                                  </div>
 
-                              {!isCapturing && modelsLoaded && (
+                                  {faceGuideStatus === 'detected' && (
+                                    <div className="absolute left-6 right-6 top-1/2 -translate-y-1/2 flex justify-center z-30">
+                                      <div className="bg-emerald-500/20 backdrop-blur-md border border-emerald-500/30 text-emerald-100 font-bold uppercase tracking-widest text-[9px] px-3 py-1 rounded-full shadow-lg text-center animate-in zoom-in">
+                                        Auto-capture: {stableCountRef.current}/5
+                                      </div>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+
+                              {!isCapturing && modelsLoaded && scanStatus === 'ready' && (
                                 <div className="absolute left-6 right-6 top-1/2 -translate-y-1/2 h-[1px] bg-blue-400/50 animate-[scan_3s_ease-in-out_infinite]" />
                               )}
                             </div>

@@ -133,17 +133,12 @@ const verifyFace = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Biometric descriptor is required and must be an array' });
     }
 
-    // Load settings for biometrics
+    // Load settings for auto enrollment and threshold
     const settings = await prisma.settings.findMany({
-      where: { key: { in: ['faceMatchThreshold', 'livenessDetection', 'autoEnrollment'] } }
+      where: { key: { in: ['faceMatchThreshold', 'autoEnrollment'] } }
     });
     const settingsMap = {};
     settings.forEach(s => settingsMap[s.key] = s.value);
-
-    const isLivenessEnabled = settingsMap['livenessDetection'] === 'true';
-    if (isLivenessEnabled && !req.body.livenessProof) {
-      return res.status(400).json({ success: false, message: 'Liveness verification failed. Please try again.' });
-    }
 
     // Fetch all employees with enrolled faces and valid users
     const employees = await prisma.employee.findMany({
@@ -165,7 +160,10 @@ const verifyFace = async (req, res) => {
     // Match the closest face
     let bestMatch = null;
     const uiThreshold = parseInt(settingsMap['faceMatchThreshold']) || 85;
-    const THRESHOLD = 1.0 - (uiThreshold / 100.0); // e.g., 85% confidence = 0.15 max distance
+    // Map UI slider (50-100%) to Euclidean distance threshold (0.7 - 0.35)
+    // Standard face-api.js threshold is ~0.4-0.6. Old formula was too strict (85% = 0.15).
+    const clampedThreshold = Math.max(50, Math.min(100, uiThreshold));
+    const THRESHOLD = 0.7 - ((clampedThreshold - 50) / 50) * 0.35; // 50%→0.7, 75%→0.525, 85%→0.455, 100%→0.35
     let minDistance = 1.0;
 
     for (const emp of employees) {

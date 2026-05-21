@@ -182,7 +182,7 @@ const EmployeeHome = () => {
         <div className="pt-2">
           {!todayRecord?.checkIn ? (
             <button 
-              onClick={() => navigate('/employee/scan')}
+              onClick={() => navigate('/employee/scan?mode=check-in')}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-bold text-base shadow-lg shadow-blue-600/25 transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
             >
               <Camera className="w-5 h-5" />
@@ -190,11 +190,11 @@ const EmployeeHome = () => {
             </button>
           ) : (!todayRecord?.checkOut || todayRecord?.checkOut === '-- : --') ? (
             <button 
-              onClick={() => checkOutMutation.mutate()}
-              disabled={checkOutMutation.isPending}
+              onClick={() => navigate('/employee/scan?mode=check-out')}
               className="w-full bg-slate-800 text-white py-4 rounded-2xl font-bold text-base shadow-lg hover:bg-slate-700 transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
             >
-              {checkOutMutation.isPending ? <Loader2 className="animate-spin" /> : 'CHECK OUT'}
+              <Camera className="w-5 h-5" />
+              CHECK OUT NOW
             </button>
           ) : (
             <div className="w-full bg-emerald-50 text-emerald-700 py-4 rounded-2xl font-bold text-base text-center border border-emerald-200">

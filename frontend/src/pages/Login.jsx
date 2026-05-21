@@ -6,12 +6,7 @@ import Webcam from 'react-webcam';
 import * as faceapi from '@vladmandic/face-api';
 import { authAPI } from '../services/api';
 
-const getEAR = (eye) => {
-  const v1 = Math.hypot(eye[1].x - eye[5].x, eye[1].y - eye[5].y);
-  const v2 = Math.hypot(eye[2].x - eye[4].x, eye[2].y - eye[4].y);
-  const h = Math.hypot(eye[0].x - eye[3].x, eye[0].y - eye[3].y);
-  return (v1 + v2) / (2.0 * h);
-};
+
 
 const Login = () => {
   const [loginMode, setLoginMode] = useState('credentials');
@@ -21,12 +16,15 @@ const Login = () => {
   const [isVerifying, setIsVerifying] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [error, setError] = useState(null);
-  const [scanStatus, setScanStatus] = useState('ready'); // ready, liveness, detecting, verifying, success, error
+  const [scanStatus, setScanStatus] = useState('ready'); // ready, detecting, verifying, success, error
   
   const webcamRef = useRef(null);
-  const livenessIntervalRef = useRef(null);
-  const [blinkCount, setBlinkCount] = useState(0);
-  const [livenessProof, setLivenessProof] = useState([]);
+  
+  // Phase 5: Real-time face guide
+  const [faceGuideStatus, setFaceGuideStatus] = useState('none'); // none, detected, not-detected
+  const faceGuideRef = useRef(null);
+  const stableCountRef = useRef(0);
+  const autoCaptureTriggeredRef = useRef(false);
   
   const navigate = useNavigate();
   const [modelsLoaded, setModelsLoaded] = useState(false);
@@ -127,10 +125,10 @@ const Login = () => {
     }
   };
 
-  const doVerify = async (descriptorArray, proof) => {
+  const doVerify = async (descriptorArray) => {
     setScanStatus('verifying');
     try {
-      const result = await authAPI.verifyFace(descriptorArray, proof);
+      const result = await authAPI.verifyFace(descriptorArray);
       if (result.success) {
         setScanStatus('success');
         setTimeout(() => {
@@ -155,102 +153,8 @@ const Login = () => {
 
   const capture = useCallback(async () => {
     if (!webcamRef.current || !modelsLoaded) return;
-    
-    // Check if liveness is required
-    if (publicSettings.livenessDetection === 'true' && scanStatus !== 'liveness') {
-      setScanStatus('liveness');
-      setBlinkCount(0);
-      setLivenessProof([]);
-      setError(null);
-      
-      let localBlinks = 0;
-      let localProof = [];
-      let isEyesClosed = false;
-      let isProcessingFrame = false;
 
-      // Start blink detection loop
-      livenessIntervalRef.current = setInterval(async () => {
-        if (isProcessingFrame) return;
-        if (!webcamRef.current) {
-          clearInterval(livenessIntervalRef.current);
-          return;
-        }
-        
-        isProcessingFrame = true;
-        try {
-          const imageSrc = webcamRef.current.getScreenshot();
-          if (!imageSrc) { isProcessingFrame = false; return; }
-          
-          const img = new Image();
-          img.src = imageSrc;
-          await new Promise(resolve => img.onload = resolve);
-          
-          const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.3 }))
-            .withFaceLandmarks();
-            
-          if (detection) {
-            const landmarks = detection.landmarks;
-            const leftEye = landmarks.getLeftEye();
-            const rightEye = landmarks.getRightEye();
-            
-            const leftEAR = getEAR(leftEye);
-            const rightEAR = getEAR(rightEye);
-            const avgEAR = (leftEAR + rightEAR) / 2.0;
-            
-            if (avgEAR < 0.30) { // Threshold for closed eyes (increased for easier detection)
-            isEyesClosed = true;
-          } else {
-            if (isEyesClosed) {
-              // Blink detected
-              isEyesClosed = false;
-              localBlinks++;
-              localProof.push(Date.now());
-              setBlinkCount(localBlinks);
-              
-              if (localBlinks >= 2) {
-                clearInterval(livenessIntervalRef.current);
-                // After 2 blinks, capture final image for verification
-                setTimeout(async () => {
-                  const finalSrc = webcamRef.current.getScreenshot();
-                  if (finalSrc) {
-                    setScanStatus('detecting');
-                    const finalImg = new Image();
-                    finalImg.src = finalSrc;
-                    await new Promise(resolve => finalImg.onload = resolve);
-                    const finalDetection = await faceapi.detectSingleFace(finalImg, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 }))
-                      .withFaceLandmarks()
-                      .withFaceDescriptor();
-                    if (finalDetection) {
-                      doVerify(Array.from(finalDetection.descriptor), localProof);
-                    } else {
-                      setScanStatus('error');
-                      setError('Wajah tidak terdeteksi saat capture final.');
-                    }
-                  }
-                }, 300);
-              }
-            }
-          }
-        } finally {
-          isProcessingFrame = false;
-        }
-      }, 80); // check every 80ms
-      
-      // Timeout after 15 seconds
-      setTimeout(() => {
-        if (livenessIntervalRef.current) {
-          clearInterval(livenessIntervalRef.current);
-          if (scanStatus === 'liveness') {
-            setScanStatus('error');
-            setError('Liveness detection timeout. Pastikan Anda berkedip 2 kali.');
-          }
-        }
-      }, 15000);
-      
-      return;
-    }
-
-    // Standard capture (no liveness)
+    // Direct capture - no liveness detection
     const imageSrc = webcamRef.current.getScreenshot();
     if (imageSrc) {
       setScanStatus('detecting');
@@ -263,12 +167,12 @@ const Login = () => {
           image.onerror = () => reject(new Error('Failed to load captured image'));
         });
 
-        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 }))
+        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.15 }))
           .withFaceLandmarks()
           .withFaceDescriptor();
         
         if (detection) {
-          doVerify(Array.from(detection.descriptor), []);
+          doVerify(Array.from(detection.descriptor));
         } else {
           setScanStatus('error');
           setError('Wajah tidak terdeteksi. Pastikan posisi wajah di tengah frame.');
@@ -281,22 +185,76 @@ const Login = () => {
     } else {
       setError('Kamera belum siap. Mohon tunggu sebentar.');
     }
-  }, [webcamRef, navigate, modelsLoaded, publicSettings, scanStatus]);
+  }, [webcamRef, navigate, modelsLoaded]);
 
   const resetScan = () => {
-    if (livenessIntervalRef.current) clearInterval(livenessIntervalRef.current);
     setScanStatus('ready');
-    setBlinkCount(0);
     setError(null);
+    stableCountRef.current = 0;
+    autoCaptureTriggeredRef.current = false;
   };
 
   const closeScan = () => {
-    if (livenessIntervalRef.current) clearInterval(livenessIntervalRef.current);
+    if (faceGuideRef.current) clearInterval(faceGuideRef.current);
     setIsScanning(false);
     setScanStatus('ready');
-    setBlinkCount(0);
     setError(null);
+    setFaceGuideStatus('none');
+    stableCountRef.current = 0;
+    autoCaptureTriggeredRef.current = false;
   };
+
+  // Phase 5: Real-time face guide loop - runs when camera is active & idle
+  useEffect(() => {
+    if (!isScanning || !modelsLoaded || scanStatus !== 'ready') {
+      if (faceGuideRef.current) clearInterval(faceGuideRef.current);
+      faceGuideRef.current = null;
+      return;
+    }
+
+    autoCaptureTriggeredRef.current = false;
+    stableCountRef.current = 0;
+    let isProcessing = false;
+
+    faceGuideRef.current = setInterval(async () => {
+      if (isProcessing || !webcamRef.current || autoCaptureTriggeredRef.current) return;
+      isProcessing = true;
+      try {
+        const screenshot = webcamRef.current.getScreenshot();
+        if (!screenshot) { isProcessing = false; return; }
+
+        const img = new Image();
+        img.src = screenshot;
+        await new Promise(resolve => img.onload = resolve);
+
+        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.2 }));
+        
+        if (detection) {
+          setFaceGuideStatus('detected');
+          stableCountRef.current++;
+          // Auto-capture after face stable for ~2.5s (5 consecutive detections at 500ms)
+          if (stableCountRef.current >= 5 && !autoCaptureTriggeredRef.current) {
+            autoCaptureTriggeredRef.current = true;
+            clearInterval(faceGuideRef.current);
+            faceGuideRef.current = null;
+            capture();
+          }
+        } else {
+          setFaceGuideStatus('not-detected');
+          stableCountRef.current = 0;
+        }
+      } catch {
+        // silently ignore face guide errors
+      } finally {
+        isProcessing = false;
+      }
+    }, 500); // Check every 500ms for the guide (lightweight)
+
+    return () => {
+      if (faceGuideRef.current) clearInterval(faceGuideRef.current);
+      faceGuideRef.current = null;
+    };
+  }, [isScanning, modelsLoaded, scanStatus, capture]);
 
   // Status color/ring mapping
   const handleForgotPassword = () => {
@@ -305,23 +263,28 @@ const Login = () => {
 
   const getStatusRingColor = () => {
     switch (scanStatus) {
-      case 'liveness': return 'border-indigo-400 shadow-indigo-400/30';
       case 'detecting': return 'border-amber-400 shadow-amber-400/30';
       case 'verifying': return 'border-blue-400 shadow-blue-400/30';
       case 'success': return 'border-emerald-400 shadow-emerald-400/40';
       case 'error': return 'border-red-400 shadow-red-400/30';
-      default: return 'border-blue-300 shadow-blue-300/10';
+      default:
+        // Use face guide status for real-time feedback
+        if (faceGuideStatus === 'detected') return 'border-emerald-400 shadow-emerald-400/30';
+        if (faceGuideStatus === 'not-detected') return 'border-orange-400 shadow-orange-400/20';
+        return 'border-blue-300 shadow-blue-300/10';
     }
   };
 
   const getStatusLabel = () => {
     switch (scanStatus) {
-      case 'liveness': return { text: `Kedipkan mata 2 kali... (${blinkCount}/2)`, color: 'text-indigo-500', icon: <ScanFace className="w-4 h-4 animate-pulse" /> };
       case 'detecting': return { text: 'Mendeteksi Wajah...', color: 'text-amber-500', icon: <Loader2 className="w-4 h-4 animate-spin" /> };
       case 'verifying': return { text: 'Memverifikasi Identitas...', color: 'text-blue-500', icon: <Loader2 className="w-4 h-4 animate-spin" /> };
       case 'success': return { text: 'Identitas Terverifikasi!', color: 'text-emerald-500', icon: <CheckCircle2 className="w-4 h-4" /> };
       case 'error': return { text: 'Verifikasi Gagal', color: 'text-red-500', icon: <AlertCircle className="w-4 h-4" /> };
-      default: return { text: 'Siap Untuk Scan', color: 'text-slate-400', icon: <ScanFace className="w-4 h-4" /> };
+      default:
+        if (faceGuideStatus === 'detected') return { text: `Wajah Terdeteksi — Auto-capture ${Math.min(stableCountRef.current, 5)}/5...`, color: 'text-emerald-500', icon: <CheckCircle2 className="w-4 h-4" /> };
+        if (faceGuideStatus === 'not-detected') return { text: 'Posisikan wajah di tengah frame', color: 'text-orange-500', icon: <AlertCircle className="w-4 h-4" /> };
+        return { text: 'Siap Untuk Scan', color: 'text-slate-400', icon: <ScanFace className="w-4 h-4" /> };
     }
   };
 
@@ -510,7 +473,8 @@ const Login = () => {
                       ref={webcamRef}
                       screenshotFormat="image/jpeg"
                       className="w-full h-full object-cover"
-                      videoConstraints={{ facingMode: "user", width: 480, height: 480 }}
+                      videoConstraints={{ facingMode: "user", width: 640, height: 480, frameRate: { ideal: 30 } }}
+                      screenshotQuality={0.92}
                     />
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-emerald-500 to-emerald-600">
@@ -520,22 +484,27 @@ const Login = () => {
                     </div>
                   )}
                   
-                  {/* Scanning line overlay */}
+                  {/* Scanning line overlay + real-time face guide */}
                   {scanStatus === 'ready' && (
                     <div className="absolute inset-0 pointer-events-none">
                       <div className="face-scan-line" />
+                      {/* Face detection indicator */}
+                      {faceGuideStatus === 'detected' && (
+                        <div className="absolute inset-4 border-2 border-emerald-400 rounded-xl transition-all duration-300 animate-pulse" style={{ boxShadow: '0 0 15px rgba(52,211,153,0.3)' }} />
+                      )}
+                      {faceGuideStatus === 'not-detected' && (
+                        <div className="absolute inset-4 border-2 border-orange-400/60 rounded-xl transition-all duration-300" />
+                      )}
+                      {/* Auto-capture progress bar */}
+                      {faceGuideStatus === 'detected' && stableCountRef.current > 0 && (
+                        <div className="absolute bottom-2 left-4 right-4 h-1.5 bg-white/30 rounded-full overflow-hidden">
+                          <div className="h-full bg-emerald-400 rounded-full transition-all duration-500" style={{ width: `${Math.min((stableCountRef.current / 5) * 100, 100)}%` }} />
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {/* Liveness overlay */}
-                  {scanStatus === 'liveness' && (
-                    <div className="absolute inset-0 bg-indigo-500/10 pointer-events-none flex items-center justify-center">
-                      <div className="face-detect-ring" style={{ borderTopColor: '#6366f1' }} />
-                      <div className="absolute top-4 bg-indigo-600 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-lg">
-                        Blink: {blinkCount} / 2
-                      </div>
-                    </div>
-                  )}
+
 
                   {/* Detecting overlay */}
                   {scanStatus === 'detecting' && (

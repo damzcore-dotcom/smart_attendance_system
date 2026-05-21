@@ -143,8 +143,8 @@ const create = async (req, res) => {
       // Prioritize user-selected shift over system default
       shiftId: rest.shiftId ? parseInt(rest.shiftId) : (defaultShift?.id || null),
       division: rest.division, locationId: rest.locationId, idNumber: rest.idNumber, cardNo: rest.cardNo,
-      verifyCode: rest.verifyCode, grade: rest.grade, section: rest.section, employmentStatus: rest.employmentStatus,
       contractDuration: rest.contractDuration, faceId: rest.faceId, facePhoto: rest.facePhoto, faceDescriptor: rest.faceDescriptor ? JSON.parse(rest.faceDescriptor) : null,
+      faceStatus: rest.faceDescriptor ? 'ENROLLED' : 'PENDING',
       bpjsTk: rest.bpjsTk, bpjsKesehatan: rest.bpjsKesehatan,
       npwp: rest.npwp, ptkpStatus: rest.ptkpStatus, maritalStatus: rest.maritalStatus, kkNumber: rest.kkNumber, birthPlace: rest.birthPlace,
       address: rest.address, education: rest.education, major: rest.major, religion: rest.religion,
@@ -201,7 +201,10 @@ const update = async (req, res) => {
     if ('joinDate' in data) data.joinDate = data.joinDate ? new Date(data.joinDate) : null;
     if ('contractEnd' in data) data.contractEnd = data.contractEnd ? new Date(data.contractEnd) : null;
     if ('birthDate' in data) data.birthDate = data.birthDate ? new Date(data.birthDate) : null;
-    if (faceDescriptor) data.faceDescriptor = JSON.parse(faceDescriptor);
+    if (faceDescriptor) {
+      data.faceDescriptor = JSON.parse(faceDescriptor);
+      data.faceStatus = 'ENROLLED';
+    }
     if ('shiftId' in data) {
       data.shiftId = data.shiftId ? parseInt(data.shiftId) : null;
     }

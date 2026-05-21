@@ -25,12 +25,6 @@ import {
   RefreshCw
 } from 'lucide-react';
 
-const getEAR = (eye) => {
-  const v1 = Math.hypot(eye[1].x - eye[5].x, eye[1].y - eye[5].y);
-  const v2 = Math.hypot(eye[2].x - eye[4].x, eye[2].y - eye[4].y);
-  const h = Math.hypot(eye[0].x - eye[3].x, eye[0].y - eye[3].y);
-  return (v1 + v2) / (2.0 * h);
-};
 
 const Users = () => {
   const queryClient = useQueryClient();
@@ -54,18 +48,15 @@ const Users = () => {
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [faceData, setFaceData] = useState({ photo: '', descriptor: null });
-  const livenessIntervalRef = useRef(null);
-  const [blinkCount, setBlinkCount] = useState(0);
   const [scanStatus, setScanStatus] = useState('ready');
-  const [publicSettings, setPublicSettings] = useState({});
 
-  useEffect(() => {
-    import('../../services/api').then(({ settingsAPI }) => {
-      settingsAPI.getPublicInfo().then(res => {
-        if (res.success) setPublicSettings(res.data);
-      }).catch(err => console.error(err));
-    });
-  }, []);
+  // Phase 5: Real-time face guide
+  const [faceGuideStatus, setFaceGuideStatus] = useState('none');
+  const faceGuideRef = useRef(null);
+  const stableCountRef = useRef(0);
+  const autoCaptureTriggeredRef = useRef(false);
+
+
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['users'],
@@ -114,7 +105,6 @@ const Users = () => {
   const biometricMutation = useMutation({
     mutationFn: ({ id, data }) => userAPI.updateBiometrics(id, data),
     onSuccess: () => {
-      if (livenessIntervalRef.current) clearInterval(livenessIntervalRef.current);
       setFaceModalOpen(false);
       setFaceData({ photo: '', descriptor: null });
       setScanStatus('ready');
@@ -122,7 +112,6 @@ const Users = () => {
       setTimeout(() => alert('Biometrik wajah berhasil disimpan!'), 150);
     },
     onError: (err) => {
-      if (livenessIntervalRef.current) clearInterval(livenessIntervalRef.current);
       setFaceModalOpen(false);
       setScanStatus('ready');
       setTimeout(() => alert(`Error: ${err.message}`), 150);
@@ -215,9 +204,7 @@ const Users = () => {
 
   const handleFaceClick = async (user) => {
     setSelectedUser(user);
-    if (livenessIntervalRef.current) clearInterval(livenessIntervalRef.current);
     setScanStatus('ready');
-    setBlinkCount(0);
     setFaceData({ photo: '', descriptor: null });
     setFaceModalOpen(true);
     if (!modelsLoaded && !isLoadingModels) {
@@ -240,97 +227,61 @@ const Users = () => {
     }
   };
 
+  // Phase 5: Real-time face guide loop
+  useEffect(() => {
+    if (!modelsLoaded || scanStatus !== 'ready' || faceData.photo || !isFaceModalOpen) {
+      if (faceGuideRef.current) clearInterval(faceGuideRef.current);
+      faceGuideRef.current = null;
+      return;
+    }
+
+    autoCaptureTriggeredRef.current = false;
+    stableCountRef.current = 0;
+    let isProcessing = false;
+
+    faceGuideRef.current = setInterval(async () => {
+      const faceapi = faceApiRef.current;
+      if (isProcessing || !webcamRef.current || autoCaptureTriggeredRef.current || !faceapi) return;
+      isProcessing = true;
+      try {
+        const screenshot = webcamRef.current.getScreenshot();
+        if (!screenshot) { isProcessing = false; return; }
+
+        const img = new Image();
+        img.src = screenshot;
+        await new Promise(resolve => img.onload = resolve);
+
+        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.2 }));
+        
+        if (detection) {
+          setFaceGuideStatus('detected');
+          stableCountRef.current++;
+          if (stableCountRef.current >= 5 && !autoCaptureTriggeredRef.current) {
+            autoCaptureTriggeredRef.current = true;
+            clearInterval(faceGuideRef.current);
+            faceGuideRef.current = null;
+            captureFace();
+          }
+        } else {
+          setFaceGuideStatus('not-detected');
+          stableCountRef.current = 0;
+        }
+      } catch {
+        // ignore err
+      } finally {
+        isProcessing = false;
+      }
+    }, 500);
+
+    return () => {
+      if (faceGuideRef.current) clearInterval(faceGuideRef.current);
+      faceGuideRef.current = null;
+    };
+  }, [modelsLoaded, scanStatus, isFaceModalOpen, faceData.photo]);
+
   const captureFace = async () => {
     const faceapi = faceApiRef.current;
     if (!webcamRef.current || !modelsLoaded || !faceapi) return;
-
-    if (publicSettings.livenessDetection === 'true' && scanStatus !== 'liveness') {
-      setScanStatus('liveness');
-      setBlinkCount(0);
-      setIsCapturing(true);
-      
-      let localBlinks = 0;
-      let isEyesClosed = false;
-      let isProcessingFrame = false;
-
-      livenessIntervalRef.current = setInterval(async () => {
-        if (isProcessingFrame) return;
-        if (!webcamRef.current) {
-          clearInterval(livenessIntervalRef.current);
-          return;
-        }
-        
-        isProcessingFrame = true;
-        try {
-          const imageSrc = webcamRef.current.getScreenshot();
-          if (!imageSrc) { isProcessingFrame = false; return; }
-          
-          const img = new Image();
-          img.src = imageSrc;
-          await new Promise(resolve => img.onload = resolve);
-          
-          const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.3 }))
-            .withFaceLandmarks();
-            
-          if (detection) {
-            const landmarks = detection.landmarks;
-            const leftEye = landmarks.getLeftEye();
-            const rightEye = landmarks.getRightEye();
-            
-            const leftEAR = getEAR(leftEye);
-            const rightEAR = getEAR(rightEye);
-            const avgEAR = (leftEAR + rightEAR) / 2.0;
-            
-            if (avgEAR < 0.30) {
-            isEyesClosed = true;
-          } else {
-            if (isEyesClosed) {
-              isEyesClosed = false;
-              localBlinks++;
-              setBlinkCount(localBlinks);
-              
-              if (localBlinks >= 2) {
-                clearInterval(livenessIntervalRef.current);
-                setTimeout(async () => {
-                  const finalSrc = webcamRef.current.getScreenshot();
-                  if (finalSrc) {
-                    setScanStatus('detecting');
-                    const finalImg = new Image();
-                    finalImg.src = finalSrc;
-                    await new Promise(resolve => finalImg.onload = resolve);
-                    const finalDetection = await faceapi.detectSingleFace(finalImg, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 }))
-                      .withFaceLandmarks()
-                      .withFaceDescriptor();
-                      
-                    setIsCapturing(false);
-                    setScanStatus('ready');
-                    if (finalDetection) {
-                      setFaceData({ photo: finalSrc, descriptor: Array.from(finalDetection.descriptor) });
-                      setTimeout(() => alert('Wajah berhasil dideteksi!'), 150);
-                    } else {
-                      setTimeout(() => alert('Wajah tidak terdeteksi saat capture final.'), 150);
-                    }
-                  }
-                }, 300);
-              }
-            }
-          }
-        } finally {
-          isProcessingFrame = false;
-        }
-      }, 80);
-      
-      setTimeout(() => {
-        if (livenessIntervalRef.current) {
-          clearInterval(livenessIntervalRef.current);
-          setIsCapturing(false);
-          setScanStatus('ready');
-          setTimeout(() => alert('Liveness detection timeout. Pastikan berkedip 2 kali.'), 150);
-        }
-      }, 15000);
-      
-      return;
-    }
 
     setIsCapturing(true);
     setScanStatus('detecting');
@@ -340,7 +291,7 @@ const Users = () => {
       img.src = imageSrc;
       img.onload = async () => {
         const detection = await faceapi
-          .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 }))
+          .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.15 }))
           .withFaceLandmarks()
           .withFaceDescriptor();
         
@@ -619,8 +570,12 @@ const Users = () => {
               </div>
               <button onClick={() => {
                 if (livenessIntervalRef.current) clearInterval(livenessIntervalRef.current);
+                if (faceGuideRef.current) clearInterval(faceGuideRef.current);
                 setScanStatus('ready');
                 setIsCapturing(false);
+                setFaceGuideStatus('none');
+                stableCountRef.current = 0;
+                autoCaptureTriggeredRef.current = false;
                 setFaceModalOpen(false);
               }} className="w-8 h-8 flex items-center justify-center hover:bg-slate-200 rounded-lg transition-colors">
                 <X className="w-4 h-4 text-slate-400" />
@@ -632,7 +587,7 @@ const Users = () => {
                   <img src={faceData.photo} alt="Face" className="w-full h-full object-cover" />
                 ) : (
                   <>
-                    <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg" className="w-full h-full object-cover" videoConstraints={{ facingMode: "user" }} />
+                    <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg" screenshotQuality={0.92} className="w-full h-full object-cover" videoConstraints={{ facingMode: "user", width: 640, height: 480, frameRate: { ideal: 30 } }} />
                     {scanStatus === 'liveness' && (
                       <div className="absolute inset-0 bg-indigo-500/10 flex flex-col items-center justify-center backdrop-blur-[1px] z-20">
                          <div className="bg-indigo-600 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-lg mb-4">
@@ -655,11 +610,30 @@ const Users = () => {
                 {/* Visual HUD */}
                 {!faceData.photo && !isLoadingModels && modelsLoaded && (
                   <div className="absolute inset-0 pointer-events-none z-10 p-4 border-4 border-transparent">
-                    <div className="absolute top-6 left-6 w-8 h-8 border-t-2 border-l-2 border-emerald-500/60 rounded-tl-xl" />
-                    <div className="absolute top-6 right-6 w-8 h-8 border-t-2 border-r-2 border-emerald-500/60 rounded-tr-xl" />
-                    <div className="absolute bottom-6 left-6 w-8 h-8 border-b-2 border-l-2 border-emerald-500/60 rounded-bl-xl" />
-                    <div className="absolute bottom-6 right-6 w-8 h-8 border-b-2 border-r-2 border-emerald-500/60 rounded-br-xl" />
+                    <div className={`absolute top-6 left-6 w-8 h-8 border-t-2 border-l-2 rounded-tl-xl transition-colors duration-300 ${faceGuideStatus === 'detected' ? 'border-emerald-500' : 'border-emerald-500/60'}`} />
+                    <div className={`absolute top-6 right-6 w-8 h-8 border-t-2 border-r-2 rounded-tr-xl transition-colors duration-300 ${faceGuideStatus === 'detected' ? 'border-emerald-500' : 'border-emerald-500/60'}`} />
+                    <div className={`absolute bottom-6 left-6 w-8 h-8 border-b-2 border-l-2 rounded-bl-xl transition-colors duration-300 ${faceGuideStatus === 'detected' ? 'border-emerald-500' : 'border-emerald-500/60'}`} />
+                    <div className={`absolute bottom-6 right-6 w-8 h-8 border-b-2 border-r-2 rounded-br-xl transition-colors duration-300 ${faceGuideStatus === 'detected' ? 'border-emerald-500' : 'border-emerald-500/60'}`} />
                     
+                    {scanStatus === 'ready' && (
+                      <>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className={`w-40 h-40 border rounded-full transition-all duration-300 ${
+                            faceGuideStatus === 'detected' ? 'border-emerald-500/80 shadow-[0_0_15px_rgba(52,211,153,0.3)] animate-pulse' : 
+                            faceGuideStatus === 'not-detected' ? 'border-orange-500/60' : 
+                            'border-emerald-400/30'
+                          }`} />
+                        </div>
+                        {faceGuideStatus === 'detected' && (
+                          <div className="absolute left-6 right-6 top-1/2 -translate-y-1/2 flex justify-center z-30">
+                            <div className="bg-emerald-500/20 backdrop-blur-md border border-emerald-500/30 text-emerald-100 font-bold uppercase tracking-widest text-[9px] px-3 py-1 rounded-full shadow-lg text-center animate-in zoom-in">
+                              Auto-capture: {stableCountRef.current}/5
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+
                     {isCapturing && (
                       <div className="absolute inset-0 flex items-center justify-center bg-emerald-900/10 backdrop-blur-sm">
                          <Loader2 className="w-10 h-10 text-emerald-600 animate-spin" />
@@ -696,8 +670,12 @@ const Users = () => {
                 <button 
                   onClick={() => {
                     if (livenessIntervalRef.current) clearInterval(livenessIntervalRef.current);
+                    if (faceGuideRef.current) clearInterval(faceGuideRef.current);
                     setScanStatus('ready');
                     setIsCapturing(false);
+                    setFaceGuideStatus('none');
+                    stableCountRef.current = 0;
+                    autoCaptureTriggeredRef.current = false;
                     setFaceModalOpen(false);
                   }}
                   className="flex-1 py-3 text-sm font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-all"

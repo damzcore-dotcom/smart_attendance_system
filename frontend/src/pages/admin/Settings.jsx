@@ -786,21 +786,7 @@ const Settings = () => {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div className="flex items-center justify-between p-6 bg-slate-50 border border-slate-100 rounded-2xl hover:border-blue-200 transition-all duration-300">
-                      <div className="space-y-1">
-                        <p className="text-sm font-bold text-slate-800 tracking-tight">Liveness Protocol</p>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Prevent spoofing via movement.</p>
-                      </div>
-                      <div className="relative inline-flex items-center cursor-pointer">
-                        <input 
-                          type="checkbox" 
-                          className="sr-only peer" 
-                          checked={formData.livenessDetection === 'true'}
-                          onChange={(e) => handleInputChange('livenessDetection', String(e.target.checked))}
-                        />
-                        <div className="w-12 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      </div>
-                    </div>
+
 
                     <div className="flex items-center justify-between p-6 bg-slate-50 border border-slate-100 rounded-2xl hover:border-blue-200 transition-all duration-300">
                       <div className="space-y-1">
