@@ -1,0 +1,49 @@
+From 5011e44a9e601ece7a7d9b14157086040f42696e Mon Sep 17 00:00:00 2001
+From: damzcore <damzcore@gmail.com>
+Date: Thu, 21 May 2026 22:02:34 +0700
+Subject: [PATCH] Fix(audit): finalize face scan confidence score and threshold
+
+---
+ backend/src/controllers/authController.js | 8 ++++++++
+ frontend/src/pages/admin/FaceCheck.jsx    | 2 +-
+ 2 files changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/backend/src/controllers/authController.js b/backend/src/controllers/authController.js
+index fa5dbbc..80f11f0 100644
+--- a/backend/src/controllers/authController.js
++++ b/backend/src/controllers/authController.js
+@@ -260,10 +260,18 @@ const verifyFace = async (req, res) => {
+       }
+     }
+ 
++    // Calculate confidence score: 100% = perfect match (distance 0), 0% = at threshold boundary
++    const confidence = Math.max(0, Math.round((1 - minDistance / 0.7) * 100));
++
+     res.json({
+       success: true,
+       accessToken,
+       refreshToken,
++      match: {
++        distance: parseFloat(minDistance.toFixed(4)),
++        threshold: parseFloat(THRESHOLD.toFixed(4)),
++        confidence,          // 0-100%: how confident the match is
++      },
+       user: {
+         id: bestMatch.user.id,
+         username: bestMatch.user.username,
+diff --git a/frontend/src/pages/admin/FaceCheck.jsx b/frontend/src/pages/admin/FaceCheck.jsx
+index 0b0516b..9af8c90 100644
+--- a/frontend/src/pages/admin/FaceCheck.jsx
++++ b/frontend/src/pages/admin/FaceCheck.jsx
+@@ -79,7 +79,7 @@ const AdminFaceCheck = () => {
+           image.onerror = () => reject(new Error('Failed to load image'));
+         });
+ 
+-        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.15 }))
++        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.35 }))
+           .withFaceLandmarks();
+         
+         if (detection) {
+-- 
+2.53.0.windows.1
+

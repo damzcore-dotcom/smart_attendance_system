@@ -221,27 +221,33 @@ const Scan = () => {
           if (boxHistoryRef.current.length > 5) boxHistoryRef.current.shift();
 
           stableCountRef.current++;
-          if (stableCountRef.current >= 5 && !autoCaptureTriggeredRef.current) {
+          if (stableCountRef.current >= 6 && !autoCaptureTriggeredRef.current) {
             // Anti-Spoofing Check (Passive Liveness)
             // A real human face breathes and inherently has micro-jitters.
-            // A printed photo or mobile screen held steady will yield mathematically identical bounding boxes across frames.
+            // A printed photo or screen held at a fixed distance produces IDENTICAL bounding boxes.
+            // Threshold is 2px — loose enough for a still person breathing, too tight for a static photo.
             let isCompletelyStatic = true;
             if (boxHistoryRef.current.length >= 5) {
               const hist = boxHistoryRef.current;
               for (let i = 1; i < hist.length; i++) {
                 const diffX = Math.abs(hist[i].x - hist[i-1].x);
                 const diffY = Math.abs(hist[i].y - hist[i-1].y);
-                // If diff is >= 0.5 pixels, it's considered natural human movement/breathing
-                if (diffX >= 0.5 || diffY >= 0.5) {
+                const diffW = Math.abs(hist[i].w - hist[i-1].w);
+                // 2px threshold is sufficient to distinguish a live face from a static photo/screen
+                if (diffX >= 2 || diffY >= 2 || diffW >= 2) {
                   isCompletelyStatic = false;
                   break;
                 }
               }
+            } else {
+              // Not enough history yet — don't block capture
+              isCompletelyStatic = false;
             }
 
             if (isCompletelyStatic) {
+              console.warn('[Liveness] Static face detected. Box history:', boxHistoryRef.current);
               setScanStatus('error');
-              setError('Anti-Spoofing Error: Terdeteksi objek 2D statis atau foto cetak. Harap gunakan wajah hidup.');
+              setError('Anti-Spoofing: Wajah terdeteksi statis. Coba gerakkan kepala sedikit, pastikan wajah Anda asli.');
               clearInterval(faceGuideRef.current);
               faceGuideRef.current = null;
               return;
