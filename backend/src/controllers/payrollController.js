@@ -126,10 +126,16 @@ const generate = async (req, res) => {
     const configObj = {};
     payrollConfigs.forEach(c => { configObj[c.key] = c.value; });
 
+    // Get global settings to respect "Auto-Calculate Overtime" toggle
+    const globalSettings = await prisma.settings.findMany();
+    const isGlobalAutoOtEnabled = globalSettings.find(s => s.key === 'autoCalculateOvertime')?.value !== 'false';
+
     const overtimeEnabled = configObj.overtimeEnabled === 'true';
     const attendancePenaltyEnabled = configObj.attendancePenaltyEnabled !== 'false'; // default true
     const penaltyPerMinute = parseFloat(configObj.penaltyPerMinute) || 0;
-    const overtimeMode = configObj.overtimeMode || 'AUTO'; // AUTO or MANUAL
+    
+    // If globally disabled, force MANUAL mode so it solely relies on SPL inputs
+    const overtimeMode = (!isGlobalAutoOtEnabled) ? 'MANUAL' : (configObj.overtimeMode || 'AUTO'); // AUTO or MANUAL
 
     // Get overtime rules
     const overtimeRules = overtimeEnabled ? await prisma.overtimeRule.findMany({ where: { isActive: true }, orderBy: { hourFrom: 'asc' } }) : [];
