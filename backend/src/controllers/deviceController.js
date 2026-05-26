@@ -6,7 +6,9 @@ const ZKLib = require('node-zklib');
  */
 const getDevices = async (req, res) => {
   try {
-    const devices = await prisma.device.findMany();
+    const devices = await prisma.device.findMany({
+      include: { location: true },
+    });
     // Pre-seed some default deviceUsers _count if needed, but not strictly required
     res.json({ success: true, data: devices });
   } catch (err) {

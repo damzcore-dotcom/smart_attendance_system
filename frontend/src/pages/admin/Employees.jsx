@@ -1228,7 +1228,7 @@ const Employees = () => {
                             >
                               <option value="">-- Choose Machine --</option>
                               {devices.map(d => (
-                                <option key={d.id} value={d.id}>{d.name} ({d.ipAddress})</option>
+                                <option key={d.id} value={d.id}>{d.name} ({d.ipAddress}) {d.location?.name ? `- Lokasi: ${d.location.name}` : ''}</option>
                               ))}
                             </select>
                           </div>
