@@ -6,11 +6,16 @@ const ZKLib = require('node-zklib');
  */
 const getDevices = async (req, res) => {
   try {
-    const devices = await prisma.device.findMany({
-      include: { location: true },
-    });
-    // Pre-seed some default deviceUsers _count if needed, but not strictly required
-    res.json({ success: true, data: devices });
+    const devices = await prisma.device.findMany();
+    const locations = await prisma.location.findMany();
+    
+    // Manually merge locations to avoid schema relation errors
+    const devicesWithLocation = devices.map(d => ({
+      ...d,
+      location: d.locationId ? locations.find(loc => loc.id === d.locationId) : null
+    }));
+
+    res.json({ success: true, data: devicesWithLocation });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
