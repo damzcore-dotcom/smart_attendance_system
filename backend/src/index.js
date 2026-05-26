@@ -24,6 +24,10 @@ const PORT = process.env.PORT || 5000;
 // Start cron jobs
 startCronJobs();
 
+// Auto-fix database sequences on startup to prevent unique constraint errors
+const fixSequences = require('./utils/fixSequences');
+fixSequences();
+
 // Global safety shield to prevent crashes from external libraries
 process.on('unhandledRejection', (reason, promise) => {
   console.error('⚠️ Unhandled Rejection at:', promise, 'reason:', reason);
@@ -74,6 +78,7 @@ app.use('/api/backup', backupRoutes);
 app.use('/api/manager', require('./routes/managerRoutes'));
 app.use('/api/direktur', require('./routes/direkturRoutes'));
 app.use('/api/devices', deviceRoutes);
+app.use('/api/fingerprint', require('./routes/fingerprintRoutes'));
 app.use('/api/audit-logs', require('./routes/auditLogRoutes'));
 app.use('/api/payroll', require('./routes/payrollRoutes'));
 app.use('/api/calendar', require('./routes/calendar'));

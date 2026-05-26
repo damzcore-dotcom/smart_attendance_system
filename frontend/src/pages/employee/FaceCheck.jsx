@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import Webcam from 'react-webcam';
-import * as faceapi from '@vladmandic/face-api';
 import { 
   Camera, 
   X, 
@@ -15,6 +14,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { authAPI, userAPI } from '../../services/api';
+import { loadFaceModels, faceapi, areModelsLoaded } from '../../utils/faceModelLoader';
 
 const FaceCheck = () => {
   const [scanStatus, setScanStatus] = useState('ready'); // ready, detecting, success, error
@@ -30,6 +30,7 @@ const FaceCheck = () => {
   const faceGuideRef = useRef(null);
   const stableCountRef = useRef(0);
   const autoCaptureTriggeredRef = useRef(false);
+  const boxHistoryRef = useRef([]);
   
   const navigate = useNavigate();
 
@@ -69,26 +70,17 @@ const FaceCheck = () => {
   });
 
   useEffect(() => {
-    const loadModels = async () => {
-      const MODEL_URL = 'https://vladmandic.github.io/face-api/model/';
-      try {
-        await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
-        ]);
-        setModelsLoaded(true);
-      } catch (err) {
+    loadFaceModels()
+      .then(() => setModelsLoaded(true))
+      .catch(err => {
         console.error('Failed to load face models', err);
         setError('Gagal memuat model pengenalan wajah.');
-      }
-    };
-    loadModels();
+      });
   }, []);
 
   // Direct face capture — no liveness/blink detection
   const handleCheck = useCallback(async () => {
-    if (!webcamRef.current || !modelsLoaded) return;
+    if (!webcamRef.current || !areModelsLoaded()) return;
 
     const imageSrc = webcamRef.current.getScreenshot();
     if (imageSrc) {
@@ -127,7 +119,7 @@ const FaceCheck = () => {
 
   // Phase 5: Real-time face guide loop - runs when camera is active & idle
   useEffect(() => {
-    if (!modelsLoaded || scanStatus !== 'ready') {
+    if (!areModelsLoaded() || scanStatus !== 'ready') {
       if (faceGuideRef.current) clearInterval(faceGuideRef.current);
       faceGuideRef.current = null;
       return;
@@ -152,9 +144,42 @@ const FaceCheck = () => {
         
         if (detection) {
           setFaceGuideStatus('detected');
+          
+          // Safely get box depending on whether landmarks were fetched
+          const box = detection.box || (detection.detection && detection.detection.box) || detection.relativeBox;
+          if (box) {
+            boxHistoryRef.current.push({ x: box.x, y: box.y, w: box.width, h: box.height });
+            if (boxHistoryRef.current.length > 5) boxHistoryRef.current.shift();
+          }
+
           stableCountRef.current++;
-          // Auto-capture after face stable for ~2.5s (5 consecutive detections at 500ms)
-          if (stableCountRef.current >= 5 && !autoCaptureTriggeredRef.current) {
+          // Auto-capture after face stable (6 consecutive detections)
+          if (stableCountRef.current >= 6 && !autoCaptureTriggeredRef.current) {
+            // Anti-Spoofing Check
+            let isCompletelyStatic = true;
+            if (boxHistoryRef.current.length >= 5) {
+              const hist = boxHistoryRef.current;
+              for (let i = 1; i < hist.length; i++) {
+                const diffX = Math.abs(hist[i].x - hist[i-1].x);
+                const diffY = Math.abs(hist[i].y - hist[i-1].y);
+                const diffW = Math.abs(hist[i].w - hist[i-1].w);
+                if (diffX >= 2 || diffY >= 2 || diffW >= 2) {
+                  isCompletelyStatic = false;
+                  break;
+                }
+              }
+            } else {
+              isCompletelyStatic = false;
+            }
+
+            if (isCompletelyStatic) {
+              setScanStatus('error');
+              setError('Anti-Spoofing: Wajah terdeteksi statis. Harap gunakan wajah asli.');
+              clearInterval(faceGuideRef.current);
+              faceGuideRef.current = null;
+              return;
+            }
+
             autoCaptureTriggeredRef.current = true;
             clearInterval(faceGuideRef.current);
             faceGuideRef.current = null;
@@ -163,13 +188,14 @@ const FaceCheck = () => {
         } else {
           setFaceGuideStatus('not-detected');
           stableCountRef.current = 0;
+          boxHistoryRef.current = [];
         }
       } catch {
         // silently ignore
       } finally {
         isProcessing = false;
       }
-    }, 500);
+    }, 200);
 
     return () => {
       if (faceGuideRef.current) clearInterval(faceGuideRef.current);

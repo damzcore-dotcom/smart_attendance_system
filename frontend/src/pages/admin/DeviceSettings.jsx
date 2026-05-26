@@ -12,6 +12,7 @@ const DeviceSettings = () => {
   const [syncPersonnelResult, setSyncPersonnelResult] = useState(null);
   const [syncPersonnelFilter, setSyncPersonnelFilter] = useState('ALL');
   const [syncDiagnostics, setSyncDiagnostics] = useState(null);
+  const [selectedPersonnel, setSelectedPersonnel] = useState({}); // Toggles for the personnel checkbox
   
   const now = new Date();
   const today = now.toISOString().split('T')[0];
@@ -87,10 +88,39 @@ const DeviceSettings = () => {
   const syncUsers = async (id) => {
     try {
       setSyncing('users-' + id);
-      const { data } = await api.post(`/devices/${id}/sync-users`);
+      const { data } = await api.post(`/devices/${id}/sync-users?preview=true`);
       setSyncPersonnelResult(data);
+      
+      // Select all 'new' and 'linked' by default
+      const initialSelected = {};
+      data.data?.details?.forEach(item => {
+        if (item.status === 'new' || item.status === 'linked') {
+          initialSelected[item.acNo] = true;
+        }
+      });
+      setSelectedPersonnel(initialSelected);
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to sync users');
+      alert(err.response?.data?.message || 'Failed to fetch personnel');
+    } finally {
+      setSyncing(null);
+    }
+  };
+
+  const commitPersonnel = async () => {
+    if (!syncPersonnelResult) return;
+    try {
+      setSyncing('commit-users');
+      // Filter the allowed details
+      const detailsToCommit = syncPersonnelResult.data.details.filter(d => selectedPersonnel[d.acNo]);
+      
+      const { data } = await api.post(`/devices/${activeDeviceId || syncPersonnelResult.deviceId}/sync-users?preview=false`, {
+        selectedUsers: detailsToCommit
+      });
+      alert(data.message);
+      setSyncPersonnelResult(null);
+      fetchDevices();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to save personnel');
     } finally {
       setSyncing(null);
     }
@@ -126,10 +156,14 @@ const DeviceSettings = () => {
   };
 
   const commitSyncAttendance = async () => {
-    if (!activeDeviceId) return;
+    if (!activeDeviceId || !previewData) return;
     try {
       setSyncing('commit-' + activeDeviceId);
-      const { data } = await api.post(`/devices/${activeDeviceId}/sync-attendance?start=${syncDates.startDate}&end=${syncDates.endDate}`);
+      // Send the already-fetched preview data directly to the commit endpoint
+      // This avoids re-fetching from the unreliable UDP fingerprint machine
+      const { data } = await api.post(`/devices/${activeDeviceId}/commit-attendance`, {
+        records: previewData
+      });
       alert(data.message);
       setPreviewData(null);
       setActiveDeviceId(null);
@@ -243,7 +277,7 @@ const DeviceSettings = () => {
                             {device.ipAddress}:{device.port}
                           </p>
                           <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">
-                            Last Sync: {device.lastSync ? new Date(device.lastSync).toLocaleString('en-US') : 'Never synced'}
+                            Last Sync: {device.lastSync ? new Date(device.lastSync).toLocaleString('id-ID', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : 'Never synced'}
                           </p>
                           <div className="flex items-center gap-3 mt-3 p-2 bg-slate-50 border border-slate-200 rounded-xl">
                             <label className="flex items-center gap-2 cursor-pointer">
@@ -434,7 +468,9 @@ const DeviceSettings = () => {
             <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white">
               <div>
                 <h3 className="text-xl font-bold text-slate-800">📋 Detail Sync Personnel — Data Mesin Fingerprint</h3>
-                <p className="text-sm text-slate-500 mt-1">{syncPersonnelResult.message}</p>
+                <p className="text-sm text-slate-500 mt-1">
+                  Preview Data: Silakan centang karyawan yang ingin disinkronkan ke database.
+                </p>
               </div>
               <button 
                 onClick={() => { setSyncPersonnelResult(null); fetchDevices(); }}
@@ -483,7 +519,22 @@ const DeviceSettings = () => {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                      <th className="px-4 py-3">No</th>
+                      <th className="px-4 py-3 text-center">
+                        <input 
+                          type="checkbox" 
+                          className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                          onChange={(e) => {
+                            const val = e.target.checked;
+                            const newObj = { ...selectedPersonnel };
+                            syncPersonnelResult.data.details.forEach(item => {
+                              if (syncPersonnelFilter === 'ALL' || item.status === syncPersonnelFilter) {
+                                if (item.status === 'new' || item.status === 'linked') newObj[item.acNo] = val;
+                              }
+                            });
+                            setSelectedPersonnel(newObj);
+                          }}
+                        />
+                      </th>
                       <th className="px-4 py-3">AC No. (Mesin)</th>
                       <th className="px-4 py-3">Nama di Mesin</th>
                       <th className="px-4 py-3">Nama di Database</th>
@@ -495,7 +546,18 @@ const DeviceSettings = () => {
                       .filter(item => syncPersonnelFilter === 'ALL' || item.status === syncPersonnelFilter)
                       .map((item, idx) => (
                       <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-4 py-3 text-slate-500 font-medium">{idx + 1}</td>
+                        <td className="px-4 py-3 text-center">
+                           {(item.status === 'new' || item.status === 'linked') ? (
+                             <input 
+                               type="checkbox" 
+                               checked={!!selectedPersonnel[item.acNo]} 
+                               onChange={(e) => setSelectedPersonnel({...selectedPersonnel, [item.acNo]: e.target.checked})}
+                               className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                             />
+                           ) : (
+                             <span className="text-slate-300">-</span>
+                           )}
+                        </td>
                         <td className="px-4 py-3 font-bold text-slate-800 font-mono">{item.acNo}</td>
                         <td className="px-4 py-3 text-slate-700 font-medium">{item.machineName || '-'}</td>
                         <td className="px-4 py-3 text-slate-700">{item.dbName}</td>
@@ -515,13 +577,20 @@ const DeviceSettings = () => {
               </div>
             </div>
 
-            <div className="p-6 border-t border-slate-100 bg-white flex justify-end shrink-0">
+            <div className="p-6 border-t border-slate-100 bg-white flex justify-end gap-3 shrink-0">
+               <button 
+                 onClick={() => { setSyncPersonnelResult(null); fetchDevices(); }}
+                 className="px-6 py-2.5 rounded-xl font-bold text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-all"
+               >
+                 Batal
+               </button>
               <button 
-                onClick={() => { setSyncPersonnelResult(null); fetchDevices(); }}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 shadow-sm transition-all"
+                onClick={commitPersonnel}
+                disabled={syncing === 'commit-users'}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 shadow-sm transition-all disabled:opacity-50"
               >
-                <CheckCircle className="w-4 h-4" />
-                Selesai
+                {syncing === 'commit-users' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                Simpan & Sync Karyawan
               </button>
             </div>
           </div>

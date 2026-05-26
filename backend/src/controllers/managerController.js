@@ -342,11 +342,31 @@ const updateLeaveRequest = async (req, res) => {
   try {
     const { id } = req.params;
     const { status, reviewNote } = req.body;
-    const request = await prisma.leaveRequest.update({
+
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const access = await prisma.$queryRaw`SELECT * FROM "ManagerAccess" WHERE "userId" = ${user.id}`;
+    const ma = access[0];
+    const isAllDepts = ma?.manageAllDepts || false;
+    const deptId = ma?.managedDeptId;
+
+    // Check if the request exists and if the manager has access to this employee
+    const request = await prisma.leaveRequest.findUnique({
+      where: { id: parseInt(id) },
+      include: { employee: true }
+    });
+
+    if (!request) return res.status(404).json({ success: false, message: 'Leave request not found' });
+
+    if (!isAllDepts && request.employee.departmentId !== deptId) {
+      return res.status(403).json({ success: false, message: 'Authorization error: You do not have access to this department.' });
+    }
+
+    const updated = await prisma.leaveRequest.update({
       where: { id: parseInt(id) },
       data: { status, reviewNote }
     });
-    res.json({ success: true, message: 'Leave request updated successfully', data: request });
+
+    res.json({ success: true, message: 'Leave request updated successfully', data: updated });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 };
 

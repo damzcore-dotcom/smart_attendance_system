@@ -4,7 +4,7 @@ const { execSync } = require('child_process');
 const archiver = require('archiver');
 
 const rootDir = __dirname;
-const patchDir = path.join(rootDir, 'PATCH_TEMP');
+const patchDir = path.join(rootDir, 'PATCH_TEMP_NEW');
 const patchZipPath = path.join(rootDir, 'Patch_Update.zip');
 
 console.log('');

@@ -23,13 +23,17 @@ function calculateLateness(checkInTime, shiftStartTime, gracePeriodMinutes = 15)
   // Add grace period
   const graceDeadline = new Date(shiftStart.getTime() + gracePeriodMinutes * 60 * 1000);
   
-  if (checkIn <= graceDeadline) {
+  // Drop seconds to align with HR visual expectation (HH:mm)
+  const safeCheckIn = new Date(checkIn);
+  safeCheckIn.setSeconds(0, 0);
+  
+  if (safeCheckIn <= graceDeadline) {
     return { lateMinutes: 0, status: 'PRESENT' };
   }
   
   // Calculate minutes late (from original shift start, not grace deadline)
-  const diffMs = checkIn.getTime() - shiftStart.getTime();
-  const rawLateMinutes = Math.ceil(diffMs / (60 * 1000));
+  const diffMs = safeCheckIn.getTime() - shiftStart.getTime();
+  const rawLateMinutes = diffMs / (60 * 1000);
   
   // Round up to nearest 30 minutes (e.g., 1-30m -> 30m, 31-60m -> 60m)
   const lateMinutes = Math.ceil(rawLateMinutes / 30) * 30;

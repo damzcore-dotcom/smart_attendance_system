@@ -1,0 +1,232 @@
+# 📋 PLAN: Menu Manajemen Fingerprint & Mesin
+
+## 🔍 Hasil Analisis
+
+### Analisis Aplikasi Bawaan Mesin (`C:\ADAM\Att\`)
+Dari file `sqlserver.sql` dan database `att2000.mdb`, saya menemukan struktur data native mesin fingerprint ZKTeco:
+
+| Tabel | Fungsi |
+|-------|--------|
+| `USERINFO` | Data user (BADGENUMBER/NIK, Name, Gender, Dept, dsb) |
+| `TEMPLATE` | **DATA SIDIK JARI** — `USERID`, `FINGERID` (jari ke-0 s/d 9), `TEMPLATE` (binary data sidik jari) |
+| `CHECKINOUT` | Log absensi |
+| `DEPARTMENTS` | Departemen |
+
+> [!IMPORTANT]
+> **Tabel TEMPLATE** adalah kunci utama. Setiap fingerprint disimpan sebagai binary blob per jari per user. Satu user bisa punya hingga 10 template sidik jari (FINGERID 0-9).
+
+### Analisis Library `node-zklib` (Yang Kita Pakai)
+Dari kode sumber `zklib.js`, `zklibtcp.js`, dan `constants.js`:
+
+**Fungsi yang SUDAH tersedia:**
+- ✅ `getUsers()` — Baca daftar user dari mesin
+- ✅ `getAttendances()` — Baca log absensi
+- ✅ `getInfo()` — Baca info mesin (jumlah user, log, kapasitas)
+- ✅ `executeCmd()` — Kirim command mentah ke mesin
+- ✅ `setTime()` — Set waktu mesin
+
+**Command constants yang TERSEDIA tapi belum di-wrap:**
+- 🔧 `CMD_USER_WRQ` (8) — **Write user ke mesin**
+- 🔧 `CMD_USERTEMP_RRQ` (9) — **Read fingerprint template dari mesin**
+- 🔧 `CMD_USERTEMP_WRQ` (10) — **Write fingerprint template ke mesin**
+- 🔧 `CMD_DELETE_USER` (18) — **Hapus user dari mesin**
+- 🔧 `CMD_DELETE_USERTEMP` (19) — Hapus template sidik jari
+- 🔧 `CMD_STARTENROLL` (61) — **Mulai proses enrollment (registrasi sidik jari)**
+- 🔧 `CMD_CAPTUREFINGER` (1009) — Capture sidik jari
+- 🔧 `CMD_TMP_WRITE` (87) — Write template fingerprint
+
+> [!WARNING]
+> Library `node-zklib` saat ini **TIDAK memiliki wrapper function** untuk membaca/menulis fingerprint template secara langsung. Kita harus **mengembangkan fungsi custom** menggunakan `executeCmd()` dengan command constants yang sudah ada, atau menggunakan library alternatif/fork yang mendukung fitur ini.
+
+---
+
+## 🏗️ Rencana Implementasi
+
+### Fase 1: Upgrade Library ZKLib (Backend Core)
+**Tujuan:** Menambahkan fungsi-fungsi fingerprint management ke library.
+
+**File yang diubah:** Custom wrapper di `backend/src/utils/zkHelper.js` (file baru)
+
+| Fungsi Baru | Command | Kegunaan |
+|-------------|---------|----------|
+| `setUser(uid, name, password, role)` | `CMD_USER_WRQ` | Mendaftarkan user baru ke mesin |
+| `deleteUser(uid)` | `CMD_DELETE_USER` | Menghapus user dari mesin |
+| `getFingerTemplates(uid)` | `CMD_USERTEMP_RRQ` | Baca template sidik jari user dari mesin |
+| `setFingerTemplate(uid, fingerId, template)` | `CMD_USERTEMP_WRQ` / `CMD_TMP_WRITE` | Tulis template sidik jari ke mesin |
+| `startEnroll(uid, fingerId)` | `CMD_STARTENROLL` | Mulai mode enrollment di mesin |
+
+> [!CAUTION]
+> Protokol binary ZKTeco cukup rumit. Kita mungkin perlu menggunakan library fork seperti `zklib-js` atau `node-zklib` versi terbaru yang sudah mendukung `setUser` dan fingerprint template. Alternatif: kita bisa menggunakan `att2000.mdb` (database Access) sebagai bridge.
+
+### Fase 2: Database Schema
+
+**Tabel baru di Prisma:**
+
+```prisma
+model FingerTemplate {
+  id           Int      @id @default(autoincrement())
+  employeeId   Int
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  fingerId     Int      // 0-9 (jari mana)
+  templateData Bytes    // Binary data sidik jari
+  quality      Int?     // Kualitas scan (jika tersedia)
+  enrolledAt   DateTime @default(now())
+  enrolledFrom Int?     // deviceId mesin sumber enrollment
+  
+  @@unique([employeeId, fingerId])
+  @@index([employeeId])
+}
+
+model DeviceUser {
+  id          Int      @id @default(autoincrement())
+  deviceId    Int
+  device      Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  employeeId  Int
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  acNo        String   // Nomor AC di mesin
+  syncedAt    DateTime @default(now())
+  
+  @@unique([deviceId, employeeId])
+  @@index([deviceId])
+}
+```
+
+### Fase 3: Backend API Endpoints
+
+| Method | Endpoint | Fungsi |
+|--------|----------|--------|
+| `GET` | `/api/devices/:id/users` | Ambil daftar user yang terdaftar di mesin tertentu |
+| `GET` | `/api/devices/:id/info` | Detail info mesin (kapasitas, jumlah user, log) |
+| `POST` | `/api/devices/:id/enroll` | Mulai proses enrollment fingerprint di mesin |
+| `GET` | `/api/devices/:id/templates/:empId` | Baca template sidik jari dari mesin |
+| `POST` | `/api/devices/:id/push-user` | Kirim/push user + template ke mesin yang dipilih |
+| `POST` | `/api/devices/:id/push-bulk` | Push beberapa user sekaligus ke mesin |
+| `DELETE` | `/api/devices/:id/users/:uid` | Hapus user dari mesin |
+| `GET` | `/api/finger-templates/:empId` | Daftar template sidik jari karyawan dari database |
+
+### Fase 4: Frontend — Halaman Baru "Fingerprint Management"
+
+**Lokasi:** Menu Admin → `Fingerprint Management` (di bawah "Mesin Finger")
+
+#### Tab 1: Dashboard Mesin
+```
+┌─────────────────────────────────────────────────────────────┐
+│  📡 Device Management                                       │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │ Office &     │  │ Sewing/Fini  │  │ Linking      │      │
+│  │ Mastes       │  │              │  │              │      │
+│  │ 192.168.11.203│ │ 192.168.11.201│ │ 192.168.11.202│     │
+│  │ 🟢 Connected │  │ 🔴 Offline   │  │ 🔴 Offline   │      │
+│  │              │  │              │  │              │      │
+│  │ 👤 882 Users │  │ 👤 0 Users   │  │ 👤 0 Users   │      │
+│  │ 📝 6388 Logs │  │ 📝 0 Logs    │  │ 📝 0 Logs    │      │
+│  │ 🖐️ 971 FP    │  │ 🖐️ 0 FP      │  │ 🖐️ 0 FP      │      │
+│  │              │  │              │  │              │      │
+│  │ [Detail]     │  │ [Detail]     │  │ [Detail]     │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Tab 2: Detail Mesin (Klik "Detail")
+```
+┌─────────────────────────────────────────────────────────────┐
+│  📡 Office & Mastes — Detail                                │
+│  IP: 192.168.11.203:4370  |  Serial: BWNF211260032         │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  [🔄 Refresh]  [📤 Push Karyawan ke Mesin]                  │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │ ☑ | AC No | NIK  | Nama             | FP | Status      ││
+│  │───┼───────┼──────┼──────────────────┼────┼─────────────││
+│  │ ☐ |  3    | 1001 | Salsabila S.     | 2  | ✅ Linked   ││
+│  │ ☐ | 14049 | 2003 | Reyhan H.        | 1  | ✅ Linked   ││
+│  │ ☐ | 208   | 1050 | Rangga           | 3  | ✅ Linked   ││
+│  │ ☐ | 15    | -    | Lilis K.         | 0  | ⚠️ No FP    ││
+│  │ ☐ | 999   | -    | Unknown User     | 1  | ❌ Unlinked ││
+│  └─────────────────────────────────────────────────────────┘│
+│                                                             │
+│  [🗑️ Hapus dari Mesin]  [📥 Tarik FP ke Database]           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Tab 3: Push Karyawan ke Mesin
+```
+┌─────────────────────────────────────────────────────────────┐
+│  📤 Push Karyawan ke Mesin                                   │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Pilih Mesin Tujuan: [▼ Office & Mastes            ]        │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │ ☑ | NIK  | Nama             | Dept      | FP di DB     ││
+│  │───┼──────┼──────────────────┼───────────┼──────────────││
+│  │ ☑ | 1001 | Salsabila S.     | Office    | ✅ 2 jari    ││
+│  │ ☐ | 2003 | Reyhan H.        | Sewing    | ✅ 1 jari    ││
+│  │ ☐ | 1050 | Rangga           | Office    | ❌ Belum     ││
+│  └─────────────────────────────────────────────────────────┘│
+│                                                             │
+│           [📤 Push Selected ke Mesin]                        │
+│                                                             │
+│  ⚠️ Hanya karyawan yang memiliki data FP di database        │
+│     yang bisa di-push ke mesin lain.                        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Fase 5: Alur Kerja (Workflow)
+
+```mermaid
+flowchart TD
+    A[HRD Buka Menu Fingerprint Management] --> B{Pilih Aksi}
+    B --> C[Lihat Detail Mesin]
+    B --> D[Register Karyawan Baru]
+    B --> E[Push ke Mesin Lain]
+    
+    C --> C1[Tampilkan list user di mesin]
+    C --> C2[Tampilkan info mesin]
+    
+    D --> D1[Pilih Mesin untuk Enrollment]
+    D1 --> D2[Pilih Karyawan yang belum punya FP]
+    D2 --> D3[Klik 'Mulai Registrasi']
+    D3 --> D4[Mesin masuk mode Enroll]
+    D4 --> D5[Karyawan scan jari di mesin]
+    D5 --> D6[Sistem tarik template FP dari mesin]
+    D6 --> D7[Simpan template ke Database]
+    
+    E --> E1[Pilih Karyawan yang sudah punya FP]
+    E1 --> E2[Pilih Mesin Tujuan]
+    E2 --> E3[Push user + FP template ke mesin]
+    E3 --> E4[Mesin menerima data → Karyawan bisa scan]
+```
+
+---
+
+## ⚠️ Risiko & Tantangan Teknis
+
+| Risiko | Detail | Mitigasi |
+|--------|--------|----------|
+| **Library Terbatas** | `node-zklib` belum punya wrapper `setUser` dan `getTemplate` | Perlu extend library atau pakai fork yang lebih lengkap (`zk-jubaer`, `node-zklib` fork) |
+| **Protokol Binary** | Format packet ZKTeco tidak terdokumentasi resmi | Gunakan referensi dari proyek open-source Python (`pyzk`) |
+| **Ukuran Template** | Template FP bisa besar (1-2KB per jari) | Simpan sebagai `Bytes` di PostgreSQL, jangan Base64 |
+| **Timeout Enrollment** | Proses enrollment membutuhkan interaksi fisik di mesin | Implementasi polling/websocket untuk status real-time |
+| **Kompatibilitas Mesin** | Mesin berbeda bisa punya format template berbeda | Validasi di mesin X401 (yang ada di client) dulu |
+
+## 📝 Estimasi Kompleksitas
+
+| Fase | Estimasi | Prioritas |
+|------|----------|-----------|
+| Fase 1: Upgrade ZKLib | ⭐⭐⭐⭐ Tinggi | 🔴 Kritikal |
+| Fase 2: Database Schema | ⭐ Rendah | 🟢 Mudah |
+| Fase 3: Backend API | ⭐⭐⭐ Sedang | 🟡 Penting |
+| Fase 4: Frontend UI | ⭐⭐ Sedang | 🟡 Penting |
+| Fase 5: Testing | ⭐⭐⭐ Sedang | 🔴 Kritikal |
+
+> [!NOTE]
+> **Fase 1 adalah bottleneck utama.** Tanpa kemampuan membaca/menulis fingerprint template dari mesin, fitur push ke mesin lain tidak bisa berjalan. Kita perlu melakukan riset dan testing mendalam pada protokol ZKTeco terlebih dahulu.
+
+## 🚀 Rekomendasi Langkah Pertama
+1. **Riset library fork** — Cari versi `node-zklib` yang sudah mendukung `setUser()` dan `getFingerTemplate()`.
+2. **Testing di mesin lokal** — Uji koneksi dan baca template dari 1 mesin yang sudah Connected (Office & Mastes).
+3. **Implementasi bertahap** — Mulai dari fitur "Lihat Detail Mesin + List User", baru lanjut ke Push/Enroll.

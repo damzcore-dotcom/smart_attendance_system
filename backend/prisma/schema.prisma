@@ -148,7 +148,10 @@ model Employee {
   attendance    Attendance[]
   corrections   CorrectionRequest[]
   leaveRequests LeaveRequest[]
+  shiftOverrides EmployeeShiftOverride[]
   notifications Notification[]
+  fingerTemplates FingerTemplate[]
+  deviceUsers    DeviceUser[]
   user          User?
   salary         EmployeeSalary?
   payrollDetails PayrollDetail[]
@@ -171,6 +174,20 @@ model Shift {
   breakEnd    String?    // "13:00"
   gracePeriod Int        @default(15)
   employees   Employee[]
+  shiftOverrides EmployeeShiftOverride[]
+}
+
+model EmployeeShiftOverride {
+  id         Int       @id @default(autoincrement())
+  employeeId Int
+  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  shiftId    Int
+  shift      Shift     @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  startDate  DateTime  @db.Date
+  endDate    DateTime  @db.Date
+  createdAt  DateTime  @default(now())
+
+  @@index([employeeId, startDate, endDate])
 }
 
 model Attendance {
@@ -273,8 +290,40 @@ model Device {
   lastSync    DateTime? 
   autoSyncEnabled Boolean @default(false)
   autoSyncTime    String?  // e.g. "17:00"
+  deviceUsers    DeviceUser[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+}
+
+model FingerTemplate {
+  id           Int      @id @default(autoincrement())
+  employeeId   Int
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  fingerId     Int      // 0-9 (which finger)
+  templateData Bytes    // Binary fingerprint template from device
+  templateSize Int      @default(0)
+  quality      Int?     // Quality score if available
+  enrolledAt   DateTime @default(now())
+  enrolledFrom Int?     // deviceId where it was enrolled
+  
+  @@unique([employeeId, fingerId])
+  @@index([employeeId])
+}
+
+model DeviceUser {
+  id          Int      @id @default(autoincrement())
+  deviceId    Int
+  device      Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  employeeId  Int
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  uid         Int      // Internal UID on the device (user sn)
+  acNo        String   // AC Number / Badge Number on the device
+  fpCount     Int      @default(0) // Number of fingerprints on this device
+  syncedAt    DateTime @default(now())
+  
+  @@unique([deviceId, employeeId])
+  @@unique([deviceId, uid])
+  @@index([deviceId])
 }
 
 model AuditLog {

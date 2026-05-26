@@ -216,9 +216,12 @@ const Scan = () => {
         if (detection) {
           setFaceGuideStatus('detected');
           
-          const box = detection.detection.box;
-          boxHistoryRef.current.push({ x: box.x, y: box.y, w: box.width, h: box.height });
-          if (boxHistoryRef.current.length > 5) boxHistoryRef.current.shift();
+          // Safely get box depending on whether landmarks were fetched
+          const box = detection.box || (detection.detection && detection.detection.box) || detection.relativeBox;
+          if (box) {
+            boxHistoryRef.current.push({ x: box.x, y: box.y, w: box.width, h: box.height });
+            if (boxHistoryRef.current.length > 5) boxHistoryRef.current.shift();
+          }
 
           stableCountRef.current++;
           if (stableCountRef.current >= 6 && !autoCaptureTriggeredRef.current) {

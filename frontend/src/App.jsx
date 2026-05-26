@@ -19,9 +19,13 @@ import AdminFaceCheck from './pages/admin/FaceCheck';
 import AdminLeaveRequests from './pages/admin/LeaveRequests';
 import Backup from './pages/admin/Backup';
 import Attendance from './pages/admin/Attendance';
+import OvertimeSPL from './pages/admin/OvertimeSPL';
+import DailyWorkerAttendance from './pages/admin/DailyWorkerAttendance';
 import Settings from './pages/admin/Settings';
+import ShiftRoster from './pages/admin/ShiftRoster';
 import AdminCorrections from './pages/admin/Corrections';
 import DeviceSettings from './pages/admin/DeviceSettings';
+import FingerprintManagement from './pages/admin/FingerprintManagement';
 import AuditLog from './pages/admin/AuditLog';
 import Payroll from './pages/admin/Payroll';
 import PayrollSettings from './pages/admin/PayrollSettings';
@@ -105,6 +109,8 @@ function App() {
             <Route path="employees" element={<PermissionRoute menuKey="employees"><Employees /></PermissionRoute>} />
             <Route path="users" element={<PermissionRoute menuKey="users"><Users /></PermissionRoute>} />
             <Route path="attendance" element={<PermissionRoute menuKey="attendance"><Attendance /></PermissionRoute>} />
+            <Route path="overtime-spl" element={<PermissionRoute menuKey="attendance"><OvertimeSPL /></PermissionRoute>} />
+            <Route path="daily-workers" element={<PermissionRoute menuKey="attendance"><DailyWorkerAttendance /></PermissionRoute>} />
             <Route path="payroll" element={<PermissionRoute menuKey="payroll"><Payroll /></PermissionRoute>} />
             <Route path="payroll-settings" element={<PermissionRoute menuKey="payroll-settings"><PayrollSettings /></PermissionRoute>} />
             <Route path="leave-requests" element={<PermissionRoute menuKey="leave-requests"><AdminLeaveRequests /></PermissionRoute>} />
@@ -112,7 +118,9 @@ function App() {
             <Route path="announcements" element={<PermissionRoute menuKey="announcements"><Announcements /></PermissionRoute>} />
             <Route path="face-check" element={<PermissionRoute menuKey="face-check"><AdminFaceCheck /></PermissionRoute>} />
             <Route path="settings" element={<PermissionRoute menuKey="settings"><Settings /></PermissionRoute>} />
+            <Route path="shift-roster" element={<PermissionRoute menuKey="settings"><ShiftRoster /></PermissionRoute>} />
             <Route path="devices" element={<PermissionRoute menuKey="settings"><DeviceSettings /></PermissionRoute>} />
+            <Route path="fingerprint" element={<PermissionRoute menuKey="settings"><FingerprintManagement /></PermissionRoute>} />
             <Route path="corrections" element={<PermissionRoute menuKey="corrections"><AdminCorrections /></PermissionRoute>} />
             <Route path="audit-log" element={<PermissionRoute menuKey="audit-log"><AuditLog /></PermissionRoute>} />
           </Route>

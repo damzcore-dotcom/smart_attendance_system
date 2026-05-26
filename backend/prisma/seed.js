@@ -6,6 +6,13 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Seeding Smart Attendance Pro database...\n');
 
+  // SAFETY CHECK: Prevent wiping an already established database
+  const adminExists = await prisma.user.findUnique({ where: { username: 'admin' } });
+  if (adminExists) {
+    console.log('✅ Database is already initialized. Skipping seed to protect existing data.');
+    return;
+  }
+
   console.log('🧹 Cleaning existing data...');
   await prisma.notification.deleteMany({});
   await prisma.attendance.deleteMany({});
@@ -21,19 +28,7 @@ async function main() {
   await prisma.location.deleteMany({});
   console.log('🧹 Database cleaned.\n');
 
-  // ─── Departments ───────────────────────────────
-  const departments = await Promise.all(
-    ['Engineering', 'Marketing', 'HR', 'Operations'].map(name =>
-      prisma.department.upsert({ where: { name }, update: {}, create: { name } })
-    )
-  );
-  console.log(`✅ ${departments.length} departments created`);
 
-  // ─── Shifts ────────────────────────────────────
-  const generalShift = await prisma.shift.create({
-    data: { name: 'General Shift', startTime: '08:00', endTime: '17:00', breakStart: '12:00', breakEnd: '13:00', gracePeriod: 15 },
-  });
-  console.log('✅ General Shift created');
 
   // ─── Users (Admin Only) ────────────────────────
   const hashedPassword = await bcrypt.hash('admin123', 10);

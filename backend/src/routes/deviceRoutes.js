@@ -10,5 +10,6 @@ router.delete('/:id', verifyToken, requireAdmin, deviceController.deleteDevice);
 router.post('/test-connection', verifyToken, requireAdmin, deviceController.testConnection);
 router.post('/:id/sync-users', verifyToken, requireAdmin, deviceController.syncUsers);
 router.post('/:id/sync-attendance', verifyToken, requireAdmin, deviceController.syncAttendance);
+router.post('/:id/commit-attendance', verifyToken, requireAdmin, deviceController.commitAttendance);
 
 module.exports = router;

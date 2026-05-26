@@ -43,7 +43,17 @@ const Attendance = () => {
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [importResult, setImportResult] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: 'date', order: 'desc' });
-  const [correctionModal, setCorrectionModal] = useState({ isOpen: false, recordId: null, employeeName: '', currentStatus: '', newStatus: 'CUTI', notes: '', overtimeHours: 0 });
+  const [correctionModal, setCorrectionModal] = useState({ isOpen: false, recordId: null, employeeName: '', currentStatus: '', newStatus: 'CUTI', notes: '', overtimeHours: 0, checkInTime: '', checkOutTime: '', lateMinutes: 0, attachment: '' });
+
+  const parseTimeForInput = (timeStr) => {
+    if (!timeStr || timeStr.includes('--')) return '';
+    const [time, modifier] = timeStr.split(' ');
+    if (!time || !modifier) return timeStr;
+    let [hours, minutes] = time.split(':');
+    if (hours === '12') hours = '00';
+    if (modifier === 'PM') hours = String(parseInt(hours, 10) + 12);
+    return `${hours.padStart(2, '0')}:${minutes}`;
+  };
   const [isCorrecting, setIsCorrecting] = useState(false);
   const [importProgress, setImportProgress] = useState({ percent: 0, phase: '', detail: '' });
   const [appliedFilters, setAppliedFilters] = useState({
@@ -233,6 +243,7 @@ const Attendance = () => {
   });
 
   let filteredData = data?.data || [];
+  let displaySummary = data?.summary || null;
 
   if (!isLoading && data?.summary?.uniqueEmployeeCount === 1 && appliedFilters.search && filteredData.length > 0) {
     let startDate, endDate;
@@ -301,8 +312,27 @@ const Attendance = () => {
           });
         }
       }
-      // Kembalikan ke urutan dari terbaru ke terlama (descending)
-      filteredData = padData.reverse(); 
+      // Adjust order based on sortConfig
+      if (sortConfig.order === 'desc') {
+        filteredData = padData.reverse(); 
+      } else {
+        filteredData = padData; 
+      }
+
+      // Compute displaySummary from the padded data 
+      displaySummary = {
+        total: filteredData.length,
+        hadir: filteredData.filter(d => d.status === 'Hadir').length,
+        telat: filteredData.filter(d => d.status === 'Terlambat').length,
+        mangkir: filteredData.filter(d => d.status === 'Mangkir').length,
+        absen: filteredData.filter(d => d.status === 'Alpa').length,
+        holiday: filteredData.filter(d => d.status === 'Libur').length,
+        cuti: filteredData.filter(d => d.status === 'Cuti').length,
+        sakit: filteredData.filter(d => d.status === 'Sakit').length,
+        izin: filteredData.filter(d => d.status === 'Izin').length,
+        totalLate: filteredData.reduce((sum, d) => sum + (d.lateMinutes || 0) + ((d.status === 'Mangkir' || d.status === 'Alpa') ? 30 : 0), 0),
+        uniqueEmployeeCount: 1
+      };
     }
   }
 
@@ -321,8 +351,16 @@ const Attendance = () => {
     e.preventDefault();
     setIsCorrecting(true);
     try {
-      await attendanceAPI.update(correctionModal.recordId, { status: correctionModal.newStatus, notes: correctionModal.notes, overtimeHours: correctionModal.overtimeHours });
-      setCorrectionModal({ isOpen: false, recordId: null, employeeName: '', currentStatus: '', newStatus: 'CUTI', notes: '', overtimeHours: 0 });
+      await attendanceAPI.update(correctionModal.recordId, { 
+        status: correctionModal.newStatus, 
+        notes: correctionModal.notes, 
+        overtimeHours: correctionModal.overtimeHours,
+        checkInTime: correctionModal.checkInTime,
+        checkOutTime: correctionModal.checkOutTime,
+        lateMinutes: correctionModal.lateMinutes,
+        attachment: correctionModal.attachment
+      });
+      setCorrectionModal({ isOpen: false, recordId: null, employeeName: '', currentStatus: '', newStatus: 'CUTI', notes: '', overtimeHours: 0, checkInTime: '', checkOutTime: '', lateMinutes: 0, attachment: '' });
       await queryClient.invalidateQueries({ queryKey: ['attendance'] });
       alert('Status absensi berhasil dikoreksi!');
     } catch (err) {
@@ -607,17 +645,17 @@ const Attendance = () => {
       />
 
       {/* Operational Summary Metrics */}
-      {!isLoading && data?.summary && (
+      {!isLoading && displaySummary && (
         <div className="space-y-6">
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
             {[
-              { label: 'Total Data', value: data.summary.total, color: 'blue', icon: Filter, desc: 'Semua Absen' },
-              { label: 'Hadir', value: data.summary.hadir, color: 'emerald', icon: CheckCircle2, desc: 'Tepat Waktu' },
-              { label: 'Terlambat', value: data.summary.telat, color: 'amber', icon: Clock, desc: 'Pelanggaran Waktu' },
-              { label: 'Mangkir', value: data.summary.mangkir, color: 'rose', icon: AlertCircle, desc: 'Kurang Finger (+30m)' },
-              { label: 'Alpa', value: data.summary.absen, color: 'red', icon: XCircle, desc: 'Tidak Ada Finger' },
-              { label: 'Total Terlambat', value: formatDuration(data.summary.totalLate || 0), color: 'rose', icon: Clock, desc: 'Akumulasi Waktu' },
-              { label: 'Lainnya', value: (data.summary.holiday || 0) + (data.summary.cuti || 0) + (data.summary.sakit || 0) + (data.summary.izin || 0), color: 'slate', icon: Calendar, desc: 'Libur/Cuti/Sakit' },
+              { label: 'Total Data', value: displaySummary.total, color: 'blue', icon: Filter, desc: 'Semua Absen' },
+              { label: 'Hadir', value: displaySummary.hadir, color: 'emerald', icon: CheckCircle2, desc: 'Tepat Waktu' },
+              { label: 'Terlambat', value: displaySummary.telat, color: 'amber', icon: Clock, desc: 'Pelanggaran Waktu' },
+              { label: 'Mangkir', value: displaySummary.mangkir, color: 'rose', icon: AlertCircle, desc: 'Kurang Finger (+30m)' },
+              { label: 'Alpa', value: displaySummary.absen, color: 'red', icon: XCircle, desc: 'Tidak Ada Finger' },
+              { label: 'Total Terlambat', value: formatDuration(displaySummary.totalLate || 0), color: 'rose', icon: Clock, desc: 'Akumulasi Waktu' },
+              { label: 'Lainnya', value: (displaySummary.holiday || 0) + (displaySummary.cuti || 0) + (displaySummary.sakit || 0) + (displaySummary.izin || 0), color: 'slate', icon: Calendar, desc: 'Libur/Cuti/Sakit' },
             ].map((item) => (
               <div key={item.label} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-3 hover:shadow-md hover:border-blue-200 transition-all group">
                 <div className="flex justify-between items-start">
@@ -637,7 +675,7 @@ const Attendance = () => {
           </div>
 
           {/* Individual Search Summary Card */}
-          {appliedFilters.search && data.summary.uniqueEmployeeCount === 1 && data.summary.totalLate > 0 && (
+          {appliedFilters.search && displaySummary.uniqueEmployeeCount === 1 && displaySummary.totalLate > 0 && (
             <div className="bg-gradient-to-r from-rose-500 to-orange-600 rounded-2xl p-0.5 shadow-lg shadow-rose-100 animate-in slide-in-from-top-4 duration-500">
               <div className="bg-white rounded-[14px] p-6 flex items-center justify-between gap-6">
                 <div className="flex items-center gap-6">
@@ -647,7 +685,7 @@ const Attendance = () => {
                   <div>
                     <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Akumulasi Terlambat Personal</h3>
                     <p className="text-3xl font-black text-slate-800 tracking-tight mt-1">
-                      {formatDuration(data.summary.totalLate)}
+                      {formatDuration(displaySummary.totalLate)}
                     </p>
                     <p className="text-[10px] font-bold text-rose-500 uppercase mt-2 flex items-center gap-2">
                       <AlertCircle className="w-3.5 h-3.5" />
@@ -673,7 +711,7 @@ const Attendance = () => {
             <div className="w-2 h-2 rounded-full bg-blue-600 animate-pulse shadow-[0_0_5px_rgba(37,99,235,0.5)]" />
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
               Data Absensi <span className="text-slate-300 mx-2">|</span> 
-              Total Data: <span className="text-slate-700 ml-1">{data?.summary?.total || 0} Baris</span>
+              Total Data: <span className="text-slate-700 ml-1">{displaySummary?.total || 0} Baris</span>
             </p>
           </div>
         </div>
@@ -815,8 +853,13 @@ const Attendance = () => {
                           employeeName: row.name,
                           currentStatus: row.status,
                           newStatus: 'CUTI',
+                          newStatus: row.status !== 'PRESENT' && row.status !== 'Hadir' ? 'PRESENT' : 'PRESENT',
                           notes: '',
-                          overtimeHours: row.overtimeHours || 0
+                          overtimeHours: row.overtimeHours || 0,
+                          checkInTime: parseTimeForInput(row.checkIn),
+                          checkOutTime: parseTimeForInput(row.checkOut),
+                          lateMinutes: row.lateMinutes || 0,
+                          attachment: ''
                         })}
                         className="p-1.5 rounded-lg bg-slate-50 hover:bg-blue-50 text-slate-400 hover:text-blue-600 border border-slate-200 hover:border-blue-200 transition-all"
                         title="Koreksi Status"
@@ -1186,19 +1229,77 @@ const Attendance = () => {
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Jam Lembur Manual (Opsional)</label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    min="0"
-                    value={correctionModal.overtimeHours}
-                    onChange={(e) => setCorrectionModal(prev => ({ ...prev, overtimeHours: parseFloat(e.target.value) || 0 }))}
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-bold text-slate-700 outline-none transition-all"
-                    placeholder="Contoh: 2.5 (untuk 2.5 jam)"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-2">Isi angka jika HRD memberikan jam lembur manual pada hari ini.</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Jam Masuk (Manual)</label>
+                    <input
+                      type="time"
+                      value={correctionModal.checkInTime}
+                      onChange={(e) => setCorrectionModal(prev => ({ ...prev, checkInTime: e.target.value }))}
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-bold text-slate-700 outline-none transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Jam Keluar (Manual)</label>
+                    <input
+                      type="time"
+                      value={correctionModal.checkOutTime}
+                      onChange={(e) => setCorrectionModal(prev => ({ ...prev, checkOutTime: e.target.value }))}
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-bold text-slate-700 outline-none transition-all"
+                    />
+                  </div>
                 </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Pemutihan Terlambat (Menit)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={correctionModal.lateMinutes}
+                      onChange={(e) => setCorrectionModal(prev => ({ ...prev, lateMinutes: parseInt(e.target.value) || 0 }))}
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-bold text-slate-700 outline-none transition-all"
+                      placeholder="Contoh: 0"
+                    />
+                     <p className="text-[9px] text-slate-400 mt-1">Ubah ke 0 untuk menghapus denda terlambat HRD.</p>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Jam Lembur Manual</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      value={correctionModal.overtimeHours}
+                      onChange={(e) => setCorrectionModal(prev => ({ ...prev, overtimeHours: parseFloat(e.target.value) || 0 }))}
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-bold text-slate-700 outline-none transition-all"
+                      placeholder="Contoh: 2.5"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Upload Form Koreksi / SPV (Opsional)</label>
+                  <label className="flex items-center gap-3 px-4 py-3 border-2 border-dashed border-slate-200 bg-slate-50 rounded-xl cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all">
+                    <Upload className="w-5 h-5 text-slate-400" />
+                    <span className="text-xs font-bold text-slate-600">
+                      {correctionModal.attachment ? "Dokumen Terlampir" : "Pilih File Gambar..."}
+                    </span>
+                    <input 
+                       type="file" 
+                       accept="image/*" 
+                       className="hidden" 
+                       onChange={(e) => {
+                         const file = e.target.files[0];
+                         if (file) {
+                           const reader = new FileReader();
+                           reader.onloadend = () => setCorrectionModal(prev => ({ ...prev, attachment: reader.result }));
+                           reader.readAsDataURL(file);
+                         }
+                       }} 
+                     />
+                  </label>
+                </div>
+
 
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Keterangan / Alasan (Opsional)</label>

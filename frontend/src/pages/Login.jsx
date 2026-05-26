@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { LogIn, ShieldCheck, Fingerprint, Camera, X, Loader2, ScanFace, CheckCircle2, AlertCircle, User } from 'lucide-react';
 import { AppLogo } from '../components/AppLogo';
 import Webcam from 'react-webcam';
-import * as faceapi from '@vladmandic/face-api';
 import { authAPI } from '../services/api';
+import { loadFaceModels, faceapi, areModelsLoaded } from '../utils/faceModelLoader';
 
 
 
@@ -25,6 +25,7 @@ const Login = () => {
   const faceGuideRef = useRef(null);
   const stableCountRef = useRef(0);
   const autoCaptureTriggeredRef = useRef(false);
+  const boxHistoryRef = useRef([]);
   
   const navigate = useNavigate();
   const [modelsLoaded, setModelsLoaded] = useState(false);
@@ -41,20 +42,11 @@ const Login = () => {
 
   // Load models on mount
   useEffect(() => {
-    const loadModels = async () => {
-      const MODEL_URL = 'https://vladmandic.github.io/face-api/model/';
-      try {
-        await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
-        ]);
-        setModelsLoaded(true);
-      } catch (err) {
+    loadFaceModels()
+      .then(() => setModelsLoaded(true))
+      .catch(err => {
         console.error('Failed to load face models', err);
-      }
-    };
-    loadModels();
+      });
   }, []);
 
   // Force password change state
@@ -152,7 +144,7 @@ const Login = () => {
   };
 
   const capture = useCallback(async () => {
-    if (!webcamRef.current || !modelsLoaded) return;
+    if (!webcamRef.current || !areModelsLoaded()) return;
 
     // Direct capture - no liveness detection
     const imageSrc = webcamRef.current.getScreenshot();
@@ -202,11 +194,12 @@ const Login = () => {
     setFaceGuideStatus('none');
     stableCountRef.current = 0;
     autoCaptureTriggeredRef.current = false;
+    boxHistoryRef.current = [];
   };
 
   // Phase 5: Real-time face guide loop - runs when camera is active & idle
   useEffect(() => {
-    if (!isScanning || !modelsLoaded || scanStatus !== 'ready') {
+    if (!isScanning || !areModelsLoaded() || scanStatus !== 'ready') {
       if (faceGuideRef.current) clearInterval(faceGuideRef.current);
       faceGuideRef.current = null;
       return;
@@ -231,9 +224,43 @@ const Login = () => {
         
         if (detection) {
           setFaceGuideStatus('detected');
+          
+          // Safely get box depending on whether landmarks were fetched
+          const box = detection.box || (detection.detection && detection.detection.box) || detection.relativeBox;
+          if (box) {
+            boxHistoryRef.current.push({ x: box.x, y: box.y, w: box.width, h: box.height });
+            if (boxHistoryRef.current.length > 5) boxHistoryRef.current.shift();
+          }
+
           stableCountRef.current++;
-          // Auto-capture after face stable for ~2.5s (5 consecutive detections at 500ms)
-          if (stableCountRef.current >= 5 && !autoCaptureTriggeredRef.current) {
+          // Auto-capture after face stable for ~2.5s (5 consecutive detections)
+          if (stableCountRef.current >= 6 && !autoCaptureTriggeredRef.current) {
+            // Anti-Spoofing Check (Passive Liveness)
+            let isCompletelyStatic = true;
+            if (boxHistoryRef.current.length >= 5) {
+              const hist = boxHistoryRef.current;
+              for (let i = 1; i < hist.length; i++) {
+                const diffX = Math.abs(hist[i].x - hist[i-1].x);
+                const diffY = Math.abs(hist[i].y - hist[i-1].y);
+                const diffW = Math.abs(hist[i].w - hist[i-1].w);
+                if (diffX >= 2 || diffY >= 2 || diffW >= 2) {
+                  isCompletelyStatic = false;
+                  break;
+                }
+              }
+            } else {
+              isCompletelyStatic = false;
+            }
+
+            if (isCompletelyStatic) {
+              console.warn('[Liveness] Static face detected on login.');
+              setScanStatus('error');
+              setError('Anti-Spoofing: Wajah terdeteksi statis (foto). Harap gunakan wajah hidup.');
+              clearInterval(faceGuideRef.current);
+              faceGuideRef.current = null;
+              return;
+            }
+
             autoCaptureTriggeredRef.current = true;
             clearInterval(faceGuideRef.current);
             faceGuideRef.current = null;
@@ -242,13 +269,14 @@ const Login = () => {
         } else {
           setFaceGuideStatus('not-detected');
           stableCountRef.current = 0;
+          boxHistoryRef.current = [];
         }
       } catch {
         // silently ignore face guide errors
       } finally {
         isProcessing = false;
       }
-    }, 500); // Check every 500ms for the guide (lightweight)
+    }, 200); // Check every 200ms for the guide (lightweight)
 
     return () => {
       if (faceGuideRef.current) clearInterval(faceGuideRef.current);
@@ -578,10 +606,10 @@ const Login = () => {
               ) : (
                 <button
                   onClick={capture}
-                  disabled={isBusy || !modelsLoaded}
+                  disabled={isBusy || !areModelsLoaded()}
                   className="flex-1 px-5 py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-semibold text-sm transition-all duration-200 shadow-lg shadow-blue-600/25 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  {!modelsLoaded ? (
+                  {!areModelsLoaded() ? (
                     <><Loader2 className="w-4 h-4 animate-spin" /> Loading...</>
                   ) : (
                     <><ScanFace className="w-4 h-4" /> Capture & Verify</>

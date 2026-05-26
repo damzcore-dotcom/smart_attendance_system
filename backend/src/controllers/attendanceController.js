@@ -408,11 +408,12 @@ const checkOut = async (req, res) => {
 
     // Calculate Overtime
     let overtimeHours = 0;
+    const autoCalcOt = settingsList.find(s => s.key === 'autoCalculateOvertime')?.value !== 'false';
     const [endHour, endMinute] = shiftEnd.split(':').map(Number);
     const expectedEnd = new Date(now);
     expectedEnd.setHours(endHour, endMinute, 0, 0);
 
-    if (now > expectedEnd) {
+    if (autoCalcOt && now > expectedEnd) {
       const diffMs = now.getTime() - expectedEnd.getTime();
       overtimeHours = parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2));
     }
@@ -1087,45 +1088,208 @@ const downloadTemplate = async (req, res) => {
 const update = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, notes, overtimeHours } = req.body;
+    const { status, notes, overtimeHours, checkInTime, checkOutTime, lateMinutes, attachment } = req.body;
     
     const validStatuses = ['PRESENT', 'LATE', 'ABSENT', 'MANGKIR', 'SAKIT', 'IZIN', 'CUTI', 'HOLIDAY'];
     if (status && !validStatuses.includes(status)) {
       return res.status(400).json({ success: false, message: 'Invalid status' });
     }
 
-    // Get the old record for audit comparison
+    // Get the old record to retrieve the base date and for audit comparison
     const oldRecord = await prisma.attendance.findUnique({ where: { id: parseInt(id) }, include: { employee: true } });
+    if (!oldRecord) {
+       return res.status(404).json({ success: false, message: 'Record not found' });
+    }
     
     const updateData = {};
     if (status) updateData.status = status;
     if (notes !== undefined) updateData.notes = notes || null;
     if (overtimeHours !== undefined) updateData.overtimeHours = parseFloat(overtimeHours) || 0;
+    
+    // Process Lateness Waiver
+    if (lateMinutes !== undefined) {
+      updateData.lateMinutes = parseInt(lateMinutes);
+    }
+
+    // Process File Attachment (Correction Form / Doc)
+    if (attachment !== undefined) {
+      updateData.photoUrl = attachment || null;
+    }
+
+    // Manual Time Update Parsing
+    if (checkInTime || checkOutTime) {
+      const baseDate = new Date(oldRecord.date);
+      
+      if (checkInTime) {
+        const [h, m] = checkInTime.split(':').map(Number);
+        const newCheckIn = new Date(baseDate);
+        newCheckIn.setUTCHours(h - 7, m, 0, 0); // Assuming frontend sends local time (UTC+7 usually, wait! Simple manual adjust using UTC setHours) 
+        // Actually, it's safer to just parse it as local time of the server or timezone.
+        // Let's use simple local setHours because node runs on local time
+        const safeCI = new Date(baseDate);
+        safeCI.setHours(h, m, 0, 0);
+        updateData.checkIn = safeCI;
+      }
+      
+      if (checkOutTime) {
+        const [h, m] = checkOutTime.split(':').map(Number);
+        const safeCO = new Date(baseDate);
+        safeCO.setHours(h, m, 0, 0);
+        updateData.checkOut = safeCO;
+      }
+    }
 
     const record = await prisma.attendance.update({
       where: { id: parseInt(id) },
       data: updateData
     });
 
-    // Audit log
+    // Record detailed audit
     if (req.user) {
-      await recordAuditLog({
-        userId: req.user.id,
-        username: req.user.username,
-        role: req.user.role,
-        action: 'CORRECTION',
-        entity: 'Attendance',
-        entityId: parseInt(id),
-        details: { employee: oldRecord?.employee?.name, oldStatus: oldRecord?.status, newStatus: status, notes },
-        ipAddress: req.ip,
-      });
+      const { recordAuditLog } = require('../utils/auditLogger');
+      try {
+         await recordAuditLog({
+           userId: req.user.id,
+           username: req.user.username,
+           role: req.user.role,
+           action: 'CORRECTION',
+           entity: 'Attendance',
+           entityId: parseInt(id),
+           details: JSON.stringify({ 
+             employee: oldRecord?.employee?.name, 
+             oldStatus: oldRecord?.status, newStatus: status, 
+             lateFixed: lateMinutes !== undefined ? lateMinutes : oldRecord?.lateMinutes,
+             timesFixed: !!(checkInTime || checkOutTime),
+             hasAttachment: !!attachment,
+             notes 
+           }),
+           ipAddress: req.ip,
+         });
+      } catch(e) { } // silent on audit error
     }
 
-    res.json({ success: true, message: 'Data absensi berhasil diperbarui', data: record });
+    res.json({ success: true, message: 'Data absensi berhasil dikoreksi HRD', data: record });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+/**
+ * PATCH /api/attendance/bulk-overtime
+ */
+const bulkUpdateOvertime = async (req, res) => {
+  try {
+    const { date, records } = req.body;
+    if (!date || !records || !Array.isArray(records)) {
+      return res.status(400).json({ success: false, message: 'Invalid payload' });
+    }
+
+    const d = new Date(date);
+    const dateObj = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0));
+
+    let updatedCount = 0;
+    
+    // Process sequentially to record distinct audit logs and upsert attendance limits
+    for (const rec of records) {
+      if (rec.overtimeHours === undefined || rec.overtimeHours === null || rec.overtimeHours === '') continue;
+      
+      const attendance = await prisma.attendance.upsert({
+        where: { employeeId_date: { employeeId: rec.employeeId, date: dateObj } },
+        update: { overtimeHours: parseFloat(rec.overtimeHours) },
+        create: {
+          employeeId: rec.employeeId,
+          date: dateObj,
+          status: 'ABSENT', // they might not have clocked in, but admin gave them overtime?
+          overtimeHours: parseFloat(rec.overtimeHours),
+          mode: 'Manual (SPL)'
+        },
+        include: { employee: true }
+      });
+      updatedCount++;
+
+      // Record detailed audit
+      if (req.user) {
+        const { recordAuditLog } = require('./auditLogController');
+        try {
+           await recordAuditLog({
+             userId: req.user.id,
+             username: req.user.username,
+             role: req.user.role,
+             action: 'UPDATE_SPL',
+             entity: 'Attendance',
+             entityId: attendance.id,
+             details: JSON.stringify({ 
+               logMsg: `${attendance.employee.name} (NIK: ${attendance.employee.employeeCode}): Lembur (SPL) diupdate menjadi ${rec.overtimeHours} Jam (Tgl: ${date})`
+             }),
+             ipAddress: req.ip,
+           });
+        } catch(e) { }
+      }
+    }
+
+    res.json({ success: true, message: `Berhasil meng-update jam lembur manual untuk ${updatedCount} karyawan.`, updatedCount });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * POST /api/attendance/bulk-daily-workers
+ */
+const bulkUpdateDailyWorkers = async (req, res) => {
+  try {
+    const { date, records } = req.body;
+    if (!date || !records || !Array.isArray(records)) {
+      return res.status(400).json({ success: false, message: 'Invalid payload' });
+    }
+
+    const d = new Date(date);
+    const dateObj = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0));
+
+    let updatedCount = 0;
+    
+    for (const rec of records) {
+      if (!rec.status) continue;
+      
+      const attendance = await prisma.attendance.upsert({
+        where: { employeeId_date: { employeeId: rec.employeeId, date: dateObj } },
+        update: { status: rec.status, mode: 'Manual (BHL)' },
+        create: {
+          employeeId: rec.employeeId,
+          date: dateObj,
+          status: rec.status,
+          mode: 'Manual (BHL)'
+        },
+        include: { employee: true }
+      });
+      updatedCount++;
+
+      // Record detailed audit
+      if (req.user) {
+        const { recordAuditLog } = require('./auditLogController');
+        try {
+           await recordAuditLog({
+             userId: req.user.id,
+             username: req.user.username,
+             role: req.user.role,
+             action: 'UPDATE_BHL',
+             entity: 'Attendance',
+             entityId: attendance.id,
+             details: JSON.stringify({ 
+               logMsg: `${attendance.employee.name} (NIK: ${attendance.employee.employeeCode}): Absen Manual (BHL) diinput - ${rec.status} (Tgl: ${date})`
+             }),
+             ipAddress: req.ip,
+           });
+        } catch(e) { }
+      }
+    }
+
+    res.json({ success: true, message: `Berhasil memproses absen Harian/BHL untuk ${updatedCount} karyawan.`, updatedCount });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 
 module.exports = {
   getAll,
@@ -1140,5 +1304,7 @@ module.exports = {
   getMasterOptions,
   createManual,
   downloadTemplate,
-  update
+  update,
+  bulkUpdateOvertime,
+  bulkUpdateDailyWorkers
 };

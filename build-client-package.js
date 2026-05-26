@@ -133,6 +133,7 @@ call npm install --production --quiet
 echo [2/4] Menyiapkan database...
 call npx prisma generate
 call npx prisma db push
+call node prisma/seed.js
 
 cd ../frontend
 echo [3/4] Menginstall modul frontend...

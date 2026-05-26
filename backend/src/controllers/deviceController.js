@@ -192,19 +192,111 @@ function findBestNameMatch(machineName, employeeList) {
 }
 
 /**
+ * Generate next sequential NIK from database
+ * Finds the highest numeric employeeCode and increments it
+ */
+async function getNextEmployeeCode() {
+  const allEmployees = await prisma.employee.findMany({
+    select: { employeeCode: true },
+    orderBy: { id: 'desc' }
+  });
+  
+  let maxCode = 0;
+  for (const emp of allEmployees) {
+    // Extract pure numeric codes (skip 'FNG' prefixed or non-numeric codes)
+    const code = emp.employeeCode || '';
+    const numericPart = parseInt(code.replace(/\D/g, ''), 10);
+    if (!isNaN(numericPart) && numericPart > maxCode) {
+      maxCode = numericPart;
+    }
+  }
+  
+  return String(maxCode + 1);
+}
+
+/**
  * Sync Users (Enrollment dari Mesin ke Sistem)
+ * Supports two modes via query param ?preview=true|false
+ * - preview=true (default): Scan the machine, classify users, return preview data WITHOUT writing to DB
+ * - preview=false: Accept selectedUsers from body and commit only those to DB
  */
 const syncUsers = async (req, res) => {
   const { id } = req.params; // Device ID
+  const isPreview = req.query.preview !== 'false'; // Default to preview mode
+  
   try {
     const device = await prisma.device.findUnique({ where: { id: parseInt(id) } });
     if (!device) return res.status(404).json({ success: false, message: 'Device not found' });
 
+    // ──────────────────────────────────────────────
+    // COMMIT MODE: Write selected users to database
+    // ──────────────────────────────────────────────
+    if (!isPreview) {
+      const { selectedUsers } = req.body;
+      if (!selectedUsers || !Array.isArray(selectedUsers) || selectedUsers.length === 0) {
+        return res.json({ success: true, message: 'Tidak ada karyawan yang dipilih untuk disinkronkan.' });
+      }
+
+      let defaultDept = await prisma.department.findFirst({ where: { name: 'General' } });
+      if (!defaultDept) {
+        defaultDept = await prisma.department.create({ data: { name: 'General' } });
+      }
+
+      let committedLinked = 0;
+      let committedNew = 0;
+
+      for (const item of selectedUsers) {
+        const fingerPrintId = String(item.acNo).trim();
+        
+        // Double-check: skip if already linked in DB
+        const alreadyExists = await prisma.employee.findFirst({ where: { fingerPrintId } });
+        if (alreadyExists) continue;
+
+        if (item.status === 'linked' && item.dbMatchId) {
+          // Auto-link: update existing employee's fingerPrintId
+          await prisma.employee.update({
+            where: { id: item.dbMatchId },
+            data: { fingerPrintId }
+          });
+          committedLinked++;
+          console.log(`[Commit] ✅ Linked AC No.${fingerPrintId} → Employee ID ${item.dbMatchId}`);
+        } else if (item.status === 'new') {
+          // Create new employee with sequential NIK
+          const nextCode = await getNextEmployeeCode();
+          await prisma.employee.create({
+            data: {
+              employeeCode: nextCode,
+              name: item.machineName || 'User Mesin ' + fingerPrintId,
+              fingerPrintId,
+              email: `emp${nextCode}@system.local`,
+              departmentId: defaultDept.id,
+              status: 'ACTIVE'
+            }
+          });
+          committedNew++;
+          console.log(`[Commit] ➕ New employee NIK ${nextCode}: "${item.machineName}" (FP: ${fingerPrintId})`);
+        }
+      }
+
+      await prisma.device.update({
+        where: { id: parseInt(id) },
+        data: { status: 'ONLINE', lastSync: new Date() }
+      });
+
+      return res.json({
+        success: true,
+        message: `Berhasil disimpan! ${committedLinked} auto-link, ${committedNew} karyawan baru.`
+      });
+    }
+
+    // ──────────────────────────────────────────────
+    // PREVIEW MODE: Scan machine, classify, return data
+    // ──────────────────────────────────────────────
     const zkInstance = new ZKLib(device.ipAddress, device.port, 60000, 30000);
     await zkInstance.createSocket();
     const users = await zkInstance.getUsers();
     
-    // Fetch attendance logs to filter out old, inactive users who haven't fingerprinted in > 30 days
+    // Fetch attendance logs to filter out old, inactive users who haven't fingerprinted in > 60 days
     let logs = null;
     try {
       logs = await zkInstance.getAttendances();
@@ -215,7 +307,7 @@ const syncUsers = async (req, res) => {
 
     // Map of deviceUserId -> latest scan date
     const latestScanMap = {};
-    let globalLatestScan = new Date(0); // Track the most recent log on the machine
+    let globalLatestScan = new Date(0);
 
     if (logs && logs.data) {
       for (const log of logs.data) {
@@ -234,16 +326,9 @@ const syncUsers = async (req, res) => {
     let linkedCount = 0;
     let alreadyLinkedCount = 0;
     let inactiveCount = 0;
-    const syncDetails = []; // Detail data dari mesin
-
-    // Default department for new unsynced employees
-    let defaultDept = await prisma.department.findFirst({ where: { name: 'General' } });
-    if (!defaultDept) {
-      defaultDept = await prisma.department.create({ data: { name: 'General' } });
-    }
+    const syncDetails = [];
 
     // Preload all unlinked employees for fuzzy matching
-    // FIX: cek BOTH null AND empty string ''
     const unlinkedEmployees = await prisma.employee.findMany({
       where: { 
         OR: [
@@ -253,12 +338,11 @@ const syncUsers = async (req, res) => {
       }
     });
 
-    // Hitung ambang batas 60 hari (2 bulan) dari aktivitas TERAKHIR di mesin, bukan dari hari ini
+    // Hitung ambang batas 60 hari dari aktivitas TERAKHIR di mesin
     const thresholdDate = globalLatestScan.getTime() > 0 ? new Date(globalLatestScan) : new Date();
     thresholdDate.setDate(thresholdDate.getDate() - 60);
 
     for (const u of users.data) {
-      // AC No. dari mesin (deviceUserId / PIN)
       const fingerPrintId = String(u.userId).trim();
       const machineName = (u.name || '').trim();
       
@@ -266,7 +350,6 @@ const syncUsers = async (req, res) => {
       let existing = await prisma.employee.findFirst({ where: { fingerPrintId } });
       
       if (existing) {
-        // Sudah terlink — skip
         alreadyLinkedCount++;
         syncDetails.push({
           acNo: fingerPrintId,
@@ -278,12 +361,11 @@ const syncUsers = async (req, res) => {
         continue;
       }
       
-      // Check if employee has fingerprint activity in the last 60 days relative to machine's clock
+      // Check if employee has fingerprint activity in the last 60 days
       const lastScan = latestScanMap[fingerPrintId];
       const hasRecentActivity = lastScan && lastScan >= thresholdDate;
       
       if (!hasRecentActivity) {
-        // Skip creating this employee because they are inactive
         inactiveCount++;
         syncDetails.push({
           acNo: fingerPrintId,
@@ -292,21 +374,15 @@ const syncUsers = async (req, res) => {
           status: 'inactive_ignored',
           statusText: 'Diabaikan (Karyawan Lama / Inaktif > 60 Hari)'
         });
-        console.log(`[Sync] 🚫 Ignored inactive machine user: "${machineName}" (FP: ${fingerPrintId}), Last Scan: ${lastScan ? lastScan.toISOString().split('T')[0] : 'None'}`);
         continue;
       }
       
-      // 2. FUZZY NAME MATCHING — cocokkan nama mesin dengan database
+      // 2. FUZZY NAME MATCHING — preview only, no DB writes
       if (machineName) {
         const bestMatch = findBestNameMatch(machineName, unlinkedEmployees);
         
         if (bestMatch) {
-          // Auto-link: isi fingerPrintId dari AC No. mesin
-          await prisma.employee.update({
-            where: { id: bestMatch.id },
-            data: { fingerPrintId }
-          });
-          // Remove from unlinked list so it won't match again
+          // Remove from unlinked list so it won't match again in this loop
           const idx = unlinkedEmployees.findIndex(e => e.id === bestMatch.id);
           if (idx !== -1) unlinkedEmployees.splice(idx, 1);
           linkedCount++;
@@ -314,34 +390,23 @@ const syncUsers = async (req, res) => {
             acNo: fingerPrintId,
             machineName,
             dbName: bestMatch.name,
+            dbMatchId: bestMatch.id,
             status: 'linked',
-            statusText: 'Auto-Link Berhasil'
+            statusText: 'Auto-Link (Preview)'
           });
-          console.log(`[Sync] ✅ Linked "${machineName}" → "${bestMatch.name}" (ID: ${bestMatch.id})`);
           continue;
         }
       }
       
-      // 3. Tidak ditemukan — buat karyawan baru sebagai placeholder
-      await prisma.employee.create({
-        data: {
-          employeeCode: 'FNG' + fingerPrintId,
-          name: machineName || 'User Mesin ' + fingerPrintId,
-          fingerPrintId,
-          email: 'user' + fingerPrintId + '@system.local',
-          departmentId: defaultDept.id,
-          status: 'ACTIVE'
-        }
-      });
+      // 3. Tidak ditemukan — preview sebagai karyawan baru
       newCount++;
       syncDetails.push({
         acNo: fingerPrintId,
         machineName: machineName || 'User Mesin ' + fingerPrintId,
         dbName: '-',
         status: 'new',
-        statusText: 'Karyawan Baru (Placeholder)'
+        statusText: 'Karyawan Baru (Belum Disimpan)'
       });
-      console.log(`[Sync] ➕ New placeholder: "${machineName || 'User Mesin ' + fingerPrintId}" (FP: ${fingerPrintId})`);
     }
 
     // Update device status to ONLINE
@@ -352,7 +417,8 @@ const syncUsers = async (req, res) => {
 
     res.json({ 
       success: true, 
-      message: `Sinkronisasi berhasil! ${linkedCount} auto-link, ${newCount} baru, ${alreadyLinkedCount} sudah terlink, ${inactiveCount} diabaikan.`,
+      message: `Preview: ${linkedCount} auto-link, ${newCount} baru, ${alreadyLinkedCount} sudah terlink, ${inactiveCount} diabaikan.`,
+      deviceId: parseInt(id),
       data: {
         totalMachine: users.data.length,
         linked: linkedCount,
@@ -575,11 +641,38 @@ const syncAttendance = async (req, res) => {
     const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
     const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
     
+    // Fetch Overrides for all active employees within this sync date range
+    const allOverrides = await prisma.employeeShiftOverride.findMany({
+      where: {
+        startDate: { lte: filterEnd },
+        endDate: { gte: filterStart }
+      },
+      include: { shift: true }
+    });
+
+    // Create a fast lookup map: employeeId_YYYY-MM-DD -> shift
+    const overrideMap = new Map();
+    for (const ov of allOverrides) {
+      let d = new Date(ov.startDate);
+      const endD = new Date(ov.endDate);
+      while (d <= endD) {
+        const dStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        overrideMap.set(`${ov.employeeId}_${dStr}`, ov.shift);
+        d.setDate(d.getDate() + 1);
+      }
+    }
+
     for (const entry of entries) {
       const emp = entry.employee;
-      const shiftStart = emp.shift?.startTime || '08:00';
-      let shiftEnd = emp.shift?.endTime || '17:00';
-      const gracePeriod = emp.shift?.gracePeriod || 15;
+      const dStr = `${entry.date.getUTCFullYear()}-${String(entry.date.getUTCMonth()+1).padStart(2,'0')}-${String(entry.date.getUTCDate()).padStart(2,'0')}`;
+      
+      // Determine effective shift
+      const overrideShift = overrideMap.get(`${emp.id}_${dStr}`);
+      const effectiveShift = overrideShift || emp.shift || null;
+
+      const shiftStart = effectiveShift?.startTime || '08:00';
+      let shiftEnd = effectiveShift?.endTime || '17:00';
+      const gracePeriod = effectiveShift?.gracePeriod || 15;
       
       // Override shiftEnd untuk hari Sabtu jika half-day aktif
       const dayOfWeek = entry.date.getUTCDay(); // 0=Sun, 6=Sat
@@ -634,16 +727,17 @@ const syncAttendance = async (req, res) => {
       // Calculate Lateness (only if checkIn exists)
       const calc = checkIn 
         ? calculateLateness(checkIn, shiftStart, gracePeriod)
-        : { lateMinutes: 0, status: 'Mangkir' }; // Tidak ada scan masuk = Mangkir
+        : { lateMinutes: 0, status: 'Mangkir' };
       
+      // Resolve status using updated logic
       const status = resolveStatus(checkIn, checkOut, calc.status);
 
       recordsToCreate.push({
         employeeId: entry.employeeId,
         date: entry.date,
-        checkIn,
-        checkOut,
-        status,
+        checkIn: checkIn,
+        checkOut: checkOut,
+        status: status,
         lateMinutes: calc.lateMinutes,
         mode: 'Fingerprint'
       });
@@ -654,9 +748,11 @@ const syncAttendance = async (req, res) => {
 
     if (isPreview) {
       // Map back to a friendlier format for frontend display
+      // Include employeeId so the frontend can send it back for direct commit
       const previewData = recordsToCreate.map(r => {
         const emp = empByCode[r.employeeId] || employees.find(e => e.id === r.employeeId);
         return {
+          employeeId: r.employeeId,
           employeeName: emp ? emp.name : 'Unknown',
           employeeCode: emp ? emp.employeeCode : '-',
           date: r.date,
@@ -812,6 +908,113 @@ const updateDevice = async (req, res) => {
   }
 };
 
+/**
+ * Commit Attendance — save previewed data directly to database
+ * This avoids re-fetching from the unreliable UDP fingerprint machine.
+ * The frontend sends the preview records that were already fetched and verified by the user.
+ */
+const commitAttendance = async (req, res) => {
+  const { id } = req.params;
+  const { records } = req.body; // Array of preview records from frontend
+
+  console.log(`[Commit] Saving ${records?.length || 0} attendance records for device ID: ${id}`);
+
+  try {
+    if (!records || records.length === 0) {
+      return res.json({ success: true, message: 'Tidak ada data untuk disimpan.' });
+    }
+
+    const device = await prisma.device.findUnique({ where: { id: parseInt(id) } });
+    if (!device) {
+      return res.status(404).json({ success: false, message: 'Device not found' });
+    }
+
+    const { calculateLateness, resolveStatus } = require('../utils/lateCalculator');
+    const employees = await prisma.employee.findMany({ include: { shift: true } });
+    const empMap = {};
+    employees.forEach(e => { empMap[e.id] = e; });
+
+    let saved = 0;
+    let failed = 0;
+
+    for (const record of records) {
+      try {
+        const employeeId = record.employeeId;
+        const checkIn = record.checkIn ? new Date(record.checkIn) : null;
+        const checkOut = record.checkOut ? new Date(record.checkOut) : null;
+
+        if (!employeeId) {
+          console.warn(`[Commit] Skipping record with no employeeId`);
+          failed++;
+          continue;
+        }
+
+        // Normalize date to UTC midnight for @db.Date compatibility
+        // This ensures consistent matching with the @@unique([employeeId, date]) constraint
+        const rawDate = new Date(record.date);
+        const date = new Date(Date.UTC(rawDate.getFullYear(), rawDate.getMonth(), rawDate.getDate()));
+
+        // Recalculate status based on employee's shift
+        const emp = empMap[employeeId];
+        const shiftStart = emp?.shift?.startTime || '08:00';
+        const gracePeriod = emp?.shift?.gracePeriod || 15;
+
+        const calc = checkIn
+          ? calculateLateness(checkIn, shiftStart, gracePeriod)
+          : { lateMinutes: 0, status: 'Mangkir' };
+        const status = resolveStatus(checkIn, checkOut, calc.status);
+
+        // Use upsert to handle both new and existing records atomically
+        // This avoids the race condition of findUnique + create/update
+        await prisma.attendance.upsert({
+          where: {
+            employeeId_date: {
+              employeeId: employeeId,
+              date: date
+            }
+          },
+          create: {
+            employeeId,
+            date,
+            checkIn,
+            checkOut,
+            status,
+            lateMinutes: calc.lateMinutes,
+            mode: 'Fingerprint'
+          },
+          update: {
+            checkIn: checkIn || undefined,
+            checkOut: checkOut || undefined,
+            status,
+            lateMinutes: calc.lateMinutes,
+            mode: 'Fingerprint'
+          }
+        });
+
+        saved++;
+      } catch (e) {
+        console.error(`[Commit] Failed record for emp ${record.employeeId}:`, e.message);
+        failed++;
+      }
+    }
+
+    // Update last sync time
+    await prisma.device.update({
+      where: { id: parseInt(id) },
+      data: { lastSync: new Date(), status: 'ONLINE' }
+    });
+
+    console.log(`[Commit] Done. Saved: ${saved}, Failed: ${failed}`);
+    res.json({
+      success: true,
+      message: `Sinkronisasi Absen berhasil. ${saved} record absen disimpan${failed > 0 ? `, ${failed} gagal` : ''}.`
+    });
+  } catch (err) {
+    console.error('[Commit] Error:', err);
+    res.status(500).json({ success: false, message: 'Gagal menyimpan data absen: ' + err.message });
+  }
+};
+
 module.exports = {
   getDevices,
   addDevice,
@@ -819,5 +1022,6 @@ module.exports = {
   deleteDevice,
   testConnection,
   syncUsers,
-  syncAttendance
+  syncAttendance,
+  commitAttendance
 };

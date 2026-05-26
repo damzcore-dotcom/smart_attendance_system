@@ -18,7 +18,9 @@ import {
   Fingerprint,
   Shield,
   Banknote,
-  Receipt
+  Receipt,
+  HardHat,
+  Clock
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -33,26 +35,57 @@ const AdminLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const menuItems = [
-    { name: 'Dashboard', path: '/admin', icon: LayoutDashboard, key: 'dashboard' },
-    { name: 'Employees', path: '/admin/employees', icon: Users, key: 'employees' },
-    { name: 'Users', path: '/admin/users', icon: UserCircle, key: 'users' },
-    { name: 'Attendance', path: '/admin/attendance', icon: CalendarCheck, key: 'attendance' },
-    { name: 'Announcements', path: '/admin/announcements', icon: Megaphone, key: 'announcements' },
-    { name: 'Face Check', path: '/admin/face-check', icon: ScanFace, key: 'face-check' },
-    { name: 'Cuti & Kalender', path: '/admin/leave-requests', icon: CalendarCheck, key: 'leave-requests' },
-    { name: 'Payroll', path: '/admin/payroll', icon: Banknote, key: 'payroll' },
-    { name: 'Payroll Settings', path: '/admin/payroll-settings', icon: Receipt, key: 'payroll-settings' },
-    { name: 'Backup', path: '/admin/backup', icon: Database, key: 'backup' },
-    { name: 'Corrections', path: '/admin/corrections', icon: Edit3, key: 'corrections' },
-    { name: 'Mesin Finger', path: '/admin/devices', icon: Fingerprint, key: 'settings' },
-    { name: 'Settings', path: '/admin/settings', icon: Settings, key: 'settings' },
+  const menuGroups = [
+    {
+      title: 'Main',
+      items: [
+        { name: 'Dashboard', path: '/admin', icon: LayoutDashboard, key: 'dashboard' },
+        { name: 'Announcements', path: '/admin/announcements', icon: Megaphone, key: 'announcements' },
+      ]
+    },
+    {
+      title: 'Workforce',
+      items: [
+        { name: 'Employees', path: '/admin/employees', icon: Users, key: 'employees' },
+        { name: 'Rolling Shift', path: '/admin/shift-roster', icon: CalendarCheck, key: 'settings' },
+        { name: 'Cuti & Kalender', path: '/admin/leave-requests', icon: CalendarCheck, key: 'leave-requests' }
+      ]
+    },
+    {
+      title: 'Attendance',
+      items: [
+        { name: 'Data Absensi', path: '/admin/attendance', icon: CalendarCheck, key: 'attendance' },
+        { name: 'Lembur (SPL)', path: '/admin/overtime-spl', icon: Clock, key: 'attendance' },
+        { name: 'Absen Harian (BHL)', path: '/admin/daily-workers', icon: HardHat, key: 'attendance' },
+        { name: 'Koreksi Absen', path: '/admin/corrections', icon: Edit3, key: 'corrections' }
+      ]
+    },
+    {
+      title: 'Payroll',
+      items: [
+        { name: 'Payroll', path: '/admin/payroll', icon: Banknote, key: 'payroll' },
+        { name: 'Payroll Settings', path: '/admin/payroll-settings', icon: Receipt, key: 'payroll-settings' }
+      ]
+    },
+    {
+      title: 'Biometrics & IT',
+      items: [
+        { name: 'Face Check Log', path: '/admin/face-check', icon: ScanFace, key: 'face-check' },
+        { name: 'Mesin Finger', path: '/admin/devices', icon: Fingerprint, key: 'settings' },
+        { name: 'Data Sidik Jari', path: '/admin/fingerprint', icon: ScanFace, key: 'settings' },
+        { name: 'User Access', path: '/admin/users', icon: UserCircle, key: 'users' },
+        { name: 'Backup Data', path: '/admin/backup', icon: Database, key: 'backup' },
+        { name: 'Settings', path: '/admin/settings', icon: Settings, key: 'settings' }
+      ]
+    }
   ];
 
-  // Super Admin exclusive items
-  const superAdminItems = [
-    { name: 'Audit Log', path: '/admin/audit-log', icon: Shield, key: 'audit-log' },
-  ];
+  const superAdminGroup = {
+    title: 'Super Admin',
+    items: [
+      { name: 'Audit Log', path: '/admin/audit-log', icon: Shield, key: 'audit-log' }
+    ]
+  };
 
   const { data: userData } = useQuery({
     queryKey: ['me'],
@@ -70,17 +103,22 @@ const AdminLayout = () => {
 
   const user = userData?.data || authAPI.getStoredUser() || { name: 'Admin', role: 'ADMIN' };
 
-  const filteredMenuItems = menuItems.filter(item => {
-    if (user.role === 'SUPER_ADMIN' || user.permissions === 'ALL') return true;
-    if (!user.permissions || !Array.isArray(user.permissions)) return false;
-    const perm = user.permissions.find(p => p.menuKey === item.key);
-    return perm?.canRead;
-  });
+  // Filter groups
+  const visibleGroups = menuGroups.map(group => {
+    return {
+      ...group,
+      items: group.items.filter(item => {
+        if (user.role === 'SUPER_ADMIN' || user.permissions === 'ALL') return true;
+        if (!user.permissions || !Array.isArray(user.permissions)) return false;
+        const perm = user.permissions.find(p => p.menuKey === item.key);
+        return perm?.canRead;
+      })
+    };
+  }).filter(group => group.items.length > 0);
 
-  // Merge super admin exclusive items
-  const finalMenuItems = user.role === 'SUPER_ADMIN' 
-    ? [...filteredMenuItems, ...superAdminItems] 
-    : filteredMenuItems;
+  if (user.role === 'SUPER_ADMIN') {
+    visibleGroups.push(superAdminGroup);
+  }
 
   const handleLogout = () => {
     authAPI.logout();
@@ -111,28 +149,40 @@ const AdminLayout = () => {
           )}
         </div>
 
-        <nav className="flex-1 px-3 space-y-1 mt-4 overflow-y-auto">
-          {finalMenuItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = location.pathname === item.path;
-            return (
-              <Link
-                key={item.name}
-                to={item.path}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group relative ${
-                  isActive 
-                    ? 'bg-blue-50 text-blue-700 font-semibold' 
-                    : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-                }`}
-              >
-                {isActive && (
-                   <div className="absolute left-0 w-1 h-6 bg-blue-600 rounded-r-full" />
-                )}
-                <Icon className={`w-5 h-5 shrink-0 transition-all duration-200 ${isActive ? 'text-blue-600' : 'group-hover:text-slate-700'}`} />
-                {isSidebarOpen && <span className="text-sm">{item.name}</span>}
-              </Link>
-            );
-          })}
+        <nav className="flex-1 px-4 space-y-4 mt-6 overflow-y-auto custom-scrollbar">
+          {visibleGroups.map((group, idx) => (
+            <div key={idx} className="space-y-1">
+              {isSidebarOpen ? (
+                <div className="px-3 mb-2">
+                  <span className="text-[10px] font-bold text-slate-400 tracking-wider uppercase">{group.title}</span>
+                </div>
+              ) : (
+                <div className="w-full h-px bg-slate-100 my-2" />
+              )}
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const isActive = location.pathname === item.path;
+                return (
+                  <Link
+                    key={item.name}
+                    to={item.path}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative ${
+                      isActive 
+                        ? 'bg-blue-50 text-blue-700 font-semibold shadow-sm border border-blue-100/50' 
+                        : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                    }`}
+                    title={!isSidebarOpen ? item.name : undefined}
+                  >
+                    {isActive && (
+                       <div className="absolute left-0 top-2.5 bottom-2.5 w-1 bg-blue-600 rounded-r-full" />
+                    )}
+                    <Icon className={`w-[18px] h-[18px] shrink-0 transition-all duration-200 ${isActive ? 'text-blue-600' : 'group-hover:text-slate-700'}`} />
+                    {isSidebarOpen && <span className="text-[13px]">{item.name}</span>}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
         <div className="p-4 mt-auto border-t border-slate-100">

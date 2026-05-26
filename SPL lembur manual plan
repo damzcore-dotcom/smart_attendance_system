@@ -1,0 +1,51 @@
+# Rencana Implementasi: Fitur Manajemen Lembur & SPL
+
+Fitur ini dirancang khusus untuk memfasilitasi HRD/Admin dalam mengelola Surat Perintah Lembur (SPL) secara masif tanpa harus masuk ke detail absensi satu per satu. Fokus utamanya adalah kecepatan input (seperti menggunakan Microsoft Excel).
+
+## 1. Konsep & Alur Kerja (Workflow)
+Sistem ini menggunakan algoritma **"Targeted Bulk Input"**. Admin memilih filter, sistem merender tabel, dan admin mengetik nominal jam secara berbeda-beda pada masing-masing baris.
+
+### Skenario Penggunaan
+1. **Memilih Target Waktu:** Admin membuka halaman "Manajemen Lembur" dan memilih tanggal lembur (contoh: 21 Juni 2026).
+2. **Memilih Filter (Opsional):** Admin memilih "Departemen Produksi" atau "Seksi Jahit".
+3. **Proses Input Individual (Berbeda-beda):**
+   - Baris 1: Budi Santoso -> Admin mengetik `2` (Jam)
+   - Baris 2: Siti Aminah -> Admin membiarkan kosong / `0` (Tidak lembur)
+   - Baris 3: Joko Widodo -> Admin mengetik `4` (Jam)
+4. **Eksekusi:** Admin menekan "Simpan Semua". Sistem mencari ID masing-masing karyawan dan menimpa *overtimeHours* mereka di database khusus pada tanggal tersebut.
+
+## 2. Struktur Modul Baru
+
+### A. Tampilan Antarmuka (FrontendUI)
+Tampilan akan dibuat modern, _clean_, dan responsif.
+*   **File Baru:** `frontend/src/pages/admin/OvertimeSPL.jsx`
+*   **Elemen Utama:**
+    *   **Dashboard Bar (Top):** Berisi Date Picker dan Filter Dropdown (Departemen, Seksi, Jabatan).
+    *   **Tabel Data (Spreadsheet Mode):** Menampilkan Foto/Inisial, Nama, NIK, dan kotak isian input nomor khusus (Type Number) bernama "Jam Lembur".
+    *   **Sticky Footer:** Memiliki Floating Action Button (FAB) atau Footer Bar yang melayang di bawah layar agar tombol **"Simpan Perubahan Lembur"** selalu mudah diklik.
+
+### B. Otomatisasi (Backend API)
+Kita tidak perlu membuat tabel database baru, melainkan mendayagunakan kemampuan tabel [Attendance](file:///c:/ADAM/smart_attendance_system/frontend/src/pages/admin/Attendance.jsx#34-1484) (Absensi) yang sudah memiliki field `overtimeHours`.
+*   **Endpoint Baru:** `PATCH /api/attendance/bulk-overtime`
+*   **Cara Kerja API:** Menerima *Payload JSON* berisikan daftar ID absen dan angka lemburnya. Server (Node.js) akan menggunakan metode Prisma `$transaction` agar pembaruan data ribuan karyawan bisa dieksekusi secara instan dalam 1 detik.
+
+### C. Pengaturan Perusahaan Tambahan (Settings)
+Menambahkan opsi *"Toggle"* di menu Pengaturan:
+*   `Auto-Calculate Overtime` (On/Off). 
+*   Jika **Dimatikan (Off)**, maka kalau mesin sidik jari/Face-ID merekam kepulangan karyawan jam 23:00 sekalipun, angka lemburnya otomatis masuk `0` (Karena bergantung penuh pada input manual SPL dari menu baru ini).
+
+## 3. Estimasi Langkah Teknis Pengerjaan
+
+| Step | Deskripsi | Target File |
+| :--- | :--- | :--- |
+| **Tahap 1** | Membuat backend API Endpoint untuk merespon dan menyimpan *array* data lembur massal. | [attendanceController.js](file:///c:/ADAM/smart_attendance_system/backend/src/controllers/attendanceController.js) |
+| **Tahap 2** | Menambahkan akses rute API baru di service *frontend*. | [api.js](file:///c:/ADAM/smart_attendance_system/frontend/src/services/api.js) |
+| **Tahap 3** | Membuat komponen halaman penuh dengan *Data Table* yang bisa di-edit tiap barisnya. | `OvertimeSPL.jsx` |
+| **Tahap 4** | Mendaftarkan halaman baru tersebut ke kerangka utama admin & sidebar. | `App.jsx` & komponen Sidebar |
+| **Tahap 5** | Mengintegrasikan _Setting_ "Lembur Mesin vs Manual" di kalkulasi checkout. | [attendanceController.js](file:///c:/ADAM/smart_attendance_system/backend/src/controllers/attendanceController.js) |
+
+## 4. Keamanan dan Audit Log
+Setiap kali Admin menekan tombol "Simpan", sistem wajib mengirimkan jejak operasi ke Audit Log, seperti:
+`[ADMIN] Berhasil meng-update jam lembur manual untuk 34 karyawan pada tanggal 21-06-2026`. 
+
+Hal ini memastikan semua perubahan *payroll* dapat dipertanggungjawabkan.

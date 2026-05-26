@@ -1,6 +1,8 @@
-const API_BASE = (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL !== '/')
-  ? (import.meta.env.VITE_API_URL.endsWith('/api') ? import.meta.env.VITE_API_URL : `${import.meta.env.VITE_API_URL}/api`)
-  : `${window.location.protocol}//${window.location.hostname}:5050/api`;
+const API_BASE = (window.APP_CONFIG && window.APP_CONFIG.API_URL)
+  ? (window.APP_CONFIG.API_URL.endsWith('/api') ? window.APP_CONFIG.API_URL : `${window.APP_CONFIG.API_URL}/api`)
+  : (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL !== '/')
+    ? (import.meta.env.VITE_API_URL.endsWith('/api') ? import.meta.env.VITE_API_URL : `${import.meta.env.VITE_API_URL}/api`)
+    : `${window.location.protocol}//${window.location.hostname}:5000/api`;
 
 /**
  * Smart Attendance Pro - API Service
@@ -235,6 +237,8 @@ export const attendanceAPI = {
     return { data: await res.blob() };
   },
   update: (id, data) => apiFetch(`/attendance/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  bulkOvertime: (data) => apiFetch('/attendance/bulk-overtime', { method: 'PATCH', body: JSON.stringify(data) }),
+  bulkDailyWorkers: (data) => apiFetch('/attendance/bulk-daily-workers', { method: 'POST', body: JSON.stringify(data) }),
 };
 
 // ─── Dashboard API ─────────────────────────────────
@@ -303,6 +307,20 @@ export const scheduleAPI = {
   getAll: () => apiFetch('/shifts'),
   create: (data) => apiFetch('/shifts', { method: 'POST', body: JSON.stringify(data) }),
   getEmployeeShift: (empId) => apiFetch(`/shifts/employee/${empId}`),
+  getOverrides: () => apiFetch('/shifts/overrides'),
+  createOverrides: (data) => apiFetch('/shifts/overrides', { method: 'POST', body: JSON.stringify(data) }),
+  deleteOverride: (id) => apiFetch(`/shifts/overrides/${id}`, { method: 'DELETE' }),
+};
+
+// ─── Fingerprint API ─────────────────────────────
+
+export const fingerprintAPI = {
+  getEmployees: () => apiFetch('/fingerprint/employees'),
+  getEmployeeTemplates: (empId) => apiFetch(`/fingerprint/employees/${empId}/templates`),
+  getDeviceDetail: (deviceId) => apiFetch(`/fingerprint/devices/${deviceId}/detail`),
+  pushUsers: (deviceId, employeeIds) => apiFetch(`/fingerprint/devices/${deviceId}/push`, { method: 'POST', body: JSON.stringify({ employeeIds }) }),
+  pullTemplates: (deviceId, uids) => apiFetch(`/fingerprint/devices/${deviceId}/pull`, { method: 'POST', body: JSON.stringify({ uids }) }),
+  deleteDeviceUser: (deviceId, uid) => apiFetch(`/fingerprint/devices/${deviceId}/users/${uid}`, { method: 'DELETE' }),
 };
 
 // ─── Notification API ────────────────────────────
