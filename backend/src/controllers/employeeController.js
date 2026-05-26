@@ -232,7 +232,7 @@ const update = async (req, res) => {
     if (data.remainingLeave !== undefined) data.remainingLeave = parseInt(data.remainingLeave);
     // Remove read-only fields and relation objects that shouldn't be updated directly
     delete data.employeeCode; delete data.dbId; delete data.id;
-    delete data.shift; delete data.department;
+    delete data.shift; delete data.department; delete data.faceIdDisplay;
 
     if (data.profilePhoto && data.profilePhoto.startsWith('data:image')) {
       const base64Data = data.profilePhoto.replace(/^data:image\/\w+;base64,/, "");
