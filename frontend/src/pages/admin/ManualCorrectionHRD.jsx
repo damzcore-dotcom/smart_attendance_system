@@ -33,7 +33,7 @@ const ManualCorrectionHRD = () => {
   const employees = employeesData?.data || [];
 
   const filteredEmployees = employees.filter(e => {
-    if (deptFilter && e.department?.name !== deptFilter) return false;
+    if (deptFilter && e.dept !== deptFilter) return false;
     if (sectionFilter && e.section !== sectionFilter) return false;
     if (rankFilter && e.position !== rankFilter) return false;
     if (search) {
@@ -184,7 +184,7 @@ const ManualCorrectionHRD = () => {
           </div>
 
           {[
-            { label: 'DEPARTMENT', val: deptFilter, setter: setDeptFilter, opts: [...new Set((employees || []).map(e => e.department?.name).filter(Boolean))] },
+            { label: 'DEPARTMENT', val: deptFilter, setter: setDeptFilter, opts: [...new Set((employees || []).map(e => e.dept).filter(Boolean))] },
             { label: 'SECTION', val: sectionFilter, setter: setSectionFilter, opts: [...new Set((employees || []).map(e => e.section).filter(Boolean))] },
             { label: 'RANK', val: rankFilter, setter: setRankFilter, opts: [...new Set((employees || []).map(e => e.position).filter(Boolean))] }
           ].map((field, idx) => (
