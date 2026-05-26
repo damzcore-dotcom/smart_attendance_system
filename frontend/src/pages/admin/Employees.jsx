@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { employeeAPI, settingsAPI, payrollAPI } from '../../services/api';
+import { employeeAPI, settingsAPI, payrollAPI, deviceAPI, fingerprintAPI } from '../../services/api';
 import CreatableSelect from 'react-select/creatable';
 import Webcam from 'react-webcam';
 import * as faceapi from '@vladmandic/face-api';
 import * as XLSX from 'xlsx';
 import { 
   Search, Filter, CheckCircle2, Clock, UserPlus, FileSpreadsheet, Upload, X, Download, Save, Camera,
-  ScanFace, Loader2, AlertCircle, RefreshCw, ShieldCheck, ChevronRight, ChevronUp, ChevronDown, FileText, Banknote, Printer
+  ScanFace, Loader2, AlertCircle, RefreshCw, ShieldCheck, ChevronRight, ChevronUp, ChevronDown, FileText, Banknote, Printer, Fingerprint
 } from 'lucide-react';
 import PrintableIDCard from '../../components/admin/PrintableIDCard';
 
@@ -62,6 +62,10 @@ const Employees = () => {
   const stableCountRef = useRef(0);
   const autoCaptureTriggeredRef = useRef(false);
 
+  // Fingerprint push/pull states
+  const [selectedDeviceForFinger, setSelectedDeviceForFinger] = useState('');
+  const [isPushingFinger, setIsPushingFinger] = useState(false);
+
   const handleSort = (key) => {
     setSortConfig(prev => ({
       key,
@@ -114,7 +118,13 @@ const Employees = () => {
     queryFn: () => settingsAPI.getShifts(),
   });
 
+  const { data: devicesData } = useQuery({
+    queryKey: ['devices'],
+    queryFn: () => deviceAPI.getAll(),
+  });
+
   const shifts = shiftsData?.data || [];
+  const devices = devicesData?.data || [];
   const masterOptions = optionsData?.data || { grades: [], positions: [], sections: [], employmentStatuses: [], contractDurations: [], departments: [] };
   const toSelectOptions = (arr) => arr.map(i => {
     if (typeof i === 'object') return { label: i.name, value: i.name };
@@ -160,6 +170,23 @@ const Employees = () => {
       alert('Employee data updated successfully!');
     },
     onError: (err) => alert(`Update failed: ${err.message}`)
+  });
+
+  const pushFingerMutation = useMutation({
+    mutationFn: ({ deviceId, employeeIds }) => fingerprintAPI.pushUsers(deviceId, employeeIds),
+    onSuccess: (res) => {
+      alert(res.message || 'Users pushed to device successfully');
+    },
+    onError: (err) => alert(`Failed to push to device: ${err.message}`)
+  });
+
+  const pullFingerMutation = useMutation({
+    mutationFn: ({ deviceId, uids }) => fingerprintAPI.pullTemplates(deviceId, uids),
+    onSuccess: (res) => {
+      alert(res.message || 'Fingerprint templates pulled and synced successfully');
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+    },
+    onError: (err) => alert(`Failed to pull from device: ${err.message}`)
   });
 
   const filteredEmployees = data?.data || [];
@@ -559,7 +586,7 @@ const Employees = () => {
                   </div>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center block">ID Finger</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center block">Fingerprint</span>
                 </th>
                 <th 
                   className="px-6 py-4 sticky left-[250px] z-30 bg-slate-50 border-b border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] cursor-pointer hover:bg-slate-100 transition-colors group"
@@ -584,7 +611,7 @@ const Employees = () => {
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Leave Quota</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Biometrics</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Face Recognition</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Shift</span>
@@ -744,9 +771,13 @@ const Employees = () => {
                     {emp.id}
                   </td>
                   <td className="px-6 py-3 border-r border-slate-100 text-center">
-                    <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded-md">
-                      {emp.fingerPrintId || '-'}
-                    </span>
+                    {emp.fingerPrintId ? (
+                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 rounded-md border border-emerald-200">
+                         <Fingerprint className="w-3 h-3" /> {emp.fingerPrintId}
+                       </span>
+                    ) : (
+                       <span className="text-xs font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">-</span>
+                    )}
                   </td>
                   <td className="px-6 py-3 sticky left-[250px] z-10 bg-white group-hover:bg-blue-50/50 transition-colors border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.02)]">
                     <div className="flex flex-col min-w-[200px]">
@@ -786,8 +817,8 @@ const Employees = () => {
                     </div>
                   </td>
                   <td className="px-6 py-3">
-                    <div className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-md border text-[10px] font-bold uppercase tracking-wider transition-all ${emp.faceId === 'Enrolled' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
-                      {emp.faceId === 'Enrolled' ? <ShieldCheck className="w-3 h-3"/> : <Clock className="w-3 h-3"/>}
+                    <div className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-md border text-[10px] font-bold uppercase tracking-wider transition-all ${emp.faceId === 'Enrolled' ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                      {emp.faceId === 'Enrolled' ? <ScanFace className="w-3 h-3"/> : <ScanFace className="w-3 h-3 opacity-50"/>}
                       {emp.faceId}
                     </div>
                   </td>
@@ -859,7 +890,7 @@ const Employees = () => {
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 print:hidden">
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => {
-            if (livenessIntervalRef.current) clearInterval(livenessIntervalRef.current);
+            if (faceGuideRef.current) clearInterval(faceGuideRef.current);
             setScanStatus('ready');
             setIsCapturing(false);
             setAddModalOpen(false);
@@ -879,7 +910,7 @@ const Employees = () => {
               </div>
               <button 
                 onClick={() => {
-                  if (livenessIntervalRef.current) clearInterval(livenessIntervalRef.current);
+                  if (faceGuideRef.current) clearInterval(faceGuideRef.current);
                   setScanStatus('ready');
                   setIsCapturing(false);
                   setAddModalOpen(false);
@@ -891,13 +922,13 @@ const Employees = () => {
             </div>
             
             <div className="flex border-b border-slate-100 bg-white px-2 overflow-x-auto hide-scrollbar">
-              {['basic', 'biometric', 'hr', 'personal', 'family'].map(tab => (
+              {['basic', 'biometric', 'finger', 'hr', 'personal', 'family'].map(tab => (
                 <button 
                   key={tab} 
                   onClick={() => setActiveTab(tab)} 
                   className={`px-6 py-4 text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === tab ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
                 >
-                  {tab === 'basic' ? 'Core Info' : tab === 'biometric' ? 'Biometrics' : tab === 'hr' ? 'Employment Info' : tab === 'personal' ? 'Personal Data' : 'Family Data'}
+                  {tab === 'basic' ? 'Core Info' : tab === 'biometric' ? 'Face Recog' : tab === 'finger' ? 'Fingerprint' : tab === 'hr' ? 'Employment Info' : tab === 'personal' ? 'Personal Data' : 'Family Data'}
                   {activeTab === tab && (
                     <div className="absolute bottom-0 left-4 right-4 h-0.5 bg-blue-600 rounded-t-full"></div>
                   )}
@@ -1060,7 +1091,6 @@ const Employees = () => {
                           ) : (
                             <div className="flex gap-2">
                               <button type="button" onClick={() => {
-                                if (livenessIntervalRef.current) clearInterval(livenessIntervalRef.current);
                                 if (faceGuideRef.current) clearInterval(faceGuideRef.current);
                                 setScanStatus('ready');
                                 setIsCapturing(false);
@@ -1158,6 +1188,80 @@ const Employees = () => {
                           )}
                         </div>
                       </div>
+                    </div>
+                  </div>
+                )}
+                {activeTab === 'finger' && (
+                  <div className="flex flex-col items-center justify-center pb-8 space-y-6">
+                    <div className="w-full max-w-md bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                      <div className="flex items-center gap-3 mb-6">
+                        <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
+                          <Fingerprint className="w-5 h-5"/>
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-slate-800">Fingerprint Registration</h4>
+                          <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Sync with Attendance Machine</p>
+                        </div>
+                      </div>
+
+                      {!newEmployee.dbId ? (
+                        <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl text-sm font-medium flex items-start gap-3">
+                          <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                          <p>Please <strong className="font-bold">Save the Employee</strong> first before registering their fingerprint to the machine.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-5">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5 ml-1">AC No. / Finger ID</label>
+                            <div className="bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl text-slate-700 font-mono font-bold">
+                              {newEmployee.fingerPrintId || '-'}
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-1 ml-1">If this is empty, a new ID will be generated by the machine or you can set it in Core Info.</p>
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5 ml-1">Select Attendance Machine</label>
+                            <select
+                              value={selectedDeviceForFinger}
+                              onChange={(e) => setSelectedDeviceForFinger(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 appearance-none cursor-pointer"
+                            >
+                              <option value="">-- Choose Machine --</option>
+                              {devices.map(d => (
+                                <option key={d.id} value={d.id}>{d.name} ({d.ipAddress})</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="flex gap-3 pt-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if(!selectedDeviceForFinger) return alert('Select a machine first!');
+                                pushFingerMutation.mutate({ deviceId: selectedDeviceForFinger, employeeIds: [newEmployee.dbId] });
+                              }}
+                              disabled={!selectedDeviceForFinger || pushFingerMutation.isPending}
+                              className="flex-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs uppercase tracking-wider py-3 rounded-xl flex items-center justify-center gap-2 border border-emerald-200 transition-all disabled:opacity-50"
+                            >
+                              {pushFingerMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin"/> : <Upload className="w-4 h-4"/>}
+                              Push to Machine
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if(!selectedDeviceForFinger) return alert('Select a machine first!');
+                                if(!newEmployee.fingerPrintId) return alert('No Finger ID applied. Try Syncing Users from Machine first.');
+                                pullFingerMutation.mutate({ deviceId: selectedDeviceForFinger, uids: [newEmployee.fingerPrintId] });
+                              }}
+                              disabled={!selectedDeviceForFinger || !newEmployee.fingerPrintId || pullFingerMutation.isPending}
+                              className="flex-1 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs uppercase tracking-wider py-3 rounded-xl flex items-center justify-center gap-2 border border-slate-200 transition-all disabled:opacity-50"
+                            >
+                              {pullFingerMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin"/> : <Download className="w-4 h-4"/>}
+                              Pull Template
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

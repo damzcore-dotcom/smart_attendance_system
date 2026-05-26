@@ -242,6 +242,11 @@ export const attendanceAPI = {
   manualCorrection: (data) => apiFetch('/attendance/manual-correction', { method: 'POST', body: JSON.stringify(data) }),
 };
 
+// ─── Device API ────────────────────────────────────
+export const deviceAPI = {
+  getAll: () => apiFetch('/devices'),
+};
+
 // ─── Dashboard API ─────────────────────────────────
 export const dashboardAPI = {
   getStats: () => apiFetch('/dashboard/stats'),
