@@ -1320,7 +1320,7 @@ const manualCorrectionHRD = async (req, res) => {
         const base64Data = photo.replace(/^data:image\/\w+;base64,/, "");
         const extMatch = photo.split(';')[0].match(/jpeg|png|gif|webp/);
         const ext = extMatch ? extMatch[0] : 'jpg';
-        const uploadDir = path.join(__dirname, '..', '..', 'public', 'uploads', 'corrections');
+        const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'corrections');
         if (!fs.existsSync(uploadDir)) {
           fs.mkdirSync(uploadDir, { recursive: true });
         }

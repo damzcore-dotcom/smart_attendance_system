@@ -60,6 +60,24 @@ const getDeviceStats = async (req, res) => {
 const addDevice = async (req, res) => {
   try {
     const { name, ipAddress, port, locationId } = req.body;
+    
+    // Check for duplicate IP or Name
+    const existingDevice = await prisma.device.findFirst({
+      where: {
+        OR: [
+          { name: name },
+          { ipAddress: ipAddress }
+        ]
+      }
+    });
+
+    if (existingDevice) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Device with same ${existingDevice.name === name ? 'name' : 'IP address'} already exists.` 
+      });
+    }
+
     const device = await prisma.device.create({
       data: { name, ipAddress, port: parseInt(port) || 4370, locationId: locationId ? parseInt(locationId) : null }
     });
@@ -931,6 +949,24 @@ const updateDevice = async (req, res) => {
     const { id } = req.params;
     const { name, ipAddress, port, locationId, autoSyncEnabled, autoSyncTime } = req.body;
     
+    // Check for duplicate IP or Name excluding current device
+    const existingDevice = await prisma.device.findFirst({
+      where: {
+        id: { not: parseInt(id) },
+        OR: [
+          { name: name },
+          { ipAddress: ipAddress }
+        ]
+      }
+    });
+
+    if (existingDevice) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Device with same ${existingDevice.name === name ? 'name' : 'IP address'} already exists.` 
+      });
+    }
+
     const device = await prisma.device.update({
       where: { id: parseInt(id) },
       data: {

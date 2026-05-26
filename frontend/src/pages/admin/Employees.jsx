@@ -817,9 +817,9 @@ const Employees = () => {
                     </div>
                   </td>
                   <td className="px-6 py-3">
-                    <div className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-md border text-[10px] font-bold uppercase tracking-wider transition-all ${emp.faceId === 'Enrolled' ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
-                      {emp.faceId === 'Enrolled' ? <ScanFace className="w-3 h-3"/> : <ScanFace className="w-3 h-3 opacity-50"/>}
-                      {emp.faceId}
+                    <div className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-md border text-[10px] font-bold uppercase tracking-wider transition-all ${emp.faceIdDisplay === 'Enrolled' ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                      {emp.faceIdDisplay === 'Enrolled' ? <ScanFace className="w-3 h-3"/> : <ScanFace className="w-3 h-3 opacity-50"/>}
+                      {emp.faceIdDisplay}
                     </div>
                   </td>
                   <td className="px-6 py-3">
@@ -1070,7 +1070,7 @@ const Employees = () => {
                       <div className="flex items-center justify-between">
                         <label className="text-[10px] font-bold text-blue-600 uppercase tracking-wider flex items-center gap-2">
                           <ScanFace className="w-4 h-4" /> Biometric Capture
-                          {newEmployee.faceId === 'Enrolled' && (
+                          {newEmployee.faceIdDisplay === 'Enrolled' && (
                             <span className="ml-2 inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-600 text-[9px] font-bold uppercase tracking-wider rounded-md border border-emerald-200">
                               <ShieldCheck className="w-3 h-3" /> Enrolled
                             </span>

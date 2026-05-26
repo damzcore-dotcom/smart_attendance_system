@@ -48,12 +48,12 @@ app.use(express.urlencoded({ extended: true }));
 const path = require('path');
 const fs = require('fs');
 // Auto-create uploads directory on startup
-const uploadsDir = path.join(__dirname, '..', 'public', 'uploads', 'profiles');
+const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'profiles');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   console.log('📁 Created uploads directory:', uploadsDir);
 }
-app.use('/uploads', express.static(path.join(__dirname, '..', 'public', 'uploads')));
+app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
 
 // Health check
 app.get('/api/health', (req, res) => {
