@@ -10,13 +10,15 @@ const OvertimeSPL = () => {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
+  const [sectionFilter, setSectionFilter] = useState('');
+  const [rankFilter, setRankFilter] = useState('');
   
   // Local state for exactly what we type into inputs
   const [overtimeInputs, setOvertimeInputs] = useState({}); // { empId: "2.5" }
 
   const { data: employeesData, isLoading: empLoading } = useQuery({
-    queryKey: ['employees-for-spl', deptFilter],
-    queryFn: () => employeeAPI.getAll({ limit: 1000, status: 'ACTIVE', dept: deptFilter === 'All' ? '' : deptFilter }),
+    queryKey: ['employees-for-spl'], // removed deptFilter from key to fetch all active once
+    queryFn: () => employeeAPI.getAll({ limit: 1000, status: 'ACTIVE' }),
   });
 
   const { data: attendanceData, isLoading: attLoading } = useQuery({
@@ -83,9 +85,16 @@ const OvertimeSPL = () => {
   };
 
   const filteredEmployees = (employeesData?.data || []).filter(e => {
-    if (!search) return true;
-    const lower = search.toLowerCase();
-    return e.name.toLowerCase().includes(lower) || e.employeeCode.toLowerCase().includes(lower);
+    if (deptFilter && e.department?.name !== deptFilter) return false;
+    if (sectionFilter && e.section !== sectionFilter) return false;
+    if (rankFilter && e.position !== rankFilter) return false;
+    if (search) {
+      const lower = search.toLowerCase();
+      if (!e.name.toLowerCase().includes(lower) && !e.employeeCode.toLowerCase().includes(lower)) {
+        return false;
+      }
+    }
+    return true;
   });
 
   const isLoading = empLoading || attLoading;
@@ -114,62 +123,60 @@ const OvertimeSPL = () => {
         </div>
       </div>
 
-      {/* Filter Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col lg:flex-row gap-4 items-center">
-        <div className="flex items-center gap-3 w-full lg:w-1/3">
-           <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0">
-             <Calendar className="w-5 h-5 text-indigo-600" />
-           </div>
-           <div className="flex-1">
-             <label className="text-[10px] font-bold text-slate-500 uppercase">Tanggal Target</label>
-             <input 
-               type="date"
-               value={selectedDate}
-               onChange={(e) => setSelectedDate(e.target.value)}
-               className="w-full text-sm font-semibold border-b border-slate-200 pb-1 focus:outline-none focus:border-indigo-600 bg-transparent"
-             />
-           </div>
+      {/* Advanced Filter Bar */}
+      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-6">
+          <div className="flex items-center gap-3 min-w-max">
+            <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center">
+              <Calendar className="w-4 h-4 text-indigo-600" />
+            </div>
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">TANGGAL TARGET:</label>
+          </div>
+          <div className="flex items-center bg-slate-50 p-1.5 rounded-xl border border-slate-200">
+            <input 
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="bg-transparent px-4 py-2 text-sm font-bold text-slate-700 outline-none uppercase tracking-wider"
+            />
+          </div>
         </div>
 
-        <div className="h-10 w-px bg-slate-200 hidden lg:block" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6 items-end bg-slate-50/50 p-5 rounded-2xl border border-slate-100">
+          <div className="space-y-2">
+            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">PERSONNEL FILTER</label>
+            <div className="relative group">
+              <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+              <input 
+                type="text" 
+                placeholder="ID SEQUENCE / NAMA..." 
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-[10px] font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder:text-slate-400 shadow-sm transition-all uppercase tracking-wider"
+              />
+            </div>
+          </div>
 
-        <div className="flex items-center gap-3 w-full lg:w-1/3">
-           <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center shrink-0">
-             <Filter className="w-5 h-5 text-slate-500" />
-           </div>
-           <div className="flex-1">
-             <label className="text-[10px] font-bold text-slate-500 uppercase">Departemen</label>
-             <select 
-               value={deptFilter}
-               onChange={(e) => setDeptFilter(e.target.value)}
-               className="w-full text-sm font-semibold border-b border-slate-200 pb-1 focus:outline-none focus:border-indigo-600 bg-transparent"
-             >
-               <option value="">Semua Departemen</option>
-               <option value="Produksi">Produksi</option>
-               <option value="Sewing">Sewing</option>
-               <option value="Cutting">Cutting</option>
-               <option value="Finishing">Finishing</option>
-               <option value="HRD">HRD</option>
-             </select>
-           </div>
-        </div>
-
-        <div className="h-10 w-px bg-slate-200 hidden lg:block" />
-
-        <div className="flex items-center gap-3 w-full lg:w-1/3">
-           <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center shrink-0">
-             <Search className="w-5 h-5 text-slate-500" />
-           </div>
-           <div className="flex-1">
-             <label className="text-[10px] font-bold text-slate-500 uppercase">Cari Karyawan</label>
-             <input 
-               type="text"
-               placeholder="Ketik Nama/NIK..."
-               value={search}
-               onChange={(e) => setSearch(e.target.value)}
-               className="w-full text-sm font-semibold border-b border-slate-200 pb-1 focus:outline-none focus:border-indigo-600 bg-transparent"
-             />
-           </div>
+          {[
+            { label: 'DEPARTMENT', val: deptFilter, setter: setDeptFilter, opts: [...new Set((employeesData?.data || []).map(e => e.department?.name).filter(Boolean))] },
+            { label: 'SECTION', val: sectionFilter, setter: setSectionFilter, opts: [...new Set((employeesData?.data || []).map(e => e.section).filter(Boolean))] },
+            { label: 'RANK', val: rankFilter, setter: setRankFilter, opts: [...new Set((employeesData?.data || []).map(e => e.position).filter(Boolean))] }
+          ].map((field, idx) => (
+            <div key={idx} className="space-y-2">
+              <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">{field.label}</label>
+              <div className="relative">
+                <select 
+                  value={field.val}
+                  onChange={(e) => field.setter(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl pl-4 pr-10 py-3 text-[10px] font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer appearance-none uppercase tracking-wider shadow-sm truncate transition-all"
+                >
+                  <option value="">GLOBAL ARCHIVE</option>
+                  {field.opts.map((o, i) => <option key={i} value={o}>{o}</option>)}
+                </select>
+                <Filter className="w-3.5 h-3.5 text-slate-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
