@@ -1,5 +1,6 @@
 import React from 'react';
 import { QRCodeSVG } from 'qrcode.react';
+import { getFileUrl } from '../../services/api';
 
 const PrintableIDCard = ({ employee, company, config, isPreview = false, isBulk = false }) => {
   if (!employee) return null;
@@ -31,7 +32,7 @@ const PrintableIDCard = ({ employee, company, config, isPreview = false, isBulk 
     return (
       <div className={`${sizeClass} ${borderStyle} overflow-hidden bg-slate-200 flex items-center justify-center flex-shrink-0 z-20 relative shadow-sm`}>
         {employee.profilePhoto || employee.facePhoto ? (
-          <img src={employee.profilePhoto || employee.facePhoto} alt={employee.name} className="w-full h-full object-cover" />
+          <img src={getFileUrl(employee.profilePhoto || employee.facePhoto)} alt={employee.name} className="w-full h-full object-cover" />
         ) : (
           <span className="text-3xl font-bold text-slate-400">
             {employee.name ? employee.name.charAt(0).toUpperCase() : '?'}

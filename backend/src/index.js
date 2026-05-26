@@ -45,6 +45,8 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+const path = require('path');
+app.use('/uploads', express.static(path.join(__dirname, '..', 'public', 'uploads')));
 
 // Health check
 app.get('/api/health', (req, res) => {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { employeeAPI, settingsAPI, payrollAPI, deviceAPI, fingerprintAPI } from '../../services/api';
+import { employeeAPI, settingsAPI, payrollAPI, deviceAPI, fingerprintAPI, getFileUrl } from '../../services/api';
 import CreatableSelect from 'react-select/creatable';
 import Webcam from 'react-webcam';
 import * as faceapi from '@vladmandic/face-api';
@@ -787,8 +787,8 @@ const Employees = () => {
                   </td>
                   <td className="px-6 py-3 text-center">
                     <div className="w-10 h-10 rounded-full border-2 border-white shadow-sm overflow-hidden bg-slate-200 flex items-center justify-center mx-auto">
-                      {emp.facePhoto ? (
-                        <img src={emp.facePhoto} alt={emp.name} className="w-full h-full object-cover" />
+                      {(emp.profilePhoto || emp.facePhoto) ? (
+                        <img src={getFileUrl(emp.profilePhoto || emp.facePhoto)} alt={emp.name} className="w-full h-full object-cover" />
                       ) : (
                         <span className="text-xs font-bold text-slate-400">
                           {emp.name ? emp.name.charAt(0).toUpperCase() : '?'}
@@ -1018,7 +1018,7 @@ const Employees = () => {
                       <div className="flex items-center gap-3">
                         {newEmployee.profilePhoto ? (
                           <div className="relative group/pic">
-                            <img src={newEmployee.profilePhoto} alt="Profile" className="w-12 h-12 rounded-xl object-cover border-2 border-blue-200" />
+                            <img src={getFileUrl(newEmployee.profilePhoto)} alt="Profile" className="w-24 h-32 rounded-xl object-cover border-2 border-blue-200 shadow-sm" />
                             <button 
                               type="button"
                               onClick={() => setNewEmployee({...newEmployee, profilePhoto: ''})}
@@ -1118,7 +1118,7 @@ const Employees = () => {
                       <div className="relative">
                         <div className="aspect-[4/3] rounded-2xl overflow-hidden relative bg-slate-100 border border-slate-200 shadow-inner group/cam">
                           {newEmployee.facePhoto ? (
-                            <img src={newEmployee.facePhoto} alt="Face" className="w-full h-full object-cover" />
+                            <img src={getFileUrl(newEmployee.facePhoto)} alt="Face" className="w-full h-full object-cover" />
                           ) : isCameraActive ? (
                             <>
                               <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg" className="w-full h-full object-cover" videoConstraints={{ facingMode: "user", width: 640, height: 480 }} />

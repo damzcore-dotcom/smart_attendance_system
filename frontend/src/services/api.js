@@ -9,6 +9,13 @@ const API_BASE = (window.APP_CONFIG && window.APP_CONFIG.API_URL)
  * Handles all HTTP requests with JWT token management
  */
 
+export const getFileUrl = (path) => {
+  if (!path) return '';
+  if (path.startsWith('http') || path.startsWith('data:')) return path;
+  const baseUrl = API_BASE.replace('/api', '');
+  return `${baseUrl}${path.startsWith('/') ? path : '/' + path}`;
+};
+
 // ─── Token Management ────────────────────────────
 
 const getAccessToken = () => localStorage.getItem('accessToken');
