@@ -11,5 +11,6 @@ router.post('/test-connection', verifyToken, requireAdmin, deviceController.test
 router.post('/:id/sync-users', verifyToken, requireAdmin, deviceController.syncUsers);
 router.post('/:id/sync-attendance', verifyToken, requireAdmin, deviceController.syncAttendance);
 router.post('/:id/commit-attendance', verifyToken, requireAdmin, deviceController.commitAttendance);
+router.get('/:id/stats', verifyToken, requireAdmin, deviceController.getDeviceStats);
 
 module.exports = router;

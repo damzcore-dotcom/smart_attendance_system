@@ -7,9 +7,43 @@ const ZKLib = require('node-zklib');
 const getDevices = async (req, res) => {
   try {
     const devices = await prisma.device.findMany();
+    // Pre-seed some default deviceUsers _count if needed, but not strictly required
     res.json({ success: true, data: devices });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * Get quick device stats (Users & Logs count)
+ */
+const getDeviceStats = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const device = await prisma.device.findUnique({ where: { id: parseInt(id) } });
+    if (!device) return res.status(404).json({ success: false });
+
+    // Gunakan timeout yang sangat singkat (5 detik) agar tidak memblokir UI
+    const zk = new ZKLib(device.ipAddress, device.port, 5000, 5000);
+    await zk.createSocket();
+    const info = await zk.getInfo();
+    await zk.disconnect();
+
+    res.json({
+      success: true,
+      data: {
+        userCounts: info.userCounts || 0,
+        logCounts: info.logCounts || 0
+      }
+    });
+  } catch (err) {
+    res.json({
+      success: true,
+      data: {
+        userCounts: '-',
+        logCounts: '-'
+      }
+    });
   }
 };
 
@@ -1023,5 +1057,6 @@ module.exports = {
   testConnection,
   syncUsers,
   syncAttendance,
-  commitAttendance
+  commitAttendance,
+  getDeviceStats
 };

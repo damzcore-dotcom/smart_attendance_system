@@ -7,6 +7,46 @@ import {
   CheckCircle2, AlertCircle, XCircle, RefreshCw, ChevronLeft, Search, Info
 } from 'lucide-react';
 
+const DeviceStats = ({ deviceId, status }) => {
+  const { data, isLoading } = useQuery({
+    queryKey: ['device-stats', deviceId],
+    queryFn: () => api.get(`/devices/${deviceId}/stats`).then(res => res.data),
+    enabled: status === 'ONLINE',
+    refetchInterval: 30000, // Refresh every 30s
+  });
+
+  if (status !== 'ONLINE') {
+    return (
+      <div className="flex gap-3 text-[10px]">
+        <div className="flex-1 bg-red-50 rounded-lg p-2.5 text-center border border-red-100 opacity-50">
+          <span className="block font-bold text-red-800 text-sm">—</span>
+          <span className="text-red-500 font-bold uppercase">Users</span>
+        </div>
+        <div className="flex-1 bg-red-50 rounded-lg p-2.5 text-center border border-red-100 opacity-50">
+          <span className="block font-bold text-red-800 text-sm">—</span>
+          <span className="text-red-500 font-bold uppercase">Logs</span>
+        </div>
+      </div>
+    );
+  }
+
+  const usersCount = isLoading ? '...' : (data?.data?.userCounts || 0);
+  const logsCount = isLoading ? '...' : (data?.data?.logCounts || 0);
+
+  return (
+    <div className="flex gap-3 text-[10px]">
+      <div className="flex-1 bg-blue-50/50 rounded-lg p-2.5 text-center border border-blue-100">
+        <span className="block font-bold text-blue-800 text-sm">{usersCount}</span>
+        <span className="text-blue-600 font-bold uppercase tracking-wider">Users</span>
+      </div>
+      <div className="flex-1 bg-emerald-50/50 rounded-lg p-2.5 text-center border border-emerald-100">
+        <span className="block font-bold text-emerald-800 text-sm">{logsCount}</span>
+        <span className="text-emerald-600 font-bold uppercase tracking-wider">Logs</span>
+      </div>
+    </div>
+  );
+};
+
 const FingerprintManagement = () => {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('devices'); // devices | push | detail
@@ -154,16 +194,8 @@ const FingerprintManagement = () => {
               </div>
               <h3 className="text-lg font-bold text-slate-800 mb-1 group-hover:text-blue-600 transition-colors">{dev.name}</h3>
               <p className="text-xs text-slate-500 font-mono mb-4">{dev.ipAddress}:{dev.port}</p>
-              <div className="flex gap-3 text-[10px]">
-                <div className="flex-1 bg-slate-50 rounded-lg p-2.5 text-center border border-slate-100">
-                  <span className="block font-bold text-slate-800 text-sm">—</span>
-                  <span className="text-slate-500 font-bold uppercase">Users</span>
-                </div>
-                <div className="flex-1 bg-slate-50 rounded-lg p-2.5 text-center border border-slate-100">
-                  <span className="block font-bold text-slate-800 text-sm">—</span>
-                  <span className="text-slate-500 font-bold uppercase">Logs</span>
-                </div>
-              </div>
+              <DeviceStats deviceId={dev.id} status={dev.status} />
+              
               <div className="mt-4 text-center">
                 <span className="text-xs text-blue-600 font-bold group-hover:underline">Klik untuk Detail →</span>
               </div>
