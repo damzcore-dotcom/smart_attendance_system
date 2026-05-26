@@ -46,6 +46,13 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 const path = require('path');
+const fs = require('fs');
+// Auto-create uploads directory on startup
+const uploadsDir = path.join(__dirname, '..', 'public', 'uploads', 'profiles');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+  console.log('📁 Created uploads directory:', uploadsDir);
+}
 app.use('/uploads', express.static(path.join(__dirname, '..', 'public', 'uploads')));
 
 // Health check

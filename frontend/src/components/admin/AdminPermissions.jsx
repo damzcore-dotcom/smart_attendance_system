@@ -42,12 +42,15 @@ const AdminPermissions = () => {
       // Override with DB values
       if (res?.data && Array.isArray(res.data)) {
         res.data.forEach(p => {
-          permMap[p.menuKey] = {
-            canRead: p.canRead,
-            canCreate: p.canCreate,
-            canUpdate: p.canUpdate,
-            canDelete: p.canDelete
-          };
+          // Only map permissions that exist in our new modular menus array
+          if (permMap[p.menuKey]) {
+            permMap[p.menuKey] = {
+              canRead: p.canRead,
+              canCreate: p.canCreate,
+              canUpdate: p.canUpdate,
+              canDelete: p.canDelete
+            };
+          }
         });
       }
       setPermissions(permMap);

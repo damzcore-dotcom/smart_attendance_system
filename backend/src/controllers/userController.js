@@ -142,12 +142,17 @@ const create = async (req, res) => {
     }
 
     if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
-      const menus = ['dashboard', 'attendance', 'employees', 'shifts', 'locations', 'corrections', 'users', 'settings', 'payroll', 'payroll-settings'];
+      const menus = [
+        'dashboard', 'announcements', 'employees', 'shift-roster', 'leave-requests', 
+        'attendance', 'overtime-spl', 'daily-workers', 'manual-correction', 'corrections', 
+        'payroll', 'payroll-settings', 'face-check', 'devices', 'fingerprint', 
+        'users', 'backup', 'settings'
+      ];
       await prisma.menuPermission.createMany({
         data: menus.map(menu => ({ userId: user.id, menuKey: menu, canRead: true, canCreate: true, canUpdate: true, canDelete: true }))
       });
     } else if (role === 'ACCOUNTING') {
-      const menus = ['dashboard', 'payroll', 'payroll-settings', 'employees'];
+      const menus = ['dashboard', 'payroll', 'payroll-settings', 'employees', 'attendance', 'overtime-spl', 'daily-workers'];
       await prisma.menuPermission.createMany({
         data: menus.map(menu => ({ userId: user.id, menuKey: menu, canRead: true, canCreate: true, canUpdate: true, canDelete: true }))
       });
