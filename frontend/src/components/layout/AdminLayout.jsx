@@ -47,7 +47,7 @@ const AdminLayout = () => {
       title: 'Workforce',
       items: [
         { name: 'Employees', path: '/admin/employees', icon: Users, key: 'employees' },
-        { name: 'Rolling Shift', path: '/admin/shift-roster', icon: CalendarCheck, key: 'settings' },
+        { name: 'Rolling Shift', path: '/admin/shift-roster', icon: CalendarCheck, key: 'shift-roster' },
         { name: 'Cuti & Kalender', path: '/admin/leave-requests', icon: CalendarCheck, key: 'leave-requests' }
       ]
     },
@@ -55,9 +55,9 @@ const AdminLayout = () => {
       title: 'Attendance',
       items: [
         { name: 'Data Absensi', path: '/admin/attendance', icon: CalendarCheck, key: 'attendance' },
-        { name: 'Lembur (SPL)', path: '/admin/overtime-spl', icon: Clock, key: 'attendance' },
-        { name: 'Absen Harian (BHL)', path: '/admin/daily-workers', icon: HardHat, key: 'attendance' },
-        { name: 'Koreksi Manual HRD', path: '/admin/manual-correction', icon: Edit3, key: 'attendance' },
+        { name: 'Lembur (SPL)', path: '/admin/overtime-spl', icon: Clock, key: 'overtime-spl' },
+        { name: 'Absen Harian (BHL)', path: '/admin/daily-workers', icon: HardHat, key: 'daily-workers' },
+        { name: 'Koreksi Manual HRD', path: '/admin/manual-correction', icon: Edit3, key: 'manual-correction' },
         { name: 'Koreksi Request', path: '/admin/corrections', icon: Edit3, key: 'corrections' }
       ]
     },
@@ -72,8 +72,8 @@ const AdminLayout = () => {
       title: 'Biometrics & IT',
       items: [
         { name: 'Face Check Log', path: '/admin/face-check', icon: ScanFace, key: 'face-check' },
-        { name: 'Mesin Finger', path: '/admin/devices', icon: Fingerprint, key: 'settings' },
-        { name: 'Data Sidik Jari', path: '/admin/fingerprint', icon: ScanFace, key: 'settings' },
+        { name: 'Mesin Finger', path: '/admin/devices', icon: Fingerprint, key: 'devices' },
+        { name: 'Data Sidik Jari', path: '/admin/fingerprint', icon: ScanFace, key: 'fingerprint' },
         { name: 'User Access', path: '/admin/users', icon: UserCircle, key: 'users' },
         { name: 'Backup Data', path: '/admin/backup', icon: Database, key: 'backup' },
         { name: 'Settings', path: '/admin/settings', icon: Settings, key: 'settings' }

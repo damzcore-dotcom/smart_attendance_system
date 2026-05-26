@@ -27,7 +27,12 @@ const AdminPermissions = () => {
     try {
       const res = await userAPI.getPermissions(adminId);
       const permMap = {};
-      const menus = ['dashboard', 'employees', 'attendance', 'users', 'leave-requests', 'face-check', 'backup', 'announcements', 'settings', 'corrections', 'payroll', 'payroll-settings'];
+      const menus = [
+        'dashboard', 'announcements', 'employees', 'shift-roster', 'leave-requests', 
+        'attendance', 'overtime-spl', 'daily-workers', 'manual-correction', 'corrections', 
+        'payroll', 'payroll-settings', 'face-check', 'devices', 'fingerprint', 
+        'users', 'backup', 'settings'
+      ];
       
       // Initialize with false
       menus.forEach(m => {
