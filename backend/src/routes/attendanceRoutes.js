@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const { getAll, checkIn, checkOut, getSummary, getHistory, importFromExcel, getImportProgress, recalculate, swapDays, getMasterOptions, createManual, downloadTemplate, update, bulkUpdateOvertime, bulkUpdateDailyWorkers } = require('../controllers/attendanceController');
+const { getAll, checkIn, checkOut, getSummary, getHistory, importFromExcel, getImportProgress, recalculate, swapDays, getMasterOptions, createManual, downloadTemplate, update, bulkUpdateOvertime, bulkUpdateDailyWorkers, manualCorrectionHRD } = require('../controllers/attendanceController');
 const { verifyToken, requireAdmin } = require('../middleware/auth');
 const multer = require('multer');
 
@@ -22,5 +22,6 @@ router.post('/manual', requireAdmin, createManual);
 router.put('/:id', requireAdmin, update);
 router.patch('/bulk-overtime', requireAdmin, bulkUpdateOvertime);
 router.post('/bulk-daily-workers', requireAdmin, bulkUpdateDailyWorkers);
+router.post('/manual-correction', requireAdmin, manualCorrectionHRD);
 
 module.exports = router;

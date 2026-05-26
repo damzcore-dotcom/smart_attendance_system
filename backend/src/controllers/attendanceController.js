@@ -1290,6 +1290,141 @@ const bulkUpdateDailyWorkers = async (req, res) => {
   }
 };
 
+/**
+ * POST /api/attendance/manual-correction
+ */
+const manualCorrectionHRD = async (req, res) => {
+  try {
+    const { type, date, records } = req.body;
+    if (!type || !date || !records || !Array.isArray(records)) {
+      return res.status(400).json({ success: false, message: 'Invalid payload' });
+    }
+
+    const fs = require('fs');
+    const path = require('path');
+    
+    const targetDate = new Date(date);
+    targetDate.setHours(0, 0, 0, 0);
+    
+    let updatedCount = 0;
+
+    for (const record of records) {
+      const { employeeId, status, checkIn, checkOut, photo } = record;
+      
+      const emp = await prisma.employee.findUnique({ where: { id: employeeId }});
+      if (!emp) continue;
+
+      let photoUrl = undefined;
+      
+      if (photo && photo.startsWith('data:image')) {
+        const base64Data = photo.replace(/^data:image\/\w+;base64,/, "");
+        const extMatch = photo.split(';')[0].match(/jpeg|png|gif|webp/);
+        const ext = extMatch ? extMatch[0] : 'jpg';
+        const uploadDir = path.join(__dirname, '..', '..', 'public', 'uploads', 'corrections');
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        const filename = `correction_${emp.employeeCode}_${Date.now()}.${ext}`;
+        const filepath = path.join(uploadDir, filename);
+        fs.writeFileSync(filepath, base64Data, 'base64');
+        photoUrl = `/uploads/corrections/${filename}`;
+      }
+
+      const existing = await prisma.attendance.findUnique({
+        where: { employeeId_date: { employeeId, date: targetDate } }
+      });
+
+      if (type === 'KEHADIRAN') {
+        const payload = {
+          status: status,
+          checkIn: null,
+          checkOut: null,
+          notes: 'Diupdate manual oleh HRD'
+        };
+        
+        if (existing) {
+          await prisma.attendance.update({ where: { id: existing.id }, data: payload });
+        } else {
+          await prisma.attendance.create({ data: { employeeId, date: targetDate, ...payload } });
+        }
+        updatedCount++;
+        
+        try {
+           await recordAuditLog({
+             action: 'MANUAL_CORRECTION_STATUS',
+             module: 'Kehadiran (HRD)',
+             userId: req.user.id,
+             details: JSON.stringify({ emp: emp.name, date, status })
+           });
+        } catch(e) {}
+      } else if (type === 'LUPA_FINGER') {
+        let finalIn = existing?.checkIn;
+        let finalOut = existing?.checkOut;
+        
+        if (checkIn) {
+          const [h, m] = checkIn.split(':');
+          finalIn = new Date(targetDate);
+          finalIn.setHours(parseInt(h, 10), parseInt(m, 10), 0);
+        }
+        if (checkOut) {
+          const [h, m] = checkOut.split(':');
+          finalOut = new Date(targetDate);
+          finalOut.setHours(parseInt(h, 10), parseInt(m, 10), 0);
+        }
+
+        const shift = await prisma.employeeShiftOverride.findFirst({
+          where: { employeeId, date: targetDate }
+        });
+
+        const cInStr = shift?.startTime || "08:00"; 
+        
+        const [sh, sm] = cInStr.split(':');
+        const expectedIn = new Date(targetDate);
+        expectedIn.setHours(parseInt(sh, 10), parseInt(sm, 10), 0);
+
+        let lateMins = 0;
+        let pStatus = 'ABSENT';
+        if (finalIn) {
+           const diff = Math.floor((finalIn - expectedIn) / 60000);
+           if (diff > 0) lateMins = diff;
+           pStatus = lateMins > 0 ? 'LATE' : 'PRESENT';
+        }
+
+        const payload = {
+          checkIn: finalIn,
+          checkOut: finalOut,
+          status: pStatus,
+          lateMinutes: lateMins,
+          notes: 'Lupa Finger dikoreksi HRD',
+        };
+        
+        if (photoUrl) {
+          payload.photoUrl = photoUrl;
+        }
+
+        if (existing) {
+          await prisma.attendance.update({ where: { id: existing.id }, data: payload });
+        } else {
+          await prisma.attendance.create({ data: { employeeId, date: targetDate, ...payload } });
+        }
+        updatedCount++;
+
+        try {
+           await recordAuditLog({
+             action: 'MANUAL_CORRECTION_TIME',
+             module: 'Kehadiran (HRD)',
+             userId: req.user.id,
+             details: JSON.stringify({ emp: emp.name, date, checkIn, checkOut })
+           });
+        } catch(e) {}
+      }
+    }
+
+    res.json({ success: true, message: `Berhasil memproses koreksi untuk ${updatedCount} karyawan.`, updatedCount });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
 
 module.exports = {
   getAll,
@@ -1306,5 +1441,6 @@ module.exports = {
   downloadTemplate,
   update,
   bulkUpdateOvertime,
-  bulkUpdateDailyWorkers
+  bulkUpdateDailyWorkers,
+  manualCorrectionHRD
 };

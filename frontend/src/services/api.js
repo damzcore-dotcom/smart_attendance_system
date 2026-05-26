@@ -239,6 +239,7 @@ export const attendanceAPI = {
   update: (id, data) => apiFetch(`/attendance/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   bulkOvertime: (data) => apiFetch('/attendance/bulk-overtime', { method: 'PATCH', body: JSON.stringify(data) }),
   bulkDailyWorkers: (data) => apiFetch('/attendance/bulk-daily-workers', { method: 'POST', body: JSON.stringify(data) }),
+  manualCorrection: (data) => apiFetch('/attendance/manual-correction', { method: 'POST', body: JSON.stringify(data) }),
 };
 
 // ─── Dashboard API ─────────────────────────────────

@@ -86,6 +86,7 @@ const getAll = async (req, res) => {
         gender: emp.gender,
         bankName: emp.bankName,
         bankAccountNumber: emp.bankAccountNumber,
+        profilePhoto: emp.profilePhoto,
         status: emp.status === 'ACTIVE' ? 'Active' : emp.status === 'ON_LEAVE' ? 'On Leave' : 'Terminated',
         shift: emp.shift ? { id: emp.shift.id, name: emp.shift.name } : null,
         shiftId: emp.shiftId,
@@ -136,9 +137,27 @@ const create = async (req, res) => {
     }
     const defaultShift = await prisma.shift.findFirst();
 
+    let profilePhotoUrl = rest.profilePhoto || null;
+    if (rest.profilePhoto && rest.profilePhoto.startsWith('data:image')) {
+      const base64Data = rest.profilePhoto.replace(/^data:image\/\w+;base64,/, "");
+      const extMatch = rest.profilePhoto.split(';')[0].match(/jpeg|png|gif|webp/);
+      const ext = extMatch ? extMatch[0] : 'jpg';
+      const fs = require('fs');
+      const path = require('path');
+      const uploadDir = path.join(__dirname, '..', '..', 'public', 'uploads', 'profiles');
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      const filename = `profile_${employeeCode}_${Date.now()}.${ext}`;
+      const filepath = path.join(uploadDir, filename);
+      fs.writeFileSync(filepath, base64Data, 'base64');
+      profilePhotoUrl = `/uploads/profiles/${filename}`;
+    }
+
     // Map string dates if present
     const dataObj = {
       employeeCode, name, email, phone: phone || null, position: position || null,
+      profilePhoto: profilePhotoUrl,
       departmentId: department.id,
       // Prioritize user-selected shift over system default
       shiftId: rest.shiftId ? parseInt(rest.shiftId) : (defaultShift?.id || null),
@@ -213,6 +232,24 @@ const update = async (req, res) => {
     // Remove read-only fields and relation objects that shouldn't be updated directly
     delete data.employeeCode; delete data.dbId; delete data.id;
     delete data.shift; delete data.department;
+
+    if (data.profilePhoto && data.profilePhoto.startsWith('data:image')) {
+      const base64Data = data.profilePhoto.replace(/^data:image\/\w+;base64,/, "");
+      const extMatch = data.profilePhoto.split(';')[0].match(/jpeg|png|gif|webp/);
+      const ext = extMatch ? extMatch[0] : 'jpg';
+      const fs = require('fs');
+      const path = require('path');
+      const uploadDir = path.join(__dirname, '..', '..', 'public', 'uploads', 'profiles');
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      // Need employee Code for name, get it via params.id first, or just use timestamp
+      const filename = `profile_upd_${req.params.id}_${Date.now()}.${ext}`;
+      const filepath = path.join(uploadDir, filename);
+      fs.writeFileSync(filepath, base64Data, 'base64');
+      data.profilePhoto = `/uploads/profiles/${filename}`;
+    }
+
 
     if (dept) {
       let department = await prisma.department.findUnique({ where: { name: dept } });

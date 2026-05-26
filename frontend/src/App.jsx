@@ -21,6 +21,7 @@ import Backup from './pages/admin/Backup';
 import Attendance from './pages/admin/Attendance';
 import OvertimeSPL from './pages/admin/OvertimeSPL';
 import DailyWorkerAttendance from './pages/admin/DailyWorkerAttendance';
+import ManualCorrectionHRD from './pages/admin/ManualCorrectionHRD';
 import Settings from './pages/admin/Settings';
 import ShiftRoster from './pages/admin/ShiftRoster';
 import AdminCorrections from './pages/admin/Corrections';
@@ -111,6 +112,7 @@ function App() {
             <Route path="attendance" element={<PermissionRoute menuKey="attendance"><Attendance /></PermissionRoute>} />
             <Route path="overtime-spl" element={<PermissionRoute menuKey="attendance"><OvertimeSPL /></PermissionRoute>} />
             <Route path="daily-workers" element={<PermissionRoute menuKey="attendance"><DailyWorkerAttendance /></PermissionRoute>} />
+            <Route path="manual-correction" element={<PermissionRoute menuKey="attendance"><ManualCorrectionHRD /></PermissionRoute>} />
             <Route path="payroll" element={<PermissionRoute menuKey="payroll"><Payroll /></PermissionRoute>} />
             <Route path="payroll-settings" element={<PermissionRoute menuKey="payroll-settings"><PayrollSettings /></PermissionRoute>} />
             <Route path="leave-requests" element={<PermissionRoute menuKey="leave-requests"><AdminLeaveRequests /></PermissionRoute>} />

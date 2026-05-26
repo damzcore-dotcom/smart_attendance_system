@@ -19,7 +19,7 @@ const emptyEmployee = {
   birthPlace: '', address: '', education: '', major: '', religion: '', maritalStatus: '', numberOfChildren: 0, 
   fatherName: '', motherName: '', spouseName: '', emergencyContact: '', notes: '',
   joinDate: '', contractEnd: '', birthDate: '',
-  leaveQuota: 12, remainingLeave: 12,
+  leaveQuota: 12, remainingLeave: 12, profilePhoto: ''
 };
 
 const Employees = () => {
@@ -981,6 +981,55 @@ const Employees = () => {
                         value={newEmployee.section ? {label: newEmployee.section, value: newEmployee.section} : null} 
                         onChange={(val) => setNewEmployee({...newEmployee, section: val ? val.value : ''})} 
                       />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">ID Card Photo (Pas Foto)</label>
+                      <div className="flex items-center gap-3">
+                        {newEmployee.profilePhoto ? (
+                          <div className="relative group/pic">
+                            <img src={newEmployee.profilePhoto} alt="Profile" className="w-12 h-12 rounded-xl object-cover border-2 border-blue-200" />
+                            <button 
+                              type="button"
+                              onClick={() => setNewEmployee({...newEmployee, profilePhoto: ''})}
+                              className="absolute -top-1 -right-1 bg-rose-500 text-white rounded-full p-0.5 opacity-0 group-hover/pic:opacity-100 transition-opacity shadow-md"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="w-full flex items-center justify-center p-3 border-2 border-dashed border-blue-300 rounded-xl text-blue-500 hover:bg-blue-50 cursor-pointer transition-all">
+                            <span className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-2">
+                              <Camera className="w-4 h-4" /> Upload Photo (Max 600px)
+                            </span>
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              className="hidden" 
+                              onChange={(e) => {
+                                const file = e.target.files[0];
+                                if (!file) return;
+                                const reader = new FileReader();
+                                reader.onload = (event) => {
+                                  const img = new Image();
+                                  img.onload = () => {
+                                    const canvas = document.createElement('canvas');
+                                    const MAX_WIDTH = 600;
+                                    const scaleSize = MAX_WIDTH / img.width;
+                                    canvas.width = MAX_WIDTH;
+                                    canvas.height = img.height * scaleSize;
+                                    const ctx = canvas.getContext('2d');
+                                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                                    const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+                                    setNewEmployee({...newEmployee, profilePhoto: dataUrl});
+                                  };
+                                  img.src = event.target.result;
+                                };
+                                reader.readAsDataURL(file);
+                              }} 
+                            />
+                          </label>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}

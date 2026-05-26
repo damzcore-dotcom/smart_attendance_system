@@ -139,6 +139,7 @@ model Employee {
   salaryCategory    String?    @default("UMK/UMR")
   status        EmpStatus  @default(ACTIVE)
   faceStatus    FaceStatus @default(PENDING)
+  profilePhoto  String?
   leaveQuota     Int        @default(12)
   remainingLeave Int        @default(12)
   departmentId  Int
