@@ -315,7 +315,8 @@ const generate = async (req, res) => {
           // Apply tiered overtime rules
           let remainingHours = overtimeHoursTotal;
           for (const rule of overtimeRules) {
-            const tierHours = rule.hourTo - rule.hourFrom;
+            const tierHours = Math.max(0, rule.hourTo - rule.hourFrom);
+            if (tierHours === 0) continue;
             const applicableHours = Math.min(remainingHours, tierHours);
             if (applicableHours > 0) {
               overtimePay += applicableHours * hourlyRate * rule.multiplier;
@@ -365,6 +366,7 @@ const generate = async (req, res) => {
 
     // Delete existing cancelled payroll if any
     if (existing && existing.status === 'CANCELLED') {
+      await prisma.payrollDetail.deleteMany({ where: { payrollId: existing.id } });
       await prisma.payroll.delete({ where: { id: existing.id } });
     }
 
