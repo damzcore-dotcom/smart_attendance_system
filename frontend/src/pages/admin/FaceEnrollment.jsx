@@ -201,7 +201,9 @@ const FaceEnrollment = () => {
       });
 
       setEnrollmentStatus('success');
-      queryClient.invalidateQueries(['employees-enrollment']);
+      setSelectedEmployee(prev => ({ ...prev, faceEmbeddingV2: avgEmbedding, faceStatus: 'ENROLLED' }));
+      queryClient.invalidateQueries({ queryKey: ['employees-enrollment'] });
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
     } catch (err) {
       setEnrollmentStatus('error');
       setErrorMsg('Gagal menyimpan: ' + (err.response?.data?.message || err.message));

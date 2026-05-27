@@ -1,8 +1,10 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Camera, AlertCircle, Upload, Loader2, CheckCircle, XCircle, ScanFace, RotateCcw } from 'lucide-react';
 import api from '../../services/api';
 
 const CCTVEnrollmentTab = ({ employee }) => {
+  const queryClient = useQueryClient();
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [capturedImages, setCapturedImages] = useState([]);
@@ -182,14 +184,16 @@ const CCTVEnrollmentTab = ({ employee }) => {
         return sum / allEmbeddings.length;
       });
 
-      const empId = employee.dbId || employee.id;
-      await api.put(`/employees/${empId}`, {
+      const dbIdVal = employee.dbId || employee.id;
+      await api.put(`/employees/${dbIdVal}`, {
         faceEmbeddingV2: avgEmbedding,
         faceSamples: allEmbeddings.length,
         faceStatus: 'ENROLLED',
       });
 
       setEnrollmentStatus('success');
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['employee', dbIdVal] });
     } catch (err) {
       setEnrollmentStatus('error');
       setErrorMsg('Gagal menyimpan ke server: ' + (err.response?.data?.message || err.message));
