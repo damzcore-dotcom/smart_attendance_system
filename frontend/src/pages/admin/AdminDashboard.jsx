@@ -214,7 +214,7 @@ const AdminDashboard = () => {
         headStyles: { fillColor: [37, 99, 235] }
       });
       
-      doc.save(`ADAM_Intelligence_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+      doc.save(`SMART_Intelligence_Report_${new Date().toISOString().split('T')[0]}.pdf`);
     } catch (error) {
       console.error('Report failed:', error);
       alert(`Report failed: ${error.message}`);
@@ -424,7 +424,7 @@ const AdminDashboard = () => {
           
           <h3 className="font-extrabold text-xl text-white mb-8 tracking-tight flex items-center gap-3 relative z-10">
             <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse shadow-[0_0_12px_rgba(59,130,246,0.8)]"></div>
-            ADAM Intelligence
+            SMART Intelligence
           </h3>
           
           <div className="space-y-4 relative z-10">
