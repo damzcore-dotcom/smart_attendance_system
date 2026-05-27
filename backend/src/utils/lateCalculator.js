@@ -13,31 +13,33 @@
 function calculateLateness(checkInTime, shiftStartTime, gracePeriodMinutes = 15) {
   const checkIn = new Date(checkInTime);
   
-  // Parse shift start time
+  // Parse shift start time (e.g. "08:00")
   const [shiftHour, shiftMinute] = shiftStartTime.split(':').map(Number);
   
-  // Create shift start datetime for the same day
-  const shiftStart = new Date(checkIn);
-  shiftStart.setHours(shiftHour, shiftMinute, 0, 0);
-  
-  // Add grace period
-  const graceDeadline = new Date(shiftStart.getTime() + gracePeriodMinutes * 60 * 1000);
-  
-  // Drop seconds to align with HR visual expectation (HH:mm)
-  const safeCheckIn = new Date(checkIn);
-  safeCheckIn.setSeconds(0, 0);
-  
-  if (safeCheckIn <= graceDeadline) {
+  // Extract checkIn hour and minute in local system time
+  const checkInHour = checkIn.getHours();
+  const checkInMinute = checkIn.getMinutes();
+
+  // Convert both into absolute minutes from midnight for safe comparison
+  let shiftMins = shiftHour * 60 + shiftMinute;
+  let checkInMins = checkInHour * 60 + checkInMinute;
+
+  // Handle Night Shift logic (If shift starts late at night e.g. 22:00, and checkIn is early morning e.g. 02:00)
+  if (shiftHour >= 18 && checkInHour <= 6) {
+    checkInMins += 24 * 60; // Push checkIn into the "next day" continuum
+  }
+
+  // Grace deadline in minutes
+  const graceDeadlineMins = shiftMins + gracePeriodMinutes;
+
+  if (checkInMins <= graceDeadlineMins) {
     return { lateMinutes: 0, status: 'PRESENT' };
   }
   
-  // Calculate minutes late (from original shift start, not grace deadline)
-  const diffMs = safeCheckIn.getTime() - shiftStart.getTime();
-  const rawLateMinutes = diffMs / (60 * 1000);
+  // Hitung jumlah menit terlambat (secara REAK/RIL, tanpa pembagian block 30 menit)
+  const exactLateMinutes = checkInMins - shiftMins;
   
-  // Round up to nearest 30 minutes (e.g., 1-30m -> 30m, 31-60m -> 60m)
-  const lateMinutes = Math.ceil(rawLateMinutes / 30) * 30;
-  return { lateMinutes, status: 'LATE' };
+  return { lateMinutes: exactLateMinutes, status: 'LATE' };
 }
 
 /**
