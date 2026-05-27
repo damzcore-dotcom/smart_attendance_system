@@ -14,10 +14,13 @@ const exportData = async (req, res) => {
 
     // List of models to export in order
     const models = [
-      'department', 'shift', 'location', 'employee', 'user', 
-      'menuPermission', 'attendance', 'correctionRequest', 
-      'leaveRequest', 'announcement', 'notification', 'settings',
-      'massLeave'
+      'settings', 'department', 'shift', 'location', 'employee', 'user',
+      'employeeShiftOverride', 'announcement', 'massLeave', 'device',
+      'deviceUser', 'fingerTemplate', 'notification', 'leaveRequest',
+      'correctionRequest', 'attendance', 'employeeSalary', 'companyCalendar',
+      'overtimeRule', 'salaryComponent', 'positionAllowance', 'payrollConfig',
+      'auditLog', 'menuPermission', 'managerAccess', 'camera', 'faceEvent',
+      'unknownFaceAlert', 'payroll', 'payrollDetail'
     ];
 
     for (const model of models) {
@@ -50,8 +53,12 @@ const restoreData = async (req, res) => {
     await prisma.$transaction(async (tx) => {
       // 1. Delete all existing data in REVERSE order of dependencies
       const modelsToDelete = [
-        'massLeave', 'notification', 'announcement', 'leaveRequest', 'correctionRequest', 
-        'attendance', 'menuPermission', 'user', 'employee', 
+        'payrollDetail', 'payroll', 'unknownFaceAlert', 'faceEvent', 'camera',
+        'managerAccess', 'menuPermission', 'auditLog', 'payrollConfig',
+        'positionAllowance', 'salaryComponent', 'overtimeRule', 'companyCalendar',
+        'employeeSalary', 'attendance', 'correctionRequest', 'leaveRequest', 
+        'notification', 'fingerTemplate', 'deviceUser', 'device', 'massLeave',
+        'announcement', 'employeeShiftOverride', 'user', 'employee', 
         'location', 'shift', 'department', 'settings'
       ];
 
@@ -63,10 +70,13 @@ const restoreData = async (req, res) => {
 
       // 2. Restore data in original order
       const modelsToRestore = [
-        'department', 'shift', 'location', 'employee', 'user', 
-        'menuPermission', 'attendance', 'correctionRequest', 
-        'leaveRequest', 'announcement', 'notification', 'settings',
-        'massLeave'
+        'settings', 'department', 'shift', 'location', 'employee', 'user',
+        'employeeShiftOverride', 'announcement', 'massLeave', 'device',
+        'deviceUser', 'fingerTemplate', 'notification', 'leaveRequest',
+        'correctionRequest', 'attendance', 'employeeSalary', 'companyCalendar',
+        'overtimeRule', 'salaryComponent', 'positionAllowance', 'payrollConfig',
+        'auditLog', 'menuPermission', 'managerAccess', 'camera', 'faceEvent',
+        'unknownFaceAlert', 'payroll', 'payrollDetail'
       ];
 
       for (const model of modelsToRestore) {
