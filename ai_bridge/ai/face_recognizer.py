@@ -20,14 +20,31 @@ class FaceRecognizer:
     def get_embedding(self, frame: np.ndarray) -> np.ndarray | None:
         """Extract 512-dim face embedding from a frame/aligned face crop."""
         try:
-            faces = self.model.get(frame)
-            if faces and len(faces) > 0:
-                embedding = faces[0].embedding
-                # Normalize embedding
-                norm = np.linalg.norm(embedding)
-                if norm > 0:
-                    embedding = embedding / norm
-                return embedding
+            # If the user provides a pre-aligned 112x112 image crop
+            if frame.shape[:2] == (112, 112):
+                recognizer = self.model.models['recognition']
+                feat = recognizer.get_feat(frame)
+                
+                if feat is not None:
+                    # 'get_feat' usually returns list or an array of shape (512,)
+                    if isinstance(feat, list):
+                        embedding = np.array(feat[0]).flatten()
+                    else:
+                        embedding = np.array(feat).flatten()
+                    
+                    norm = np.linalg.norm(embedding)
+                    if norm > 0:
+                        embedding = embedding / norm
+                    return embedding
+                return None
+            else:
+                faces = self.model.get(frame)
+                if faces and len(faces) > 0:
+                    embedding = faces[0].embedding
+                    norm = np.linalg.norm(embedding)
+                    if norm > 0:
+                        embedding = embedding / norm
+                    return embedding
         except Exception as e:
             print(f"[FaceRecognizer] Embedding extraction error: {e}")
         return None
