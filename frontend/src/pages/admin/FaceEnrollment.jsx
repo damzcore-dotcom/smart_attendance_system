@@ -25,8 +25,8 @@ const FaceEnrollment = () => {
 
   // Filter employees
   const filteredEmployees = employees.filter(emp =>
-    emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    emp.employeeCode.toLowerCase().includes(searchQuery.toLowerCase())
+    (emp.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (emp.employeeCode || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // Start camera
