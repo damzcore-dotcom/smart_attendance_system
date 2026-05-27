@@ -261,28 +261,29 @@ const Attendance = () => {
       const padData = [];
       const dataMap = {};
       
-      // Simpan data asli ke map untuk lookup cepat berdasarkan tanggal string
+      // Simpan data asli ke map untuk lookup cepat berdasarkan tanggal absolut ISO
       filteredData.forEach(r => {
-        // Asumsi format backend: "May 3, 2026"
-        dataMap[r.date] = r; 
+        // Gunakan date parser yang kuat untuk menstandarisasi key
+        const parsedObj = new Date(r.date);
+        const isoMatch = `${parsedObj.getFullYear()}-${String(parsedObj.getMonth()+1).padStart(2,'0')}-${String(parsedObj.getDate()).padStart(2,'0')}`;
+        dataMap[isoMatch] = r; 
       });
 
       const empRef = filteredData[0]; // Ambil data master karyawan dari row pertama
       const overrides = data?.summary?.calendarOverrides || [];
       const overrideMap = {};
       overrides.forEach(c => {
-         // overrides is array of { date: '2026-05-01T...', type: 'HOLIDAY' }
          const dStr = c.date.split('T')[0];
          overrideMap[dStr] = c.type;
       });
       const workingDays = data?.summary?.workingDays || [1,2,3,4,5]; // default mon-fri
 
       for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-        // Cocokkan dengan format backend
-        const dateStr = d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        const isoKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        const displayDate = d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
         
-        if (dataMap[dateStr]) {
-          padData.push(dataMap[dateStr]);
+        if (dataMap[isoKey]) {
+          padData.push(dataMap[isoKey]);
         } else {
           const isoDate = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().split('T')[0];
           const dayOfWeek = d.getDay();
@@ -302,7 +303,7 @@ const Attendance = () => {
             dept: empRef.dept,
             section: empRef.section,
             position: empRef.position,
-            date: dateStr,
+            date: displayDate,
             checkIn: '--:--',
             checkOut: '--:--',
             status: isLibur ? 'Libur' : 'Alpa',

@@ -598,64 +598,77 @@ const importFromExcel = async (req, res) => {
       empByName[e.name.toLowerCase().trim()] = e;
     });
 
-    updateProgress(15, 'matching', `Mencocokkan ${dataRows.length} baris dengan ${allEmployees.length} karyawan...`);
+    updateProgress(15, 'matching', `Mencocokkan baris dengan data karyawan...`);
 
-    // 1. DETERMINE TARGET MONTH/YEAR (From first valid data row)
-    let targetMonth = 4; // Default April
-    let targetYear = 2026;
-    
-    // 2. GROUP RAW EXCEL DATA (STRICT DATE ALIGNMENT)
+    let minDateMs = Infinity;
+    let maxDateMs = -Infinity;
+
+    // 2. GROUP RAW EXCEL DATA DYNAMICALLY
     for (const row of dataRows) {
       if (!row || row.length < 3) continue;
-      const rawDateTime = (row[2] || '').toString().trim();
-      const rawStatus = (row[3] || '').toString().trim().toLowerCase();
-      const rawId = (row[4] || '').toString().trim();
-      const rawName = (row[1] || '').toString().trim();
-
-      if (!rawDateTime.includes('/')) continue;
-
-      // Format from Machine: "M/D/YYYY H:MM:SS AM/PM"
-      const parts = rawDateTime.split(' ');
-      const dateParts = parts[0].split('/');
+      const rawStatus = (row[colMap.status] || row[3] || '').toString().trim().toLowerCase();
+      const rawId = (row[colMap.idNumber] || row[4] || '').toString().trim();
+      const rawName = (row[colMap.name] || row[1] || '').toString().trim();
       
-      const m = parseInt(dateParts[0]); // Month
-      const d = parseInt(dateParts[1]); // Day
-      const y = parseInt(dateParts[2]); // Year
+      let rawDateTime = row[colMap.dateTime] !== undefined ? row[colMap.dateTime] : row[2];
+      if (rawDateTime === undefined || rawDateTime === null) continue;
 
-      if (isNaN(m) || isNaN(d) || isNaN(y)) continue;
-      
-      // Update target month/year
-      targetMonth = m;
-      targetYear = y;
+      let eventTime;
+      // Handle Excel Date Serial Number vs String
+      if (typeof rawDateTime === 'number') {
+        eventTime = new Date(Math.round((rawDateTime - 25569) * 86400 * 1000));
+        // Normalize UTC back to Local Offset because Javascript serial parsing drops it
+        eventTime = new Date(eventTime.getTime() + (eventTime.getTimezoneOffset() * 60000));
+      } else {
+        rawDateTime = rawDateTime.toString().trim();
+        if (rawDateTime.includes('/')) {
+           const parts = rawDateTime.split(' ');
+           const dateParts = parts[0].split('/');
+           const m = parseInt(dateParts[0]); 
+           const d = parseInt(dateParts[1]); 
+           const y = parseInt(dateParts[2]) < 100 ? parseInt(dateParts[2]) + 2000 : parseInt(dateParts[2]);
+           
+           let hours = 0, minutes = 0, seconds = 0;
+           if (parts[1]) {
+             const timeParts = parts[1].split(':');
+             hours = parseInt(timeParts[0]);
+             minutes = parseInt(timeParts[1]);
+             seconds = parseInt(timeParts[2] || 0);
+             const ampm = (parts[2] || '').toUpperCase();
+             if (ampm === 'PM' && hours < 12) hours += 12;
+             if (ampm === 'AM' && hours === 12) hours = 0;
+           }
+           eventTime = new Date(y, m - 1, d, hours, minutes, seconds);
+        } else {
+           eventTime = new Date(rawDateTime);
+        }
+      }
+
+      if (isNaN(eventTime.getTime())) continue;
+
+      // Track min/max for dynamic padding
+      if (eventTime.getTime() < minDateMs) minDateMs = eventTime.getTime();
+      if (eventTime.getTime() > maxDateMs) maxDateMs = eventTime.getTime();
+
+      const y = eventTime.getFullYear();
+      const m = eventTime.getMonth() + 1;
+      const d = eventTime.getDate();
+      const hours = eventTime.getHours();
 
       let emp = empByCode[rawId] || empByName[rawName.toLowerCase()];
       if (!emp) {
-        // Record unmatched employee info so admin knows who was skipped
         const identifier = rawId ? `${rawName} (NIK: ${rawId})` : rawName;
         if (identifier.trim()) unmatchedNames.add(identifier);
         continue;
       }
 
-      // CONSTRUCT DATE STRING (YYYY-MM-DD) - NO SHIFTING ALLOWED
+      // CONSTRUCT DATE STRING (YYYY-MM-DD)
       const dateOnlyStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const groupKey = `${emp.id}|${dateOnlyStr}`;
 
       if (!grouped[groupKey]) {
         grouped[groupKey] = { employeeId: emp.id, employee: emp, date: dateOnlyStr, checkIn: null, checkOut: null };
       }
-
-      // Parse time accurately
-      const timeParts = parts[1].split(':');
-      let hours = parseInt(timeParts[0]);
-      const minutes = parseInt(timeParts[1]);
-      const seconds = parseInt(timeParts[2] || 0);
-      const ampm = (parts[2] || '').toUpperCase();
-
-      if (ampm === 'PM' && hours < 12) hours += 12;
-      if (ampm === 'AM' && hours === 12) hours = 0;
-
-      // This is the actual timestamp of the event
-      const eventTime = new Date(y, m - 1, d, hours, minutes, seconds);
 
       if (rawStatus.includes('in') || hours < 12) {
         if (!grouped[groupKey].checkIn || eventTime < grouped[groupKey].checkIn) grouped[groupKey].checkIn = eventTime;
@@ -664,21 +677,33 @@ const importFromExcel = async (req, res) => {
       }
     }
 
-    // 3. GENERATE FULL SEQUENCE (1 to End of Month)
-    const daysInMonth = new Date(targetYear, targetMonth, 0).getDate(); // Get last day
-    const employeesInvolved = [...new Set(Object.values(grouped).map(g => g.employeeId))];
+    // 3. GENERATE FULL SEQUENCE (Dynamic Range from Min to Max)
+    if (minDateMs !== Infinity && maxDateMs !== -Infinity) {
+       const minDate = new Date(minDateMs);
+       const maxDate = new Date(maxDateMs);
+       minDate.setHours(12, 0, 0, 0); // prevent DST jumps
+       maxDate.setHours(12, 0, 0, 0);
 
-    for (const empId of employeesInvolved) {
-      const emp = allEmployees.find(e => e.id === empId);
-      for (let day = 1; day <= daysInMonth; day++) {
-        const dateStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const key = `${empId}|${dateStr}`;
-        
-        // If this date is NOT in excel data, we create an empty entry
-        if (!grouped[key]) {
-          grouped[key] = { employeeId: empId, employee: emp, date: dateStr, checkIn: null, checkOut: null };
-        }
-      }
+       const employeesInvolved = [...new Set(Object.values(grouped).map(g => g.employeeId))];
+
+       for (const empId of employeesInvolved) {
+         const emp = allEmployees.find(e => e.id === empId);
+         
+         let current = new Date(minDate);
+         while (current <= maxDate) {
+           const y = current.getFullYear();
+           const m = current.getMonth() + 1;
+           const day = current.getDate();
+           
+           const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+           const key = `${empId}|${dateStr}`;
+           
+           if (!grouped[key]) {
+             grouped[key] = { employeeId: empId, employee: emp, date: dateStr, checkIn: null, checkOut: null };
+           }
+           current.setDate(current.getDate() + 1);
+         }
+       }
     }
 
     // 4. UPSERT ALL RECORDS (1-30)
