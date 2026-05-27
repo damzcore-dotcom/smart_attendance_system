@@ -10,7 +10,20 @@ const CCTVEnrollmentTab = ({ employee }) => {
   const [enrollmentStatus, setEnrollmentStatus] = useState(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  
+  // Interactive Phase variables
+  const [phaseIndex, setPhaseIndex] = useState(-1);
+  const [countdown, setCountdown] = useState(3);
+  
   const streamRef = useRef(null);
+  
+  const phases = [
+    { title: "Tatap Depan", desc: "Tatap lurus ke arah kamera", id: 'front' },
+    { title: "Tengok Atas", desc: "Angkat dagu sedikit ke atas", id: 'up' },
+    { title: "Tengok Bawah", desc: "Tundukkan wajah sedikit", id: 'down' },
+    { title: "Tengok Kiri", desc: "Tengokkan wajah ke arah kiri", id: 'left' },
+    { title: "Tengok Kanan", desc: "Tengokkan wajah ke arah kanan", id: 'right' },
+  ];
 
   const startCamera = async () => {
     try {
@@ -24,6 +37,8 @@ const CCTVEnrollmentTab = ({ employee }) => {
       setCameraActive(true);
       setEnrollmentStatus(null);
       setErrorMsg('');
+      setPhaseIndex(-1);
+      setCapturedImages([]);
     } catch (err) {
       setErrorMsg('Gagal mengakses kamera: ' + err.message);
     }
@@ -35,6 +50,7 @@ const CCTVEnrollmentTab = ({ employee }) => {
       streamRef.current = null;
     }
     setCameraActive(false);
+    setPhaseIndex(-1);
   };
 
   useEffect(() => {
@@ -52,39 +68,59 @@ const CCTVEnrollmentTab = ({ employee }) => {
     return canvas.toDataURL('image/jpeg', 0.9);
   }, []);
 
-  const startCapture = async () => {
+  const startSequence = () => {
     if (!employee?.dbId || !cameraActive) return;
     setCapturing(true);
     setEnrollmentStatus('capturing');
     setCapturedImages([]);
     setErrorMsg('');
+    runPhase(0, []);
+  };
 
-    const images = [];
-    const totalShots = 15;
-
-    for (let i = 0; i < totalShots; i++) {
-      await new Promise(r => setTimeout(r, 600));
-      const img = captureFrame();
-      if (img) {
-        images.push(img);
-        setCapturedImages([...images]);
-      }
-    }
-
-    setCapturing(false);
-
-    if (images.length >= 10) {
+  const runPhase = (index, currentImages) => {
+    if (index >= phases.length) {
+      // Selesai semua fase
+      setCapturing(false);
+      setPhaseIndex(-1);
       setEnrollmentStatus('processing');
-      processEnrollment(images);
-    } else {
-      setEnrollmentStatus('error');
-      setErrorMsg(`Hanya ${images.length} foto berhasil diambil. Minimal 10 diperlukan.`);
+      processEnrollment(currentImages);
+      return;
     }
+
+    setPhaseIndex(index);
+    let count = 3;
+    setCountdown(count);
+
+    const intv = setInterval(() => {
+      count--;
+      if (count > 0) {
+        setCountdown(count);
+      } else {
+        clearInterval(intv);
+        // SNAP
+        const img = captureFrame();
+        if (img) {
+          const newImages = [...currentImages, img];
+          setCapturedImages(newImages);
+          // Beri jeda 800ms sebelum fase berikutnya
+          setTimeout(() => {
+            runPhase(index + 1, newImages);
+          }, 800);
+        } else {
+          // Gagal snap
+          setCapturing(false);
+          setPhaseIndex(-1);
+          setEnrollmentStatus('error');
+          setErrorMsg('Kamera gagal menangkap gambar.');
+        }
+      }
+    }, 1000);
   };
 
   const processEnrollment = async (images) => {
     try {
       const embeddings = [];
+      const aiUrl = import.meta.env.VITE_AI_ENGINE_URL || `${window.location.protocol}//${window.location.hostname}:8001`;
 
       for (const imgData of images) {
         const fetchRes = await fetch(imgData);
@@ -96,7 +132,6 @@ const CCTVEnrollmentTab = ({ employee }) => {
         formData.append('employee_id', employee.employeeCode);
 
         try {
-          const aiUrl = import.meta.env.VITE_AI_ENGINE_URL || 'http://localhost:8001';
           const response = await fetch(`${aiUrl}/enroll?employee_id=${employee.employeeCode}`, {
             method: 'POST',
             body: formData
@@ -110,12 +145,13 @@ const CCTVEnrollmentTab = ({ employee }) => {
         }
       }
 
-      if (embeddings.length < 5) {
+      if (embeddings.length < 3) {
         setEnrollmentStatus('error');
-        setErrorMsg(`Hanya ${embeddings.length} embedding diekstrak. Pastikan cahaya cukup.`);
+        setErrorMsg(`Hanya ${embeddings.length} embedding diekstrak. Pastikan cahaya cukup & wajah terlihat.`);
         return;
       }
 
+      // Hitung mean embedding
       const avgEmbedding = embeddings[0].map((_, idx) => {
         const sum = embeddings.reduce((acc, emb) => acc + emb[idx], 0);
         return sum / embeddings.length;
@@ -130,7 +166,7 @@ const CCTVEnrollmentTab = ({ employee }) => {
       setEnrollmentStatus('success');
     } catch (err) {
       setEnrollmentStatus('error');
-      setErrorMsg('Gagal memproses: ' + (err.response?.data?.message || err.message));
+      setErrorMsg('Gagal menyimpan: ' + (err.response?.data?.message || err.message));
     }
   };
 
@@ -140,7 +176,7 @@ const CCTVEnrollmentTab = ({ employee }) => {
         <AlertCircle className="w-12 h-12 text-amber-500 mb-4" />
         <h4 className="text-lg font-bold text-slate-800">Save Employee First</h4>
         <p className="text-sm text-slate-500 mt-2">
-          Anda harus menyimpan (Save) data karyawan ini terlebih dahulu sebelum melakukan pendaftaran wajah CCTV.
+          Simpan data karyawan ini terlebih dahulu sebelum melakukan pendaftaran wajah CCTV.
         </p>
       </div>
     );
@@ -156,26 +192,34 @@ const CCTVEnrollmentTab = ({ employee }) => {
         </div>
 
         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-xs text-slate-600">
-          <strong className="text-slate-800">Petunjuk:</strong> Modul ini mendaftarkan wajah karyawan spesifik untuk <strong>Kamera CCTV</strong> (High Accuracy AI), berbeda dengan wajah untuk Tablet/Webcam. Pastikan wajah terlihat jelas.
+          <strong className="text-slate-800">Sistem Guiding:</strong> Pendaftaran wajah akan dipandu menjadi 5 sisi (Depan, Atas, Bawah, Kiri, Kanan) agar deteksi CCTV saat bergerak lebih optimal.
         </div>
 
-        <div className="relative bg-slate-900 rounded-2xl overflow-hidden aspect-video flex items-center justify-center border border-slate-200 shadow-sm">
+        <div className="relative bg-slate-900 rounded-2xl overflow-hidden aspect-video flex items-center justify-center border border-slate-200 shadow-sm transition-all">
           <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
           
           {!cameraActive && (
-            <div className="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center text-slate-400 space-y-3">
+            <div className="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center text-slate-400 space-y-3 z-20">
               <Camera className="w-12 h-12 opacity-50" />
               <p className="text-sm font-medium">Kamera belum aktif</p>
             </div>
           )}
 
-          {capturing && (
-            <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center z-10">
-              <div className="bg-white/95 rounded-2xl px-8 py-6 text-center shadow-2xl">
-                <Loader2 className="w-10 h-10 animate-spin text-blue-600 mx-auto mb-3" />
-                <p className="text-base font-bold text-slate-800 mb-1">Merekam Wajah...</p>
-                <p className="text-xs font-semibold text-blue-600">({capturedImages.length}/15 foto)</p>
-                <p className="text-[10px] text-slate-500 mt-2">Gerakkan kepala perlahan</p>
+          {/* Guiding HUD */}
+          {capturing && phaseIndex >= 0 && phaseIndex < phases.length && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-between p-6 bg-black/30">
+              <div className="bg-blue-600/90 backdrop-blur text-white px-6 py-2.5 rounded-full shadow-xl animate-in slide-in-from-top fade-in">
+                <p className="font-bold text-lg uppercase tracking-wider">{phases[phaseIndex].title}</p>
+              </div>
+              
+              <div className="flex items-center justify-center">
+                <span className="text-7xl font-extrabold text-white drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] animate-pulse">
+                  {countdown}
+                </span>
+              </div>
+              
+              <div className="bg-black/50 backdrop-blur text-white px-6 py-3 rounded-2xl shadow-lg border border-white/20 text-center animate-in slide-in-from-bottom fade-in">
+                <p className="text-sm font-medium">{phases[phaseIndex].desc}</p>
               </div>
             </div>
           )}
@@ -196,12 +240,12 @@ const CCTVEnrollmentTab = ({ employee }) => {
             <>
               <button
                 type="button"
-                onClick={startCapture}
+                onClick={startSequence}
                 disabled={capturing || enrollmentStatus === 'processing'}
                 className="px-6 py-3 bg-emerald-600 text-white rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-emerald-700 transition-all disabled:opacity-50 flex items-center gap-2 shadow-sm"
               >
                 {capturing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                Mulai Rekam (15 frame)
+                Mulai Panduan (5 Sisi)
               </button>
               <button
                 type="button"
@@ -214,15 +258,24 @@ const CCTVEnrollmentTab = ({ employee }) => {
           )}
         </div>
 
+        {/* Phase Progress Bar */}
+        {capturedImages.length > 0 && (
+          <div className="flex gap-2 justify-center">
+            {phases.map((p, idx) => (
+              <div key={p.id} className={`w-12 h-1.5 rounded-full transition-all duration-300 ${idx < capturedImages.length ? 'bg-emerald-500' : 'bg-slate-200'}`} />
+            ))}
+          </div>
+        )}
+
         {/* Status Messages */}
         {enrollmentStatus === 'processing' && (
           <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm font-medium text-blue-800 animate-in fade-in">
-            <Loader2 className="w-5 h-5 animate-spin" /> Memproses AI Embedding ke Server...
+            <Loader2 className="w-5 h-5 animate-spin" /> Memproses AI Embedding dari 5 sisi wajah ke Server...
           </div>
         )}
         {enrollmentStatus === 'success' && (
           <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-sm font-bold text-emerald-800 animate-in fade-in">
-            <CheckCircle className="w-5 h-5" /> Registrasi CCTV Berhasil!
+            <CheckCircle className="w-5 h-5" /> Registrasi Wajah 5-Sisi Berhasil Tersimpan!
           </div>
         )}
         {enrollmentStatus === 'error' && (

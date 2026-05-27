@@ -16,6 +16,18 @@ const FaceEnrollment = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const streamRef = useRef(null);
 
+  // Interactive Phase variables
+  const [phaseIndex, setPhaseIndex] = useState(-1);
+  const [countdown, setCountdown] = useState(3);
+  
+  const phases = [
+    { title: "Tatap Depan", desc: "Tatap lurus ke arah kamera", id: 'front' },
+    { title: "Tengok Atas", desc: "Angkat dagu sedikit ke atas", id: 'up' },
+    { title: "Tengok Bawah", desc: "Tundukkan wajah sedikit", id: 'down' },
+    { title: "Tengok Kiri", desc: "Tengokkan wajah ke arah kiri", id: 'left' },
+    { title: "Tengok Kanan", desc: "Tengokkan wajah ke arah kanan", id: 'right' },
+  ];
+
   // Fetch employees
   const { data: employeesData, isLoading: loadingEmployees } = useQuery({
     queryKey: ['employees-enrollment'],
@@ -40,6 +52,10 @@ const FaceEnrollment = () => {
         videoRef.current.srcObject = stream;
       }
       setCameraActive(true);
+      setEnrollmentStatus(null);
+      setErrorMsg('');
+      setPhaseIndex(-1);
+      setCapturedImages([]);
     } catch (err) {
       setErrorMsg('Gagal mengakses kamera: ' + err.message);
     }
@@ -52,6 +68,7 @@ const FaceEnrollment = () => {
       streamRef.current = null;
     }
     setCameraActive(false);
+    setPhaseIndex(-1);
   };
 
   useEffect(() => { return () => stopCamera(); }, []);
@@ -68,54 +85,72 @@ const FaceEnrollment = () => {
     return canvas.toDataURL('image/jpeg', 0.9);
   }, []);
 
-  // Auto-capture multiple shots
-  const startCapture = async () => {
+  const startSequence = () => {
     if (!selectedEmployee || !cameraActive) return;
     setCapturing(true);
     setEnrollmentStatus('capturing');
     setCapturedImages([]);
     setErrorMsg('');
+    runPhase(0, []);
+  };
 
-    const images = [];
-    const totalShots = 15;
-
-    for (let i = 0; i < totalShots; i++) {
-      await new Promise(r => setTimeout(r, 600));
-      const img = captureFrame();
-      if (img) {
-        images.push(img);
-        setCapturedImages([...images]);
-      }
-    }
-
-    setCapturing(false);
-
-    if (images.length >= 10) {
+  const runPhase = (index, currentImages) => {
+    if (index >= phases.length) {
+      setCapturing(false);
+      setPhaseIndex(-1);
       setEnrollmentStatus('processing');
-      processEnrollment(images);
-    } else {
-      setEnrollmentStatus('error');
-      setErrorMsg(`Hanya ${images.length} foto berhasil diambil. Minimal 10 diperlukan.`);
+      processEnrollment(currentImages);
+      return;
     }
+
+    setPhaseIndex(index);
+    let count = 3;
+    setCountdown(count);
+
+    const intv = setInterval(() => {
+      count--;
+      if (count > 0) {
+        setCountdown(count);
+      } else {
+        clearInterval(intv);
+        // SNAP
+        const img = captureFrame();
+        if (img) {
+          const newImages = [...currentImages, img];
+          setCapturedImages(newImages);
+          setTimeout(() => {
+            runPhase(index + 1, newImages);
+          }, 800);
+        } else {
+          setCapturing(false);
+          setPhaseIndex(-1);
+          setEnrollmentStatus('error');
+          setErrorMsg('Kamera gagal menangkap gambar.');
+        }
+      }
+    }, 1000);
   };
 
   // Send to AI Engine for embedding extraction
   const processEnrollment = async (images) => {
     try {
-      // Send each image to AI Engine, collect embeddings
       const embeddings = [];
+      const aiUrl = import.meta.env.VITE_AI_ENGINE_URL || `${window.location.protocol}//${window.location.hostname}:8001`;
 
       for (const imgData of images) {
-        const blob = await (await fetch(imgData)).blob();
+        const fetchRes = await fetch(imgData);
+        if(!fetchRes.ok) continue;
+        const blob = await fetchRes.blob();
+        
         const formData = new FormData();
         formData.append('file', blob, 'face.jpg');
         formData.append('employee_id', selectedEmployee.id);
 
         try {
-          const response = await fetch(
-            `${import.meta.env.VITE_AI_ENGINE_URL || 'http://localhost:8001'}/enroll?employee_id=${selectedEmployee.id}`,
-            { method: 'POST', body: formData }
-          );
+          const response = await fetch(`${aiUrl}/enroll?employee_id=${selectedEmployee.id}`, {
+            method: 'POST',
+            body: formData
+          });
           const result = await response.json();
           if (result.success && result.embedding) {
             embeddings.push(result.embedding);
@@ -125,9 +160,9 @@ const FaceEnrollment = () => {
         }
       }
 
-      if (embeddings.length < 5) {
+      if (embeddings.length < 3) {
         setEnrollmentStatus('error');
-        setErrorMsg(`Hanya ${embeddings.length} embedding berhasil diekstrak. Pastikan posisi wajah jelas.`);
+        setErrorMsg(`Hanya ${embeddings.length} embedding berhasil diekstrak. Pastikan posisi wajah jelas & terang.`);
         return;
       }
 
@@ -189,7 +224,7 @@ const FaceEnrollment = () => {
               filteredEmployees.map(emp => (
                 <button
                   key={emp.id}
-                  onClick={() => { setSelectedEmployee(emp); setEnrollmentStatus(null); setCapturedImages([]); }}
+                  onClick={() => { setSelectedEmployee(emp); setEnrollmentStatus(null); setCapturedImages([]); setPhaseIndex(-1); }}
                   className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-all flex items-center justify-between group ${
                     selectedEmployee?.id === emp.id
                       ? 'bg-blue-50 border border-blue-200 text-blue-800 font-semibold'
@@ -217,12 +252,16 @@ const FaceEnrollment = () => {
             <Camera className="w-4 h-4" /> Live Camera Preview
           </h3>
 
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-600">
+            <strong className="text-slate-800">Sistem Guiding:</strong> Pendaftaran wajah akan dipandu menjadi 5 sisi (Depan, Atas, Bawah, Kiri, Kanan) agar deteksi CCTV lebih optimal saat karyawan berjalan masuk.
+          </div>
+
           {/* Camera feed */}
-          <div className="relative bg-slate-900 rounded-xl overflow-hidden aspect-video flex items-center justify-center">
+          <div className="relative bg-slate-900 rounded-xl overflow-hidden aspect-video flex items-center justify-center border border-slate-200 shadow-sm">
             <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
             
             {!cameraActive && (
-              <div className="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center text-slate-400 space-y-3">
+              <div className="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center text-slate-400 space-y-3 z-20">
                 <Camera className="w-12 h-12" />
                 <p className="text-sm">Kamera belum aktif</p>
               </div>
@@ -230,18 +269,37 @@ const FaceEnrollment = () => {
 
             {/* Overlay info */}
             {selectedEmployee && cameraActive && (
-              <div className="absolute top-3 left-3 bg-black/60 text-white text-xs px-3 py-1.5 rounded-lg backdrop-blur-sm">
+              <div className="absolute top-3 left-3 bg-black/60 text-white text-xs px-3 py-1.5 rounded-lg backdrop-blur-sm z-30">
                 {selectedEmployee.name} ({selectedEmployee.employeeCode})
               </div>
             )}
 
-            {capturing && (
-              <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
-                <div className="bg-white/90 rounded-xl px-6 py-4 text-center backdrop-blur-sm">
-                  <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-2" />
-                  <p className="text-sm font-semibold text-slate-800">Mengambil foto... ({capturedImages.length}/15)</p>
-                  <p className="text-xs text-slate-500">Gerakkan kepala perlahan ke kiri, kanan, atas, bawah</p>
+            {/* Guiding HUD */}
+            {capturing && phaseIndex >= 0 && phaseIndex < phases.length && (
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-between p-6 bg-black/30">
+                <div className="bg-blue-600/90 backdrop-blur text-white px-6 py-2.5 rounded-full shadow-xl animate-in slide-in-from-top fade-in">
+                  <p className="font-bold text-lg uppercase tracking-wider">{phases[phaseIndex].title}</p>
                 </div>
+                
+                <div className="flex items-center justify-center">
+                  <span className="text-7xl font-extrabold text-white drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] animate-pulse">
+                    {countdown}
+                  </span>
+                </div>
+                
+                <div className="bg-black/50 backdrop-blur text-white px-6 py-3 rounded-2xl shadow-lg border border-white/20 text-center animate-in slide-in-from-bottom fade-in">
+                  <p className="text-sm font-medium">{phases[phaseIndex].desc}</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-center mt-2">
+            {capturedImages.length > 0 && (
+              <div className="flex gap-2">
+                {phases.map((p, idx) => (
+                  <div key={p.id} className={`w-12 h-1.5 rounded-full transition-all duration-300 ${idx < capturedImages.length ? 'bg-emerald-500' : 'bg-slate-200'}`} />
+                ))}
               </div>
             )}
           </div>
@@ -254,19 +312,19 @@ const FaceEnrollment = () => {
             {!cameraActive ? (
               <button
                 onClick={startCamera}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-all flex items-center gap-2"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-all flex items-center gap-2 shadow-sm"
               >
                 <Camera className="w-4 h-4" /> Aktifkan Kamera
               </button>
             ) : (
               <>
                 <button
-                  onClick={startCapture}
+                  onClick={startSequence}
                   disabled={!selectedEmployee || capturing || enrollmentStatus === 'processing'}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm"
                 >
                   {capturing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                  {capturing ? 'Capturing...' : 'Mulai Enrollment (15 foto)'}
+                  {capturing ? 'Capturing...' : 'Mulai Panduan Wajah (5 Sisi)'}
                 </button>
                 <button
                   onClick={stopCamera}
@@ -281,12 +339,12 @@ const FaceEnrollment = () => {
           {/* Status */}
           {enrollmentStatus === 'processing' && (
             <div className="flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-blue-800">
-              <Loader2 className="w-5 h-5 animate-spin" /> Memproses embedding wajah...
+              <Loader2 className="w-5 h-5 animate-spin" /> Memproses AI embedding dari semua sisi wajah...
             </div>
           )}
           {enrollmentStatus === 'success' && (
             <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-800">
-              <CheckCircle className="w-5 h-5" /> Enrollment berhasil! Wajah {selectedEmployee?.name} telah terdaftar.
+              <CheckCircle className="w-5 h-5" /> Registrasi 5-Sisi berhasil! Wajah {selectedEmployee?.name} telah tersimpan.
             </div>
           )}
           {enrollmentStatus === 'error' && (
@@ -298,10 +356,15 @@ const FaceEnrollment = () => {
           {/* Captured thumbnails */}
           {capturedImages.length > 0 && (
             <div>
-              <p className="text-xs text-slate-500 mb-2 font-medium">Foto yang diambil ({capturedImages.length})</p>
-              <div className="flex gap-1.5 flex-wrap">
+              <p className="text-xs text-slate-500 mb-2 font-medium">Foto yang diambil ({capturedImages.length}/5)</p>
+              <div className="flex gap-2 flex-wrap">
                 {capturedImages.map((img, i) => (
-                  <img key={i} src={img} alt={`cap-${i}`} className="w-14 h-14 rounded-lg object-cover border border-slate-200" />
+                  <div key={i} className="relative">
+                    <img src={img} alt={`cap-${i}`} className="w-16 h-16 rounded-lg object-cover border border-slate-200 shadow-sm" />
+                    <div className="absolute bottom-0 inset-x-0 bg-black/50 text-[9px] text-white text-center py-0.5 rounded-b-lg trunc">
+                      {phases[i]?.title}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
