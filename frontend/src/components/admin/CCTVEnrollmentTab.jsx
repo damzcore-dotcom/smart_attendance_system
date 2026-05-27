@@ -104,11 +104,11 @@ const CCTVEnrollmentTab = ({ employee }) => {
     setEmbeddings([]);
     setErrorMsg('');
     setEnrollmentStatus('capturing');
-    beginPhase(0);
+    beginPhase(0, [], []);
   };
 
   // Begin a specific phase with countdown
-  const beginPhase = (index) => {
+  const beginPhase = (index, currentImages, currentEmbs) => {
     setPhaseIndex(index);
     setPhaseState('countdown');
     setErrorMsg('');
@@ -123,14 +123,14 @@ const CCTVEnrollmentTab = ({ employee }) => {
       } else {
         setCountdown(0);
         // Capture and verify
-        captureAndVerify(index);
+        captureAndVerify(index, currentImages, currentEmbs);
       }
     };
     countdownRef.current = setTimeout(tick, 1000);
   };
 
   // Capture frame and send to AI for verification
-  const captureAndVerify = async (index) => {
+  const captureAndVerify = async (index, currentImages, currentEmbs) => {
     setPhaseState('verifying');
     const img = captureFrame();
     if (!img) {
@@ -141,9 +141,9 @@ const CCTVEnrollmentTab = ({ employee }) => {
 
     try {
       const emb = await sendToAI(img);
-      // SUCCESS — store and move on
-      const newImages = [...capturedImages, img];
-      const newEmbs = [...embeddings, emb];
+      // SUCCESS
+      const newImages = [...currentImages, img];
+      const newEmbs = [...currentEmbs, emb];
       setCapturedImages(newImages);
       setEmbeddings(newEmbs);
       setPhaseState('success');
@@ -151,7 +151,7 @@ const CCTVEnrollmentTab = ({ employee }) => {
       // Auto-advance after short delay
       setTimeout(() => {
         if (index + 1 < phases.length) {
-          beginPhase(index + 1);
+          beginPhase(index + 1, newImages, newEmbs);
         } else {
           // All phases done — finalize
           finalizeEnrollment(newEmbs);
@@ -166,7 +166,7 @@ const CCTVEnrollmentTab = ({ employee }) => {
   // Retry current phase (user clicks button, no auto-loop)
   const retryPhase = () => {
     if (phaseIndex >= 0 && phaseIndex < phases.length) {
-      beginPhase(phaseIndex);
+      beginPhase(phaseIndex, capturedImages, embeddings);
     }
   };
 

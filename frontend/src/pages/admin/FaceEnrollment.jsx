@@ -121,10 +121,10 @@ const FaceEnrollment = () => {
     setCollectedEmbeddings([]);
     setErrorMsg('');
     setEnrollmentStatus('capturing');
-    beginPhase(0);
+    beginPhase(0, [], []);
   };
 
-  const beginPhase = (index) => {
+  const beginPhase = (index, currentImages, currentEmbs) => {
     setPhaseIndex(index);
     setPhaseState('countdown');
     setErrorMsg('');
@@ -138,13 +138,13 @@ const FaceEnrollment = () => {
         countdownRef.current = setTimeout(tick, 1000);
       } else {
         setCountdown(0);
-        captureAndVerify(index);
+        captureAndVerify(index, currentImages, currentEmbs);
       }
     };
     countdownRef.current = setTimeout(tick, 1000);
   };
 
-  const captureAndVerify = async (index) => {
+  const captureAndVerify = async (index, currentImages, currentEmbs) => {
     setPhaseState('verifying');
     const img = captureFrame();
     if (!img) {
@@ -153,33 +153,33 @@ const FaceEnrollment = () => {
       return;
     }
 
-    try {
-      const emb = await sendToAI(img);
-      // SUCCESS
-      const newImages = [...capturedImages, img];
-      const newEmbs = [...collectedEmbeddings, emb];
-      setCapturedImages(newImages);
-      setCollectedEmbeddings(newEmbs);
-      setPhaseState('success');
-
-      setTimeout(() => {
-        if (index + 1 < phases.length) {
-          beginPhase(index + 1);
-        } else {
-          finalizeEnrollment(newEmbs);
-        }
-      }, 1000);
-    } catch (err) {
-      setPhaseState('failed');
-      setErrorMsg(`Fase "${phases[index].title}" gagal: ${err.message}`);
-    }
-  };
-
-  const retryPhase = () => {
-    if (phaseIndex >= 0 && phaseIndex < phases.length) {
-      beginPhase(phaseIndex);
-    }
-  };
+      try {
+        const emb = await sendToAI(img);
+        // SUCCESS
+        const newImages = [...currentImages, img];
+        const newEmbs = [...currentEmbs, emb];
+        setCapturedImages(newImages);
+        setCollectedEmbeddings(newEmbs);
+        setPhaseState('success');
+  
+        setTimeout(() => {
+          if (index + 1 < phases.length) {
+            beginPhase(index + 1, newImages, newEmbs);
+          } else {
+            finalizeEnrollment(newEmbs);
+          }
+        }, 1000);
+      } catch (err) {
+        setPhaseState('failed');
+        setErrorMsg(`Fase "${phases[index].title}" gagal: ${err.message}`);
+      }
+    };
+  
+    const retryPhase = () => {
+      if (phaseIndex >= 0 && phaseIndex < phases.length) {
+        beginPhase(phaseIndex, capturedImages, collectedEmbeddings);
+      }
+    };
 
   const finalizeEnrollment = async (allEmbeddings) => {
     setPhaseState('idle');
@@ -192,7 +192,9 @@ const FaceEnrollment = () => {
         return sum / allEmbeddings.length;
       });
 
-      await api.put(`/employees/${selectedEmployee.id}`, {
+      const dbIdVal = selectedEmployee.dbId || selectedEmployee.id;
+
+      await api.put(`/employees/${dbIdVal}`, {
         faceEmbeddingV2: avgEmbedding,
         faceSamples: allEmbeddings.length,
         faceStatus: 'ENROLLED',
