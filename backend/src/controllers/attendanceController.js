@@ -1171,7 +1171,7 @@ const update = async (req, res) => {
 
     // Record detailed audit
     if (req.user) {
-      const { recordAuditLog } = require('../utils/auditLogger');
+      const { recordAuditLog } = require('./auditLogController');
       try {
          await recordAuditLog({
            userId: req.user.id,
@@ -1375,6 +1375,7 @@ const manualCorrectionHRD = async (req, res) => {
         updatedCount++;
         
         try {
+           const { recordAuditLog } = require('./auditLogController');
            await recordAuditLog({
              action: 'MANUAL_CORRECTION_STATUS',
              module: 'Kehadiran (HRD)',
@@ -1435,6 +1436,7 @@ const manualCorrectionHRD = async (req, res) => {
         updatedCount++;
 
         try {
+           const { recordAuditLog } = require('./auditLogController');
            await recordAuditLog({
              action: 'MANUAL_CORRECTION_TIME',
              module: 'Kehadiran (HRD)',
