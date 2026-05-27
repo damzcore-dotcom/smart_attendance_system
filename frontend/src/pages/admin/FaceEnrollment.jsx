@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Camera, UserCheck, AlertCircle, RefreshCw, Upload, Loader2, CheckCircle, XCircle, ScanFace } from 'lucide-react';
-import api from '../../services/api';
+import { Camera, UserCheck, AlertCircle, RefreshCw, Upload, Loader2, CheckCircle, XCircle, ScanFace, Filter, Search } from 'lucide-react';
+import api, { employeeAPI } from '../../services/api';
 
 const FaceEnrollment = () => {
   const queryClient = useQueryClient();
@@ -9,6 +9,8 @@ const FaceEnrollment = () => {
   const canvasRef = useRef(null);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [deptFilter, setDeptFilter] = useState('');
+  const [positionFilter, setPositionFilter] = useState('');
   const [capturing, setCapturing] = useState(false);
   const [capturedImages, setCapturedImages] = useState([]);
   const [enrollmentStatus, setEnrollmentStatus] = useState(null); // null | 'capturing' | 'processing' | 'success' | 'error'
@@ -28,18 +30,20 @@ const FaceEnrollment = () => {
     { title: "Tengok Kanan", desc: "Tengokkan wajah ke arah kanan", id: 'right' },
   ];
 
+  // Data Options
+  const { data: optionsData } = useQuery({
+    queryKey: ['master-options'],
+    queryFn: () => employeeAPI.getMasterOptions({}),
+  });
+  const masterOptions = optionsData?.data || { departments: [], positions: [], sections: [] };
+
   // Fetch employees
   const { data: employeesData, isLoading: loadingEmployees } = useQuery({
-    queryKey: ['employees-enrollment'],
-    queryFn: () => api.get('/employees').then(r => r.data),
+    queryKey: ['employees-enrollment', { search: searchQuery, dept: deptFilter, position: positionFilter }],
+    queryFn: () => employeeAPI.getAll({ search: searchQuery, dept: deptFilter, position: positionFilter, limit: 100 }),
+    keepPreviousData: true,
   });
-  const employees = employeesData?.data || [];
-
-  // Filter employees
-  const filteredEmployees = employees.filter(emp =>
-    (emp.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (emp.employeeCode || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredEmployees = employeesData?.data || [];
 
   // Start camera
   const startCamera = async () => {
@@ -207,15 +211,40 @@ const FaceEnrollment = () => {
             <UserCheck className="w-4 h-4" /> Pilih Karyawan
           </h3>
 
-          <input
-            type="text"
-            placeholder="Cari nama / kode karyawan..."
-            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 outline-none"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+          <div className="space-y-3 pb-2 border-b border-slate-100">
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Cari nama / NIK..."
+                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-blue-500 outline-none"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            
+            <div className="grid grid-cols-2 gap-2">
+              <select 
+                value={deptFilter} 
+                onChange={e => setDeptFilter(e.target.value)} 
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 text-xs font-medium text-slate-700 outline-none"
+              >
+                <option value="">Semua Dept</option>
+                {masterOptions.departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+              </select>
+              
+              <select 
+                value={positionFilter} 
+                onChange={e => setPositionFilter(e.target.value)} 
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 text-xs font-medium text-slate-700 outline-none"
+              >
+                <option value="">Semua Rank</option>
+                {masterOptions.positions.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+          </div>
 
-          <div className="max-h-96 overflow-y-auto space-y-1">
+          <div className="max-h-96 overflow-y-auto space-y-1 pr-1">
             {loadingEmployees ? (
               <div className="flex items-center justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
             ) : filteredEmployees.length === 0 ? (
