@@ -5,7 +5,7 @@ WORKDIR /app
 # Install system dependencies for OpenCV and InsightFace
 RUN apt-get update && apt-get install -y \
     libglib2.0-0 libsm6 libxext6 libxrender-dev \
-    libgomp1 ffmpeg \
+    libgomp1 ffmpeg build-essential python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

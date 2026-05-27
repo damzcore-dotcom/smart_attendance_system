@@ -25,7 +25,7 @@ cd /d "%~dp0"
 docker -v >nul 2>&1
 if %errorlevel% equ 0 (
     echo     Docker is installed. Starting AI Engine...
-    start "Smart Attendance - AI Engine (Docker)" cmd /c "docker-compose up -d --build"
+    start "Smart Attendance - AI Engine (Docker)" cmd /c "docker-compose up -d --build ai-engine redis minio"
 ) else (
     echo     [WARNING] Docker is NOT installed or running!
     echo     AI Face Recognition Server won't start automatically.
