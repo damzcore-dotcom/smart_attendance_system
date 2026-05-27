@@ -37,6 +37,17 @@ console.log('');
     
     fs.cpSync(path.join(rootDir, 'frontend', 'dist'), path.join(patchDir, 'frontend', 'dist'), { recursive: true });
 
+    // Include AI Engine & Docker Compose for Face Recognition
+    if (fs.existsSync(path.join(rootDir, 'ai_bridge'))) {
+      fs.cpSync(path.join(rootDir, 'ai_bridge'), path.join(patchDir, 'ai_bridge'), { 
+        recursive: true, 
+        filter: (src) => !src.includes('__pycache__') && !src.includes('.git') && !src.includes('models') // Jangan bawa bobot model dalam patch
+      });
+    }
+    if (fs.existsSync(path.join(rootDir, 'docker-compose.yml'))) {
+      fs.cpSync(path.join(rootDir, 'docker-compose.yml'), path.join(patchDir, 'docker-compose.yml'));
+    }
+
     if (fs.existsSync(path.join(rootDir, 'reset-client-data.js'))) {
       fs.cpSync(path.join(rootDir, 'reset-client-data.js'), path.join(patchDir, 'reset-client-data.js'));
     }

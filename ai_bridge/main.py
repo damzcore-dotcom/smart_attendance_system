@@ -52,16 +52,31 @@ async def lifespan(app: FastAPI):
 
     # Initialize camera streams
     stream_manager = HikvisionStreamManager()
-    config_path = os.getenv("CAMERA_CONFIG", "/app/config/cameras.yaml")
-    if os.path.exists(config_path):
-        await stream_manager.load_from_config(config_path)
-        # Start frame processing loop
-        asyncio.create_task(
-            process_frames_loop(stream_manager, face_detector, face_recognizer, liveness_detector, recorder)
-        )
-        print(f"[AI Engine] Camera processing started with {len(stream_manager.get_active_cameras())} cameras")
-    else:
-        print(f"[AI Engine] No camera config found at {config_path}, running in API-only mode")
+    
+    try:
+        # Coba ambil kamera dari Database via Node.js API
+        api_cameras = await bridge.get_cameras()
+        if api_cameras and len(api_cameras) > 0:
+            stream_manager.load_from_api(api_cameras)
+            print(f"[AI Engine] Loaded {len(stream_manager.get_active_cameras())} cameras successfully from DB")
+        else:
+            # Fallback ke YAML jika kosong / gagal
+            config_path = os.getenv("CAMERA_CONFIG", "/app/config/cameras.yaml")
+            if os.path.exists(config_path):
+                await stream_manager.load_from_config(config_path)
+                print(f"[AI Engine] Loaded cameras from fallback config {config_path}")
+            else:
+                print("[AI Engine] No camera config found, running in API-only mode")
+                
+        # Start frame processing loop if there are cameras
+        if len(stream_manager.get_active_cameras()) > 0:
+            asyncio.create_task(
+                process_frames_loop(stream_manager, face_detector, face_recognizer, liveness_detector, recorder)
+            )
+            print(f"[AI Engine] Camera processing started!")
+            
+    except Exception as e:
+        print(f"[AI Engine] Failed to initialize camera streams: {e}")
 
     print("[AI Engine] Ready!")
     yield

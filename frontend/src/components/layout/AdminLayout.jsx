@@ -22,7 +22,8 @@ import {
   HardHat,
   Clock,
   Video,
-  AlertTriangle
+  AlertTriangle,
+  Camera
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -71,14 +72,24 @@ const AdminLayout = () => {
       ]
     },
     {
-      title: 'Biometrics & IT',
+      title: 'Face Recognition CCTV',
       items: [
         { name: 'Face Check Log', path: '/admin/face-check', icon: ScanFace, key: 'face-check' },
         { name: 'CCTV Enrollment', path: '/admin/face-enrollment', icon: Camera, key: 'face-check' },
         { name: 'Live Camera', path: '/admin/cameras', icon: Video, key: 'settings' },
-        { name: 'Alert Wajah Asing', path: '/admin/unknown-alerts', icon: AlertTriangle, key: 'settings' },
+        { name: 'Alert Wajah Asing', path: '/admin/unknown-alerts', icon: AlertTriangle, key: 'settings' }
+      ]
+    },
+    {
+      title: 'Fingerprint',
+      items: [
         { name: 'Mesin Finger', path: '/admin/devices', icon: Fingerprint, key: 'devices' },
-        { name: 'Data Sidik Jari', path: '/admin/fingerprint', icon: ScanFace, key: 'fingerprint' },
+        { name: 'Data Sidik Jari', path: '/admin/fingerprint', icon: Fingerprint, key: 'fingerprint' }
+      ]
+    },
+    {
+      title: 'IT & System',
+      items: [
         { name: 'User Access', path: '/admin/users', icon: UserCircle, key: 'users' },
         { name: 'Backup Data', path: '/admin/backup', icon: Database, key: 'backup' },
         { name: 'Settings', path: '/admin/settings', icon: Settings, key: 'settings' }

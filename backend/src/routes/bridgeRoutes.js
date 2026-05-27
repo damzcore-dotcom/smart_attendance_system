@@ -92,49 +92,142 @@ router.post('/checkin', async (req, res) => {
     const attendanceDate = new Date(date);
     attendanceDate.setHours(0, 0, 0, 0);
 
-    // Calculate late minutes if LATE
-    let lateMinutes = 0;
-    if (status === 'LATE') {
-      const employee = await prisma.employee.findUnique({
-        where: { id: employeeId },
-        include: { shift: true }
-      });
-      if (employee?.shift?.startTime) {
-        const [sh, sm] = employee.shift.startTime.split(':').map(Number);
-        const shiftStart = sh * 60 + sm;
-        const checkTime = new Date(timestamp);
-        const actualMin = checkTime.getHours() * 60 + checkTime.getMinutes();
-        lateMinutes = Math.max(0, actualMin - shiftStart);
-      }
+    // Get Camera Schedule
+    const camera = await prisma.camera.findUnique({
+      where: { id: cameraId }
+    });
+
+    if (!camera) {
+      return res.status(404).json({ success: false, message: 'Camera not found' });
     }
 
-    // Upsert: create or update attendance for the day
-    const attendance = await prisma.attendance.upsert({
-      where: {
-        employeeId_date: { employeeId, date: attendanceDate }
-      },
-      create: {
-        employeeId,
-        date: attendanceDate,
-        checkIn: new Date(timestamp),
-        status: status === 'LATE' ? 'LATE' : 'PRESENT',
-        lateMinutes,
-        mode: 'Face CCTV',
-        source: source || 'face_cctv',
-        checkinPhotoUrl: photoUrl,
-        checkinSimilarity: similarity,
-        checkinCameraId: cameraId,
-      },
-      update: {
-        // If record exists, this is a check-out
-        checkOut: new Date(timestamp),
-        checkoutPhotoUrl: photoUrl,
-        checkoutSimilarity: similarity,
-        checkoutCameraId: cameraId,
+    // Get Employee and their Shift
+    const employee = await prisma.employee.findUnique({
+      where: { id: employeeId },
+      include: {
+        shift: true,
+        shiftOverrides: {
+          where: { startDate: { lte: attendanceDate }, endDate: { gte: attendanceDate } },
+          include: { shift: true },
+          take: 1
+        }
       }
     });
 
-    res.json({ success: true, data: attendance });
+    // Parsing helper
+    const parseTime = (tString, defaultVal) => {
+      if (!tString) return defaultVal;
+      const [h, min] = tString.split(':').map(Number);
+      return h * 60 + min;
+    };
+
+    const eventTime = new Date(timestamp);
+    const m = eventTime.getHours() * 60 + eventTime.getMinutes(); // current minutes in day
+
+    let isCheckInPeriod = false;
+    let isCheckOutPeriod = false;
+    let shiftStartMin = null;
+
+    // 1. DYNAMIC SHIFT SCHEDULE (Flexible for any company rules)
+    const activeShift = employee?.shiftOverrides?.length > 0 ? employee.shiftOverrides[0].shift : employee?.shift;
+    
+    if (activeShift) {
+      shiftStartMin = parseTime(activeShift.startTime, 8 * 60);
+      const shiftEndMin = parseTime(activeShift.endTime, 17 * 60);
+      
+      // Check-In Window: 2 hours before shift start, up to 4 hours after shift start
+      const inWindowStart = shiftStartMin - (2 * 60);
+      const inWindowEnd = shiftStartMin + (4 * 60);
+      
+      // Check-Out Window: 1 hour before shift end, up to 6 hours after shift end
+      const outWindowStart = shiftEndMin - (1 * 60);
+      const outWindowEnd = shiftEndMin + (6 * 60);
+
+      isCheckInPeriod = m >= inWindowStart && m <= inWindowEnd;
+      isCheckOutPeriod = m >= outWindowStart && m <= outWindowEnd;
+    } else {
+      // 2. FALLBACK TO CAMERA GLOBAL SCHEDULE (If employee has no shift)
+      const inStart = parseTime(camera.captureInStart, 6 * 60); // 06:00
+      const inEnd = parseTime(camera.captureInEnd, 10 * 60); // 10:00
+      const outStart = parseTime(camera.captureOutStart, 15 * 60); // 15:00
+      const outEnd = parseTime(camera.captureOutEnd, 21 * 60); // 21:00
+      
+      isCheckInPeriod = m >= inStart && m <= inEnd;
+      isCheckOutPeriod = m >= outStart && m <= outEnd;
+    }
+
+    if (!isCheckInPeriod && !isCheckOutPeriod) {
+      return res.json({ success: true, ignored: true, message: 'Outside scheduled capture times (Shift / Global)' });
+    }
+
+    // Hitung late minutes jika LATE
+    let lateMinutes = 0;
+    if (status === 'LATE' && isCheckInPeriod && shiftStartMin) {
+      lateMinutes = Math.max(0, m - shiftStartMin);
+    }
+
+    // Upsert logic
+    // Jika tidak ada di DB untuk hari ini
+    const existing = await prisma.attendance.findUnique({
+      where: { employeeId_date: { employeeId, date: attendanceDate } }
+    });
+
+    let checkinData = existing ? existing.checkIn : null;
+    let checkoutData = existing ? existing.checkOut : null;
+
+    if (!existing && isCheckInPeriod) {
+      // First check in
+      const attendance = await prisma.attendance.create({
+        data: {
+          employeeId,
+          date: attendanceDate,
+          checkIn: eventTime,
+          status: status === 'LATE' ? 'LATE' : 'PRESENT',
+          lateMinutes,
+          mode: 'Face CCTV',
+          source: source || 'face_cctv',
+          checkinPhotoUrl: photoUrl,
+          checkinSimilarity: similarity,
+          checkinCameraId: cameraId,
+        }
+      });
+      return res.json({ success: true, data: attendance, type: 'CHECKIN' });
+    }
+
+    if (existing) {
+      const updateData = {};
+      let type = 'UPDATE';
+      
+      // Jika masih masa check-in period dan belum pernah check-in
+      if (isCheckInPeriod && !existing.checkIn) {
+        updateData.checkIn = eventTime;
+        updateData.status = status === 'LATE' ? 'LATE' : 'PRESENT';
+        updateData.lateMinutes = lateMinutes;
+        updateData.checkinPhotoUrl = photoUrl;
+        updateData.checkinSimilarity = similarity;
+        updateData.checkinCameraId = cameraId;
+        type = 'CHECKIN_RECOVERY';
+      }
+      
+      // Jika masa check-out period
+      if (isCheckOutPeriod) {
+        updateData.checkOut = eventTime;
+        updateData.checkoutPhotoUrl = photoUrl;
+        updateData.checkoutSimilarity = similarity;
+        updateData.checkoutCameraId = cameraId;
+        type = 'CHECKOUT';
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        const attendance = await prisma.attendance.update({
+          where: { id: existing.id },
+          data: updateData
+        });
+        return res.json({ success: true, data: attendance, type });
+      }
+    }
+
+    res.json({ success: true, ignored: true, message: 'Time mismatch or already handled' });
   } catch (err) {
     console.error('[Bridge] Checkin error:', err.message);
     res.status(500).json({ success: false, message: err.message });
@@ -267,9 +360,14 @@ router.get('/cameras', async (req, res) => {
 // Create camera
 router.post('/cameras', async (req, res) => {
   try {
-    const { id, name, location, ipAddress, rtspUrl, direction } = req.body;
+    const { id, name, location, ipAddress, rtspUrl, direction, captureInStart, captureInEnd, captureOutStart, captureOutEnd } = req.body;
     const camera = await prisma.camera.create({
-      data: { id, name, location, ipAddress, rtspUrl, direction: direction || 'BOTH' }
+      data: { id, name, location, ipAddress, rtspUrl, direction: direction || 'BOTH',
+        captureInStart: captureInStart || '06:00',
+        captureInEnd: captureInEnd || '10:00',
+        captureOutStart: captureOutStart || '15:00',
+        captureOutEnd: captureOutEnd || '21:00'
+      }
     });
     res.json({ success: true, data: camera });
   } catch (err) {
@@ -280,10 +378,12 @@ router.post('/cameras', async (req, res) => {
 // Update camera
 router.put('/cameras/:id', async (req, res) => {
   try {
-    const { name, location, ipAddress, rtspUrl, direction, active } = req.body;
+    const { name, location, ipAddress, rtspUrl, direction, active, captureInStart, captureInEnd, captureOutStart, captureOutEnd } = req.body;
     const camera = await prisma.camera.update({
       where: { id: req.params.id },
-      data: { name, location, ipAddress, rtspUrl, direction, active }
+      data: { name, location, ipAddress, rtspUrl, direction, active,
+        captureInStart, captureInEnd, captureOutStart, captureOutEnd
+      }
     });
     res.json({ success: true, data: camera });
   } catch (err) {

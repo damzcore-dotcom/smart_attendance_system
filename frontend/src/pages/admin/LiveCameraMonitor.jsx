@@ -1,12 +1,24 @@
 import { useState, useEffect, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Camera, Wifi, WifiOff, RefreshCw, Clock, Users, Loader2, Activity } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Camera, Wifi, WifiOff, RefreshCw, Clock, Loader2, Activity, XCircle } from 'lucide-react';
 import api from '../../services/api';
 
 const LiveCameraMonitor = () => {
+  const queryClient = useQueryClient();
   const [selectedCamera, setSelectedCamera] = useState(null);
   const [liveEvents, setLiveEvents] = useState([]);
   const wsRef = useRef(null);
+
+  // Simulation Modal State
+  const [isSimulationOpen, setIsSimulationOpen] = useState(false);
+  const [simData, setSimData] = useState({ employeeId: '', cameraId: '', timestamp: '', status: 'PRESENT' });
+
+  // Fetch employees for simulation
+  const { data: employeesData } = useQuery({
+    queryKey: ['employees'],
+    queryFn: () => api.get('/employees').then(r => r.data),
+  });
+  const employees = employeesData?.data || [];
 
   // Fetch cameras
   const { data: camerasData, isLoading, refetch: refetchCameras } = useQuery({
@@ -40,6 +52,59 @@ const LiveCameraMonitor = () => {
     },
     refetchInterval: 15000,
   });
+
+  const simulateMutation = useMutation({
+    mutationFn: async (data) => {
+      // Create artificial event similar to what Python Engine sends to Bridge
+      const now = new Date();
+      // If user provides a custom time in HH:mm format, combine with today's date
+      let eventTime = now;
+      if (data.time) {
+        const [h, m] = data.time.split(':');
+        eventTime = new Date();
+        eventTime.setHours(parseInt(h, 10));
+        eventTime.setMinutes(parseInt(m, 10));
+        eventTime.setSeconds(0);
+      }
+      
+      const payload = {
+        employeeId: parseInt(data.employeeId, 10),
+        date: eventTime.toISOString().split('T')[0],
+        timestamp: eventTime.toISOString(),
+        cameraId: data.cameraId,
+        similarity: 0.99,
+        status: data.status,
+        source: 'FACE_SIMULATION'
+      };
+      
+      // We directly hit our backend bridge endpoint for simulation
+      const res = await api.post('/bridge/checkin', payload, {
+        headers: { 'X-Bridge-Key': import.meta.env.VITE_INTERNAL_BRIDGE_KEY || 'AI_INTERNAL_KEY' }
+      });
+      return res.data;
+    },
+    onSuccess: (res) => {
+      if (res.ignored) {
+        alert('Simulasi diabaikan: ' + res.message);
+      } else {
+        alert('Simulasi berhasil dicatat sebagai: ' + res.type);
+        queryClient.invalidateQueries(['face-events']);
+      }
+      setIsSimulationOpen(false);
+    },
+    onError: (err) => {
+      alert('Error simulasi: ' + err.message);
+    }
+  });
+
+  const handleSimulate = (e) => {
+    e.preventDefault();
+    if (!simData.employeeId || !simData.cameraId) {
+      alert('Pilih karyawan dan kamera');
+      return;
+    }
+    simulateMutation.mutate(simData);
+  };
 
   // WebSocket for live events
   useEffect(() => {
@@ -95,9 +160,12 @@ const LiveCameraMonitor = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Camera List */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
-          <h3 className="font-semibold text-slate-700 text-sm flex items-center gap-2">
-            <Camera className="w-4 h-4" /> Daftar Kamera ({cameras.length})
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-slate-700 text-sm flex items-center gap-2">
+              <Camera className="w-4 h-4" /> Daftar Kamera ({cameras.length})
+            </h3>
+            <span className="text-xs text-slate-400">Pilih untuk filter</span>
+          </div>
 
           {isLoading ? (
             <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
@@ -109,10 +177,10 @@ const LiveCameraMonitor = () => {
           ) : (
             <div className="space-y-2">
               {cameras.map(cam => (
-                <button
+                <div
                   key={cam.id}
                   onClick={() => setSelectedCamera(cam.id === selectedCamera ? null : cam.id)}
-                  className={`w-full text-left p-3 rounded-lg transition-all border text-sm ${
+                  className={`w-full text-left p-3 rounded-lg transition-all border text-sm group cursor-pointer ${
                     selectedCamera === cam.id
                       ? 'bg-blue-50 border-blue-200 text-blue-800'
                       : 'bg-white border-slate-100 hover:bg-slate-50 text-slate-700'
@@ -133,16 +201,20 @@ const LiveCameraMonitor = () => {
                       'bg-purple-100 text-purple-700'
                     }`}>{cam.direction}</span>
                   </div>
-                  <div className="text-xs text-slate-400 mt-1">
-                    {cam.location || cam.ipAddress || cam.id}
+                  
+                  <div className="flex items-center justify-between mt-1">
+                    <div className="text-xs text-slate-400">
+                      {cam.location || cam.ipAddress || cam.id}
+                    </div>
                   </div>
+                  
                   {cam._count && (
-                    <div className="flex gap-3 mt-2 text-[10px] text-slate-500">
+                    <div className="flex gap-3 mt-3 text-[10px] text-slate-500 border-t border-slate-100 pt-2">
                       <span>{cam._count.faceEvents} events</span>
                       <span>{cam._count.unknownAlerts} alerts</span>
                     </div>
                   )}
-                </button>
+                </div>
               ))}
             </div>
           )}
@@ -204,6 +276,100 @@ const LiveCameraMonitor = () => {
           </div>
         </div>
       </div>
+
+      {/* Modal Simulasi CCTV */}
+      {isSimulationOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-5">
+              <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <Activity className="w-5 h-5 text-purple-600" />
+                Simulasi Auto Capture CCTV
+              </h2>
+              <button onClick={() => setIsSimulationOpen(false)} className="text-slate-400 hover:bg-slate-100 p-1 rounded-lg">
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="mb-4 text-xs text-slate-500 bg-slate-50 p-3 rounded-lg border border-slate-100">
+              Uji coba sistem tanpa perlu berdiri di depan kamera. Waktu simulasi akan dicocokkan dengan Jadwal Capture Kamera di API.
+            </div>
+
+            <form onSubmit={handleSimulate} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Karyawan</label>
+                <select
+                  required
+                  className="w-full px-3 py-2 border rounded-lg text-sm bg-white"
+                  value={simData.employeeId}
+                  onChange={e => setSimData({...simData, employeeId: e.target.value})}
+                >
+                  <option value="">-- Pilih Karyawan --</option>
+                  {employees.map(emp => (
+                    <option key={emp.id} value={emp.id}>{emp.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Kamera (Trigger)</label>
+                <select
+                  required
+                  className="w-full px-3 py-2 border rounded-lg text-sm bg-white"
+                  value={simData.cameraId}
+                  onChange={e => setSimData({...simData, cameraId: e.target.value})}
+                >
+                  <option value="">-- Pilih Kamera --</option>
+                  {cameras.map(cam => (
+                    <option key={cam.id} value={cam.id}>{cam.name} ({cam.id})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Status Absen</label>
+                <select
+                  required
+                  className="w-full px-3 py-2 border rounded-lg text-sm bg-white"
+                  value={simData.status}
+                  onChange={e => setSimData({...simData, status: e.target.value})}
+                >
+                  <option value="PRESENT">Hadir Tepat Waktu (PRESENT)</option>
+                  <option value="LATE">Terlambat (LATE)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Waktu Mocking (Jam:Menit)</label>
+                <input
+                  type="time"
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
+                  value={simData.time || ''}
+                  onChange={e => setSimData({...simData, time: e.target.value})}
+                />
+                <p className="text-[10px] text-slate-400 mt-1">Biarkan kosong untuk ambil waktu sekarang.</p>
+              </div>
+
+              <div className="pt-4 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsSimulationOpen(false)}
+                  className="flex-1 py-2 text-slate-600 font-semibold bg-slate-100 hover:bg-slate-200 rounded-lg text-sm transition-all"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={simulateMutation.isPending}
+                  className="flex-1 py-2 text-white font-semibold bg-purple-600 hover:bg-purple-700 rounded-lg text-sm transition-all flex justify-center items-center gap-2 disabled:opacity-50"
+                >
+                  {simulateMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Kirim Event'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -491,6 +491,10 @@ model Camera {
   rtspUrl     String?
   direction   String       @default("BOTH") // IN | OUT | BOTH
   active      Boolean      @default(true)
+  captureInStart  String?  @default("06:00")
+  captureInEnd    String?  @default("10:00")
+  captureOutStart String?  @default("15:00")
+  captureOutEnd   String?  @default("21:00")
   lastSeen    DateTime?
   faceEvents  FaceEvent[]
   unknownAlerts UnknownFaceAlert[]

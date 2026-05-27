@@ -28,6 +28,8 @@ import SlipTemplateBuilder from '../../components/admin/SlipTemplateBuilder';
 import AttendanceTemplateBuilder from '../../components/admin/AttendanceTemplateBuilder';
 import IDCardTemplateBuilder from '../../components/admin/IDCardTemplateBuilder';
 import CompanyCalendarSettings from '../../components/admin/CompanyCalendarSettings';
+import SettingsCameras from '../../components/admin/SettingsCameras';
+import { Camera as CameraIcon } from 'lucide-react';
 
 const Settings = () => {
   const queryClient = useQueryClient();
@@ -195,6 +197,7 @@ const Settings = () => {
     { id: 'Shifts', icon: Clock, label: 'Shift Rules' },
     { id: 'Calendar', icon: CalendarCheck, label: 'Calendar & Holidays' },
     { id: 'Security', icon: ShieldCheck, label: 'Biometrics' },
+    { id: 'Cameras', icon: CameraIcon, label: 'CCTV AI Cameras' },
     { id: 'SlipBuilder', icon: FileText, label: 'Slip Configuration' },
     { id: 'AttendanceBuilder', icon: CalendarCheck, label: 'Attendance Report' },
     { id: 'IDCardBuilder', icon: CreditCard, label: 'ID Card Template' },
@@ -303,6 +306,10 @@ const Settings = () => {
 
           {activeTab === 'IDCardBuilder' && (
             <IDCardTemplateBuilder formData={formData} handleInputChange={handleInputChange} />
+          )}
+
+          {activeTab === 'Cameras' && (
+            <SettingsCameras />
           )}
 
           {activeTab === 'General' && (

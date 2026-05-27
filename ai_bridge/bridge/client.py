@@ -84,6 +84,21 @@ class BridgeClient:
             r.raise_for_status()
             return r.json().get("data", [])
 
+    async def get_cameras(self) -> list:
+        """Get all active cameras from Smart Attendance frontend/DB."""
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.get(
+                    f"{self.base_url}/api/bridge/cameras",
+                    headers=self.headers,
+                    timeout=5.0
+                )
+                if r.status_code == 200:
+                    return r.json().get("data", [])
+                return []
+        except Exception:
+            return []
+
     async def broadcast_event(self, event: dict):
         """Broadcast a real-time event to the backend (for WebSocket relay)."""
         try:

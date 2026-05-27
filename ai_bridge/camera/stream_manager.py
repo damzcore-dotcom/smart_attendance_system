@@ -26,6 +26,12 @@ class HikvisionStreamManager:
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, self.load_from_config_sync, config_path)
 
+    def load_from_api(self, cameras_list: list):
+        """Memuat kamera dari respons HTTP API Smart Attendance"""
+        for cam in cameras_list:
+            if cam.get("active", True) and cam.get("rtspUrl"):
+                self.add_camera(cam["id"], cam["rtspUrl"], cam.get("direction", "BOTH"))
+
     def add_camera(self, cam_id: str, rtsp_url: str, direction: str = "BOTH"):
         cap = cv2.VideoCapture(rtsp_url)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
