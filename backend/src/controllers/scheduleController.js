@@ -21,7 +21,7 @@ const create = async (req, res) => {
   try {
     const { name, startTime, endTime, breakStart, breakEnd, gracePeriod } = req.body;
     const shift = await prisma.shift.create({
-      data: { name, startTime, endTime, breakStart, breakEnd, gracePeriod: parseInt(gracePeriod) || 15 },
+      data: { name, startTime, endTime, breakStart, breakEnd, gracePeriod: Math.max(0, parseInt(gracePeriod) || 0) },
     });
     res.status(201).json({ success: true, data: shift });
   } catch (err) {
@@ -61,7 +61,7 @@ const update = async (req, res) => {
     const { name, startTime, endTime, breakStart, breakEnd, gracePeriod } = req.body;
     const shift = await prisma.shift.update({
       where: { id: parseInt(id) },
-      data: { name, startTime, endTime, breakStart, breakEnd, gracePeriod: parseInt(gracePeriod) },
+      data: { name, startTime, endTime, breakStart, breakEnd, gracePeriod: Math.max(0, parseInt(gracePeriod) || 0) },
     });
     res.json({ success: true, data: shift });
   } catch (err) {
