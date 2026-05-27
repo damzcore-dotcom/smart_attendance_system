@@ -146,6 +146,8 @@ async def enroll_face(employee_id: int, file: UploadFile = File(...)):
 
     # Check liveness
     liveness_result = liveness_detector.check(face["region"])
+    if liveness_result.get("is_real") is False:
+        raise HTTPException(status_code=403, detail="Liveness spoofing terdeteksi (Wajah palsu/foto tidak diizinkan)")
 
     # Extract embedding
     embedding = face_recognizer.get_embedding(face["aligned"])

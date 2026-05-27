@@ -88,8 +88,17 @@ const CCTVEnrollmentTab = ({ employee }) => {
     });
 
     if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`AI Engine Error ${response.status}: ${errText}`);
+      let detail = '';
+      try {
+        const errJson = await response.json();
+        detail = errJson.detail || '';
+      } catch (e) {
+        detail = await response.text();
+      }
+      if (response.status === 403 && detail.toLowerCase().includes('liveness')) {
+         throw new Error("Liveness gagal: Jangan gunakan foto! Tampilkan wajah asli Anda.");
+      }
+      throw new Error(detail || `AI Engine Error ${response.status}`);
     }
 
     const result = await response.json();
