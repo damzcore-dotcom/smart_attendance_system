@@ -192,10 +192,10 @@ const FaceEnrollment = () => {
         return sum / allEmbeddings.length;
       });
 
-      await api.post('/bridge/enrollment/save', {
-        employeeId: selectedEmployee.id,
-        embedding: avgEmbedding,
-        samplesCount: allEmbeddings.length,
+      await api.put(`/employees/${selectedEmployee.id}`, {
+        faceEmbeddingV2: avgEmbedding,
+        faceSamples: allEmbeddings.length,
+        faceStatus: 'ENROLLED',
       });
 
       setEnrollmentStatus('success');

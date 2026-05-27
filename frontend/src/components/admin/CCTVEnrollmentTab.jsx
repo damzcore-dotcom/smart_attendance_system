@@ -182,10 +182,11 @@ const CCTVEnrollmentTab = ({ employee }) => {
         return sum / allEmbeddings.length;
       });
 
-      await api.post('/bridge/enrollment/save', {
-        employeeId: employee.dbId || employee.id,
-        embedding: avgEmbedding,
-        samplesCount: allEmbeddings.length,
+      const empId = employee.dbId || employee.id;
+      await api.put(`/employees/${empId}`, {
+        faceEmbeddingV2: avgEmbedding,
+        faceSamples: allEmbeddings.length,
+        faceStatus: 'ENROLLED',
       });
 
       setEnrollmentStatus('success');
