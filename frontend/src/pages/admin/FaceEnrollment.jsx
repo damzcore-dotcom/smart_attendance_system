@@ -219,11 +219,11 @@ const FaceEnrollment = () => {
 
           {/* Camera feed */}
           <div className="relative bg-slate-900 rounded-xl overflow-hidden aspect-video flex items-center justify-center">
-            {cameraActive ? (
-              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-            ) : (
-              <div className="text-slate-400 text-center space-y-3">
-                <Camera className="w-12 h-12 mx-auto" />
+            <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+            
+            {!cameraActive && (
+              <div className="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center text-slate-400 space-y-3">
+                <Camera className="w-12 h-12" />
                 <p className="text-sm">Kamera belum aktif</p>
               </div>
             )}

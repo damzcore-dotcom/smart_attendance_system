@@ -20,4 +20,10 @@ LICENSE_KEY_*.txt
 *.swp
 *.swo
 
+# AI dependencies
+ai_bridge/models/
+key.txt
+license.txt
+inject_license.js
+backend/inject_license.js
 RELEASE_*

@@ -10,7 +10,7 @@ import {
   ScanFace, Loader2, AlertCircle, RefreshCw, ShieldCheck, ChevronRight, ChevronUp, ChevronDown, FileText, Banknote, Printer, Fingerprint
 } from 'lucide-react';
 import PrintableIDCard from '../../components/admin/PrintableIDCard';
-
+import CCTVEnrollmentTab from '../../components/admin/CCTVEnrollmentTab';
 const emptyEmployee = { 
   employeeCode: '',
   name: '', dept: '', division: '', locationId: '', idNumber: '', cardNo: '', verifyCode: 'Face ID', 
@@ -922,13 +922,13 @@ const Employees = () => {
             </div>
             
             <div className="flex border-b border-slate-100 bg-white px-2 overflow-x-auto hide-scrollbar">
-              {['basic', 'biometric', 'finger', 'hr', 'personal', 'family'].map(tab => (
+              {['basic', 'biometric', 'cctv', 'finger', 'hr', 'personal', 'family'].map(tab => (
                 <button 
                   key={tab} 
                   onClick={() => setActiveTab(tab)} 
                   className={`px-6 py-4 text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === tab ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
                 >
-                  {tab === 'basic' ? 'Core Info' : tab === 'biometric' ? 'Face Recog' : tab === 'finger' ? 'Fingerprint' : tab === 'hr' ? 'Employment Info' : tab === 'personal' ? 'Personal Data' : 'Family Data'}
+                  {tab === 'basic' ? 'Core Info' : tab === 'biometric' ? 'Face Recog' : tab === 'cctv' ? 'CCTV Face' : tab === 'finger' ? 'Fingerprint' : tab === 'hr' ? 'Employment Info' : tab === 'personal' ? 'Personal Data' : 'Family Data'}
                   {activeTab === tab && (
                     <div className="absolute bottom-0 left-4 right-4 h-0.5 bg-blue-600 rounded-t-full"></div>
                   )}
@@ -1190,6 +1190,9 @@ const Employees = () => {
                       </div>
                     </div>
                   </div>
+                )}
+                {activeTab === 'cctv' && (
+                  <CCTVEnrollmentTab employee={newEmployee} />
                 )}
                 {activeTab === 'finger' && (
                   <div className="flex flex-col items-center justify-center pb-8 space-y-6">
