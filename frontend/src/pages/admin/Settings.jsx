@@ -208,7 +208,7 @@ const Settings = () => {
     tabs.push({ id: 'License', icon: ShieldCheck, label: 'System License' });
   }
 
-  if (settingsLoading || locationsLoading || shiftsLoading) {
+  if (settingsLoading) {
     return (
       <div className="h-96 flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-blue-600" />

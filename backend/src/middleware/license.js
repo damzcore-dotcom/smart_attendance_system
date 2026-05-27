@@ -51,7 +51,7 @@ const verifyLicense = async (req, res, next) => {
   if (cachedLicenseStatus && !cachedLicenseStatus.valid) {
     // Only allow SUPER_ADMIN to bypass to update settings, but we need token first.
     // However, token middleware runs BEFORE this. So req.user is available.
-    if (req.user && req.user.role === 'SUPER_ADMIN' && req.originalUrl.includes('/api/settings')) {
+    if (req.user && req.user.role === 'SUPER_ADMIN' && (req.originalUrl.includes('/api/settings') || req.originalUrl.includes('/api/shifts'))) {
       return next(); // Let Super Admin update the license key
     }
     return res.status(403).json({ success: false, message: 'SOFTWARE LOCKED: ' + cachedLicenseStatus.message, code: 'LICENSE_ERROR' });
