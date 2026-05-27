@@ -94,6 +94,59 @@ const AdminDashboard = () => {
 
   const navigate = useNavigate();
 
+  const generateInsights = () => {
+    const insights = [];
+    if (lateByDept.length > 0) {
+      const worst = [...lateByDept].sort((a,b) => b.minutes - a.minutes)[0];
+      if (worst && worst.minutes > 0) {
+        insights.push({
+          type: 'warning',
+          icon: AlertCircle,
+          color: 'orange',
+          title: 'Perhatian Operasional',
+          desc: `Tim `,
+          bold1: worst.dept,
+          desc2: ` mencatat angka hilangnya waktu produksi terbesar yaitu `,
+          bold2: `${worst.minutes} menit`,
+          desc3: `. Direkomendasikan evaluasi shift segera.`
+        });
+      }
+      
+      const best = [...lateByDept].sort((a,b) => a.minutes - b.minutes)[0];
+      if (best && lateByDept.length > 1 && best.minutes < worst.minutes / 2) {
+        insights.push({
+          type: 'success',
+          icon: TrendingUp,
+          color: 'emerald',
+          title: 'Efisiensi Sempurna',
+          desc: `Tim `,
+          bold1: best.dept,
+          desc2: ` membuktikan tingkat kedisiplinan tertinggi dengan deviasi hanya `,
+          bold2: `${best.minutes} menit`,
+          desc3: `.`
+        });
+      }
+    }
+    
+    if (insights.length === 0) {
+      insights.push({
+        type: 'info',
+        icon: Activity,
+        color: 'blue',
+        title: 'Sistem Optimal',
+        desc: `Alur operasional hari ini terdeteksi `,
+        bold1: `stabil`,
+        desc2: ` tanpa adanya anomali keterlambatan struktural. Semua divisi `,
+        bold2: `berfungsi normal`,
+        desc3: `.`
+      });
+    }
+
+    return insights.slice(0, 2);
+  };
+
+  const dynamicInsights = generateInsights();
+
   const handleDownloadReport = async () => {
     // ... [keep same PDF logic] ...
     try {
@@ -375,29 +428,26 @@ const AdminDashboard = () => {
           </h3>
           
           <div className="space-y-4 relative z-10">
-            <div className="p-6 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 flex gap-5 group hover:bg-white/10 transition-all duration-500 hover:-translate-y-1">
-              <div className="w-12 h-12 rounded-xl bg-orange-500/20 text-orange-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform shadow-inner border border-orange-500/20">
-                <AlertCircle className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-[11px] font-bold text-orange-300 uppercase tracking-widest">Operations Warning</p>
-                <p className="text-sm text-slate-300 mt-2 leading-relaxed font-medium">
-                  Lateness vector increased by <span className="text-white font-bold bg-orange-500/20 px-1 rounded">15%</span> in Operations division this week. Recommend strategic shift adjustment.
-                </p>
-              </div>
-            </div>
-            
-            <div className="p-6 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 flex gap-5 group hover:bg-white/10 transition-all duration-500 hover:-translate-y-1">
-              <div className="w-12 h-12 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform shadow-inner border border-emerald-500/20">
-                <TrendingUp className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-[11px] font-bold text-emerald-300 uppercase tracking-widest">Engineering Excellence</p>
-                <p className="text-sm text-slate-300 mt-2 leading-relaxed font-medium">
-                  Engineering division maintains a <span className="text-white font-bold bg-emerald-500/20 px-1 rounded">98.4%</span> punctuality rating. Consistent performance for 90 days.
-                </p>
-              </div>
-            </div>
+            {dynamicInsights.map((insight, idx) => {
+              const IconComp = insight.icon;
+              return (
+                <div key={idx} className="p-6 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 flex gap-5 group hover:bg-white/10 transition-all duration-500 hover:-translate-y-1">
+                  <div className={`w-12 h-12 rounded-xl bg-${insight.color}-500/20 text-${insight.color}-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform shadow-inner border border-${insight.color}-500/20`}>
+                    <IconComp className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className={`text-[11px] font-bold text-${insight.color}-300 uppercase tracking-widest`}>{insight.title}</p>
+                    <p className="text-sm text-slate-300 mt-2 leading-relaxed font-medium">
+                      {insight.desc}
+                      <span className={`text-white font-bold bg-${insight.color}-500/20 px-1 rounded`}>{insight.bold1}</span>
+                      {insight.desc2}
+                      <span className={`text-white font-bold bg-${insight.color}-500/20 px-1 rounded`}>{insight.bold2}</span>
+                      {insight.desc3}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
