@@ -203,7 +203,7 @@ const AdminDashboard = () => {
 
           <div className="flex flex-wrap items-center gap-3">
             <button 
-              onClick={() => navigate('/admin/live')}
+              onClick={() => navigate('/admin/cameras')}
               className="flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 text-white px-5 py-3 rounded-2xl text-sm font-semibold transition-all shadow-lg active:scale-95 group"
             >
               <Video className="w-5 h-5 group-hover:text-blue-300 transition-colors" /> Live CCTV
