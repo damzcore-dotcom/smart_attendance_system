@@ -74,10 +74,36 @@ const CCTVEnrollmentTab = ({ employee }) => {
     setEnrollmentStatus('capturing');
     setCapturedImages([]);
     setErrorMsg('');
-    runPhase(0, []);
+    runPhase(0, [], []);
   };
 
-  const runPhase = (index, currentImages) => {
+  const extractEmbeddingOnce = async (imgData) => {
+    try {
+      const aiUrl = import.meta.env.VITE_AI_ENGINE_URL || `${window.location.protocol}//${window.location.hostname}:8001`;
+      const fetchRes = await fetch(imgData);
+      if (!fetchRes.ok) return null;
+      const blob = await fetchRes.blob();
+      
+      const formData = new FormData();
+      formData.append('file', blob, 'face.jpg');
+      formData.append('employee_id', employee.employeeCode);
+
+      const response = await fetch(`${aiUrl}/enroll?employee_id=${employee.employeeCode}`, {
+        method: 'POST',
+        body: formData
+      });
+      const result = await response.json();
+      if (result.success && result.embedding) {
+        return result.embedding;
+      }
+      return null;
+    } catch (e) {
+      console.warn('Single frame enrollment failed:', e);
+      return null;
+    }
+  };
+
+  const runPhase = (index, currentImages, currentEmbeddings) => {
     if (index >= phases.length) {
       // Selesai semua fase
       setCapturing(false);
@@ -91,7 +117,7 @@ const CCTVEnrollmentTab = ({ employee }) => {
     let count = 3;
     setCountdown(count);
 
-    const intv = setInterval(() => {
+    const intv = setInterval(async () => {
       count--;
       if (count > 0) {
         setCountdown(count);
@@ -100,14 +126,24 @@ const CCTVEnrollmentTab = ({ employee }) => {
         // SNAP
         const img = captureFrame();
         if (img) {
-          const newImages = [...currentImages, img];
-          setCapturedImages(newImages);
-          // Beri jeda 800ms sebelum fase berikutnya
-          setTimeout(() => {
-            runPhase(index + 1, newImages);
-          }, 800);
+          // CHECK AI ENGINE IMMEDIATELY (100% accuracy required to proceed)
+          const emb = await extractEmbeddingOnce(img);
+          if (emb) {
+            const newImages = [...currentImages, img];
+            const newEmbs = [...currentEmbeddings, emb];
+            setCapturedImages(newImages);
+            setTimeout(() => {
+              runPhase(index + 1, newImages, newEmbs);
+            }, 800);
+          } else {
+            // DETEKSI GAGAL -> Ulangi Fase
+            setErrorMsg(`Peringatan: Wajah tidak terbaca jelas saat ${phases[index].title}. Silakan ulangi.`);
+            setTimeout(() => {
+              setErrorMsg('');
+              runPhase(index, currentImages, currentEmbeddings);
+            }, 3000);
+          }
         } else {
-          // Gagal snap
           setCapturing(false);
           setPhaseIndex(-1);
           setEnrollmentStatus('error');
@@ -117,37 +153,12 @@ const CCTVEnrollmentTab = ({ employee }) => {
     }, 1000);
   };
 
-  const processEnrollment = async (images) => {
+  // Finalize: Average all embeddings and save to DB
+  const processEnrollment = async (embeddings) => {
     try {
-      const embeddings = [];
-      const aiUrl = import.meta.env.VITE_AI_ENGINE_URL || `${window.location.protocol}//${window.location.hostname}:8001`;
-
-      for (const imgData of images) {
-        const fetchRes = await fetch(imgData);
-        if(!fetchRes.ok) continue;
-        const blob = await fetchRes.blob();
-        
-        const formData = new FormData();
-        formData.append('file', blob, 'face.jpg');
-        formData.append('employee_id', employee.employeeCode);
-
-        try {
-          const response = await fetch(`${aiUrl}/enroll?employee_id=${employee.employeeCode}`, {
-            method: 'POST',
-            body: formData
-          });
-          const result = await response.json();
-          if (result.success && result.embedding) {
-            embeddings.push(result.embedding);
-          }
-        } catch (e) {
-          console.warn('Single frame enrollment failed:', e);
-        }
-      }
-
-      if (embeddings.length < 3) {
+      if (embeddings.length < 5) {
         setEnrollmentStatus('error');
-        setErrorMsg(`Hanya ${embeddings.length} embedding diekstrak. Pastikan cahaya cukup & wajah terlihat.`);
+        setErrorMsg(`Sistem mendeteksi kegagalan pada ekstraksi. Wajah kurang dari 5 sisi.`);
         return;
       }
 
