@@ -140,6 +140,9 @@ model Employee {
   status        EmpStatus  @default(ACTIVE)
   faceStatus    FaceStatus @default(PENDING)
   profilePhoto  String?
+  faceEmbeddingV2 Json?     // InsightFace 512-dim vector for CCTV recognition
+  faceEnrolledAt  DateTime?
+  faceSamples     Int        @default(0) // Number of enrollment samples
   leaveQuota     Int        @default(12)
   remainingLeave Int        @default(12)
   departmentId  Int
@@ -203,6 +206,13 @@ model Attendance {
   overtimeHours Float   @default(0)
   mode        String    @default("Credentials")
   photoUrl    String?
+  checkinPhotoUrl   String?  // CCTV snapshot at check-in
+  checkoutPhotoUrl  String?  // CCTV snapshot at check-out
+  checkinSimilarity Float?   // Face match confidence (0.0-1.0)
+  checkoutSimilarity Float?
+  checkinCameraId   String?  // Camera ID that captured check-in
+  checkoutCameraId  String?
+  source            String   @default("manual") // face_cctv | fingerprint | face_web | manual
   notes       String?
   createdAt   DateTime  @default(now())
 
@@ -469,4 +479,54 @@ model CompanyCalendar {
   type        String   // "HOLIDAY" or "WORKDAY"
   description String
   createdAt   DateTime @default(now())
+}
+
+// ─── Face Recognition CCTV Integration ──────────────────────────────────
+
+model Camera {
+  id          String       @id // e.g. "CAM_LOBBY_01"
+  name        String
+  location    String?
+  ipAddress   String?
+  rtspUrl     String?
+  direction   String       @default("BOTH") // IN | OUT | BOTH
+  active      Boolean      @default(true)
+  lastSeen    DateTime?
+  faceEvents  FaceEvent[]
+  unknownAlerts UnknownFaceAlert[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model FaceEvent {
+  id             Int       @id @default(autoincrement())
+  cameraId       String
+  camera         Camera    @relation(fields: [cameraId], references: [id], onDelete: Cascade)
+  employeeId     Int?      // NULL if unknown face
+  eventTime      DateTime
+  similarity     Float?
+  livenessScore  Float?
+  isUnknown      Boolean   @default(false)
+  isSpoof        Boolean   @default(false)
+  photoUrl       String?
+  processed      Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+
+  @@index([eventTime])
+  @@index([employeeId])
+  @@index([isUnknown])
+}
+
+model UnknownFaceAlert {
+  id          Int       @id @default(autoincrement())
+  cameraId    String
+  camera      Camera    @relation(fields: [cameraId], references: [id], onDelete: Cascade)
+  eventTime   DateTime
+  photoUrl    String?
+  similarity  Float?
+  resolved    Boolean   @default(false)
+  resolvedBy  String?
+  resolvedAt  DateTime?
+  notes       String?
+  createdAt   DateTime  @default(now())
 }

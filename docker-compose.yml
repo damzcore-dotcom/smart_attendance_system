@@ -1,0 +1,106 @@
+# ── Smart Attendance System — Docker Compose ────────────────────────────
+# Includes: Backend, Frontend, PostgreSQL, Redis, AI Engine, MinIO
+
+version: "3.8"
+
+services:
+  # ── Existing: PostgreSQL Database ────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: sa_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: kaleng232432
+      POSTGRES_DB: smart_attendance
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  # ── Existing: Backend API (Node.js) ──────────────────────────────────
+  backend:
+    build: ./backend
+    container_name: sa_backend
+    env_file: ./backend/.env
+    environment:
+      DATABASE_URL: postgresql://postgres:kaleng232432@postgres:5432/smart_attendance
+    ports:
+      - "5000:5000"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+  # ── Existing: Frontend (Vite/React) ──────────────────────────────────
+  frontend:
+    build: ./frontend
+    container_name: sa_frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # ── NEW: Redis (Embedding Cache for AI Engine) ───────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: sa_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  # ── NEW: AI Face Recognition Engine (Python/FastAPI) ─────────────────
+  ai-engine:
+    build: ./ai_bridge
+    container_name: sa_ai_engine
+    ports:
+      - "8001:8001"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - SMART_ATTENDANCE_URL=http://backend:5000
+      - BRIDGE_API_KEY=${INTERNAL_BRIDGE_KEY}
+      - AI_DEVICE=${AI_DEVICE:-cpu}
+      - MIN_RECOGNITION_SCORE=${MIN_RECOGNITION_SCORE:-0.60}
+      - MINIO_ENDPOINT=minio
+      - MINIO_PORT=9000
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin123}
+      - CAMERA_CONFIG=/app/config/cameras.yaml
+    volumes:
+      - ./ai_bridge/models:/app/models
+      - ./ai_bridge/config:/app/config
+    depends_on:
+      - backend
+      - redis
+      - minio
+    restart: unless-stopped
+    # Uncomment block below if you have NVIDIA GPU:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  # ── NEW: MinIO (Object Storage for face snapshots) ───────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: sa_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin123}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"   # API endpoint
+      - "9001:9001"   # Admin Console (http://localhost:9001)
+    restart: unless-stopped
+
+volumes:
+  pg_data:
+  redis_data:
+  minio_data:

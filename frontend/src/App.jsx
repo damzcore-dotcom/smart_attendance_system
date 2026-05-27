@@ -30,6 +30,9 @@ import FingerprintManagement from './pages/admin/FingerprintManagement';
 import AuditLog from './pages/admin/AuditLog';
 import Payroll from './pages/admin/Payroll';
 import PayrollSettings from './pages/admin/PayrollSettings';
+import FaceEnrollment from './pages/admin/FaceEnrollment';
+import LiveCameraMonitor from './pages/admin/LiveCameraMonitor';
+import UnknownAlerts from './pages/admin/UnknownAlerts';
 import EmployeeHome from './pages/employee/EmployeeHome';
 import History from './pages/employee/History';
 import Profile from './pages/employee/Profile';
@@ -125,6 +128,9 @@ function App() {
             <Route path="fingerprint" element={<PermissionRoute menuKey="settings"><FingerprintManagement /></PermissionRoute>} />
             <Route path="corrections" element={<PermissionRoute menuKey="corrections"><AdminCorrections /></PermissionRoute>} />
             <Route path="audit-log" element={<PermissionRoute menuKey="audit-log"><AuditLog /></PermissionRoute>} />
+            <Route path="face-enrollment" element={<PermissionRoute menuKey="face-check"><FaceEnrollment /></PermissionRoute>} />
+            <Route path="cameras" element={<PermissionRoute menuKey="settings"><LiveCameraMonitor /></PermissionRoute>} />
+            <Route path="unknown-alerts" element={<PermissionRoute menuKey="settings"><UnknownAlerts /></PermissionRoute>} />
           </Route>
 
           {/* Director Routes */}

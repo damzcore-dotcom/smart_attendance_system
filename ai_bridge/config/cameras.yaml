@@ -1,0 +1,28 @@
+# ── Smart Attendance - CCTV Camera Configuration ────────────────────────
+# Sesuaikan IP, username, dan password dengan CCTV Hikvision Anda.
+# Channel 101 = Main Stream (1080p) — untuk recording
+# Channel 102 = Sub Stream (480p)  — GUNAKAN INI untuk AI (lebih ringan)
+# Channel 103 = Third Stream (360p) — untuk thumbnail
+
+cameras:
+  - id: "CAM_LOBBY_01"
+    name: "Pintu Masuk Utama"
+    ip: "192.168.1.64"
+    port: 554
+    username: "admin"
+    password: "password123"
+    rtsp_url: "rtsp://admin:password123@192.168.1.64:554/Streaming/Channels/102"
+    location: "Lobi Utama"
+    direction: "IN"
+    enabled: true
+
+  - id: "CAM_EXIT_01"
+    name: "Pintu Keluar"
+    ip: "192.168.1.65"
+    port: 554
+    username: "admin"
+    password: "password123"
+    rtsp_url: "rtsp://admin:password123@192.168.1.65:554/Streaming/Channels/102"
+    location: "Pintu Keluar"
+    direction: "OUT"
+    enabled: true
