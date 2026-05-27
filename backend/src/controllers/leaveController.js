@@ -11,6 +11,10 @@ const create = async (req, res) => {
     if (!employeeId || !startDate || !endDate || !type || !reason) {
       return res.status(400).json({ success: false, message: 'All fields are required' });
     }
+    
+    if (new Date(startDate) > new Date(endDate)) {
+      return res.status(400).json({ success: false, message: 'End date cannot be earlier than start date' });
+    }
 
     const leave = await prisma.leaveRequest.create({
       data: {
@@ -125,8 +129,11 @@ const review = async (req, res) => {
         const end = new Date(leave.endDate);
         
         // Calculate duration in days
-        const diffTime = Math.abs(end - start);
+        if (start > end) throw new Error('Invalid date range');
+        const diffTime = end - start;
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+        
+        if (diffDays > 60) throw new Error('Leave quota limits applied. Max duration exceeded.');
 
         // Deduct from quota if type is 'Cuti'
         if (leave.type === 'Cuti') {
@@ -221,9 +228,17 @@ const massApply = async (req, res) => {
     const start = new Date(startDate);
     const end = new Date(endDate);
     
+    if (start > end) {
+      return res.status(400).json({ success: false, message: 'End date cannot be earlier than start date.' });
+    }
+
     // Calculate duration
-    const diffTime = Math.abs(end - start);
+    const diffTime = end - start;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+    if (diffDays > 30) {
+      return res.status(400).json({ success: false, message: 'Mass leave duration cannot exceed 30 days to prevent buffer overflow.' });
+    }
 
     const employees = await prisma.employee.findMany({ where: { status: 'ACTIVE' } });
 
