@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { authAPI, leaveAPI } from '../../services/api';
+import { getStatusLabel, getStatusColor } from '../../utils/statusUtils';
 
 const Leave = () => {
   const user = authAPI.getStoredUser();
@@ -134,15 +135,11 @@ const Leave = () => {
           <div key={item.id} className="bg-white p-6 group animate-in slide-in-from-bottom-4 duration-500 border border-slate-200 rounded-2xl hover:border-blue-200 hover:shadow-sm transition-all shadow-sm">
             <div className="flex justify-between items-start mb-4">
               <div className="flex items-center gap-4">
-                <div className={`w-11 h-11 rounded-xl flex items-center justify-center border transition-all duration-300 ${
-                  item.type === 'Sakit' ? 'bg-rose-50 border-rose-200 text-rose-500' :
-                  item.type === 'Izin' ? 'bg-amber-50 border-amber-200 text-amber-500' :
-                  'bg-blue-50 border-blue-100 text-blue-600 group-hover:bg-blue-600 group-hover:text-white'
-                }`}>
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center border transition-all duration-300 ${getStatusColor(item.type)}`}>
                   <FileText className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="text-base font-bold text-slate-800">{item.type}</h4>
+                  <h4 className="text-base font-bold text-slate-800">{getStatusLabel(item.type)}</h4>
                   <p className="text-[10px] text-slate-400 font-medium mt-0.5">Filed: {new Date(item.createdAt).toLocaleDateString()}</p>
                 </div>
               </div>

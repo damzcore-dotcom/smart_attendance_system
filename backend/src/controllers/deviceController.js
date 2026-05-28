@@ -615,7 +615,9 @@ const syncAttendance = async (req, res) => {
     const employees = await prisma.employee.findMany({ include: { shift: true } });
     const empByFingerPrint = {};
     const empByCode = {};
+    const empById = {};
     employees.forEach(e => {
+      empById[e.id] = e;
       if (e.fingerPrintId) empByFingerPrint[e.fingerPrintId.trim()] = e;
       if (e.employeeCode) empByCode[e.employeeCode.trim()] = e;
       if (e.idNumber) empByCode[e.idNumber.trim()] = e;
@@ -681,7 +683,8 @@ const syncAttendance = async (req, res) => {
 
       const key = `${emp.id}|${dateKey}`;
       if (!grouped[key]) {
-        grouped[key] = { employeeId: emp.id, employee: emp, date: new Date(dateKey + 'T00:00:00.000Z'), scans: [] };
+        const [gy, gm, gd] = dateKey.split('-').map(Number);
+        grouped[key] = { employeeId: emp.id, employee: emp, date: new Date(Date.UTC(gy, gm - 1, gd, 0, 0, 0, 0)), scans: [] };
       }
       grouped[key].scans.push(recordTime);
     }
@@ -809,7 +812,7 @@ const syncAttendance = async (req, res) => {
       // Map back to a friendlier format for frontend display
       // Include employeeId so the frontend can send it back for direct commit
       const previewData = recordsToCreate.map(r => {
-        const emp = empByCode[r.employeeId] || employees.find(e => e.id === r.employeeId);
+        const emp = empById[r.employeeId];
         return {
           employeeId: r.employeeId,
           employeeName: emp ? emp.name : 'Unknown',
@@ -870,51 +873,64 @@ const syncAttendance = async (req, res) => {
           }
         });
 
+        let mergedCheckIn = record.checkIn;
+        let mergedCheckOut = record.checkOut;
+        let finalStatus = record.status;
+        let lateMins = record.lateMinutes;
+
         if (existingRecord) {
           // Merge times:
           // checkIn should be the earliest of (existing.checkIn, new.checkIn)
           // checkOut should be the latest of (existing.checkOut, new.checkOut)
-          let finalCheckIn = existingRecord.checkIn;
           if (record.checkIn) {
-            finalCheckIn = finalCheckIn 
-              ? (record.checkIn < finalCheckIn ? record.checkIn : finalCheckIn) 
+            mergedCheckIn = existingRecord.checkIn 
+              ? (record.checkIn < existingRecord.checkIn ? record.checkIn : existingRecord.checkIn) 
               : record.checkIn;
+          } else {
+            mergedCheckIn = existingRecord.checkIn;
           }
 
-          let finalCheckOut = existingRecord.checkOut;
           if (record.checkOut) {
-            finalCheckOut = finalCheckOut 
-              ? (record.checkOut > finalCheckOut ? record.checkOut : finalCheckOut) 
+            mergedCheckOut = existingRecord.checkOut 
+              ? (record.checkOut > existingRecord.checkOut ? record.checkOut : existingRecord.checkOut) 
               : record.checkOut;
+          } else {
+            mergedCheckOut = existingRecord.checkOut;
           }
 
           // Recalculate status and lateness based on merged times
-          const emp = empByCode[record.employeeId] || employees.find(e => e.id === record.employeeId);
+          const emp = empById[record.employeeId];
           const shiftStart = emp?.shift?.startTime || '08:00';
           const gracePeriod = emp?.shift?.gracePeriod || 15;
           
-          const calc = finalCheckIn 
-            ? calculateLateness(finalCheckIn, shiftStart, gracePeriod)
+          const calc = mergedCheckIn 
+            ? calculateLateness(mergedCheckIn, shiftStart, gracePeriod)
             : { lateMinutes: 0, status: 'Mangkir' };
           
-          const finalStatus = resolveStatus(finalCheckIn, finalCheckOut, calc.status);
-
-          await prisma.attendance.update({
-            where: { id: existingRecord.id },
-            data: {
-              checkIn: finalCheckIn,
-              checkOut: finalCheckOut,
-              status: finalStatus,
-              lateMinutes: calc.lateMinutes,
-              mode: 'Fingerprint'
-            }
-          });
-        } else {
-          // No existing record, create a new one directly
-          await prisma.attendance.create({
-            data: record
-          });
+          lateMins = calc.lateMinutes;
+          finalStatus = resolveStatus(mergedCheckIn, mergedCheckOut, calc.status);
         }
+
+        // C5 FIX: Concurrency-safe Upsert
+        await prisma.attendance.upsert({
+          where: { employeeId_date: { employeeId: record.employeeId, date: record.date } },
+          update: {
+            checkIn: mergedCheckIn,
+            checkOut: mergedCheckOut,
+            status: finalStatus,
+            lateMinutes: lateMins,
+            mode: 'Fingerprint'
+          },
+          create: {
+            employeeId: record.employeeId,
+            date: record.date,
+            checkIn: record.checkIn,
+            checkOut: record.checkOut,
+            status: record.status,
+            lateMinutes: record.lateMinutes,
+            mode: 'Fingerprint'
+          }
+        });
         saved++;
       } catch (e) {
         console.error(`[Sync] Failed record for emp ${record.employeeId}:`, e.message);

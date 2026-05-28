@@ -215,8 +215,12 @@ model Attendance {
   source            String   @default("manual") // face_cctv | fingerprint | face_web | manual
   notes       String?
   createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
 
   @@unique([employeeId, date])
+  @@index([date])
+  @@index([status])
+  @@index([date, status])
 }
 
 model Location {

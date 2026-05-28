@@ -7,7 +7,7 @@ import * as faceapi from '@vladmandic/face-api';
 import * as XLSX from 'xlsx';
 import { 
   Search, Filter, CheckCircle2, Clock, UserPlus, FileSpreadsheet, Upload, X, Download, Save, Camera,
-  ScanFace, Loader2, AlertCircle, RefreshCw, ShieldCheck, ChevronRight, ChevronUp, ChevronDown, FileText, Banknote, Printer, Fingerprint
+  ScanFace, Loader2, AlertCircle, RefreshCw, ShieldCheck, ChevronRight, ChevronUp, ChevronDown, FileText, Banknote, Printer, Fingerprint, Trash2
 } from 'lucide-react';
 import PrintableIDCard from '../../components/admin/PrintableIDCard';
 import CCTVEnrollmentTab from '../../components/admin/CCTVEnrollmentTab';
@@ -188,6 +188,23 @@ const Employees = () => {
     },
     onError: (err) => alert(`Failed to pull from device: ${err.message}`)
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => employeeAPI.remove(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['master-options'] });
+      alert('Karyawan berhasil dihapus dari sistem.');
+    },
+    onError: (err) => alert(`Gagal menghapus: ${err.message}`)
+  });
+
+  const handleDeleteEmployee = (emp) => {
+    const msg = `⚠️ PERINGATAN!\n\nAnda akan menghapus permanen karyawan:\n• Nama: ${emp.name}\n• NIK: ${emp.id}\n• Dept: ${emp.dept}\n\nSemua data absensi, cuti, dan koreksi karyawan ini juga akan terhapus.\n\nLanjutkan?`;
+    if (window.confirm(msg)) {
+      deleteMutation.mutate(emp.dbId);
+    }
+  };
 
   const filteredEmployees = data?.data || [];
   const totalPages = data?.totalPages || 1;
@@ -764,6 +781,14 @@ const Employees = () => {
                         title="Print ID Card"
                       >
                         <Printer className="w-3 h-3" />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteEmployee(emp)} 
+                        disabled={deleteMutation.isPending}
+                        className="px-3 py-1.5 bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border border-rose-100 hover:border-rose-600 shadow-sm flex items-center gap-1 disabled:opacity-50"
+                        title="Hapus Karyawan"
+                      >
+                        <Trash2 className="w-3 h-3" />
                       </button>
                     </div>
                   </td>

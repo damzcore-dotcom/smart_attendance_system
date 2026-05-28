@@ -1,5 +1,6 @@
 const prisma = require('../prismaClient');
 const { calculateLateness, resolveStatus } = require('../utils/lateCalculator');
+const { toUTCMidnight, parseUTCDate, getUTCToday, getUTCYesterday, getUTCStartOfWeek, getUTCStartOfMonth, getUTCEndOfDay, VALID_STATUSES, MANGKIR_PENALTY_MINUTES } = require('../utils/dateHelper');
 const { getDistance } = require('../utils/geo');
 const XLSX = require('xlsx');
 const { recordAuditLog } = require('./auditLogController');
@@ -15,32 +16,30 @@ const getAll = async (req, res) => {
     const settingsList = await prisma.settings.findMany();
     const workingDaysSetting = settingsList.find(s => s.key === 'workingDays')?.value || '[1,2,3,4,5]';
     const workingDays = JSON.parse(workingDaysSetting);
+    const mangkirPenalty = parseInt(settingsList.find(s => s.key === 'mangkirPenaltyMinutes')?.value) || MANGKIR_PENALTY_MINUTES;
 
     const where = {};
 
     // Date filtering
     const now = new Date();
     if (period === 'Today' || (!period && !date && !startDate)) {
-      const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+      const today = getUTCToday();
       const tomorrow = new Date(today);
       tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
       where.date = { gte: today, lt: tomorrow };
     } else if (period === 'This Week') {
-      const startOfWeek = new Date(now);
-      startOfWeek.setDate(now.getDate() - now.getDay());
-      startOfWeek.setHours(0, 0, 0, 0);
-      where.date = { gte: startOfWeek, lte: now };
+      const startOfWeek = getUTCStartOfWeek(now);
+      where.date = { gte: startOfWeek, lte: toUTCMidnight(now) };
     } else if (period === 'This Month') {
-      const startOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
-      where.date = { gte: startOfMonth, lte: now };
+      const startOfMonth = getUTCStartOfMonth(now);
+      where.date = { gte: startOfMonth, lte: toUTCMidnight(now) };
     } else if (period === 'Custom' && startDate && endDate) {
-      const start = new Date(startDate);
-      const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999);
+      const start = toUTCMidnight(new Date(startDate));
+      const end = getUTCEndOfDay(toUTCMidnight(new Date(endDate)));
       where.date = { gte: start, lte: end };
     } else if (date) {
       const d = new Date(date);
-      const start = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+      const start = toUTCMidnight(d);
       const next = new Date(start);
       next.setUTCDate(next.getUTCDate() + 1);
       where.date = { gte: start, lt: next };
@@ -132,7 +131,7 @@ const getAll = async (req, res) => {
       else if (s === 'IZIN') izinCount += count;
       else absenCount += count;
 
-      totalLate += late + (s === 'MANGKIR' ? count * 30 : 0);
+      totalLate += late + (s === 'MANGKIR' ? count * mangkirPenalty : 0);
     });
 
     const overrideMap = {};
@@ -175,7 +174,8 @@ const getAll = async (req, res) => {
       totalLate: totalLate,
       uniqueEmployeeCount: uniqueEmpRecords.length,
       calendarOverrides: calendarOverrides, // Send to frontend
-      workingDays: workingDays // Send to frontend for accurate padding
+      workingDays: workingDays, // Send to frontend for accurate padding
+      mangkirPenalty: mangkirPenalty, // Send penalty value to frontend
     };
 
     res.json({
@@ -185,8 +185,11 @@ const getAll = async (req, res) => {
       totalPages: Math.ceil(total / limit),
       summary,
       data: records.map(r => {
-        let resolved = resolveStatus(r.checkIn, r.checkOut, r.status, r.date);
+        // Use DB status directly — don't re-resolve, as resolveStatus can
+        // incorrectly change LATE→MANGKIR when checkOut is missing mid-day
+        let resolved = r.status;
         
+        // Only apply HOLIDAY override logic
         if (resolved === 'MANGKIR' || resolved === 'ABSENT' || resolved === 'HOLIDAY') {
           const dateStr = r.date.toISOString().split('T')[0];
           const override = overrideMap[dateStr];
@@ -205,16 +208,6 @@ const getAll = async (req, res) => {
              r.lateMinutes = 0;
           }
         }
-        
-        let displayStatus = 'Alpa';
-        if (resolved === 'PRESENT') displayStatus = 'Hadir';
-        else if (resolved === 'LATE') displayStatus = 'Terlambat';
-        else if (resolved === 'MANGKIR') displayStatus = 'Mangkir';
-        else if (resolved === 'HOLIDAY') displayStatus = 'Libur';
-        else if (resolved === 'CUTI') displayStatus = 'Cuti';
-        else if (resolved === 'SAKIT') displayStatus = 'Sakit';
-        else if (resolved === 'IZIN') displayStatus = 'Izin';
-        else if (resolved === 'ABSENT') displayStatus = 'Alpa';
 
         return {
           id: r.id,
@@ -224,9 +217,9 @@ const getAll = async (req, res) => {
           section: r.employee.section,
           position: r.employee.position,
           date: r.date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }),
-          checkIn: r.checkIn ? r.checkIn.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-- : --',
-          checkOut: r.checkOut ? r.checkOut.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-- : --',
-          status: displayStatus,
+          checkIn: r.checkIn ? r.checkIn.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }) : '-- : --',
+          checkOut: r.checkOut ? r.checkOut.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }) : '-- : --',
+          status: resolved,
           lateMinutes: r.lateMinutes,
           overtimeHours: r.overtimeHours,
           mode: r.mode,
@@ -310,7 +303,7 @@ const checkIn = async (req, res) => {
     }
 
     const now = new Date();
-    const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+    const today = getUTCToday();
 
     // Check if already checked in today
     const existing = await prisma.attendance.findUnique({
@@ -365,12 +358,24 @@ const checkOut = async (req, res) => {
   try {
     const { employeeId, photoData } = req.body;
     const now = new Date();
-    const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+    const today = getUTCToday();
 
-    const attendance = await prisma.attendance.findUnique({
+    let attendance = await prisma.attendance.findUnique({
       where: { employeeId_date: { employeeId, date: today } },
       include: { employee: { include: { shift: true } } }
     });
+
+    // C1 FIX: Night shift — if no record today, check yesterday (for employees who checked in last night)
+    if ((!attendance || !attendance.checkIn) && now.getHours() < 12) {
+      const yesterday = getUTCYesterday();
+      const yesterdayRecord = await prisma.attendance.findUnique({
+        where: { employeeId_date: { employeeId, date: yesterday } },
+        include: { employee: { include: { shift: true } } }
+      });
+      if (yesterdayRecord && yesterdayRecord.checkIn && !yesterdayRecord.checkOut) {
+        attendance = yesterdayRecord;
+      }
+    }
 
     if (!attendance || !attendance.checkIn) {
       return res.status(400).json({ success: false, message: 'No check-in record found for today' });
@@ -440,7 +445,7 @@ const checkOut = async (req, res) => {
 const getSummary = async (req, res) => {
   try {
     const now = new Date();
-    const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+    const today = getUTCToday();
     const tomorrow = new Date(today);
     tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
 
@@ -453,7 +458,11 @@ const getSummary = async (req, res) => {
     const present = todayRecords.filter(r => r.status === 'PRESENT').length;
     const late = todayRecords.filter(r => r.status === 'LATE').length;
     const mangkir = todayRecords.filter(r => r.status === 'MANGKIR').length;
-    const absent = totalEmployees - present - late - mangkir;
+    const cuti = todayRecords.filter(r => r.status === 'CUTI').length;
+    const sakit = todayRecords.filter(r => r.status === 'SAKIT').length;
+    const izin = todayRecords.filter(r => r.status === 'IZIN').length;
+    const holiday = todayRecords.filter(r => r.status === 'HOLIDAY').length;
+    const absent = Math.max(0, totalEmployees - present - late - mangkir - cuti - sakit - izin - holiday);
     const avgLateMinutes = late > 0
       ? Math.round(todayRecords.filter(r => r.status === 'LATE').reduce((sum, r) => sum + r.lateMinutes, 0) / late)
       : 0;
@@ -489,6 +498,9 @@ const getHistory = async (req, res) => {
       take: 31,
     });
 
+    const settings = await prisma.settings.findMany();
+    const dynamicMangkirPenalty = parseInt(settings.find(s => s.key === 'mangkirPenaltyMinutes')?.value) || MANGKIR_PENALTY_MINUTES;
+
     res.json({
       success: true,
       data: records.map(r => ({
@@ -496,15 +508,8 @@ const getHistory = async (req, res) => {
         weekday: r.date.toLocaleDateString('en-US', { weekday: 'short' }),
         in: r.checkIn ? r.checkIn.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-- : --',
         out: r.checkOut ? r.checkOut.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-- : --',
-        status: r.status === 'PRESENT' ? 'Hadir' : 
-                r.status === 'LATE' ? 'Terlambat' : 
-                r.status === 'MANGKIR' ? 'Mangkir' : 
-                r.status === 'HOLIDAY' ? 'Libur' : 
-                r.status === 'CUTI' ? 'Cuti' : 
-                r.status === 'SAKIT' ? 'Sakit' : 
-                r.status === 'IZIN' ? 'Izin' : 
-                r.status === 'ABSENT' ? 'Alpa' : 'Alpa',
-        lateMinutes: (r.status === 'MANGKIR' || r.status === 'MISSING') ? 30 : r.lateMinutes,
+        status: r.status,
+        lateMinutes: (r.status === 'MANGKIR' || r.status === 'MISSING') ? dynamicMangkirPenalty : r.lateMinutes,
       })),
     });
   } catch (err) {
@@ -670,7 +675,15 @@ const importFromExcel = async (req, res) => {
         grouped[groupKey] = { employeeId: emp.id, employee: emp, date: dateOnlyStr, checkIn: null, checkOut: null };
       }
 
-      if (rawStatus.includes('in') || hours < 12) {
+      // C4 FIX: Use shift midpoint instead of fragile hours < 12 heuristic
+      const empShiftStart = emp.shift?.startTime || '08:00';
+      const empShiftEnd = emp.shift?.endTime || '17:00';
+      const [sH, sM] = empShiftStart.split(':').map(Number);
+      const [eH, eM] = empShiftEnd.split(':').map(Number);
+      const midpointMinutes = Math.floor(((sH * 60 + sM) + (eH * 60 + eM)) / 2);
+      const scanMinutes = hours * 60 + eventTime.getMinutes();
+      
+      if (rawStatus.includes('in') || (!rawStatus.includes('out') && scanMinutes <= midpointMinutes)) {
         if (!grouped[groupKey].checkIn || eventTime < grouped[groupKey].checkIn) grouped[groupKey].checkIn = eventTime;
       } else {
         if (!grouped[groupKey].checkOut || eventTime > grouped[groupKey].checkOut) grouped[groupKey].checkOut = eventTime;
@@ -729,6 +742,15 @@ const importFromExcel = async (req, res) => {
         }
 
         const status = resolveStatus(entry.checkIn, entry.checkOut, lateStatus);
+
+        // H1 FIX: Skip records that were manually corrected by HRD
+        const existingRecord = await prisma.attendance.findUnique({
+          where: { employeeId_date: { employeeId: entry.employeeId, date: dateObj } }
+        });
+        if (existingRecord && (existingRecord.mode === 'Manual' || existingRecord.mode === 'Manual (SPL)' || existingRecord.mode === 'Manual (BHL)' || existingRecord.notes?.includes('HRD'))) {
+          processedEntries++;
+          continue; // Don't overwrite HRD corrections
+        }
 
         await prisma.attendance.upsert({
           where: { employeeId_date: { employeeId: entry.employeeId, date: dateObj } },
@@ -967,26 +989,23 @@ const getMasterOptions = async (req, res) => {
     // 1. Logic for Date filtering (reuse from getAll)
     const now = new Date();
     if (period === 'Today' || (!period && !date && !startDate)) {
-      const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+      const today = getUTCToday();
       const tomorrow = new Date(today);
       tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
       where.date = { gte: today, lt: tomorrow };
     } else if (period === 'This Week') {
-      const startOfWeek = new Date(now);
-      startOfWeek.setDate(now.getDate() - now.getDay());
-      startOfWeek.setHours(0, 0, 0, 0);
-      where.date = { gte: startOfWeek, lte: now };
+      const startOfWeek = getUTCStartOfWeek(now);
+      where.date = { gte: startOfWeek, lte: toUTCMidnight(now) };
     } else if (period === 'This Month') {
-      const startOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
-      where.date = { gte: startOfMonth, lte: now };
+      const startOfMonth = getUTCStartOfMonth(now);
+      where.date = { gte: startOfMonth, lte: toUTCMidnight(now) };
     } else if (period === 'Custom' && startDate && endDate) {
-      const start = new Date(startDate);
-      const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999);
+      const start = toUTCMidnight(new Date(startDate));
+      const end = getUTCEndOfDay(toUTCMidnight(new Date(endDate)));
       where.date = { gte: start, lte: end };
     } else if (date) {
       const d = new Date(date);
-      const start = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+      const start = toUTCMidnight(d);
       const next = new Date(start);
       next.setUTCDate(next.getUTCDate() + 1);
       where.date = { gte: start, lt: next };
@@ -1066,6 +1085,10 @@ const createManual = async (req, res) => {
 
     if (!employeeId || !date || !status) {
       return res.status(400).json({ success: false, message: 'Employee, date, and status are required' });
+    }
+
+    if (!VALID_STATUSES.includes(status)) {
+      return res.status(400).json({ success: false, message: `Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}` });
     }
 
     const employee = await prisma.employee.findUnique({ where: { id: parseInt(employeeId) } });
@@ -1274,7 +1297,7 @@ const bulkUpdateDailyWorkers = async (req, res) => {
     let updatedCount = 0;
     
     for (const rec of records) {
-      if (!rec.status) continue;
+      if (!rec.status || !VALID_STATUSES.includes(rec.status)) continue;
       
       const attendance = await prisma.attendance.upsert({
         where: { employeeId_date: { employeeId: rec.employeeId, date: dateObj } },
@@ -1328,8 +1351,7 @@ const manualCorrectionHRD = async (req, res) => {
     const fs = require('fs');
     const path = require('path');
     
-    const targetDate = new Date(date);
-    targetDate.setHours(0, 0, 0, 0);
+    const targetDate = toUTCMidnight(new Date(date));
     
     let updatedCount = 0;
 

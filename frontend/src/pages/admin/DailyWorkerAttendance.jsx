@@ -57,12 +57,7 @@ const DailyWorkerAttendance = () => {
 
       attendanceData.data.forEach(r => {
         // Map backend translated status back to our Enum values
-        // r.status might be "Hadir", "Alpa", "Setengah Hari" - wait, in attendanceController we use displayStatus
-        let enumStatus = 'ABSENT';
-        if (r.status === 'Hadir') enumStatus = 'PRESENT';
-        else if (r.status === 'Cuti') enumStatus = 'CUTI';
-        else if (r.status === 'Sakit') enumStatus = 'SAKIT';
-        else if (r.status === 'Izin') enumStatus = 'IZIN';
+        let enumStatus = r.status;
         
         // We will just use 'PRESENT' or 'ABSENT' for quick UI
         const emp = bhlEmployees.find(e => e.id === r.id || e.employeeCode === r.employeeCode || e.name === r.name);

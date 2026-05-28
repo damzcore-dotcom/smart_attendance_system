@@ -15,6 +15,7 @@ import {
   Loader2,
   ChevronRight
 } from 'lucide-react';
+import { getStatusLabel, getStatusColor } from '../../utils/statusUtils';
 
 const AdminLeaveRequests = () => {
   const queryClient = useQueryClient();
@@ -235,12 +236,8 @@ const AdminLeaveRequests = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${
-                      item.type === 'Sakit' ? 'bg-rose-50 text-rose-600 border-rose-200' :
-                      item.type === 'Izin' ? 'bg-amber-50 text-amber-600 border-amber-200' :
-                      'bg-blue-50 text-blue-600 border-blue-200'
-                    }`}>
-                      {item.type}
+                    <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${getStatusColor(item.type)}`}>
+                      {getStatusLabel(item.type)}
                     </span>
                   </td>
                   <td className="px-6 py-4">
@@ -324,12 +321,8 @@ const AdminLeaveRequests = () => {
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-2">Protocol Type</span>
-                    <span className={`inline-flex items-center px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${
-                      selectedRequest.type === 'Sakit' ? 'bg-rose-50 text-rose-600 border-rose-200' :
-                      selectedRequest.type === 'Izin' ? 'bg-amber-50 text-amber-600 border-amber-200' :
-                      'bg-blue-50 text-blue-600 border-blue-200'
-                    }`}>
-                      {selectedRequest.type}
+                    <span className={`inline-flex items-center px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${getStatusColor(selectedRequest.type)}`}>
+                      {getStatusLabel(selectedRequest.type)}
                     </span>
                   </div>
                 </div>

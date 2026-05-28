@@ -7,27 +7,18 @@ import {
 } from 'lucide-react';
 import { managerAPI } from '../../services/api';
 import * as XLSX from 'xlsx';
+import { getStatusLabel, getStatusColor } from '../../utils/statusUtils';
 
-const STATUS_MAP = {
-  'PRESENT': 'Hadir',
-  'LATE': 'Terlambat',
-  'MANGKIR': 'Mangkir',
-  'HOLIDAY': 'Libur',
-  'CUTI': 'Cuti',
-  'SAKIT': 'Sakit',
-  'IZIN': 'Izin',
-  'ABSENT': 'Alpa'
-};
-
-const STATUS_CONFIG = {
-  'PRESENT': { label: 'Hadir', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500', icon: CheckCircle2 },
-  'LATE': { label: 'Terlambat', color: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500', icon: Clock },
-  'ABSENT': { label: 'Alpa', color: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-500', icon: XCircle },
-  'MANGKIR': { label: 'Mangkir', color: 'bg-orange-50 text-orange-700 border-orange-200', dot: 'bg-orange-500', icon: AlertCircle },
-  'SAKIT': { label: 'Sakit', color: 'bg-blue-50 text-blue-700 border-blue-200', dot: 'bg-blue-500', icon: AlertCircle },
-  'IZIN': { label: 'Izin', color: 'bg-sky-50 text-sky-700 border-sky-200', dot: 'bg-sky-500', icon: AlertCircle },
-  'CUTI': { label: 'Cuti', color: 'bg-purple-50 text-purple-700 border-purple-200', dot: 'bg-purple-500', icon: AlertCircle },
-  'HOLIDAY': { label: 'Libur', color: 'bg-slate-50 text-slate-600 border-slate-200', dot: 'bg-slate-400', icon: AlertCircle },
+// We map status enum directly to specific icons
+const STATUS_ICONS = {
+  'PRESENT': CheckCircle2,
+  'LATE': Clock,
+  'ABSENT': XCircle,
+  'MANGKIR': AlertCircle,
+  'SAKIT': AlertCircle,
+  'IZIN': AlertCircle,
+  'CUTI': AlertCircle,
+  'HOLIDAY': AlertCircle,
 };
 
 const AVATAR_COLORS = [
@@ -104,7 +95,7 @@ const ManagerAttendance = () => {
   const handleExport = () => {
     const sortedRecords = [...records].sort((a, b) => new Date(a.date) - new Date(b.date));
     const rows = sortedRecords.map(r => {
-      const penalty = (r.status === 'MANGKIR' || r.status === 'MISSING') ? 30 : 0;
+      const penalty = (r.status === 'MANGKIR' || r.status === 'MISSING') ? (summary.mangkirPenalty || 30) : 0;
       return {
         'NIK': r.employeeCode,
         'Nama': r.name,
@@ -114,7 +105,7 @@ const ManagerAttendance = () => {
         'Tanggal': new Date(r.date).toLocaleDateString('id-ID'),
         'Check In': formatTime(r.checkIn),
         'Check Out': formatTime(r.checkOut),
-        'Status': STATUS_MAP[r.status] || r.status,
+        'Status': getStatusLabel(r.status),
         'Terlambat (menit)': (r.lateMinutes || 0) + penalty,
       };
     });
@@ -210,7 +201,7 @@ const ManagerAttendance = () => {
                     </div>
                     <div className="flex items-center gap-2 text-rose-600 font-bold text-xs mt-3 bg-rose-50 px-3 py-1.5 rounded-full w-fit">
                       <AlertCircle className="w-3.5 h-3.5" />
-                      TERMASUK SANKSI MANGKIR (+30 MENIT/HARI)
+                      TERMASUK SANKSI MANGKIR (+{summary.mangkirPenalty || 30} MENIT/HARI)
                     </div>
                   </div>
                 </div>
@@ -313,8 +304,9 @@ const ManagerAttendance = () => {
               ) : records.map((r, idx) => {
                 const initials = r.name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
                 const avatarColor = AVATAR_COLORS[r.name.charCodeAt(0) % AVATAR_COLORS.length];
-                const cfg = STATUS_CONFIG[r.status] || { label: r.status, color: 'bg-slate-50 text-slate-600 border-slate-200', dot: 'bg-slate-400', icon: AlertCircle };
-                const Icon = cfg.icon;
+                const Icon = STATUS_ICONS[r.status] || AlertCircle;
+                const statusColor = getStatusColor(r.status);
+                const statusLabel = getStatusLabel(r.status);
 
                 return (
                   <tr key={`${r.id}-${idx}`} className="group hover:bg-blue-50/40 transition-colors duration-200">
@@ -349,15 +341,15 @@ const ManagerAttendance = () => {
                       {r.status === 'LATE' && r.lateMinutes > 0 ? (
                         <span className="text-xs font-black text-rose-600 tracking-tighter">+{r.lateMinutes}m</span>
                       ) : (r.status === 'MANGKIR' || r.status === 'MISSING') ? (
-                        <span className="text-xs font-black text-slate-500 tracking-tighter">+30m</span>
+                        <span className="text-xs font-black text-slate-500 tracking-tighter">+{summary?.mangkirPenalty || 30}m</span>
                       ) : (
                         <span className="text-slate-200 font-black">—</span>
                       )}
                     </td>
                     <td className="px-6 py-3 sticky right-0 bg-white group-hover:bg-blue-50/50 z-10 border-l border-slate-50 text-center shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.01)]">
-                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-black border uppercase tracking-wider ${cfg.color}`}>
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-black border uppercase tracking-wider ${statusColor}`}>
                         <Icon className="w-3 h-3" />
-                        {cfg.label}
+                        {statusLabel}
                       </span>
                     </td>
                   </tr>
@@ -475,7 +467,7 @@ const FilterBar = ({ onApply, isLoading, currentSearch }) => {
             { label: 'DEPARTMENT', val: filterDept, setter: setFilterDept, opts: masterOptions.departments.map(d => ({ v: d.name, l: d.name })), onChg: () => { setFilterSection(''); setFilterPosition(''); } },
             { label: 'SECTION', val: filterSection, setter: setFilterSection, opts: (masterOptions.sections || []).map(s => ({ v: s, l: s })) },
             { label: 'RANK', val: filterPosition, setter: setFilterPosition, opts: (masterOptions.positions || []).map(p => ({ v: p, l: p })) },
-            { label: 'STATUS PROTOCOL', val: filterStatus, setter: setFilterStatus, opts: (masterOptions.statuses || []).map(s => ({ v: s, l: STATUS_MAP[s] || s })) }
+            { label: 'STATUS PROTOCOL', val: filterStatus, setter: setFilterStatus, opts: (masterOptions.statuses || []).map(s => ({ v: s, l: getStatusLabel(s) })) }
           ].map((field, idx) => (
             <div key={idx} className="space-y-2">
               <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">{field.label}</label>

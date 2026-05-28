@@ -19,11 +19,11 @@ const AdminCorrections = () => {
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-corrections', filterStatus],
-    queryFn: () => correctionAPI.getAll(filterStatus),
+    queryFn: () => correctionAPI.getAll({ status: filterStatus }),
   });
 
   const reviewMutation = useMutation({
-    mutationFn: ({ id, status, note }) => correctionAPI.review(id, status, note),
+    mutationFn: ({ id, status, note }) => correctionAPI.review(id, { status, reviewNote: note }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-corrections'] });
       alert('Correction request updated successfully');

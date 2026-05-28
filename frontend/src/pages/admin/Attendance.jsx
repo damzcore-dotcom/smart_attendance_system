@@ -2,15 +2,11 @@ import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { attendanceAPI, employeeAPI, payrollAPI, settingsAPI } from '../../services/api';
 import PrintableAttendanceReport from '../../components/payroll/PrintableAttendanceReport';
-import { 
-  Calendar, Search, Download, Filter, CheckCircle2, XCircle, Clock, 
-  ArrowRight, Scan, Upload, FileSpreadsheet, X, Loader2, AlertCircle, RefreshCw,
-  FileText, ChevronLeft, ChevronRight, LayoutDashboard, Edit2, ArrowUpDown,
-  ArrowUp, ArrowDown, Printer
-} from 'lucide-react';
+import { Edit2, LayoutDashboard, Calendar, Clock, RefreshCw, Upload, AlertCircle, CheckCircle2, XCircle, Search, Filter, Scan, X, FileSpreadsheet, Printer, FileText, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, ArrowRight } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { getStatusLabel, getStatusColor, isPresent, isAbsent } from '../../utils/statusUtils';
 
 const STATUS_MAP = {
   'PRESENT': 'Hadir',
@@ -145,16 +141,17 @@ const Attendance = () => {
         const logs = res.data || [];
         
         let daysPresent = 0;
+        let daysLate = 0;
+        let daysAbsent = 0;
         let totalLateMinutes = 0;
         logs.forEach(log => {
-          if (log.status === 'PRESENT' || log.status === 'LATE' || log.status === 'Hadir' || log.status === 'Terlambat') {
-             daysPresent++;
-          }
-          if (log.status === 'LATE' || log.status === 'Terlambat') {
-             totalLateMinutes += (log.lateMinutes || 0);
-          }
-          if (log.status === 'MANGKIR' || log.status === 'MISSING' || log.status === 'ABSENT' || log.status === 'Tanpa Keterangan (Alpa)') {
-             totalLateMinutes += 30;
+          if (isPresent(log.status)) {
+            daysPresent++;
+            if (log.status === 'LATE' || log.status === 'Terlambat') daysLate++;
+            totalLateMinutes += (log.lateMinutes || 0);
+          } else if (isAbsent(log.status) || log.status === 'MISSING' || log.status === 'Tanpa Keterangan (Alpa)') {
+            daysAbsent++;
+            totalLateMinutes += parseInt(companySettings?.mangkirPenaltyMinutes) || 30;
           }
         });
         
@@ -207,7 +204,7 @@ const Attendance = () => {
            totalLateMinutes += (log.lateMinutes || 0);
         }
         if (log.status === 'MANGKIR' || log.status === 'MISSING' || log.status === 'ABSENT' || log.status === 'Tanpa Keterangan (Alpa)') {
-           totalLateMinutes += 30;
+           totalLateMinutes += parseInt(companySettings?.mangkirPenaltyMinutes) || 30;
         }
       });
       
@@ -307,7 +304,7 @@ const Attendance = () => {
             checkIn: '--:--',
             checkOut: '--:--',
             status: isLibur ? 'Libur' : 'Alpa',
-            lateMinutes: 0, // Alpa sanksi +30m dihitung terpisah di kolom Terlambat
+            lateMinutes: 0, // Penalty is calculated dynamically in summary
             overtimeHours: 0,
             mode: '-',
           });
@@ -331,7 +328,7 @@ const Attendance = () => {
         cuti: filteredData.filter(d => d.status === 'Cuti').length,
         sakit: filteredData.filter(d => d.status === 'Sakit').length,
         izin: filteredData.filter(d => d.status === 'Izin').length,
-        totalLate: filteredData.reduce((sum, d) => sum + (d.lateMinutes || 0) + ((d.status === 'Mangkir' || d.status === 'Alpa') ? 30 : 0), 0),
+        totalLate: filteredData.reduce((sum, d) => sum + (d.lateMinutes || 0) + ((d.status === 'Mangkir' || d.status === 'Alpa') ? (data?.summary?.mangkirPenalty || 30) : 0), 0),
         uniqueEmployeeCount: 1
       };
     }
@@ -458,30 +455,41 @@ const Attendance = () => {
     }
   };
 
-  const handleExportExcel = () => {
-    // Sort data ascending by date (oldest first)
-    const sortedData = [...filteredData].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const handleExportExcel = async () => {
+    try {
+      // H6 FIX: Fetch ALL records from API, not just the current page
+      const allParams = { ...appliedFilters, page: 1, limit: 99999 };
+      const allDataResponse = await attendanceAPI.getAll(allParams);
+      const allRecords = allDataResponse?.data || filteredData;
 
-    const exportData = sortedData.map(row => {
-      const penalty = (row.status === 'MANGKIR' || row.status === 'MISSING') ? 30 : 0;
-      return {
-        'Employee Name': row.name,
-        'Department': row.dept,
-        'Section': row.section,
-        'Position': row.position,
-        'Date': row.date,
-        'Check In': row.checkIn,
-        'Check Out': row.checkOut,
-        'Late Minutes': (row.lateMinutes || 0) + penalty,
-        'Status': row.status,
-        'Mode': row.mode
-      };
-    });
+      // Sort data ascending by date (oldest first)
+      const sortedData = [...allRecords].sort((a, b) => new Date(a.date) - new Date(b.date));
 
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Attendance');
-    XLSX.writeFile(wb, `Attendance_Report_${appliedFilters.period}_${new Date().toISOString().split('T')[0]}.xlsx`);
+      const exportData = sortedData.map(row => {
+        const isMangkir = (row.status === 'MANGKIR' || row.status === 'MISSING' || row.status === 'Mangkir');
+        const penalty = isMangkir ? (allDataResponse?.summary?.mangkirPenalty || 30) : 0;
+        return {
+          'Employee Name': row.name,
+          'Department': row.dept,
+          'Section': row.section,
+          'Position': row.position,
+          'Date': row.date,
+          'Check In': row.checkIn,
+          'Check Out': row.checkOut,
+          'Late Minutes': (row.lateMinutes || 0) + penalty,
+          'Status': getStatusLabel(row.status),
+          'Mode': row.mode
+        };
+      });
+
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Attendance');
+      XLSX.writeFile(wb, `Attendance_Report_${appliedFilters.period}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    } catch (err) {
+      console.error('Export error:', err);
+      alert('Gagal export data: ' + err.message);
+    }
   };
 
   const handleExportPDF = () => {
@@ -515,7 +523,8 @@ const Attendance = () => {
     const sortedData = [...filteredData].sort((a, b) => new Date(a.date) - new Date(b.date));
 
     const tableData = sortedData.map(row => {
-      const penalty = (row.status === 'MANGKIR' || row.status === 'MISSING') ? 30 : 0;
+      const isMangkir = (row.status === 'MANGKIR' || row.status === 'MISSING' || row.status === 'Mangkir');
+      const penalty = isMangkir ? (displaySummary?.mangkirPenalty || 30) : 0;
       return [
         row.name,
         row.dept,
@@ -525,7 +534,7 @@ const Attendance = () => {
         row.checkIn,
         row.checkOut,
         `${(row.lateMinutes || 0) + penalty} min`,
-        row.status
+        getStatusLabel(row.status)
       ];
     });
 
@@ -652,8 +661,8 @@ const Attendance = () => {
             {[
               { label: 'Total Data', value: displaySummary.total, color: 'blue', icon: Filter, desc: 'Semua Absen' },
               { label: 'Hadir', value: displaySummary.hadir, color: 'emerald', icon: CheckCircle2, desc: 'Tepat Waktu' },
-              { label: 'Terlambat', value: displaySummary.telat, color: 'amber', icon: Clock, desc: 'Pelanggaran Waktu' },
-              { label: 'Mangkir', value: displaySummary.mangkir, color: 'rose', icon: AlertCircle, desc: 'Kurang Finger (+30m)' },
+              { label: 'Terlambat', value: displaySummary.telat, color: 'amber', icon: Clock, desc: 'Total Hari' },
+              { label: 'Mangkir', value: displaySummary.mangkir, color: 'rose', icon: AlertCircle, desc: `Kurang Finger (+${displaySummary?.mangkirPenalty || 30}m)` },
               { label: 'Alpa', value: displaySummary.absen, color: 'red', icon: XCircle, desc: 'Tidak Ada Finger' },
               { label: 'Total Terlambat', value: formatDuration(displaySummary.totalLate || 0), color: 'rose', icon: Clock, desc: 'Akumulasi Waktu' },
               { label: 'Lainnya', value: (displaySummary.holiday || 0) + (displaySummary.cuti || 0) + (displaySummary.sakit || 0) + (displaySummary.izin || 0), color: 'slate', icon: Calendar, desc: 'Libur/Cuti/Sakit' },
@@ -690,7 +699,7 @@ const Attendance = () => {
                     </p>
                     <p className="text-[10px] font-bold text-rose-500 uppercase mt-2 flex items-center gap-2">
                       <AlertCircle className="w-3.5 h-3.5" />
-                      Termasuk sanksi alpa (+30 menit/hari)
+                      Termasuk sanksi alpa (+{displaySummary?.mangkirPenalty || 30} menit/hari)
                     </p>
                   </div>
                 </div>
@@ -757,7 +766,7 @@ const Attendance = () => {
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan="9" className="text-center py-24">
+                  <td colSpan="11" className="text-center py-24">
                     <div className="flex flex-col items-center gap-4">
                       <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
                       <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest animate-pulse">Memuat Data...</p>
@@ -766,7 +775,7 @@ const Attendance = () => {
                 </tr>
               ) : (!filteredData || filteredData.length === 0) ? (
                 <tr>
-                  <td colSpan="9" className="text-center py-24">
+                  <td colSpan="11" className="text-center py-24">
                     <div className="flex flex-col items-center gap-4 opacity-70">
                       <div className="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center border border-slate-100">
                         <Calendar className="w-8 h-8 text-slate-400" />
@@ -812,24 +821,15 @@ const Attendance = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <span className={`inline-flex items-center px-3 py-1.5 rounded-md text-[9px] font-bold uppercase tracking-wider border transition-all ${
-                        row.status === 'Hadir' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' :
-                        row.status === 'Terlambat' ? 'bg-amber-50 text-amber-600 border-amber-200' :
-                        row.status === 'Alpa' || row.status === 'Mangkir' ? 'bg-rose-50 text-rose-600 border-rose-200' :
-                        row.status === 'Libur' ? 'bg-indigo-50 text-indigo-600 border-indigo-200' :
-                        row.status === 'Cuti' ? 'bg-cyan-50 text-cyan-600 border-cyan-200' :
-                        row.status === 'Sakit' ? 'bg-yellow-50 text-yellow-600 border-yellow-200' :
-                        row.status === 'Izin' ? 'bg-blue-50 text-blue-600 border-blue-200' :
-                        'bg-slate-50 text-slate-500 border-slate-200'
-                      }`}>
-                        {row.status}
+                      <span className={`inline-flex items-center px-3 py-1.5 rounded-md text-[9px] font-bold uppercase tracking-wider border transition-all ${getStatusColor(row.status)}`}>
+                        {getStatusLabel(row.status)}
                       </span>
                     </td>
                     <td className="px-4 py-4 text-center">
-                      {row.status === 'Terlambat' || row.status === 'LATE' ? (
+                      {(row.status === 'Terlambat' || row.status === 'LATE') ? (
                         <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">+{row.lateMinutes}m</span>
                       ) : (row.status === 'Mangkir' || row.status === 'MANGKIR') ? (
-                        <span className="text-[10px] font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-200">+30m</span>
+                        <span className="text-[10px] font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-200">+{displaySummary?.mangkirPenalty || 30}m</span>
                       ) : (
                         <span className="text-slate-400">—</span>
                       )}
@@ -853,7 +853,6 @@ const Attendance = () => {
                           recordId: row.id,
                           employeeName: row.name,
                           currentStatus: row.status,
-                          newStatus: 'CUTI',
                           newStatus: row.status !== 'PRESENT' && row.status !== 'Hadir' ? 'PRESENT' : 'PRESENT',
                           notes: '',
                           overtimeHours: row.overtimeHours || 0,

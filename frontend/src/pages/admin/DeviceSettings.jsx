@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Trash2, Plus, RefreshCw, Wifi, Download, Users, MonitorSmartphone, Clock, CheckCircle, AlertTriangle, Info } from 'lucide-react';
 import api from '../../services/api';
+import { getStatusLabel, getStatusColor } from '../../utils/statusUtils';
 
 const DeviceSettings = () => {
   const [devices, setDevices] = useState([]);
@@ -423,12 +424,8 @@ const DeviceSettings = () => {
                           {record.checkOut ? new Date(record.checkOut).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : <span className="text-slate-400">—</span>}
                         </td>
                         <td className="px-6 py-4">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                            record.status === 'Hadir' ? 'bg-emerald-100 text-emerald-700' :
-                            record.status === 'Terlambat' ? 'bg-amber-100 text-amber-700' :
-                            'bg-slate-100 text-slate-700'
-                          }`}>
-                            {record.status}
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${getStatusColor(record.status)}`}>
+                            {getStatusLabel(record.status)}
                           </span>
                         </td>
                       </tr>

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { authAPI, attendanceAPI, correctionAPI, leaveAPI } from '../../services/api';
+import { getStatusLabel, getStatusColor, normalizeStatus, isPresent, isAbsent } from '../../utils/statusUtils';
 
 const History = () => {
   const user = authAPI.getStoredUser();
@@ -81,10 +82,11 @@ const History = () => {
   };
   
   const stats = historyList.reduce((acc, curr) => {
-    if (curr.status === 'Hadir') acc.present++;
-    else if (curr.status === 'Terlambat') acc.late++;
-    else if (curr.status === 'Mangkir') acc.mangkir++;
-    else if (curr.status === 'Alpa') acc.absent++;
+    const norm = normalizeStatus(curr.status);
+    if (norm === 'PRESENT') acc.present++;
+    else if (norm === 'LATE') acc.late++;
+    else if (norm === 'MANGKIR') acc.mangkir++;
+    else if (norm === 'ABSENT') acc.absent++;
     return acc;
   }, { present: 0, late: 0, mangkir: 0, absent: 0 });
 
@@ -176,12 +178,12 @@ const History = () => {
                 key={idx} 
                 onClick={() => handleDayClick(item)}
                 className={`bg-white p-5 flex items-center gap-5 group active:scale-[0.98] transition-all duration-300 cursor-pointer border border-slate-200 hover:border-blue-200 hover:shadow-sm rounded-2xl ${
-                  item.status === 'Alpa' ? 'bg-rose-50/50' : ''
+                  isAbsent(item.status) ? 'bg-rose-50/50' : ''
                 }`}
               >
                 <div className={`w-14 h-14 rounded-xl flex flex-col items-center justify-center shrink-0 border transition-all duration-300 ${
-                  item.status === 'Libur' ? 'bg-slate-50 border-slate-200 text-slate-400' : 
-                  item.status === 'Alpa' ? 'bg-rose-50 border-rose-200 text-rose-500' :
+                  normalizeStatus(item.status) === 'HOLIDAY' ? 'bg-slate-50 border-slate-200 text-slate-400' : 
+                  isAbsent(item.status) ? 'bg-rose-50 border-rose-200 text-rose-500' :
                   'bg-blue-50 border-blue-100 text-blue-600 group-hover:bg-blue-600 group-hover:text-white'
                 }`}>
                   <span className="text-[9px] font-bold uppercase">{item.weekday}</span>
@@ -191,19 +193,19 @@ const History = () => {
                 <div className="flex-1">
                   <div className="flex justify-between items-center mb-3">
                     <span className={`text-xs font-semibold uppercase tracking-wider ${
-                      item.status === 'Hadir' ? 'text-emerald-600' :
-                      item.status === 'Terlambat' ? 'text-amber-600' :
-                      item.status === 'Mangkir' ? 'text-orange-600' :
-                      item.status === 'Alpa' ? 'text-rose-600' :
+                      normalizeStatus(item.status) === 'PRESENT' ? 'text-emerald-600' :
+                      normalizeStatus(item.status) === 'LATE' ? 'text-amber-600' :
+                      normalizeStatus(item.status) === 'MANGKIR' ? 'text-orange-600' :
+                      normalizeStatus(item.status) === 'ABSENT' ? 'text-rose-600' :
                       'text-slate-400'
                     }`}>
-                      {item.status}
+                      {getStatusLabel(item.status)}
                     </span>
                     <div className="flex items-center gap-1.5">
-                      {item.status === 'Hadir' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
-                      {item.status === 'Terlambat' && <Clock className="w-4 h-4 text-amber-500" />}
-                      {item.status === 'Mangkir' && <AlertCircle className="w-4 h-4 text-orange-500" />}
-                      {item.status === 'Alpa' && <XCircle className="w-4 h-4 text-rose-500" />}
+                      {normalizeStatus(item.status) === 'PRESENT' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                      {normalizeStatus(item.status) === 'LATE' && <Clock className="w-4 h-4 text-amber-500" />}
+                      {normalizeStatus(item.status) === 'MANGKIR' && <AlertCircle className="w-4 h-4 text-orange-500" />}
+                      {normalizeStatus(item.status) === 'ABSENT' && <XCircle className="w-4 h-4 text-rose-500" />}
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-6">
@@ -241,15 +243,11 @@ const History = () => {
               <div key={idx} className="bg-white p-6 border border-slate-200 hover:border-blue-200 transition-all duration-300 group rounded-2xl shadow-sm">
                 <div className="flex justify-between items-start mb-6">
                   <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center border transition-all duration-300 ${
-                      leave.type === 'Sakit' ? 'bg-rose-50 border-rose-200 text-rose-500' :
-                      leave.type === 'Cuti' ? 'bg-blue-50 border-blue-100 text-blue-600 group-hover:bg-blue-600 group-hover:text-white' :
-                      'bg-amber-50 border-amber-200 text-amber-500'
-                    }`}>
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center border transition-all duration-300 ${getStatusColor(leave.type)}`}>
                       <FileText className="w-6 h-6" />
                     </div>
                     <div>
-                      <h3 className="text-base font-bold text-slate-800">{leave.type}</h3>
+                      <h3 className="text-base font-bold text-slate-800">{getStatusLabel(leave.type)}</h3>
                       <p className="text-[10px] text-slate-400 font-medium mt-0.5">Filed: {new Date(leave.createdAt).toLocaleDateString()}</p>
                     </div>
                   </div>

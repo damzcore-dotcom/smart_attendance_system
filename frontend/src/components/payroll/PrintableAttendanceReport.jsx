@@ -1,4 +1,5 @@
 import React from 'react';
+import { getStatusLabel, getStatusColor, normalizeStatus } from '../../utils/statusUtils';
 
 const PrintableAttendanceReport = ({ detail, logs, company, config }) => {
   if (!detail || !config) return null;
@@ -76,23 +77,23 @@ const PrintableAttendanceReport = ({ detail, logs, company, config }) => {
       <div className="mt-6 border border-slate-200 rounded-lg p-4 grid grid-cols-4 md:grid-cols-5 gap-4 text-center text-xs">
         <div>
           <p className="text-slate-500 font-medium">Hari Kerja</p>
-          <p className="font-bold text-slate-800 text-sm">{detail.workingDays}</p>
+          <p className="font-bold text-slate-800 text-sm">{detail.workingDays || 0}</p>
         </div>
         <div>
           <p className="text-emerald-600 font-medium">Hadir</p>
-          <p className="font-bold text-emerald-700 text-sm">{detail.daysPresent}</p>
+          <p className="font-bold text-emerald-700 text-sm">{detail.daysPresent || 0}</p>
         </div>
         <div>
           <p className="text-red-500 font-medium">Absen/Mangkir</p>
-          <p className="font-bold text-red-600 text-sm">{detail.daysAbsent}</p>
+          <p className="font-bold text-red-600 text-sm">{detail.daysAbsent || 0}</p>
         </div>
         <div>
           <p className="text-amber-500 font-medium">Telat (Kali)</p>
-          <p className="font-bold text-amber-600 text-sm">{detail.daysLate}</p>
+          <p className="font-bold text-amber-600 text-sm">{detail.daysLate || 0}</p>
         </div>
         <div>
           <p className="text-amber-600 font-medium">Total Menit Telat</p>
-          <p className="font-bold text-amber-700 text-sm">{detail.totalLateMinutes} Mnt</p>
+          <p className="font-bold text-amber-700 text-sm">{detail.totalLateMinutes || 0} Mnt</p>
         </div>
       </div>
 
@@ -118,12 +119,8 @@ const PrintableAttendanceReport = ({ detail, logs, company, config }) => {
                   <td className="py-2 px-2">{log.checkIn ? formatTime(log.checkIn) : (log.in || '-')}</td>
                   <td className="py-2 px-2">{log.checkOut ? formatTime(log.checkOut) : (log.out || '-')}</td>
                   <td className="py-2 px-2 font-semibold">
-                    <span className={
-                      (log.status === 'LATE' || log.status === 'Terlambat') ? 'text-amber-600' :
-                      (log.status === 'ABSENT' || log.status === 'MANGKIR' || log.status === 'Mangkir' || log.status === 'Alpa' || log.status === 'Tanpa Keterangan (Alpa)') ? 'text-red-600' :
-                      (log.status === 'PRESENT' || log.status === 'Hadir') ? 'text-emerald-600' : 'text-blue-600'
-                    }>
-                      {log.status}
+                    <span className={getStatusColor(log.status).split(' ')[1]}>
+                      {getStatusLabel(log.status)}
                     </span>
                   </td>
                   <td className="py-2 px-2 text-right text-amber-600 font-bold">{log.lateMinutes > 0 ? log.lateMinutes : '-'}</td>

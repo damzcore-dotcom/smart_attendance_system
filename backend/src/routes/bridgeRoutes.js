@@ -10,8 +10,12 @@ const prisma = require('../prismaClient');
 // ── Bridge Key Middleware ────────────────────────────────────────────────
 const verifyBridgeKey = (req, res, next) => {
   const key = req.headers['x-bridge-key'];
-  if (!key || key !== process.env.INTERNAL_BRIDGE_KEY) {
-    return res.status(403).json({ success: false, message: 'Unauthorized bridge access' });
+  const BRIDGE_KEY = process.env.INTERNAL_BRIDGE_KEY;
+  if (!BRIDGE_KEY) {
+    return res.status(503).json({ success: false, message: 'Bridge authentication not configured. Set INTERNAL_BRIDGE_KEY env variable.' });
+  }
+  if (!key || key !== BRIDGE_KEY) {
+    return res.status(401).json({ success: false, message: 'Invalid bridge key' });
   }
   next();
 };
