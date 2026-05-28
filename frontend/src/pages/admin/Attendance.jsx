@@ -152,7 +152,6 @@ const Attendance = () => {
             totalLateMinutes += (log.lateMinutes || 0);
           } else if (isAbsent(log.status) || log.status === 'MISSING' || log.status === 'Tanpa Keterangan (Alpa)') {
             daysAbsent++;
-            totalLateMinutes += parseInt(companySettings?.mangkirPenaltyMinutes) || 30;
           }
         });
         
@@ -205,7 +204,7 @@ const Attendance = () => {
            totalLateMinutes += (log.lateMinutes || 0);
         }
         if (log.status === 'MANGKIR' || log.status === 'MISSING' || log.status === 'ABSENT' || log.status === 'Tanpa Keterangan (Alpa)') {
-           totalLateMinutes += parseInt(companySettings?.mangkirPenaltyMinutes) || 30;
+           // Do not add mangkir penalty to accumulated late minutes
         }
       });
       
@@ -294,7 +293,6 @@ const Attendance = () => {
         g.lateDetails.push({ date: row.date, checkIn: row.checkIn, lateMinutes: row.lateMinutes || 0 });
       } else if (status === 'MANGKIR' || status === 'Mangkir') {
         g.mangkir++;
-        g.totalLateMinutes += (fullDataForRekap?.summary?.mangkirPenalty || 30);
         g.mangkirDetails.push({ date: row.date, checkIn: row.checkIn, checkOut: row.checkOut });
       } else if (status === 'ABSENT' || status === 'Alpa' || status === 'MISSING') {
         g.absent++;
