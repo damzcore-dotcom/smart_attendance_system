@@ -131,7 +131,7 @@ const getAll = async (req, res) => {
       else if (s === 'IZIN') izinCount += count;
       else absenCount += count;
 
-      totalLate += late;
+      totalLate += late + (s === 'MANGKIR' ? count * mangkirPenalty : 0);
     });
 
     const overrideMap = {};
