@@ -1042,7 +1042,7 @@ const Attendance = () => {
       )}
 
       {/* Central Intelligence Data Grid */}
-      <div className="bg-white border border-slate-200 shadow-sm overflow-hidden rounded-2xl">
+      <div className="bg-white border border-slate-200 shadow-sm rounded-2xl">
         {/* Primary View Tab Controls */}
         <div className="flex border-b border-slate-100 bg-slate-50/50 print:hidden text-[11px] font-bold uppercase tracking-wider">
           <button
@@ -1308,7 +1308,7 @@ const Attendance = () => {
             )}
           </>
         ) : (
-          <div className="relative overflow-auto min-h-[400px] hide-scrollbar custom-scrollbar animate-in fade-in duration-300">
+          <div className="relative overflow-x-auto overflow-y-visible min-h-[400px] pb-48 hide-scrollbar custom-scrollbar animate-in fade-in duration-300">
             <table className="w-full text-left whitespace-nowrap">
               <thead className="sticky top-0 z-30 bg-slate-50 border-b border-slate-100 shadow-sm">
                 <tr className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">
