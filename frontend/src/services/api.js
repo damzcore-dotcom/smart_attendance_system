@@ -247,6 +247,9 @@ export const attendanceAPI = {
   bulkOvertime: (data) => apiFetch('/attendance/bulk-overtime', { method: 'PATCH', body: JSON.stringify(data) }),
   bulkDailyWorkers: (data) => apiFetch('/attendance/bulk-daily-workers', { method: 'POST', body: JSON.stringify(data) }),
   manualCorrection: (data) => apiFetch('/attendance/manual-correction', { method: 'POST', body: JSON.stringify(data) }),
+  getOvertimeSummary: (month) => apiFetch(`/attendance/overtime-summary?month=${month}`),
+  getBhlSummary: (month) => apiFetch(`/attendance/bhl-summary?month=${month}`),
+  getCorrectionHistory: (month) => apiFetch(`/attendance/correction-history?month=${month}`),
 };
 
 // ─── Device API ────────────────────────────────────

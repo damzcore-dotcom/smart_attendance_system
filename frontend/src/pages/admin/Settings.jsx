@@ -510,7 +510,7 @@ const Settings = () => {
                       <p className="text-sm font-bold text-slate-800 tracking-tight">Strict Geofencing Protocol</p>
                       <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Enforce physical proximity requirements for all check-in/out events.</p>
                     </div>
-                    <div className="relative inline-flex items-center cursor-pointer">
+                    <label className="relative inline-flex items-center cursor-pointer">
                       <input 
                         type="checkbox" 
                         className="sr-only peer" 
@@ -518,7 +518,7 @@ const Settings = () => {
                         onChange={(e) => handleInputChange('strictGeofencing', String(e.target.checked))}
                       />
                       <div className="w-12 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </div>
+                    </label>
                   </div>
                 </div>
               </div>
@@ -664,7 +664,7 @@ const Settings = () => {
                       <p className="text-sm font-bold text-slate-800 tracking-tight">Saturday Half-Day Protocol</p>
                       <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Enable special early checkout rules for Saturdays (Sabtu Setengah Hari).</p>
                     </div>
-                    <div className="relative inline-flex items-center cursor-pointer">
+                    <label className="relative inline-flex items-center cursor-pointer">
                       <input 
                         type="checkbox" 
                         className="sr-only peer" 
@@ -672,7 +672,7 @@ const Settings = () => {
                         onChange={(e) => handleInputChange('saturdayHalfDay', String(e.target.checked))}
                       />
                       <div className="w-12 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </div>
+                    </label>
                   </div>
                   
                   {formData.saturdayHalfDay === 'true' && (
@@ -732,6 +732,28 @@ const Settings = () => {
 
                 <div className="bg-white p-8 border border-slate-200 shadow-sm rounded-3xl">
                   <h3 className="text-xs font-bold text-slate-800 uppercase tracking-widest mb-6 border-l-4 border-amber-500 pl-4">Overtime Intelligence</h3>
+                  
+                  <div className="space-y-4 mb-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Batas Maksimal Lembur Per Hari (Jam)</label>
+                      <input 
+                        type="number" 
+                        value={formData.overtimeMaxPerDay || 4} 
+                        onChange={(e) => handleInputChange('overtimeMaxPerDay', e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Batas Maksimal Lembur Per Bulan (Jam)</label>
+                      <input 
+                        type="number" 
+                        value={formData.overtimeMaxPerMonth || 40} 
+                        onChange={(e) => handleInputChange('overtimeMaxPerMonth', e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                      />
+                    </div>
+                  </div>
+
                   <div className="flex items-center justify-between p-6 bg-slate-50 border border-slate-100 rounded-2xl hover:border-blue-200 transition-all duration-300">
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 bg-amber-50 border border-amber-100 rounded-xl flex items-center justify-center text-amber-600">
@@ -742,7 +764,7 @@ const Settings = () => {
                         <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Alert HR when shift exceeds 9 hours.</p>
                       </div>
                     </div>
-                    <div className="relative inline-flex items-center cursor-pointer">
+                    <label className="relative inline-flex items-center cursor-pointer">
                       <input 
                         type="checkbox" 
                         className="sr-only peer" 
@@ -750,7 +772,7 @@ const Settings = () => {
                         onChange={(e) => handleInputChange('otNotification', String(e.target.checked))}
                       />
                       <div className="w-12 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </div>
+                    </label>
                   </div>
                   
                   <div className="flex items-center justify-between p-6 bg-slate-50 border border-slate-100 rounded-2xl hover:border-blue-200 transition-all duration-300 mt-4">
@@ -763,7 +785,7 @@ const Settings = () => {
                         <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Turn off to rely strictly on manual SPL inputs.</p>
                       </div>
                     </div>
-                    <div className="relative inline-flex items-center cursor-pointer">
+                    <label className="relative inline-flex items-center cursor-pointer">
                       <input 
                         type="checkbox" 
                         className="sr-only peer" 
@@ -771,9 +793,11 @@ const Settings = () => {
                         onChange={(e) => handleInputChange('autoCalculateOvertime', String(e.target.checked))}
                       />
                       <div className="w-12 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </div>
+                    </label>
                   </div>
                 </div>
+
+
               </div>
             </div>
           )}
@@ -821,7 +845,7 @@ const Settings = () => {
                         <p className="text-sm font-bold text-slate-800 tracking-tight">Auto-Enrollment</p>
                         <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Update biometrics on match.</p>
                       </div>
-                      <div className="relative inline-flex items-center cursor-pointer">
+                      <label className="relative inline-flex items-center cursor-pointer">
                         <input 
                           type="checkbox" 
                           className="sr-only peer" 
@@ -829,7 +853,7 @@ const Settings = () => {
                           onChange={(e) => handleInputChange('autoEnrollment', String(e.target.checked))}
                         />
                         <div className="w-12 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      </div>
+                      </label>
                     </div>
                   </div>
                 </div>

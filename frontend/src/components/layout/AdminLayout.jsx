@@ -143,7 +143,7 @@ const AdminLayout = () => {
   };
 
   return (
-    <div className="flex h-screen print:h-auto relative overflow-hidden print:overflow-visible font-sans bg-[#f7f8fc] print:bg-white">
+    <div className={`flex h-screen print:h-auto relative overflow-hidden print:overflow-visible font-sans bg-[#f7f8fc] print:bg-white ${isSidebarOpen ? 'sidebar-open' : 'sidebar-collapsed'}`}>
 
       {/* Sidebar */}
       <aside 

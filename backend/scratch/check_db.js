@@ -1,28 +1,37 @@
-const prisma = require('../src/prismaClient');
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 
 async function main() {
-  // Search for Risma Yanti
-  const risma = await prisma.employee.findMany({
-    where: { name: { contains: 'Risma', mode: 'insensitive' } },
-    select: { id: true, employeeCode: true, name: true, department: { select: { name: true } }, idNumber: true }
+  const emp = await prisma.employee.findFirst({
+    where: { name: { contains: 'Hana Nurhasanah', mode: 'insensitive' } }
   });
-  console.log('Risma search:', JSON.stringify(risma, null, 2));
-  
-  // Check if any employee has idNumber matching 2507020451
-  const byIdNumber = await prisma.employee.findMany({
-    where: { idNumber: '2507020451' },
-    select: { id: true, employeeCode: true, name: true }
+
+  if (!emp) {
+    console.log('Employee not found');
+    return;
+  }
+
+  console.log('Employee found:', { id: emp.id, name: emp.name, code: emp.employeeCode });
+
+  const records = await prisma.attendance.findMany({
+    where: { employeeId: emp.id },
+    orderBy: { date: 'desc' },
+    take: 20
   });
-  console.log('By ID Number 2507020451:', JSON.stringify(byIdNumber));
-  
-  // Check FINISHING department
-  const finishing = await prisma.employee.findMany({
-    where: { department: { name: { contains: 'FINISHING', mode: 'insensitive' } } },
-    select: { id: true, employeeCode: true, name: true, department: { select: { name: true } } },
-    take: 5
+
+  console.log('Attendance records (last 20):');
+  records.forEach(r => {
+    console.log({
+      id: r.id,
+      date: r.date.toISOString(),
+      checkIn: r.checkIn ? r.checkIn.toISOString() : null,
+      checkOut: r.checkOut ? r.checkOut.toISOString() : null,
+      status: r.status,
+      notes: r.notes
+    });
   });
-  console.log('FINISHING dept employees:', JSON.stringify(finishing, null, 2));
-  
-  await prisma.$disconnect();
 }
-main();
+
+main()
+  .catch(e => console.error(e))
+  .finally(() => prisma.$disconnect());

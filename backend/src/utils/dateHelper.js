@@ -77,7 +77,7 @@ function getUTCEndOfDay(utcDate) {
 }
 
 /** Valid attendance statuses */
-const VALID_STATUSES = ['PRESENT', 'LATE', 'ABSENT', 'MANGKIR', 'SAKIT', 'IZIN', 'CUTI', 'HOLIDAY'];
+const VALID_STATUSES = ['PRESENT', 'LATE', 'ABSENT', 'MANGKIR', 'SAKIT', 'IZIN', 'CUTI', 'HOLIDAY', 'HALF_DAY'];
 
 /** Default mangkir penalty in minutes — should eventually be read from Settings */
 const MANGKIR_PENALTY_MINUTES = 30;

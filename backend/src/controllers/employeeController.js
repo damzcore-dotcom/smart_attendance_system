@@ -9,18 +9,40 @@ const getAll = async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const where = {};
+    const conditions = [];
+
     if (search) {
-      where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { employeeCode: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } },
-      ];
+      conditions.push({
+        OR: [
+          { name: { contains: search, mode: 'insensitive' } },
+          { employeeCode: { contains: search, mode: 'insensitive' } },
+          { email: { contains: search, mode: 'insensitive' } },
+        ]
+      });
     }
     if (dept && dept !== 'All') where.department = { name: dept };
     if (section && section !== 'All') where.section = section;
     if (position && position !== 'All') where.position = position;
     if (status && status !== 'All') where.status = status;
     if (empStatus && empStatus !== 'All') where.employmentStatus = empStatus;
+
+    if (req.query.excludeBhl === 'true') {
+      where.employmentStatus = { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] };
+      where.salaryCategory = { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] };
+    }
+
+    if (req.query.onlyBhl === 'true') {
+      conditions.push({
+        OR: [
+          { employmentStatus: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } },
+          { salaryCategory: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } }
+        ]
+      });
+    }
+
+    if (conditions.length > 0) {
+      where.AND = conditions;
+    }
 
     let orderBy = {};
     if (sortBy === 'dept') {
@@ -32,7 +54,7 @@ const getAll = async (req, res) => {
     const [employees, total] = await Promise.all([
       prisma.employee.findMany({
         where,
-        include: { department: true, shift: true },
+        include: { department: true, shift: true, salary: true },
         skip,
         take: parseInt(limit),
         orderBy,
@@ -40,60 +62,73 @@ const getAll = async (req, res) => {
       prisma.employee.count({ where }),
     ]);
 
+    const isLight = req.query.light === 'true';
+
     res.json({
       success: true,
-      data: employees.map(emp => ({
-        id: emp.employeeCode,
-        dbId: emp.id,
-        name: emp.name,
-        dept: emp.department?.name || 'No Dept',
-        email: emp.email,
-        phone: emp.phone,
-        position: emp.position,
-        division: emp.division,
-        locationId: emp.locationId,
-        idNumber: emp.idNumber,
-        cardNo: emp.cardNo,
-        verifyCode: emp.verifyCode,
-        grade: emp.grade,
-        section: emp.section,
-        employmentStatus: emp.employmentStatus,
-        contractDuration: emp.contractDuration,
-        joinDate: emp.joinDate,
-        contractEnd: emp.contractEnd,
-        salaryCategory: emp.salaryCategory,
-        fingerPrintId: emp.fingerPrintId,
-        faceId: emp.faceId,
-        faceIdDisplay: emp.faceId || (emp.faceStatus === 'ENROLLED' ? 'Enrolled' : 'Pending'),
-        facePhoto: emp.facePhoto,
-        bpjsTk: emp.bpjsTk,
-        bpjsKesehatan: emp.bpjsKesehatan,
-        npwp: emp.npwp,
-        ptkpStatus: emp.ptkpStatus,
-        maritalStatus: emp.maritalStatus,
-        kkNumber: emp.kkNumber,
-        birthDate: emp.birthDate,
-        birthPlace: emp.birthPlace,
-        address: emp.address,
-        education: emp.education,
-        major: emp.major,
-        religion: emp.religion,
-        numberOfChildren: emp.numberOfChildren,
-        fatherName: emp.fatherName,
-        motherName: emp.motherName,
-        spouseName: emp.spouseName,
-        emergencyContact: emp.emergencyContact,
-        notes: emp.notes,
-        gender: emp.gender,
-        bankName: emp.bankName,
-        bankAccountNumber: emp.bankAccountNumber,
-        profilePhoto: emp.profilePhoto,
-        status: emp.status === 'ACTIVE' ? 'Active' : emp.status === 'ON_LEAVE' ? 'On Leave' : 'Terminated',
-        shift: emp.shift ? { id: emp.shift.id, name: emp.shift.name } : null,
-        shiftId: emp.shiftId,
-        leaveQuota: emp.leaveQuota,
-        remainingLeave: emp.remainingLeave,
-      })),
+      data: employees.map(emp => {
+        const base = {
+          id: emp.employeeCode,
+          dbId: emp.id,
+          name: emp.name,
+          dept: emp.department?.name || 'No Dept',
+          employeeCode: emp.employeeCode,
+          department: emp.department,
+          position: emp.position,
+          section: emp.section,
+          employmentStatus: emp.employmentStatus,
+          salaryCategory: emp.salaryCategory,
+          status: emp.status === 'ACTIVE' ? 'Active' : emp.status === 'ON_LEAVE' ? 'On Leave' : 'Terminated',
+          dailyRate: emp.salary?.dailyRate || emp.salary?.baseSalary || 0,
+        };
+
+        if (isLight) return base;
+
+        return {
+          ...base,
+          email: emp.email,
+          phone: emp.phone,
+          division: emp.division,
+          locationId: emp.locationId,
+          idNumber: emp.idNumber,
+          cardNo: emp.cardNo,
+          verifyCode: emp.verifyCode,
+          grade: emp.grade,
+          contractDuration: emp.contractDuration,
+          joinDate: emp.joinDate,
+          contractEnd: emp.contractEnd,
+          fingerPrintId: emp.fingerPrintId,
+          faceId: emp.faceId,
+          faceIdDisplay: emp.faceId || (emp.faceStatus === 'ENROLLED' ? 'Enrolled' : 'Pending'),
+          facePhoto: emp.facePhoto,
+          bpjsTk: emp.bpjsTk,
+          bpjsKesehatan: emp.bpjsKesehatan,
+          npwp: emp.npwp,
+          ptkpStatus: emp.ptkpStatus,
+          maritalStatus: emp.maritalStatus,
+          kkNumber: emp.kkNumber,
+          birthDate: emp.birthDate,
+          birthPlace: emp.birthPlace,
+          address: emp.address,
+          education: emp.education,
+          major: emp.major,
+          religion: emp.religion,
+          numberOfChildren: emp.numberOfChildren,
+          fatherName: emp.fatherName,
+          motherName: emp.motherName,
+          spouseName: emp.spouseName,
+          emergencyContact: emp.emergencyContact,
+          notes: emp.notes,
+          gender: emp.gender,
+          bankName: emp.bankName,
+          bankAccountNumber: emp.bankAccountNumber,
+          profilePhoto: emp.profilePhoto,
+          shift: emp.shift ? { id: emp.shift.id, name: emp.shift.name } : null,
+          shiftId: emp.shiftId,
+          leaveQuota: emp.leaveQuota,
+          remainingLeave: emp.remainingLeave,
+        };
+      }),
       total,
       page: parseInt(page),
       totalPages: Math.ceil(total / parseInt(limit)),
@@ -127,14 +162,49 @@ const create = async (req, res) => {
     // Auto-generate NIK based on last numeric sequence
     let employeeCode = rest.employeeCode?.trim();
     if (!employeeCode) {
-      const allEmployees = await prisma.employee.findMany({ select: { employeeCode: true } });
-      let maxNum = 0;
-      allEmployees.forEach(emp => {
-        const num = parseInt(emp.employeeCode.replace(/\D/g, ''));
-        if (!isNaN(num) && num > maxNum) maxNum = num;
-      });
-      // Increment and keep it as a string
-      employeeCode = String(maxNum + 1);
+      if (rest.employmentStatus === 'HARIAN' || rest.salaryCategory === 'HARIAN') {
+        const allBhl = await prisma.employee.findMany({ 
+          where: { OR: [{ employmentStatus: 'HARIAN' }, { salaryCategory: 'HARIAN' }] }, 
+          select: { employeeCode: true } 
+        });
+        const allBhlUsers = await prisma.user.findMany({
+          where: { username: { startsWith: 'BHL-' } },
+          select: { username: true }
+        });
+        
+        let maxNum = 0;
+        allBhl.forEach(emp => {
+          const num = parseInt(emp.employeeCode.replace(/\D/g, ''));
+          if (!isNaN(num) && num > maxNum) maxNum = num;
+        });
+        allBhlUsers.forEach(u => {
+          const num = parseInt(u.username.replace(/\D/g, ''));
+          if (!isNaN(num) && num > maxNum) maxNum = num;
+        });
+        
+        employeeCode = `BHL-${String(maxNum + 1).padStart(4, '0')}`;
+      } else {
+        const allEmployees = await prisma.employee.findMany({ 
+          where: { AND: [{ employmentStatus: { not: 'HARIAN' } }, { salaryCategory: { not: 'HARIAN' } }] },
+          select: { employeeCode: true } 
+        });
+        const allUsers = await prisma.user.findMany({
+          where: { NOT: { username: { startsWith: 'BHL-' } } },
+          select: { username: true }
+        });
+
+        let maxNum = 0;
+        allEmployees.forEach(emp => {
+          const num = parseInt(emp.employeeCode.replace(/\D/g, ''));
+          if (!isNaN(num) && num > maxNum) maxNum = num;
+        });
+        allUsers.forEach(u => {
+          const num = parseInt(u.username.replace(/\D/g, ''));
+          if (!isNaN(num) && num > maxNum) maxNum = num;
+        });
+        
+        employeeCode = String(maxNum + 1);
+      }
     }
     const defaultShift = await prisma.shift.findFirst();
 
@@ -170,7 +240,9 @@ const create = async (req, res) => {
       address: rest.address, education: rest.education, major: rest.major, religion: rest.religion,
       numberOfChildren: rest.numberOfChildren ? parseInt(rest.numberOfChildren) : null,
       fatherName: rest.fatherName, motherName: rest.motherName, spouseName: rest.spouseName,
-      emergencyContact: rest.emergencyContact, notes: rest.notes, salaryCategory: rest.salaryCategory || 'UMK/UMR',
+      emergencyContact: rest.emergencyContact, notes: rest.notes, 
+      salaryCategory: rest.salaryCategory || 'UMK/UMR',
+      employmentStatus: rest.employmentStatus || 'TETAP',
       gender: rest.gender || null,
       bankName: rest.bankName || null,
       bankAccountNumber: rest.bankAccountNumber || null,
@@ -179,12 +251,15 @@ const create = async (req, res) => {
       birthDate: rest.birthDate ? new Date(rest.birthDate) : null,
       leaveQuota: rest.leaveQuota ? parseInt(rest.leaveQuota) : 12,
       remainingLeave: rest.remainingLeave ? parseInt(rest.remainingLeave) : 12,
+      status: rest.status ? (rest.status.toUpperCase() === 'TERMINATED' ? 'TERMINATED' : rest.status.toUpperCase() === 'ON_LEAVE' ? 'ON_LEAVE' : 'ACTIVE') : 'ACTIVE',
     };
 
     const employee = await prisma.$transaction(async (tx) => {
       const emp = await tx.employee.create({ data: dataObj, include: { department: true } });
-      const hashedPassword = await bcrypt.hash('password123', 10);
-      await tx.user.create({ data: { username: employeeCode, password: hashedPassword, role: 'EMPLOYEE', employeeId: emp.id, mustChangePassword: true } });
+      if (rest.employmentStatus !== 'HARIAN' && rest.salaryCategory !== 'HARIAN') {
+        const hashedPassword = await bcrypt.hash('password123', 10);
+        await tx.user.create({ data: { username: employeeCode, password: hashedPassword, role: 'EMPLOYEE', employeeId: emp.id, mustChangePassword: true } });
+      }
       return emp;
     });
 
@@ -326,6 +401,9 @@ const importExcel = async (req, res) => {
     const deptMap = new Map();
     existingDepts.forEach(d => deptMap.set(d.name.toLowerCase().trim(), d.id));
 
+    const bhlWageSetting = await prisma.settings.findUnique({ where: { key: 'bhlDefaultDailyWage' } });
+    const defaultBhlWage = bhlWageSetting ? parseFloat(bhlWageSetting.value) || 150000 : 150000;
+
     for (let i = 0; i < totalRows; i++) {
       const row = rawData[i];
       // Update progress
@@ -362,6 +440,9 @@ const importExcel = async (req, res) => {
       // Helper to convert empty strings to null for optional fields
       const ns = (val) => { const s = String(val || '').trim(); return s || null; };
 
+      const empStatusStr = ns(row['Status Kerja']);
+      const isHarian = ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'].includes(empStatusStr);
+
       const createData = {
         employeeCode: empCode,
         name,
@@ -369,7 +450,7 @@ const importExcel = async (req, res) => {
         grade: ns(row['Grade']),
         position: ns(row['Jabatan'] || row['Position']),
         section: ns(row['Bagian']),
-        employmentStatus: ns(row['Status Kerja']),
+        employmentStatus: empStatusStr,
         contractDuration: ns(row['Lama Kontrak']),
         bpjsTk: ns(row['BPJS TK']),
         bpjsKesehatan: ns(row['BPJS Kesehatan']),
@@ -393,6 +474,7 @@ const importExcel = async (req, res) => {
         gender: ns(row['Jenis Kelamin']),
         bankName: ns(row['Nama Bank']),
         bankAccountNumber: ns(row['Nomor Rekening']),
+        salaryCategory: isHarian ? 'HARIAN' : (ns(row['Kategori Gaji']) || 'UMK/UMR'),
       };
       
       // Helper: konversi Excel Serial Number ke Date
@@ -430,14 +512,28 @@ const importExcel = async (req, res) => {
       // Pastikan fingerPrintId diset null (bukan undefined) agar fuzzy matching sync bisa mendeteksinya
       createData.fingerPrintId = null;
 
-      const hashedPassword = await bcrypt.hash('password123', 10);
       const newEmployee = await prisma.employee.create({
         data: createData
       });
       
-      await prisma.user.create({
-        data: { username: empCode, password: hashedPassword, role: 'EMPLOYEE', employeeId: newEmployee.id }
-      });
+      if (isHarian) {
+        const rawWage = row['Upah Harian'] || row['Gaji Harian'] || row['Daily Rate'] || row['Daily Wage'] || row['Upah'];
+        const dailyRateVal = rawWage ? parseFloat(String(rawWage).replace(/[^\d]/g, '')) || defaultBhlWage : defaultBhlWage;
+        await prisma.employeeSalary.create({
+          data: {
+            employeeId: newEmployee.id,
+            employmentType: 'HARIAN',
+            salaryType: 'DAILY',
+            dailyRate: dailyRateVal,
+            baseSalary: dailyRateVal
+          }
+        });
+      } else {
+        const hashedPassword = await bcrypt.hash('password123', 10);
+        await prisma.user.create({
+          data: { username: empCode, password: hashedPassword, role: 'EMPLOYEE', employeeId: newEmployee.id }
+        });
+      }
       
       employeesImported++;
     }

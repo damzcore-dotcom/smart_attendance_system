@@ -120,7 +120,8 @@ const restoreData = async (req, res) => {
         }
       }
     }, {
-      timeout: 30000 // Increase timeout for large restores
+      maxWait: 30000, // 30 seconds to wait to acquire transaction
+      timeout: 300000 // Increase timeout for large restores (5 minutes)
     });
 
     res.json({ success: true, message: 'Database restored successfully' });

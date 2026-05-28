@@ -1,9 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { employeeAPI, attendanceAPI } from '../../services/api';
+import { employeeAPI, attendanceAPI, settingsAPI } from '../../services/api';
+import * as XLSX from 'xlsx';
 import { 
   Users, Save, Calendar, Search, Filter, Loader2, AlertCircle, Edit3, 
-  Clock, CheckSquare, Image as ImageIcon, X 
+  Clock, CheckSquare, Image as ImageIcon, X, History, ChevronLeft, ChevronRight,
+  FileSpreadsheet, Printer, Eye
 } from 'lucide-react';
 
 const ManualCorrectionHRD = () => {
@@ -14,7 +16,35 @@ const ManualCorrectionHRD = () => {
   const [sectionFilter, setSectionFilter] = useState('');
   const [rankFilter, setRankFilter] = useState('');
   
-  const [activeTab, setActiveTab] = useState('KEHADIRAN'); // KEHADIRAN | LUPA_FINGER
+  const [activeTab, setActiveTab] = useState('KEHADIRAN'); // KEHADIRAN | LUPA_FINGER | RIWAYAT
+  const [historyMonth, setHistoryMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
+  const [historySearch, setHistorySearch] = useState('');
+  const [historyTypeFilter, setHistoryTypeFilter] = useState('');
+  const [historyDeptFilter, setHistoryDeptFilter] = useState('');
+  const [previewPhoto, setPreviewPhoto] = useState(null);
+  const [companySettings, setCompanySettings] = useState({});
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const res = await settingsAPI.getAll();
+        if (res?.data) {
+          setCompanySettings(res.data);
+        }
+      } catch (err) {
+        console.error('Failed to load settings:', err);
+      }
+    };
+    fetchSettings();
+  }, []);
+
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, deptFilter, sectionFilter, rankFilter]);
 
   // State maps
   const [attendanceInputs, setAttendanceInputs] = useState({}); // { empId: 'SAKIT' }
@@ -22,7 +52,7 @@ const ManualCorrectionHRD = () => {
 
   const { data: employeesData, isLoading: empLoading } = useQuery({
     queryKey: ['employees-for-correction'],
-    queryFn: () => employeeAPI.getAll({ limit: 1000, status: 'ACTIVE' }),
+    queryFn: () => employeeAPI.getAll({ limit: 1000, status: 'ACTIVE', excludeBhl: true }),
   });
 
   const { data: attendanceData, isLoading: attLoading } = useQuery({
@@ -30,7 +60,266 @@ const ManualCorrectionHRD = () => {
     queryFn: () => attendanceAPI.getAll({ date: selectedDate, limit: 1000 }),
   });
 
+  const { data: historyData, isLoading: historyLoading } = useQuery({
+    queryKey: ['correction-history', historyMonth],
+    queryFn: () => attendanceAPI.getCorrectionHistory(historyMonth),
+    enabled: activeTab === 'RIWAYAT'
+  });
+
+  // Helpers
+  const formatTime = (timeStr) => {
+    if (!timeStr || timeStr === '-' || timeStr === '--:--') return '--:--';
+    if (!timeStr.includes('T')) return timeStr;
+    return new Date(timeStr).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const renderStatusBadge = (status) => {
+    if (!status) {
+      return (
+        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-black bg-slate-100 text-slate-500 border border-slate-200 uppercase tracking-wider">
+          BELUM ABSEN
+        </span>
+      );
+    }
+    
+    const config = {
+      'PRESENT': { label: 'HADIR', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+      'LATE': { label: 'TELAT', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+      'ABSENT': { label: 'ALPA', color: 'bg-rose-50 text-rose-700 border-rose-200' },
+      'MANGKIR': { label: 'MANGKIR', color: 'bg-orange-50 text-orange-700 border-orange-200' },
+      'SAKIT': { label: 'SAKIT', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+      'IZIN': { label: 'IZIN', color: 'bg-sky-50 text-sky-700 border-sky-200' },
+      'CUTI': { label: 'CUTI', color: 'bg-purple-50 text-purple-700 border-purple-200' },
+      'HOLIDAY': { label: 'LIBUR', color: 'bg-slate-150 text-slate-700 border-slate-255' },
+    };
+
+    const cfg = config[status] || { label: status, color: 'bg-slate-50 text-slate-600 border-slate-200' };
+
+    return (
+      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-black border uppercase tracking-wider ${cfg.color}`}>
+        {cfg.label}
+      </span>
+    );
+  };
+
+  const renderCorrectionDetails = (log) => {
+    try {
+      const data = JSON.parse(log.details);
+      if (log.action === 'MANUAL_CORRECTION_STATUS') {
+        const prevStatus = data.previousStatus;
+        return (
+          <div className="text-[11px] font-medium text-slate-600 space-y-1.5">
+            <div>Tanggal Koreksi: <span className="font-bold text-slate-800">{data.date}</span></div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Status:</span>
+              {prevStatus ? renderStatusBadge(prevStatus) : <span className="text-slate-400 italic text-[10px]">Lama</span>}
+              <span className="text-slate-400 font-bold">&rarr;</span>
+              {renderStatusBadge(data.status)}
+            </div>
+          </div>
+        );
+      } else if (log.action === 'MANUAL_CORRECTION_TIME') {
+        const hasPrev = 'previousCheckIn' in data;
+        return (
+          <div className="text-[11px] text-slate-600 font-medium space-y-1.5">
+            <div>Tanggal Koreksi: <span className="font-bold text-slate-800">{data.date}</span></div>
+            {!hasPrev ? (
+              <div className="text-[10px] text-slate-500 font-bold bg-slate-50 border border-slate-100 rounded-lg p-1.5 w-fit flex gap-3">
+                <span>CHECK IN: <span className="text-slate-800 font-extrabold">{data.checkIn || '--:--'}</span></span>
+                <span className="text-slate-300">|</span>
+                <span>CHECK OUT: <span className="text-slate-800 font-extrabold">{data.checkOut || '--:--'}</span></span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-md">
+                <div className="text-[10px] text-slate-500 font-bold bg-slate-50 border border-slate-200/60 rounded-lg p-2 flex flex-col">
+                  <span className="text-[8px] text-slate-400 tracking-wider">SEBELUMNYA</span>
+                  <div className="flex gap-3 mt-0.5">
+                    <span>IN: <span className="text-slate-700 font-black">{data.previousCheckIn || '--:--'}</span></span>
+                    <span className="text-slate-300">|</span>
+                    <span>OUT: <span className="text-slate-700 font-black">{data.previousCheckOut || '--:--'}</span></span>
+                  </div>
+                </div>
+                <div className="text-[10px] text-slate-700 font-bold bg-rose-50/40 border border-rose-100/50 rounded-lg p-2 flex flex-col">
+                  <span className="text-[8px] text-rose-500 tracking-wider">SESUDAH KOREKSI</span>
+                  <div className="flex gap-3 mt-0.5">
+                    <span>IN: <span className="text-rose-600 font-black">{data.checkIn || '--:--'}</span></span>
+                    <span className="text-slate-300">|</span>
+                    <span>OUT: <span className="text-rose-600 font-black">{data.checkOut || '--:--'}</span></span>
+                  </div>
+                </div>
+              </div>
+            )}
+            {data.photoUrl && (
+              <div className="flex items-center gap-2 mt-1.5">
+                <span className="text-[9px] text-slate-400 font-bold uppercase">Bukti Lupa Finger:</span>
+                <button 
+                  onClick={() => setPreviewPhoto(data.photoUrl)}
+                  className="flex items-center gap-1.5 text-[9px] text-rose-600 hover:text-rose-700 font-bold uppercase bg-rose-50 hover:bg-rose-100 border border-rose-100 rounded-lg px-2.5 py-1 transition-all shadow-sm hover:scale-105 active:scale-95"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>Lihat Foto Bukti</span>
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      } else if (log.action === 'CORRECTION') {
+        return (
+          <div className="text-[11px] text-slate-600 font-medium space-y-1">
+            <div>Edit Pengajuan: <span className="font-bold text-slate-500">{data.oldStatus}</span> &rarr; <span className="font-bold text-rose-600">{data.newStatus}</span></div>
+            {data.notes && <div className="text-[10px] text-slate-400 italic font-semibold">&ldquo;{data.notes}&rdquo;</div>}
+          </div>
+        );
+      }
+      return <span className="text-[11px] text-slate-600 font-medium">{log.details}</span>;
+    } catch (e) {
+      return <span className="text-[11px] text-slate-600 font-medium">{log.details}</span>;
+    }
+  };
+
+  const getEmployeeFromLog = (log) => {
+    try {
+      const data = JSON.parse(log.details);
+      const name = data.emp || data.employee || '-';
+      const code = data.employeeCode || '';
+      return { name, code };
+    } catch (e) {
+      return { name: '-', code: '' };
+    }
+  };
+
   const employees = employeesData?.data || [];
+
+  const employeesMap = useMemo(() => {
+    const map = {};
+    employees.forEach(e => {
+      map[e.employeeCode] = e;
+    });
+    return map;
+  }, [employees]);
+
+  const allDepts = useMemo(() => {
+    return [...new Set(employees.map(e => e.department?.name || e.dept).filter(Boolean))];
+  }, [employees]);
+
+  const filteredHistoryLogs = useMemo(() => {
+    const logs = historyData?.data || [];
+    return logs.filter(log => {
+      if (historyTypeFilter && log.action !== historyTypeFilter) return false;
+
+      const empDetails = getEmployeeFromLog(log);
+      const employeeObj = employeesMap[empDetails.code];
+      const deptName = employeeObj?.department?.name || employeeObj?.dept || 'UMUM';
+
+      if (historyDeptFilter && deptName !== historyDeptFilter) return false;
+
+      if (historySearch) {
+        const lower = historySearch.toLowerCase();
+        const operatorMatch = log.username?.toLowerCase().includes(lower);
+        const nameMatch = empDetails.name.toLowerCase().includes(lower);
+        const codeMatch = empDetails.code.toLowerCase().includes(lower);
+        const actionMatch = log.action?.toLowerCase().includes(lower);
+        return operatorMatch || nameMatch || codeMatch || actionMatch;
+      }
+      return true;
+    });
+  }, [historyData, historySearch, historyTypeFilter, historyDeptFilter, employeesMap]);
+
+  const historyStats = useMemo(() => {
+    const logs = filteredHistoryLogs || [];
+    let total = logs.length;
+    let statusCorrections = 0;
+    let timeCorrections = 0;
+    let selfCorrections = 0;
+    let photoCount = 0;
+
+    logs.forEach(log => {
+      if (log.action === 'MANUAL_CORRECTION_STATUS') statusCorrections++;
+      else if (log.action === 'MANUAL_CORRECTION_TIME') timeCorrections++;
+      else if (log.action === 'CORRECTION') selfCorrections++;
+
+      try {
+        const data = JSON.parse(log.details);
+        if (data.photoUrl) photoCount++;
+      } catch (e) {}
+    });
+
+    return { total, statusCorrections, timeCorrections, selfCorrections, photoCount };
+  }, [filteredHistoryLogs]);
+
+  const handleExportExcel = () => {
+    try {
+      if (filteredHistoryLogs.length === 0) {
+        return alert('Tidak ada data riwayat untuk diexport.');
+      }
+      
+      const exportData = filteredHistoryLogs.map((log, index) => {
+        const empDetails = getEmployeeFromLog(log);
+        const employeeObj = employeesMap[empDetails.code];
+        const dept = employeeObj?.department?.name || employeeObj?.dept || 'UMUM';
+        const position = employeeObj?.position || '-';
+
+        let typeStr = 'UPDATE';
+        if (log.action === 'MANUAL_CORRECTION_STATUS') typeStr = 'KOREKSI KEHADIRAN (STATUS)';
+        else if (log.action === 'MANUAL_CORRECTION_TIME') typeStr = 'KOREKSI LUPA FINGER (JAM)';
+        else if (log.action === 'CORRECTION') typeStr = 'PENGAJUAN KOREKSI KARYAWAN';
+
+        let detailStr = '';
+        try {
+          const data = JSON.parse(log.details);
+          if (log.action === 'MANUAL_CORRECTION_STATUS') {
+            detailStr = `Override Status ke ${data.status || 'ALPA'} pada tgl ${data.date} (Sebelumnya: ${data.previousStatus || '-'})`;
+          } else if (log.action === 'MANUAL_CORRECTION_TIME') {
+            detailStr = `Revisi Waktu tgl ${data.date} -> IN: ${data.checkIn || '--:--'}, OUT: ${data.checkOut || '--:--'} (Sebelumnya -> IN: ${data.previousCheckIn || '--:--'}, OUT: ${data.previousCheckOut || '--:--'})`;
+          } else if (log.action === 'CORRECTION') {
+            detailStr = `Edit Pengajuan: ${data.oldStatus || '-'} -> ${data.newStatus || '-'} (${data.notes || ''})`;
+          }
+        } catch (e) {
+          detailStr = log.details;
+        }
+
+        return {
+          'No': index + 1,
+          'Waktu Tindakan': new Date(log.createdAt).toLocaleString('id-ID'),
+          'Operator': log.username || 'System',
+          'Role Operator': log.role || 'HRD',
+          'NIK Karyawan': empDetails.code,
+          'Nama Karyawan': empDetails.name,
+          'Departemen': dept,
+          'Jabatan': position,
+          'Tipe Koreksi': typeStr,
+          'Detail Perubahan': detailStr,
+          'IP Address': log.ipAddress || '-'
+        };
+      });
+
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Riwayat Koreksi');
+      
+      // Auto-fit columns
+      const maxLens = {};
+      exportData.forEach(row => {
+        Object.keys(row).forEach(key => {
+          const val = String(row[key] || '');
+          maxLens[key] = Math.max(maxLens[key] || 10, val.length);
+        });
+      });
+      ws['!cols'] = Object.keys(maxLens).map(key => ({ wch: maxLens[key] + 3 }));
+
+      XLSX.writeFile(wb, `Laporan_Koreksi_HRD_${historyMonth}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    } catch (err) {
+      console.error('Export error:', err);
+      alert('Gagal mengekspor data: ' + err.message);
+    }
+  };
+
+  const handlePrintReport = () => {
+    if (filteredHistoryLogs.length === 0) {
+      return alert('Tidak ada data riwayat untuk dicetak.');
+    }
+    window.print();
+  };
 
   const filteredEmployees = employees.filter(e => {
     if (deptFilter && e.dept !== deptFilter) return false;
@@ -44,6 +333,10 @@ const ManualCorrectionHRD = () => {
     }
     return true;
   });
+
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedEmployees = filteredEmployees.slice(startIndex, startIndex + itemsPerPage);
+  const totalPages = Math.ceil(filteredEmployees.length / itemsPerPage);
 
   // Photo compression via canvas
   const handlePhotoUpload = (empId, e) => {
@@ -149,63 +442,190 @@ const ManualCorrectionHRD = () => {
         </div>
       </div>
 
-      {/* Advanced Filter Bar */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-        <div className="flex flex-col lg:flex-row lg:items-center gap-6">
-          <div className="flex items-center gap-3 min-w-max">
-            <div className="w-8 h-8 rounded-lg bg-rose-50 border border-rose-100 flex items-center justify-center">
-              <Calendar className="w-4 h-4 text-rose-600" />
+      {/* Advanced Filter Bar (Only shown for Kehadiran / Lupa Finger override) */}
+      {activeTab !== 'RIWAYAT' && (
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-6">
+            <div className="flex items-center gap-3 min-w-max">
+              <div className="w-8 h-8 rounded-lg bg-rose-50 border border-rose-100 flex items-center justify-center">
+                <Calendar className="w-4 h-4 text-rose-600" />
+              </div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">TANGGAL KOREKSI:</label>
             </div>
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">TANGGAL KOREKSI:</label>
-          </div>
-          <div className="flex items-center bg-slate-50 p-1.5 rounded-xl border border-slate-200">
-            <input 
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="bg-transparent px-4 py-2 text-sm font-bold text-slate-700 outline-none uppercase tracking-wider"
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6 items-end bg-slate-50/50 p-5 rounded-2xl border border-slate-100">
-          <div className="space-y-2">
-            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">PERSONNEL FILTER</label>
-            <div className="relative group">
-              <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-rose-500 transition-colors" />
+            <div className="flex items-center bg-slate-50 p-1.5 rounded-xl border border-slate-200">
               <input 
-                type="text" 
-                placeholder="ID SEQUENCE / NAMA..." 
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-[10px] font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-rose-500 placeholder:text-slate-400 shadow-sm transition-all uppercase tracking-wider"
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="bg-transparent px-4 py-2 text-sm font-bold text-slate-700 outline-none uppercase tracking-wider"
               />
             </div>
           </div>
 
-          {[
-            { label: 'DEPARTMENT', val: deptFilter, setter: setDeptFilter, opts: [...new Set((employees || []).map(e => e.dept).filter(Boolean))] },
-            { label: 'SECTION', val: sectionFilter, setter: setSectionFilter, opts: [...new Set((employees || []).map(e => e.section).filter(Boolean))] },
-            { label: 'RANK', val: rankFilter, setter: setRankFilter, opts: [...new Set((employees || []).map(e => e.position).filter(Boolean))] }
-          ].map((field, idx) => (
-            <div key={idx} className="space-y-2">
-              <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">{field.label}</label>
-              <div className="relative">
-                <select 
-                  value={field.val}
-                  onChange={(e) => field.setter(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-xl pl-4 pr-10 py-3 text-[10px] font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer appearance-none uppercase tracking-wider shadow-sm truncate transition-all"
-                >
-                  <option value="">GLOBAL ARCHIVE</option>
-                  {field.opts.map((o, i) => <option key={i} value={o}>{o}</option>)}
-                </select>
-                <Filter className="w-3.5 h-3.5 text-slate-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6 items-end bg-slate-50/50 p-5 rounded-2xl border border-slate-100">
+            <div className="space-y-2">
+              <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">PENCARIAN KARYAWAN</label>
+              <div className="relative group">
+                <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-rose-500 transition-colors" />
+                <input 
+                  type="text" 
+                  placeholder="NAMA / NIK..." 
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-[10px] font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-rose-500 placeholder:text-slate-400 shadow-sm transition-all uppercase tracking-wider"
+                />
               </div>
             </div>
-          ))}
-        </div>
-      </div>
 
+            {[
+              { 
+                label: 'DEPARTEMEN', 
+                val: deptFilter, 
+                setter: (val) => { setDeptFilter(val); setSectionFilter(''); setRankFilter(''); }, 
+                opts: [...new Set((employees || []).map(e => e.dept).filter(Boolean))] 
+              },
+              { 
+                label: 'BAGIAN / SECTION', 
+                val: sectionFilter, 
+                setter: (val) => { setSectionFilter(val); setRankFilter(''); }, 
+                opts: [...new Set((employees || [])
+                  .filter(e => !deptFilter || e.dept === deptFilter)
+                  .map(e => e.section).filter(Boolean))] 
+              },
+              { 
+                label: 'JABATAN / RANK', 
+                val: rankFilter, 
+                setter: setRankFilter, 
+                opts: [...new Set((employees || [])
+                  .filter(e => !deptFilter || e.dept === deptFilter)
+                  .filter(e => !sectionFilter || e.section === sectionFilter)
+                  .map(e => e.position).filter(Boolean))] 
+              }
+            ].map((field, idx) => (
+              <div key={idx} className="space-y-2">
+                <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">{field.label}</label>
+                <div className="relative">
+                  <select 
+                    value={field.val}
+                    onChange={(e) => field.setter(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl pl-4 pr-10 py-3 text-[10px] font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer appearance-none uppercase tracking-wider shadow-sm truncate transition-all"
+                  >
+                    <option value="">SEMUA</option>
+                    {field.opts.map((o, i) => <option key={i} value={o}>{o}</option>)}
+                  </select>
+                  <Filter className="w-3.5 h-3.5 text-slate-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* History Report Header & Filters */}
+      {activeTab === 'RIWAYAT' && (
+        <div className="space-y-6">
+          {/* Summary Dashboard Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 print:hidden">
+            {[
+              { label: 'Total Koreksi', value: historyStats.total, color: 'text-slate-800 border-slate-200 bg-white' },
+              { label: 'Koreksi Kehadiran', value: historyStats.statusCorrections, color: 'text-rose-600 border-rose-100 bg-rose-50/20' },
+              { label: 'Lupa Finger', value: historyStats.timeCorrections, color: 'text-amber-600 border-amber-100 bg-amber-50/20' },
+              { label: 'Bukti Terlampir', value: historyStats.photoCount, color: 'text-blue-600 border-blue-100 bg-blue-50/20' }
+            ].map((card, idx) => (
+              <div key={idx} className={`p-5 rounded-2xl border shadow-sm ${card.color} flex flex-col justify-between h-28`}>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">{card.label}</span>
+                <span className="text-3xl font-black tracking-tight">{card.value}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Action Buttons & Advanced Filters */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4 print:hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-rose-50 border border-rose-100 flex items-center justify-center">
+                  <Calendar className="w-4 h-4 text-rose-600" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">BULAN LAPORAN:</label>
+                  <input 
+                    type="month"
+                    value={historyMonth}
+                    onChange={(e) => setHistoryMonth(e.target.value)}
+                    className="font-bold text-slate-800 outline-none text-sm uppercase tracking-wider cursor-pointer mt-0.5 bg-transparent"
+                  />
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={handleExportExcel}
+                  className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-sm active:scale-95 hover:shadow-lg hover:shadow-emerald-500/10"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>Excel Export</span>
+                </button>
+                <button
+                  onClick={handlePrintReport}
+                  className="flex items-center gap-2 bg-rose-600 hover:bg-rose-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-sm active:scale-95 hover:shadow-lg hover:shadow-rose-500/10"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Cetak Laporan</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-black text-slate-450 uppercase tracking-wider ml-1">Cari Karyawan / Operator</label>
+                <div className="relative group">
+                  <Search className="w-3.5 h-3.5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-rose-500 transition-colors" />
+                  <input 
+                    type="text" 
+                    placeholder="NIK, Nama, Operator..." 
+                    value={historySearch}
+                    onChange={(e) => setHistorySearch(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-3 py-2.5 text-[10px] font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-rose-500 placeholder:text-slate-400 shadow-sm transition-all uppercase tracking-wider"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-black text-slate-450 uppercase tracking-wider ml-1">Tipe Koreksi</label>
+                <div className="relative">
+                  <select 
+                    value={historyTypeFilter}
+                    onChange={(e) => setHistoryTypeFilter(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-10 py-2.5 text-[10px] font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer appearance-none uppercase tracking-wider shadow-sm transition-all"
+                  >
+                    <option value="">Semua Tipe</option>
+                    <option value="MANUAL_CORRECTION_STATUS">Kehadiran (Status)</option>
+                    <option value="MANUAL_CORRECTION_TIME">Lupa Finger (Jam)</option>
+                    <option value="CORRECTION">Pengajuan Karyawan</option>
+                  </select>
+                  <Filter className="w-3.5 h-3.5 text-slate-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-black text-slate-450 uppercase tracking-wider ml-1">Departemen</label>
+                <div className="relative">
+                  <select 
+                    value={historyDeptFilter}
+                    onChange={(e) => setHistoryDeptFilter(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-10 py-2.5 text-[10px] font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer appearance-none uppercase tracking-wider shadow-sm transition-all"
+                  >
+                    <option value="">Semua Departemen</option>
+                    {allDepts.map((d, i) => <option key={i} value={d}>{d}</option>)}
+                  </select>
+                  <Filter className="w-3.5 h-3.5 text-slate-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab controls */}
       <div className="flex gap-2 bg-slate-50 p-1.5 rounded-2xl w-max border border-slate-200">
         <button 
           onClick={() => setActiveTab('KEHADIRAN')}
@@ -221,158 +641,493 @@ const ManualCorrectionHRD = () => {
           <Clock className="w-4 h-4" />
           Koreksi Lupa Finger
         </button>
-      </div>
-
-      {/* Grid */}
-      <div className="bg-white border border-slate-200 shadow-sm overflow-hidden rounded-2xl relative">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-          <div className="flex items-center gap-3">
-            <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-              Spreadsheet Koreksi <span className="text-slate-300 mx-2">|</span> 
-              Menampilkan {filteredEmployees.length} Karyawan
-            </p>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto min-h-[400px]">
-           <table className="w-full text-left whitespace-nowrap">
-             <thead className="bg-slate-50 border-b border-slate-100">
-               <tr className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">
-                 <th className="px-6 py-4 w-12 text-center">No</th>
-                 <th className="px-6 py-4">Karyawan</th>
-                 <th className="px-4 py-4">Departemen</th>
-                 
-                 {activeTab === 'KEHADIRAN' ? (
-                   <th className="px-6 py-4 text-center bg-rose-50/50 text-rose-700">Override Status</th>
-                 ) : (
-                   <>
-                     <th className="px-6 py-4 text-center bg-rose-50/50 text-rose-700">Check In</th>
-                     <th className="px-6 py-4 text-center bg-rose-50/50 text-rose-700">Check Out</th>
-                     <th className="px-6 py-4 text-center bg-rose-50/50 text-rose-700">Bukti Foto Lupa Finger</th>
-                   </>
-                 )}
-               </tr>
-             </thead>
-             <tbody className="divide-y divide-slate-100">
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={6} className="text-center py-20">
-                      <Loader2 className="w-8 h-8 animate-spin text-rose-600 mx-auto mb-3" />
-                      <p className="text-xs font-bold text-slate-400">Loading Data...</p>
-                    </td>
-                  </tr>
-                ) : filteredEmployees.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="text-center py-20 text-slate-400 text-xs">
-                      Tidak ada Karyawan ditemukan
-                    </td>
-                  </tr>
-                ) : (
-                  filteredEmployees.map((emp, index) => (
-                    <tr key={emp.id} className="hover:bg-slate-50 transition-colors group">
-                      <td className="px-6 py-4 text-center text-xs text-slate-400 font-medium">{index + 1}</td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col">
-                          <span className="text-xs font-bold text-slate-800 uppercase">{emp.name}</span>
-                          <span className="text-[10px] text-slate-500">{emp.employeeCode}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-xs font-medium text-slate-600">
-                        {emp.department?.name || 'UMUM'}
-                      </td>
-
-                      {activeTab === 'KEHADIRAN' ? (
-                        <td className="px-6 py-4 text-center bg-rose-50/10 group-hover:bg-rose-50/50 transition-colors">
-                          <select
-                            value={attendanceInputs[emp.id] || ''}
-                            onChange={(e) => setAttendanceInputs(prev => ({ ...prev, [emp.id]: e.target.value }))}
-                            className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-500 uppercase cursor-pointer"
-                          >
-                            <option value="">- Tidak Dirubah -</option>
-                            <option value="PRESENT">HADIR NORMAL</option>
-                            <option value="IZIN">IZIN</option>
-                            <option value="SAKIT">SAKIT</option>
-                            <option value="CUTI">CUTI</option>
-                            <option value="HOLIDAY">LIBUR / OFF</option>
-                            <option value="ABSENT">ALPA (TIDAK HADIR)</option>
-                          </select>
-                        </td>
-                      ) : (
-                        <>
-                          <td className="px-6 py-4 text-center bg-rose-50/10 group-hover:bg-rose-50/50 transition-colors border-r border-white">
-                            <input
-                              type="time"
-                              value={fingerInputs[emp.id]?.checkIn || ''}
-                              onChange={(e) => setFingerInputs(prev => ({ ...prev, [emp.id]: { ...prev[emp.id], checkIn: e.target.value } }))}
-                              className="bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-rose-500 outline-none"
-                            />
-                          </td>
-                          <td className="px-6 py-4 text-center bg-rose-50/10 group-hover:bg-rose-50/50 transition-colors border-r border-white">
-                            <input
-                              type="time"
-                              value={fingerInputs[emp.id]?.checkOut || ''}
-                              onChange={(e) => setFingerInputs(prev => ({ ...prev, [emp.id]: { ...prev[emp.id], checkOut: e.target.value } }))}
-                              className="bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-rose-500 outline-none"
-                            />
-                          </td>
-                          <td className="px-6 py-4 text-center bg-rose-50/10 group-hover:bg-rose-50/50 transition-colors">
-                             <div className="flex items-center justify-center gap-3">
-                               {fingerInputs[emp.id]?.photo ? (
-                                 <div className="relative group/img">
-                                    <img src={fingerInputs[emp.id].photo} alt="Bukti" className="h-10 w-10 object-cover rounded-lg border-2 border-rose-200" />
-                                    <button 
-                                      onClick={() => setFingerInputs(prev => { const n = {...prev}; n[emp.id].photo = null; return n; })}
-                                      className="absolute -top-2 -right-2 bg-rose-500 text-white rounded-full p-0.5 opacity-0 group-hover/img:opacity-100 transition-opacity"
-                                    >
-                                      <X className="w-3 h-3" />
-                                    </button>
-                                 </div>
-                               ) : (
-                                 <label className="flex flex-col items-center justify-center w-10 h-10 border-2 border-dashed border-rose-300 rounded-lg cursor-pointer bg-white hover:bg-rose-50 transition-colors">
-                                   <ImageIcon className="w-4 h-4 text-rose-400" />
-                                   <input type="file" accept="image/*" className="hidden" onChange={(e) => handlePhotoUpload(emp.id, e)} />
-                                 </label>
-                               )}
-                             </div>
-                          </td>
-                        </>
-                      )}
-
-                    </tr>
-                  ))
-                )}
-             </tbody>
-           </table>
-        </div>
-      </div>
-
-      {/* Floating Save Bar */}
-      <div className="fixed bottom-0 left-0 lg:left-64 right-0 bg-white border-t border-slate-200 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] p-4 px-6 flex items-center justify-between z-40">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center">
-             <AlertCircle className="w-5 h-5 text-rose-600" />
-          </div>
-          <div>
-            <p className="text-[10px] font-bold text-slate-500 uppercase">Perubahan Disimpan</p>
-            <p className="text-sm font-bold text-slate-800">
-              {activeTab === 'KEHADIRAN' 
-                 ? Object.keys(attendanceInputs).filter(k => attendanceInputs[k]).length 
-                 : Object.keys(fingerInputs).filter(k => fingerInputs[k]?.checkIn || fingerInputs[k]?.checkOut).length
-              } Data Koreksi Siap
-            </p>
-          </div>
-        </div>
-        
-        <button
-          onClick={handleSaveAll}
-          disabled={saveMutation.isPending}
-          className="bg-rose-600 hover:bg-rose-700 text-white px-8 py-3 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-lg hover:shadow-xl hover:shadow-rose-500/20 active:scale-95 transition-all outline-none"
+        <button 
+           onClick={() => setActiveTab('RIWAYAT')}
+           className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold transition-all uppercase tracking-wider ${activeTab === 'RIWAYAT' ? 'bg-white text-rose-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800'}`}
         >
-          {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          <span>Jalankan Koreksi ({activeTab})</span>
+          <History className="w-4 h-4" />
+          Riwayat Koreksi
         </button>
       </div>
+
+      {/* Spreadsheet / Grid (For Kehadiran and Lupa Finger tab) */}
+      {activeTab !== 'RIWAYAT' && (
+        <div className="bg-white border border-slate-200 shadow-sm overflow-hidden rounded-2xl relative">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                Spreadsheet Koreksi <span className="text-slate-300 mx-2">|</span> 
+                Menampilkan {filteredEmployees.length > 0 ? `${startIndex + 1} - ${Math.min(startIndex + itemsPerPage, filteredEmployees.length)} dari ` : ''}{filteredEmployees.length} Karyawan
+              </p>
+            </div>
+            
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button 
+                  disabled={currentPage <= 1} 
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-slate-205 text-slate-400 disabled:opacity-20 hover:bg-slate-50 transition-all shadow-sm active:scale-90"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="text-[10px] font-bold text-slate-600">
+                  Halaman {currentPage} / {totalPages}
+                </span>
+                <button 
+                  disabled={currentPage >= totalPages} 
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-slate-205 text-slate-400 disabled:opacity-20 hover:bg-slate-50 transition-all shadow-sm active:scale-90"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="overflow-x-auto min-h-[400px]">
+             <table className="w-full text-left whitespace-nowrap">
+               <thead className="bg-slate-50 border-b border-slate-100">
+                 <tr className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+                   <th className="px-6 py-4 w-12 text-center">No</th>
+                   <th className="px-6 py-4">Karyawan</th>
+                   <th className="px-4 py-4">Departemen</th>
+                   
+                   {activeTab === 'KEHADIRAN' ? (
+                     <>
+                       <th className="px-4 py-4 text-center">Status Saat Ini</th>
+                       <th className="px-6 py-4 text-center bg-rose-50/50 text-rose-700">Override Status</th>
+                     </>
+                   ) : (
+                     <>
+                       <th className="px-4 py-4 text-center border-r border-slate-100">Check In Saat Ini</th>
+                       <th className="px-4 py-4 text-center border-r border-slate-100">Check Out Saat Ini</th>
+                       <th className="px-6 py-4 text-center bg-rose-50/50 text-rose-700">Check In</th>
+                       <th className="px-6 py-4 text-center bg-rose-50/50 text-rose-700">Check Out</th>
+                       <th className="px-6 py-4 text-center bg-rose-50/50 text-rose-700">Bukti Foto Lupa Finger</th>
+                     </>
+                   )}
+                 </tr>
+               </thead>
+               <tbody className="divide-y divide-slate-100">
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={activeTab === 'KEHADIRAN' ? 5 : 8} className="text-center py-20">
+                        <Loader2 className="w-8 h-8 animate-spin text-rose-600 mx-auto mb-3" />
+                        <p className="text-xs font-bold text-slate-400">Loading Data...</p>
+                      </td>
+                    </tr>
+                  ) : filteredEmployees.length === 0 ? (
+                    <tr>
+                      <td colSpan={activeTab === 'KEHADIRAN' ? 5 : 8} className="text-center py-20 text-slate-400 text-xs">
+                        Tidak ada Karyawan ditemukan
+                      </td>
+                    </tr>
+                  ) : (
+                    (() => {
+                      const attendanceList = attendanceData?.data || [];
+                      const attendanceMap = attendanceList.reduce((acc, curr) => {
+                        acc[curr.employeeId] = curr;
+                        return acc;
+                      }, {});
+
+                      return paginatedEmployees.map((emp, index) => {
+                        const currentAtt = attendanceMap[emp.dbId];
+                        return (
+                          <tr key={emp.dbId} className="hover:bg-slate-50 transition-colors group">
+                            <td className="px-6 py-4 text-center text-xs text-slate-400 font-medium">{startIndex + index + 1}</td>
+                            <td className="px-6 py-4">
+                              <div className="flex flex-col">
+                                <span className="text-xs font-bold text-slate-800 uppercase">{emp.name}</span>
+                                <span className="text-[10px] text-slate-500">{emp.employeeCode}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-4 text-xs font-medium text-slate-600">
+                              {emp.department?.name || 'UMUM'}
+                            </td>
+
+                            {activeTab === 'KEHADIRAN' ? (
+                              <>
+                                <td className="px-4 py-4 text-center">
+                                  {renderStatusBadge(currentAtt?.status)}
+                                </td>
+                                <td className="px-6 py-4 text-center bg-rose-50/10 group-hover:bg-rose-50/50 transition-colors">
+                                  <select
+                                    value={attendanceInputs[emp.dbId] || ''}
+                                    onChange={(e) => setAttendanceInputs(prev => ({ ...prev, [emp.dbId]: e.target.value }))}
+                                    disabled={currentAtt?.status === 'PRESENT'}
+                                    className={`border rounded-lg px-3 py-1.5 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-rose-500 uppercase transition-all ${
+                                      currentAtt?.status === 'PRESENT'
+                                        ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                                        : 'bg-white border-slate-300 text-slate-700 cursor-pointer'
+                                    }`}
+                                  >
+                                    <option value="">- Tidak Dirubah -</option>
+                                    <option value="PRESENT">HADIR NORMAL</option>
+                                    <option value="IZIN">IZIN</option>
+                                    <option value="SAKIT">SAKIT</option>
+                                    <option value="CUTI">CUTI</option>
+                                    <option value="HOLIDAY">LIBUR / OFF</option>
+                                    <option value="ABSENT">ALPA (TIDAK HADIR)</option>
+                                  </select>
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="px-4 py-4 text-center text-xs font-bold text-slate-700 bg-slate-50/30 border-r border-slate-100">
+                                  {currentAtt?.checkIn ? formatTime(currentAtt.checkIn) : '--:--'}
+                                </td>
+                                <td className="px-4 py-4 text-center text-xs font-bold text-slate-700 bg-slate-50/30 border-r border-slate-100">
+                                  {currentAtt?.checkOut ? formatTime(currentAtt.checkOut) : '--:--'}
+                                </td>
+                                <td className="px-6 py-4 text-center bg-rose-50/10 group-hover:bg-rose-50/50 transition-colors border-r border-white">
+                                  <input
+                                    type="time"
+                                    value={fingerInputs[emp.dbId]?.checkIn || ''}
+                                    onChange={(e) => setFingerInputs(prev => ({ ...prev, [emp.dbId]: { ...prev[emp.dbId], checkIn: e.target.value } }))}
+                                    disabled={currentAtt?.status === 'PRESENT'}
+                                    className={`border rounded-lg px-2 py-1 text-xs font-bold focus:ring-2 focus:ring-rose-500 outline-none transition-all ${
+                                      currentAtt?.status === 'PRESENT'
+                                        ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                                        : 'bg-white border-slate-300 text-slate-800'
+                                    }`}
+                                  />
+                                </td>
+                                <td className="px-6 py-4 text-center bg-rose-50/10 group-hover:bg-rose-50/50 transition-colors border-r border-white">
+                                  <input
+                                    type="time"
+                                    value={fingerInputs[emp.dbId]?.checkOut || ''}
+                                    onChange={(e) => setFingerInputs(prev => ({ ...prev, [emp.dbId]: { ...prev[emp.dbId], checkOut: e.target.value } }))}
+                                    disabled={currentAtt?.status === 'PRESENT'}
+                                    className={`border rounded-lg px-2 py-1 text-xs font-bold focus:ring-2 focus:ring-rose-500 outline-none transition-all ${
+                                      currentAtt?.status === 'PRESENT'
+                                        ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                                        : 'bg-white border-slate-300 text-slate-800'
+                                    }`}
+                                  />
+                                </td>
+                                <td className="px-6 py-4 text-center bg-rose-50/10 group-hover:bg-rose-50/50 transition-colors">
+                                   <div className="flex items-center justify-center gap-3">
+                                     {fingerInputs[emp.dbId]?.photo ? (
+                                       <div className="relative group/img">
+                                          <img src={fingerInputs[emp.dbId].photo} alt="Bukti" className="h-10 w-10 object-cover rounded-lg border-2 border-rose-200" />
+                                          <button 
+                                            onClick={() => setFingerInputs(prev => { const n = {...prev}; n[emp.dbId].photo = null; return n; })}
+                                            className="absolute -top-2 -right-2 bg-rose-500 text-white rounded-full p-0.5 opacity-0 group-hover/img:opacity-100 transition-opacity"
+                                            disabled={currentAtt?.status === 'PRESENT'}
+                                          >
+                                            <X className="w-3 h-3" />
+                                          </button>
+                                       </div>
+                                     ) : (
+                                       <label className={`flex flex-col items-center justify-center w-10 h-10 border-2 border-dashed rounded-lg transition-colors ${
+                                         currentAtt?.status === 'PRESENT'
+                                           ? 'bg-slate-50 border-slate-200 text-slate-300 cursor-not-allowed opacity-50'
+                                           : 'bg-white border-rose-300 text-rose-400 cursor-pointer hover:bg-rose-50'
+                                       }`}>
+                                         <ImageIcon className={`w-4 h-4 ${currentAtt?.status === 'PRESENT' ? 'text-slate-300' : 'text-rose-400'}`} />
+                                         <input 
+                                           type="file" 
+                                           accept="image/*" 
+                                           className="hidden" 
+                                           onChange={(e) => handlePhotoUpload(emp.dbId, e)}
+                                           disabled={currentAtt?.status === 'PRESENT'}
+                                         />
+                                       </label>
+                                     )}
+                                   </div>
+                                </td>
+                              </>
+                            )}
+                          </tr>
+                        );
+                      });
+                    })()
+                  )}
+               </tbody>
+             </table>
+          </div>
+        </div>
+      )}
+
+      {/* History Log View */}
+      {activeTab === 'RIWAYAT' && (
+        <div className="bg-white border border-slate-200 shadow-sm overflow-hidden rounded-2xl relative animate-in fade-in duration-500 print:hidden">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                Log Koreksi Manual & Lupa Finger <span className="text-slate-300 mx-2">|</span> 
+                Menampilkan {filteredHistoryLogs.length} Log Terkini
+              </p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto min-h-[400px]">
+             <table className="w-full text-left whitespace-nowrap">
+               <thead className="bg-slate-50 border-b border-slate-100">
+                 <tr className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+                   <th className="px-6 py-4 w-12 text-center">No</th>
+                   <th className="px-6 py-4">Waktu Tindakan</th>
+                   <th className="px-6 py-4">Operator HRD</th>
+                   <th className="px-6 py-4">Karyawan Terkait</th>
+                   <th className="px-4 py-4">Departemen</th>
+                   <th className="px-6 py-4 text-center">Tipe Koreksi</th>
+                   <th className="px-6 py-4">Detail Perubahan</th>
+                   <th className="px-6 py-4 text-center">IP Address</th>
+                 </tr>
+               </thead>
+               <tbody className="divide-y divide-slate-100">
+                  {historyLoading ? (
+                    <tr>
+                      <td colSpan={8} className="text-center py-20">
+                        <Loader2 className="w-8 h-8 animate-spin text-rose-600 mx-auto mb-3" />
+                        <p className="text-xs font-bold text-slate-400">Memuat data riwayat...</p>
+                      </td>
+                    </tr>
+                  ) : filteredHistoryLogs.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="text-center py-20 text-slate-400 text-xs font-bold">
+                        Tidak ada riwayat koreksi ditemukan untuk kriteria bulan atau pencarian ini.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredHistoryLogs.map((log, index) => {
+                      const emp = getEmployeeFromLog(log);
+                      const employeeObj = employeesMap[emp.code];
+                      const dept = employeeObj?.department?.name || employeeObj?.dept || 'UMUM';
+
+                      return (
+                        <tr key={log.id} className="hover:bg-slate-50/50 transition-colors group">
+                          <td className="px-6 py-4 text-center text-xs text-slate-400 font-medium">{index + 1}</td>
+                          <td className="px-6 py-4 text-xs font-bold text-slate-700">
+                            {new Date(log.createdAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            <span className="text-[10px] text-slate-400 font-medium ml-1.5">
+                              {new Date(log.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col">
+                              <span className="text-xs font-bold text-slate-800 uppercase">{log.username || 'System'}</span>
+                              <span className="text-[9px] text-rose-600 uppercase font-black tracking-wider">{log.role || 'HRD'}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col">
+                              <span className="text-xs font-bold text-slate-800 uppercase">{emp.name}</span>
+                              <span className="text-[10px] text-slate-500 font-semibold">{emp.code}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 text-xs font-medium text-slate-600">
+                            {dept}
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[9px] font-black tracking-wider border uppercase ${
+                              log.action === 'MANUAL_CORRECTION_STATUS' 
+                                ? 'bg-rose-50 text-rose-700 border-rose-100'
+                                : log.action === 'MANUAL_CORRECTION_TIME'
+                                ? 'bg-amber-50 text-amber-700 border-amber-100'
+                                : 'bg-slate-100 text-slate-700 border-slate-200'
+                            }`}>
+                              {log.action === 'MANUAL_CORRECTION_STATUS' ? 'KEHADIRAN' : log.action === 'MANUAL_CORRECTION_TIME' ? 'LUPA FINGER' : 'UPDATE'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            {renderCorrectionDetails(log)}
+                          </td>
+                          <td className="px-6 py-4 text-center text-xs font-mono text-slate-500">
+                            {log.ipAddress || '-'}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+               </tbody>
+             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Save Bar (Hidden for History tab) */}
+      {activeTab !== 'RIWAYAT' && (
+        <div className="fixed bottom-0 left-0 lg:left-64 right-0 bg-white border-t border-slate-200 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] p-4 px-6 flex items-center justify-between z-40 floating-save-bar animate-in slide-in-from-bottom-5 duration-300">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center">
+               <AlertCircle className="w-5 h-5 text-rose-600" />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-slate-500 uppercase">Perubahan Disimpan</p>
+              <p className="text-sm font-bold text-slate-800">
+                {activeTab === 'KEHADIRAN' 
+                   ? Object.keys(attendanceInputs).filter(k => attendanceInputs[k]).length 
+                   : Object.keys(fingerInputs).filter(k => fingerInputs[k]?.checkIn || fingerInputs[k]?.checkOut).length
+                } Data Koreksi Siap
+              </p>
+            </div>
+          </div>
+          
+          <button
+            onClick={handleSaveAll}
+            disabled={saveMutation.isPending}
+            className="bg-rose-600 hover:bg-rose-700 text-white px-8 py-3 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-lg hover:shadow-xl hover:shadow-rose-500/20 active:scale-95 transition-all outline-none"
+          >
+            {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            <span>Jalankan Koreksi ({activeTab})</span>
+          </button>
+        </div>
+      )}
+
+      {/* Hidden Print Container for Correction Log Report */}
+      {activeTab === 'RIWAYAT' && filteredHistoryLogs.length > 0 && (
+        <div className="hidden print:block fixed inset-0 bg-white z-[9999] p-8 text-black overflow-visible font-sans">
+          {/* Branded Header */}
+          <div className="flex items-center justify-between border-b-2 border-slate-900 pb-4 mb-6">
+            <div className="flex items-center gap-3">
+              {companySettings?.appLogo ? (
+                <img src={companySettings.appLogo} alt="Logo" className="w-12 h-12 object-contain" />
+              ) : (
+                <div className="w-12 h-12 bg-slate-100 border border-slate-205 rounded-lg flex items-center justify-center text-slate-400 font-bold text-[10px]">LOGO</div>
+              )}
+              <div className="text-left">
+                <h1 className="font-extrabold text-base leading-tight uppercase tracking-tight">{companySettings?.companyName || 'Nama Perusahaan'}</h1>
+                <p className="text-[10px] text-slate-500 font-semibold">{companySettings?.companyAddress || 'Alamat Perusahaan'}</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <h2 className="font-black text-lg text-slate-900 uppercase tracking-tight">LAPORAN KOREKSI & LUPA FINGER</h2>
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                Periode: {new Date(historyMonth + '-02').toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
+              </p>
+            </div>
+          </div>
+
+          {/* Report Metadata */}
+          <div className="grid grid-cols-3 gap-4 bg-slate-50 p-4 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 mb-6 uppercase tracking-wider">
+            <div>
+              <p className="text-slate-400 font-medium">Tanggal Cetak</p>
+              <p className="text-slate-800 font-bold text-xs mt-0.5">{new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+            </div>
+            <div>
+              <p className="text-slate-400 font-medium">Total Log Koreksi</p>
+              <p className="text-slate-800 font-bold text-xs mt-0.5">{historyStats.total} Records</p>
+            </div>
+            <div>
+              <p className="text-slate-400 font-medium">Klasifikasi</p>
+              <p className="text-slate-800 font-bold text-xs mt-0.5">
+                KHD: {historyStats.statusCorrections} | LF: {historyStats.timeCorrections}
+              </p>
+            </div>
+          </div>
+
+          {/* Table */}
+          <table className="w-full text-[10px] text-left border-collapse border border-slate-300">
+            <thead>
+              <tr className="bg-slate-100 border-b border-slate-300 font-black uppercase text-slate-700 tracking-wider">
+                <th className="py-2.5 px-3 border border-slate-300 w-8 text-center">No</th>
+                <th className="py-2.5 px-3 border border-slate-300 w-24">Tanggal & Waktu</th>
+                <th className="py-2.5 px-3 border border-slate-300 w-24">Operator HRD</th>
+                <th className="py-2.5 px-3 border border-slate-300 w-32">Karyawan</th>
+                <th className="py-2.5 px-3 border border-slate-300 w-24 text-center">Tipe</th>
+                <th className="py-2.5 px-3 border border-slate-300">Rincian Perubahan</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredHistoryLogs.map((log, idx) => {
+                const emp = getEmployeeFromLog(log);
+                const employeeObj = employeesMap[emp.code];
+                const dept = employeeObj?.department?.name || employeeObj?.dept || 'UMUM';
+                
+                let typeLabel = 'UPDATE';
+                if (log.action === 'MANUAL_CORRECTION_STATUS') typeLabel = 'KEHADIRAN';
+                else if (log.action === 'MANUAL_CORRECTION_TIME') typeLabel = 'LUPA FINGER';
+                else if (log.action === 'CORRECTION') typeLabel = 'PENGAJUAN';
+
+                let detailsText = '';
+                try {
+                  const data = JSON.parse(log.details);
+                  if (log.action === 'MANUAL_CORRECTION_STATUS') {
+                    detailsText = `Status: ${data.previousStatus || 'BELUM ABSEN'} -> ${data.status} (Tgl: ${data.date})`;
+                  } else if (log.action === 'MANUAL_CORRECTION_TIME') {
+                    detailsText = `Clock: [IN: ${data.previousCheckIn || '--:--'} / OUT: ${data.previousCheckOut || '--:--'}] -> [IN: ${data.checkIn || '--:--'} / OUT: ${data.checkOut || '--:--'}] (Tgl: ${data.date})`;
+                  } else if (log.action === 'CORRECTION') {
+                    detailsText = `Pengajuan: ${data.oldStatus} -> ${data.newStatus} (${data.notes || ''})`;
+                  }
+                } catch (e) {
+                  detailsText = log.details;
+                }
+
+                return (
+                  <tr key={log.id} className="border-b border-slate-300">
+                    <td className="py-2 px-3 border border-slate-300 text-center font-medium">{idx + 1}</td>
+                    <td className="py-2 px-3 border border-slate-300 font-bold">
+                      {new Date(log.createdAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      <span className="block text-[8px] text-slate-500 font-medium">
+                        {new Date(log.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </td>
+                    <td className="py-2 px-3 border border-slate-300">
+                      <span className="font-bold uppercase block">{log.username || 'System'}</span>
+                      <span className="text-[8px] font-black text-rose-600 tracking-wider block">{log.role || 'HRD'}</span>
+                    </td>
+                    <td className="py-2 px-3 border border-slate-300">
+                      <span className="font-bold uppercase block">{emp.name}</span>
+                      <span className="text-[8px] font-semibold text-slate-500 block">{emp.code} | {dept}</span>
+                    </td>
+                    <td className="py-2 px-3 border border-slate-300 text-center">
+                      <span className="font-bold text-[9px] uppercase tracking-wider block">{typeLabel}</span>
+                    </td>
+                    <td className="py-2 px-3 border border-slate-300 leading-normal text-[9px] font-medium text-slate-700">
+                      {detailsText}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          {/* Footer Signature */}
+          <div className="mt-16 grid grid-cols-2 gap-20 text-[10px] uppercase font-bold text-center">
+            <div className="space-y-16">
+              <p>Dibuat Oleh:</p>
+              <div className="border-b border-slate-900 w-48 mx-auto" />
+              <p className="text-slate-500">Staf HRD / Operator</p>
+            </div>
+            <div className="space-y-16">
+              <p>Mengetahui & Disetujui:</p>
+              <div className="border-b border-slate-900 w-48 mx-auto" />
+              <p className="text-slate-500">Manager HRD / Pimpinan</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Preview Foto Bukti Lupa Finger */}
+      {previewPhoto && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[999] flex items-center justify-center p-4 animate-in fade-in duration-200 print:hidden">
+          <div className="bg-white rounded-3xl overflow-hidden shadow-2xl border border-slate-100 max-w-lg w-full relative animate-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <span className="text-xs font-extrabold uppercase text-slate-500 tracking-wider">Foto Bukti Lupa Finger</span>
+              <button 
+                onClick={() => setPreviewPhoto(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-rose-500 hover:text-white flex items-center justify-center text-slate-500 transition-all active:scale-95"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-6 bg-slate-950 flex items-center justify-center min-h-[300px] max-h-[500px]">
+              <img src={previewPhoto} alt="Bukti" className="max-w-full max-h-[400px] object-contain rounded-lg shadow-md" />
+            </div>
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+              <button 
+                onClick={() => setPreviewPhoto(null)}
+                className="bg-slate-200 hover:bg-slate-300 text-slate-800 px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all active:scale-95"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

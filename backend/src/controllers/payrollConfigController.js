@@ -168,7 +168,11 @@ const getEmployeeSalaries = async (req, res) => {
     const { dept, type, search, page = 1, limit = 50 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    const empWhere = { status: 'ACTIVE' };
+    const empWhere = { 
+      status: 'ACTIVE',
+      employmentStatus: { notIn: ['HARIAN', 'BHL', 'Harian', 'bhl'] },
+      salaryCategory: { notIn: ['HARIAN', 'BHL', 'Harian', 'bhl'] }
+    };
     if (dept && dept !== 'All') empWhere.department = { name: dept };
     if (search) {
       empWhere.OR = [
@@ -284,7 +288,7 @@ const setEmployeeSalary = async (req, res) => {
     // Also sync the Employee model's employment status for consistency
     let mappedStatus = 'Karyawan Tetap';
     if (data.employmentType === 'KONTRAK') mappedStatus = 'Karyawan Kontrak';
-    if (data.employmentType === 'HARIAN') mappedStatus = 'Karyawan Harian Lepas';
+    if (data.employmentType === 'HARIAN') mappedStatus = 'HARIAN';
 
     await prisma.employee.update({
       where: { id: empId },

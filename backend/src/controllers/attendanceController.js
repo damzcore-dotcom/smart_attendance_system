@@ -90,7 +90,7 @@ const getAll = async (req, res) => {
       prisma.attendance.count({ where }),
       prisma.attendance.findMany({
         where,
-        include: { employee: { include: { department: true } } },
+        include: { employee: { include: { department: true, shift: true } } },
         orderBy,
         skip,
         take: limit,
@@ -213,6 +213,7 @@ const getAll = async (req, res) => {
           id: r.id,
           name: r.employee.name,
           employeeCode: r.employee.employeeCode,
+          employeeId: r.employee.id,
           dept: r.employee.department.name,
           section: r.employee.section,
           position: r.employee.position,
@@ -223,6 +224,8 @@ const getAll = async (req, res) => {
           lateMinutes: r.lateMinutes,
           overtimeHours: r.overtimeHours,
           mode: r.mode,
+          shiftName: r.employee.shift?.name || 'Default Shift',
+          shiftTime: r.employee.shift ? `${r.employee.shift.startTime} - ${r.employee.shift.endTime}` : '08:00 - 17:00',
         };
       }),
     });
@@ -1136,17 +1139,47 @@ const downloadTemplate = async (req, res) => {
 const update = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, notes, overtimeHours, checkInTime, checkOutTime, lateMinutes, attachment } = req.body;
+    const { status, notes, overtimeHours, checkInTime, checkOutTime, lateMinutes, attachment, employeeCode, date } = req.body;
     
     const validStatuses = ['PRESENT', 'LATE', 'ABSENT', 'MANGKIR', 'SAKIT', 'IZIN', 'CUTI', 'HOLIDAY'];
     if (status && !validStatuses.includes(status)) {
       return res.status(400).json({ success: false, message: 'Invalid status' });
     }
 
-    // Get the old record to retrieve the base date and for audit comparison
-    const oldRecord = await prisma.attendance.findUnique({ where: { id: parseInt(id) }, include: { employee: true } });
-    if (!oldRecord) {
-       return res.status(404).json({ success: false, message: 'Record not found' });
+    let oldRecord;
+    const isPadded = id.startsWith('pad-') || isNaN(parseInt(id));
+
+    if (isPadded) {
+      if (!employeeCode || !date) {
+        return res.status(400).json({ success: false, message: 'Employee code and date are required for padded records' });
+      }
+      const employee = await prisma.employee.findUnique({
+        where: { employeeCode },
+        include: { shift: true }
+      });
+      if (!employee) {
+        return res.status(404).json({ success: false, message: 'Employee not found' });
+      }
+
+      const targetDate = toUTCMidnight(new Date(date));
+      oldRecord = {
+        id: null,
+        date: targetDate,
+        status: 'ABSENT',
+        checkIn: null,
+        checkOut: null,
+        lateMinutes: 0,
+        overtimeHours: 0,
+        employee
+      };
+    } else {
+      oldRecord = await prisma.attendance.findUnique({
+        where: { id: parseInt(id) },
+        include: { employee: { include: { shift: true } } }
+      });
+      if (!oldRecord) {
+         return res.status(404).json({ success: false, message: 'Record not found' });
+      }
     }
     
     const updateData = {};
@@ -1164,33 +1197,70 @@ const update = async (req, res) => {
       updateData.photoUrl = attachment || null;
     }
 
-    // Manual Time Update Parsing
-    if (checkInTime || checkOutTime) {
-      const baseDate = new Date(oldRecord.date);
-      
-      if (checkInTime) {
+    const baseDate = new Date(oldRecord.date);
+
+    // Manual Time Update Parsing (Timezone-agnostic conversion from WIB to UTC)
+    if (checkInTime !== undefined) {
+      if (!checkInTime) {
+        updateData.checkIn = null;
+      } else {
         const [h, m] = checkInTime.split(':').map(Number);
-        const newCheckIn = new Date(baseDate);
-        newCheckIn.setUTCHours(h - 7, m, 0, 0); // Assuming frontend sends local time (UTC+7 usually, wait! Simple manual adjust using UTC setHours) 
-        // Actually, it's safer to just parse it as local time of the server or timezone.
-        // Let's use simple local setHours because node runs on local time
-        const safeCI = new Date(baseDate);
-        safeCI.setHours(h, m, 0, 0);
-        updateData.checkIn = safeCI;
+        updateData.checkIn = new Date(baseDate.getTime() + (h * 60 + m - 420) * 60000);
       }
-      
-      if (checkOutTime) {
+    }
+    
+    if (checkOutTime !== undefined) {
+      if (!checkOutTime) {
+        updateData.checkOut = null;
+      } else {
         const [h, m] = checkOutTime.split(':').map(Number);
-        const safeCO = new Date(baseDate);
-        safeCO.setHours(h, m, 0, 0);
-        updateData.checkOut = safeCO;
+        updateData.checkOut = new Date(baseDate.getTime() + (h * 60 + m - 420) * 60000);
       }
     }
 
-    const record = await prisma.attendance.update({
-      where: { id: parseInt(id) },
-      data: updateData
-    });
+    // Automatically recalculate status and lateness if times are changed and status is not explicitly set to SAKIT/IZIN/etc.
+    const finalStatusType = status || oldRecord.status;
+    if (!['SAKIT', 'IZIN', 'CUTI', 'HOLIDAY'].includes(finalStatusType)) {
+      const shiftStart = oldRecord.employee.shift?.startTime || '08:00';
+      const gracePeriod = oldRecord.employee.shift?.gracePeriod || 15;
+      
+      const finalIn = 'checkIn' in updateData ? updateData.checkIn : oldRecord.checkIn;
+      const finalOut = 'checkOut' in updateData ? updateData.checkOut : oldRecord.checkOut;
+      
+      let lateStatus = 'PRESENT';
+      let lateMins = 0;
+      if (finalIn) {
+        const calc = calculateLateness(finalIn, shiftStart, gracePeriod);
+        lateStatus = calc.status;
+        lateMins = calc.lateMinutes;
+      }
+      
+      updateData.lateMinutes = lateMins;
+      updateData.status = resolveStatus(finalIn, finalOut, lateStatus);
+    }
+
+    let record;
+    if (isPadded) {
+      record = await prisma.attendance.create({
+        data: {
+          employeeId: oldRecord.employee.id,
+          date: oldRecord.date,
+          status: updateData.status || 'ABSENT',
+          notes: updateData.notes || null,
+          overtimeHours: updateData.overtimeHours || 0,
+          lateMinutes: updateData.lateMinutes || 0,
+          checkIn: updateData.checkIn || null,
+          checkOut: updateData.checkOut || null,
+          photoUrl: updateData.photoUrl || null,
+          mode: 'Manual'
+        }
+      });
+    } else {
+      record = await prisma.attendance.update({
+        where: { id: oldRecord.id },
+        data: updateData
+      });
+    }
 
     // Record detailed audit
     if (req.user) {
@@ -1202,11 +1272,12 @@ const update = async (req, res) => {
            role: req.user.role,
            action: 'CORRECTION',
            entity: 'Attendance',
-           entityId: parseInt(id),
+           entityId: record.id,
            details: JSON.stringify({ 
              employee: oldRecord?.employee?.name, 
-             oldStatus: oldRecord?.status, newStatus: status, 
-             lateFixed: lateMinutes !== undefined ? lateMinutes : oldRecord?.lateMinutes,
+             oldStatus: oldRecord?.status, 
+             newStatus: record.status, 
+             lateFixed: record.lateMinutes,
              timesFixed: !!(checkInTime || checkOutTime),
              hasAttachment: !!attachment,
              notes 
@@ -1239,17 +1310,22 @@ const bulkUpdateOvertime = async (req, res) => {
     
     // Process sequentially to record distinct audit logs and upsert attendance limits
     for (const rec of records) {
+      if (!rec.employeeId || isNaN(rec.employeeId)) continue;
       if (rec.overtimeHours === undefined || rec.overtimeHours === null || rec.overtimeHours === '') continue;
       
       const attendance = await prisma.attendance.upsert({
-        where: { employeeId_date: { employeeId: rec.employeeId, date: dateObj } },
-        update: { overtimeHours: parseFloat(rec.overtimeHours) },
+        where: { employeeId_date: { employeeId: parseInt(rec.employeeId), date: dateObj } },
+        update: { 
+          overtimeHours: parseFloat(rec.overtimeHours),
+          ...(rec.reason ? { notes: rec.reason } : {})
+        },
         create: {
-          employeeId: rec.employeeId,
+          employeeId: parseInt(rec.employeeId),
           date: dateObj,
           status: 'ABSENT', // they might not have clocked in, but admin gave them overtime?
           overtimeHours: parseFloat(rec.overtimeHours),
-          mode: 'Manual (SPL)'
+          mode: 'Manual (SPL)',
+          notes: rec.reason || null
         },
         include: { employee: true }
       });
@@ -1297,6 +1373,32 @@ const bulkUpdateDailyWorkers = async (req, res) => {
     let updatedCount = 0;
     
     for (const rec of records) {
+      if (rec.status === 'DELETE') {
+        await prisma.attendance.deleteMany({
+          where: { employeeId: rec.employeeId, date: dateObj }
+        });
+        updatedCount++;
+        
+        // Record detailed audit
+        if (req.user) {
+          const { recordAuditLog } = require('./auditLogController');
+          try {
+             await recordAuditLog({
+               userId: req.user.id,
+               username: req.user.username,
+               role: req.user.role,
+               action: 'DELETE_BHL',
+               entity: 'Attendance',
+               details: JSON.stringify({ 
+                 logMsg: `Absen Harian (BHL) dihapus untuk Employee ID: ${rec.employeeId} (Tgl: ${date})`
+               }),
+               ipAddress: req.ip,
+             });
+          } catch(e) { }
+        }
+        continue;
+      }
+
       if (!rec.status || !VALID_STATUSES.includes(rec.status)) continue;
       
       const attendance = await prisma.attendance.upsert({
@@ -1358,7 +1460,10 @@ const manualCorrectionHRD = async (req, res) => {
     for (const record of records) {
       const { employeeId, status, checkIn, checkOut, photo } = record;
       
-      const emp = await prisma.employee.findUnique({ where: { id: employeeId }});
+      const emp = await prisma.employee.findUnique({ 
+        where: { id: employeeId },
+        include: { shift: true }
+      });
       if (!emp) continue;
 
       let photoUrl = undefined;
@@ -1399,10 +1504,20 @@ const manualCorrectionHRD = async (req, res) => {
         try {
            const { recordAuditLog } = require('./auditLogController');
            await recordAuditLog({
-             action: 'MANUAL_CORRECTION_STATUS',
-             module: 'Kehadiran (HRD)',
              userId: req.user.id,
-             details: JSON.stringify({ emp: emp.name, date, status })
+             username: req.user.username,
+             role: req.user.role,
+             action: 'MANUAL_CORRECTION_STATUS',
+             entity: 'Attendance',
+             entityId: existing?.id || null,
+             details: JSON.stringify({ 
+               emp: emp.name, 
+               employeeCode: emp.employeeCode, 
+               date, 
+               status, 
+               previousStatus: existing?.status || 'BELUM ABSEN' 
+             }),
+             ipAddress: req.ip
            });
         } catch(e) {}
       } else if (type === 'LUPA_FINGER') {
@@ -1410,25 +1525,23 @@ const manualCorrectionHRD = async (req, res) => {
         let finalOut = existing?.checkOut;
         
         if (checkIn) {
-          const [h, m] = checkIn.split(':');
-          finalIn = new Date(targetDate);
-          finalIn.setHours(parseInt(h, 10), parseInt(m, 10), 0);
+          const [h, m] = checkIn.split(':').map(Number);
+          finalIn = new Date(targetDate.getTime() + (h * 60 + m - 420) * 60000);
         }
         if (checkOut) {
-          const [h, m] = checkOut.split(':');
-          finalOut = new Date(targetDate);
-          finalOut.setHours(parseInt(h, 10), parseInt(m, 10), 0);
+          const [h, m] = checkOut.split(':').map(Number);
+          finalOut = new Date(targetDate.getTime() + (h * 60 + m - 420) * 60000);
         }
 
-        const shift = await prisma.employeeShiftOverride.findFirst({
+        const shiftOverride = await prisma.employeeShiftOverride.findFirst({
           where: { employeeId, date: targetDate }
         });
 
-        const cInStr = shift?.startTime || "08:00"; 
+        const cInStr = shiftOverride?.startTime || emp.shift?.startTime || "08:00"; 
+        const gracePeriod = shiftOverride?.gracePeriod || emp.shift?.gracePeriod || 15;
         
-        const [sh, sm] = cInStr.split(':');
-        const expectedIn = new Date(targetDate);
-        expectedIn.setHours(parseInt(sh, 10), parseInt(sm, 10), 0);
+        const [sh, sm] = cInStr.split(':').map(Number);
+        const expectedIn = new Date(targetDate.getTime() + (sh * 60 + sm - 420) * 60000);
 
         let lateMins = 0;
         let pStatus = 'ABSENT';
@@ -1438,10 +1551,12 @@ const manualCorrectionHRD = async (req, res) => {
            pStatus = lateMins > 0 ? 'LATE' : 'PRESENT';
         }
 
+        const finalStatus = resolveStatus(finalIn, finalOut, pStatus);
+
         const payload = {
           checkIn: finalIn,
           checkOut: finalOut,
-          status: pStatus,
+          status: finalStatus,
           lateMinutes: lateMins,
           notes: 'Lupa Finger dikoreksi HRD',
         };
@@ -1458,18 +1573,217 @@ const manualCorrectionHRD = async (req, res) => {
         updatedCount++;
 
         try {
+           const formatTime24 = (dateObj) => {
+             if (!dateObj) return '--:--';
+             const d = new Date(dateObj);
+             return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Jakarta' });
+           };
            const { recordAuditLog } = require('./auditLogController');
            await recordAuditLog({
-             action: 'MANUAL_CORRECTION_TIME',
-             module: 'Kehadiran (HRD)',
              userId: req.user.id,
-             details: JSON.stringify({ emp: emp.name, date, checkIn, checkOut })
+             username: req.user.username,
+             role: req.user.role,
+             action: 'MANUAL_CORRECTION_TIME',
+             entity: 'Attendance',
+             entityId: existing?.id || null,
+             details: JSON.stringify({ 
+               emp: emp.name, 
+               employeeCode: emp.employeeCode, 
+               date, 
+               checkIn, 
+               checkOut,
+               previousCheckIn: existing?.checkIn ? formatTime24(existing.checkIn) : '--:--',
+               previousCheckOut: existing?.checkOut ? formatTime24(existing.checkOut) : '--:--',
+               photoUrl: photoUrl || existing?.photoUrl || null
+             }),
+             ipAddress: req.ip
            });
         } catch(e) {}
       }
     }
 
     res.json({ success: true, message: `Berhasil memproses koreksi untuk ${updatedCount} karyawan.`, updatedCount });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// GET /api/attendance/overtime-summary?month=2026-05
+const getOvertimeSummary = async (req, res) => {
+  try {
+    const { month } = req.query; // format: YYYY-MM
+    if (!month) return res.status(400).json({ success: false, message: 'Month parameter required (YYYY-MM)' });
+    
+    const [year, m] = month.split('-').map(Number);
+    const startDate = new Date(Date.UTC(year, m - 1, 1));
+    const endDate = new Date(Date.UTC(year, m, 0, 23, 59, 59));
+    
+    const attendanceRecords = await prisma.attendance.findMany({
+      where: {
+        date: { gte: startDate, lte: endDate },
+        overtimeHours: { gt: 0 }
+      },
+      include: {
+        employee: {
+          include: { department: true, salary: true }
+        }
+      }
+    });
+
+    const summaryMap = new Map();
+    let totalEmployees = 0;
+    let totalHours = 0;
+    let estimatedCost = 0;
+
+    // We can assume a basic rate or get it from config if needed. For now, we just sum hours
+    // and provide a dummy estimated cost if baseSalary is not reliable, or use a basic formula:
+    // Rate = baseSalary / 173
+    for (const record of attendanceRecords) {
+      const emp = record.employee;
+      if (!emp) continue;
+
+      if (!summaryMap.has(emp.id)) {
+        summaryMap.set(emp.id, {
+          employeeId: emp.id,
+          employeeCode: emp.employeeCode,
+          name: emp.name,
+          department: emp.department?.name || '-',
+          section: emp.section || '-',
+          position: emp.position || '-',
+          totalOvertimeHours: 0,
+          totalCost: 0,
+          records: []
+        });
+        totalEmployees++;
+      }
+
+      const empSummary = summaryMap.get(emp.id);
+      empSummary.totalOvertimeHours += record.overtimeHours;
+      empSummary.records.push({
+        date: record.date.toISOString().split('T')[0],
+        hours: record.overtimeHours,
+        notes: record.notes || ''
+      });
+
+      // Simple estimation: baseSalary / 173 * hours
+      const baseSalary = emp.salary?.baseSalary || 0;
+      const hourlyRate = baseSalary > 0 ? baseSalary / 173 : 0;
+      const cost = record.overtimeHours * hourlyRate * 1.5; // assume 1.5x on average for estimation
+      
+      empSummary.totalCost += cost;
+      
+      totalHours += record.overtimeHours;
+      estimatedCost += cost;
+    }
+
+    res.json({
+      success: true,
+      data: Array.from(summaryMap.values()),
+      totals: {
+        totalEmployees,
+        totalHours,
+        estimatedCost
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// GET /api/attendance/bhl-summary?month=2026-05
+const getBhlSummary = async (req, res) => {
+  try {
+    const { month } = req.query; // format: YYYY-MM
+    if (!month) return res.status(400).json({ success: false, message: 'Month parameter required (YYYY-MM)' });
+    
+    const [year, m] = month.split('-').map(Number);
+    const startDate = new Date(Date.UTC(year, m - 1, 1));
+    const endDate = new Date(Date.UTC(year, m, 0, 23, 59, 59));
+    
+    // Get all BHL employees
+    const bhlEmployees = await prisma.employee.findMany({
+      where: {
+        status: 'ACTIVE',
+        OR: [
+          { employmentStatus: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } },
+          { salary: { employmentType: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } } }
+        ]
+      },
+      include: {
+        salary: true,
+        department: true,
+        attendance: {
+          where: { date: { gte: startDate, lte: endDate } }
+        }
+      }
+    });
+    
+    const summary = bhlEmployees.map(emp => {
+      const dailyRate = emp.salary?.dailyRate || 0;
+      const workingDays = emp.attendance.filter(a => ['PRESENT', 'LATE'].includes(a.status)).length;
+      const halfDays = emp.attendance.filter(a => a.status === 'HALF_DAY').length;
+      const sickDays = emp.attendance.filter(a => a.status === 'SAKIT').length;
+      const leaveDays = emp.attendance.filter(a => a.status === 'IZIN').length;
+      const absentDays = emp.attendance.filter(a => ['ABSENT', 'MANGKIR'].includes(a.status)).length;
+      const effectiveDays = workingDays + (halfDays * 0.5);
+      const totalWage = effectiveDays * dailyRate;
+      
+      return {
+        employeeId: emp.id,
+        employeeCode: emp.employeeCode,
+        name: emp.name,
+        department: emp.department?.name || '-',
+        section: emp.section || '-',
+        dailyRate,
+        workingDays,
+        halfDays,
+        sickDays,
+        leaveDays,
+        absentDays,
+        effectiveDays,
+        totalWage,
+        attendanceDetails: emp.attendance.map(a => {
+          const dStr = a.date.toISOString().split('T')[0];
+          return {
+            date: dStr,
+            status: a.status
+          };
+        })
+      };
+    });
+    
+    res.json({
+      success: true,
+      data: summary,
+      totals: {
+        totalEmployees: summary.length,
+        totalWorkingDays: summary.reduce((s, e) => s + e.workingDays, 0),
+        totalWage: summary.reduce((s, e) => s + e.totalWage, 0)
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const getCorrectionHistory = async (req, res) => {
+  try {
+    const { month } = req.query;
+    if (!month) return res.status(400).json({ success: false, message: 'Month parameter required (YYYY-MM)' });
+    
+    const [year, m] = month.split('-').map(Number);
+    const startDate = new Date(year, m - 1, 1, 0, 0, 0);
+    const endDate = new Date(year, m, 0, 23, 59, 59, 999);
+
+    const logs = await prisma.auditLog.findMany({
+      where: {
+        action: { in: ['MANUAL_CORRECTION_STATUS', 'MANUAL_CORRECTION_TIME', 'CORRECTION'] },
+        createdAt: { gte: startDate, lte: endDate }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json({ success: true, data: logs });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -1491,5 +1805,8 @@ module.exports = {
   update,
   bulkUpdateOvertime,
   bulkUpdateDailyWorkers,
-  manualCorrectionHRD
+  manualCorrectionHRD,
+  getOvertimeSummary,
+  getBhlSummary,
+  getCorrectionHistory
 };

@@ -143,9 +143,19 @@ const generate = async (req, res) => {
     // Get employees: ACTIVE + TERMINATED (who have attendance in this period for pending salary)
     const employees = await prisma.employee.findMany({
       where: {
-        OR: [
-          { status: 'ACTIVE' },
-          { attendance: { some: { date: { gte: startDate, lte: endDate } } } }
+        AND: [
+          {
+            OR: [
+              { status: 'ACTIVE' },
+              { attendance: { some: { date: { gte: startDate, lte: endDate } } } }
+            ]
+          },
+          {
+            employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] }
+          },
+          {
+            salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] }
+          }
         ]
       },
       include: {

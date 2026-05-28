@@ -104,7 +104,7 @@ const Employees = () => {
 
   const { data, isLoading } = useQuery({
     queryKey: ['employees', { search: searchTerm, dept: deptFilter, section: sectionFilter, position: positionFilter, empStatus: empStatusFilter, page, sortBy: sortConfig.key, order: sortConfig.direction }],
-    queryFn: () => employeeAPI.getAll({ search: searchTerm, dept: deptFilter, section: sectionFilter, position: positionFilter, empStatus: empStatusFilter, page, limit: PAGE_SIZE, sortBy: sortConfig.key, order: sortConfig.direction }),
+    queryFn: () => employeeAPI.getAll({ search: searchTerm, dept: deptFilter, section: sectionFilter, position: positionFilter, empStatus: empStatusFilter, page, limit: PAGE_SIZE, sortBy: sortConfig.key, order: sortConfig.direction, excludeBhl: true }),
     keepPreviousData: true,
   });
 
@@ -1004,39 +1004,42 @@ const Employees = () => {
                     </div>
                     <div>
                       <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">Department</label>
-                      <CreatableSelect 
-                        menuPortalTarget={document.body}
-                        styles={customSelectStyles} 
-                        isClearable 
-                        placeholder="Select..."
-                        options={toSelectOptions(masterOptions.departments)} 
-                        value={newEmployee.dept ? {label: newEmployee.dept, value: newEmployee.dept} : null} 
-                        onChange={(val) => setNewEmployee({...newEmployee, dept: val ? val.value : ''})} 
+                      <input 
+                        list="dept-options"
+                        value={newEmployee.dept || ''} 
+                        onChange={(e) => setNewEmployee({...newEmployee, dept: e.target.value})}
+                        placeholder="Select or type..."
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
                       />
+                      <datalist id="dept-options">
+                        {(masterOptions.departments || []).map(opt => <option key={opt} value={opt} />)}
+                      </datalist>
                     </div>
                     <div>
                       <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">Position</label>
-                      <CreatableSelect 
-                        menuPortalTarget={document.body}
-                        styles={customSelectStyles} 
-                        isClearable 
-                        placeholder="Select..."
-                        options={toSelectOptions(masterOptions.positions)} 
-                        value={newEmployee.position ? {label: newEmployee.position, value: newEmployee.position} : null} 
-                        onChange={(val) => setNewEmployee({...newEmployee, position: val ? val.value : ''})} 
+                      <input 
+                        list="position-options"
+                        value={newEmployee.position || ''} 
+                        onChange={(e) => setNewEmployee({...newEmployee, position: e.target.value})}
+                        placeholder="Select or type..."
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
                       />
+                      <datalist id="position-options">
+                        {(masterOptions.positions || []).map(opt => <option key={opt} value={opt} />)}
+                      </datalist>
                     </div>
                     <div>
                       <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">Section</label>
-                      <CreatableSelect 
-                        menuPortalTarget={document.body}
-                        styles={customSelectStyles} 
-                        isClearable 
-                        placeholder="Select..."
-                        options={toSelectOptions(masterOptions.sections)} 
-                        value={newEmployee.section ? {label: newEmployee.section, value: newEmployee.section} : null} 
-                        onChange={(val) => setNewEmployee({...newEmployee, section: val ? val.value : ''})} 
+                      <input 
+                        list="section-options"
+                        value={newEmployee.section || ''} 
+                        onChange={(e) => setNewEmployee({...newEmployee, section: e.target.value})}
+                        placeholder="Select or type..."
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
                       />
+                      <datalist id="section-options">
+                        {(masterOptions.sections || []).map(opt => <option key={opt} value={opt} />)}
+                      </datalist>
                     </div>
                     <div>
                       <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">ID Card Photo (Pas Foto)</label>
@@ -1308,11 +1311,29 @@ const Employees = () => {
                     </div>
                     <div>
                       <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Grade</label>
-                      <CreatableSelect menuPortalTarget={document.body} styles={customSelectStyles} isClearable options={toSelectOptions(masterOptions.grades)} value={newEmployee.grade ? {label: newEmployee.grade, value: newEmployee.grade} : null} onChange={(val) => setNewEmployee({...newEmployee, grade: val ? val.value : ''})} />
+                      <input 
+                        list="grade-options"
+                        value={newEmployee.grade || ''} 
+                        onChange={(e) => setNewEmployee({...newEmployee, grade: e.target.value})}
+                        placeholder="Select or type..."
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
+                      />
+                      <datalist id="grade-options">
+                        {(masterOptions.grades || []).map(opt => <option key={opt} value={opt} />)}
+                      </datalist>
                     </div>
                     <div>
                       <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Employment Status</label>
-                      <CreatableSelect menuPortalTarget={document.body} styles={customSelectStyles} isClearable options={toSelectOptions(masterOptions.employmentStatuses)} value={newEmployee.employmentStatus ? {label: newEmployee.employmentStatus, value: newEmployee.employmentStatus} : null} onChange={(val) => setNewEmployee({...newEmployee, employmentStatus: val ? val.value : ''})} />
+                      <input 
+                        list="empstatus-options"
+                        value={newEmployee.employmentStatus || ''} 
+                        onChange={(e) => setNewEmployee({...newEmployee, employmentStatus: e.target.value})}
+                        placeholder="Select or type..."
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
+                      />
+                      <datalist id="empstatus-options">
+                        {(masterOptions.employmentStatuses || []).map(opt => <option key={opt} value={opt} />)}
+                      </datalist>
                     </div>
                     <div>
                       <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Type Gaji</label>

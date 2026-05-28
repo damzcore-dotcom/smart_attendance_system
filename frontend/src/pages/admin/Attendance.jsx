@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { attendanceAPI, employeeAPI, payrollAPI, settingsAPI } from '../../services/api';
 import PrintableAttendanceReport from '../../components/payroll/PrintableAttendanceReport';
-import { Edit2, LayoutDashboard, Calendar, Clock, RefreshCw, Upload, AlertCircle, CheckCircle2, XCircle, Search, Filter, Scan, X, FileSpreadsheet, Printer, FileText, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, ArrowRight, Loader2 } from 'lucide-react';
+import { Edit2, LayoutDashboard, Calendar, Clock, RefreshCw, Upload, AlertCircle, CheckCircle2, XCircle, Search, Filter, Scan, X, FileSpreadsheet, Printer, FileText, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, ArrowRight, Loader2, AlertTriangle, ShieldCheck, ShieldAlert, TrendingUp } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -51,6 +51,7 @@ const Attendance = () => {
     return `${hours.padStart(2, '0')}:${minutes}`;
   };
   const [isCorrecting, setIsCorrecting] = useState(false);
+  const [anomalyFilter, setAnomalyFilter] = useState('ALL'); // 'ALL' | 'ANOMALY'
   const [importProgress, setImportProgress] = useState({ percent: 0, phase: '', detail: '' });
   const [appliedFilters, setAppliedFilters] = useState({
     page: 1,
@@ -239,8 +240,96 @@ const Attendance = () => {
     queryFn: () => attendanceAPI.getAll(appliedFilters),
   });
 
+  const [activeViewTab, setActiveViewTab] = useState('DETAIL'); // 'DETAIL' | 'REKAPITULASI'
+
+  const { data: fullDataForRekap, isLoading: isRekapLoading } = useQuery({
+    queryKey: ['attendance-full-rekap', { ...appliedFilters, limit: 99999, page: 1 }],
+    queryFn: () => attendanceAPI.getAll({ ...appliedFilters, limit: 99999, page: 1 }),
+    enabled: activeViewTab === 'REKAPITULASI'
+  });
+
+  const rekapData = useMemo(() => {
+    const rawLogs = fullDataForRekap?.data || [];
+    const groups = {};
+
+    rawLogs.forEach(row => {
+      const empCode = row.employeeCode || 'SYS_ID_ERR';
+      const name = row.name || '—';
+      const dept = row.dept || 'UMUM';
+      const sec = row.section || '—';
+      const pos = row.position || '—';
+      const key = empCode;
+
+      if (!groups[key]) {
+        groups[key] = {
+          employeeCode: empCode,
+          name,
+          dept,
+          section: sec,
+          position: pos,
+          total: 0,
+          present: 0,
+          late: 0,
+          mangkir: 0,
+          absent: 0,
+          other: 0,
+          totalLateMinutes: 0,
+          mangkirDetails: [],
+          absentDetails: [],
+          otherDetails: [],
+          lateDetails: []
+        };
+      }
+
+      const g = groups[key];
+      g.total++;
+      
+      const status = row.status;
+      if (status === 'PRESENT' || status === 'Hadir') {
+        g.present++;
+      } else if (status === 'LATE' || status === 'Terlambat') {
+        g.present++;
+        g.late++;
+        g.totalLateMinutes += (row.lateMinutes || 0);
+        g.lateDetails.push({ date: row.date, checkIn: row.checkIn, lateMinutes: row.lateMinutes || 0 });
+      } else if (status === 'MANGKIR' || status === 'Mangkir') {
+        g.mangkir++;
+        g.totalLateMinutes += (fullDataForRekap?.summary?.mangkirPenalty || 30);
+        g.mangkirDetails.push({ date: row.date, checkIn: row.checkIn, checkOut: row.checkOut });
+      } else if (status === 'ABSENT' || status === 'Alpa' || status === 'MISSING') {
+        g.absent++;
+        g.absentDetails.push({ date: row.date, checkIn: row.checkIn, checkOut: row.checkOut });
+      } else {
+        g.other++;
+        g.otherDetails.push({ date: row.date, status: row.status });
+      }
+    });
+
+    return Object.values(groups).sort((a, b) => a.dept.localeCompare(b.dept) || a.name.localeCompare(b.name));
+  }, [fullDataForRekap]);
+
+  const isAnomaly = (row) => {
+    const hasIn = row.checkIn && row.checkIn !== '-- : --' && row.checkIn !== '--:--' && row.checkIn !== '-';
+    const hasOut = row.checkOut && row.checkOut !== '-- : --' && row.checkOut !== '--:--' && row.checkOut !== '-';
+    
+    if ((row.status === 'MANGKIR' || row.status === 'ABSENT' || row.status === 'Alpa') && hasOut) {
+      return true;
+    }
+    if (hasIn && !hasOut && !['SAKIT', 'IZIN', 'CUTI', 'HOLIDAY', 'Libur', 'Holiday'].includes(row.status)) {
+      return true;
+    }
+    if (!hasIn && hasOut && !['SAKIT', 'IZIN', 'CUTI', 'HOLIDAY', 'Libur', 'Holiday'].includes(row.status)) {
+      return true;
+    }
+    return false;
+  };
+
   let filteredData = data?.data || [];
   let displaySummary = data?.summary || null;
+
+  if (anomalyFilter === 'ANOMALY') {
+    filteredData = filteredData.filter(isAnomaly);
+  }
 
   if (!isLoading && data?.summary?.uniqueEmployeeCount === 1 && appliedFilters.search && filteredData.length > 0) {
     let startDate, endDate;
@@ -277,7 +366,7 @@ const Attendance = () => {
 
       for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
         const isoKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-        const displayDate = d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
+        const displayDate = d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
         
         if (dataMap[isoKey]) {
           padData.push(dataMap[isoKey]);
@@ -349,7 +438,7 @@ const Attendance = () => {
     e.preventDefault();
     setIsCorrecting(true);
     try {
-      await attendanceAPI.update(correctionModal.recordId, { 
+      const payload = { 
         status: correctionModal.newStatus, 
         notes: correctionModal.notes, 
         overtimeHours: correctionModal.overtimeHours,
@@ -357,12 +446,59 @@ const Attendance = () => {
         checkOutTime: correctionModal.checkOutTime,
         lateMinutes: correctionModal.lateMinutes,
         attachment: correctionModal.attachment
-      });
-      setCorrectionModal({ isOpen: false, recordId: null, employeeName: '', currentStatus: '', newStatus: 'CUTI', notes: '', overtimeHours: 0, checkInTime: '', checkOutTime: '', lateMinutes: 0, attachment: '' });
+      };
+      // For padded (non-existent) rows, include employeeCode and date so the backend can create a new record
+      const isPadded = String(correctionModal.recordId).startsWith('pad-');
+      if (isPadded && correctionModal.employeeCode && correctionModal.rawDate) {
+        payload.employeeCode = correctionModal.employeeCode;
+        // rawDate is in display format ("May 29, 2026"), convert to ISO
+        const parsed = new Date(correctionModal.rawDate);
+        if (!isNaN(parsed.getTime())) {
+          payload.date = `${parsed.getFullYear()}-${String(parsed.getMonth()+1).padStart(2,'0')}-${String(parsed.getDate()).padStart(2,'0')}`;
+        }
+      }
+      await attendanceAPI.update(correctionModal.recordId, payload);
+      setCorrectionModal({ isOpen: false, recordId: null, employeeName: '', employeeCode: '', rawDate: '', currentStatus: '', newStatus: 'CUTI', notes: '', overtimeHours: 0, checkInTime: '', checkOutTime: '', lateMinutes: 0, attachment: '' });
       await queryClient.invalidateQueries({ queryKey: ['attendance'] });
       alert('Status absensi berhasil dikoreksi!');
     } catch (err) {
       alert(`Gagal koreksi data: ${err.message}`);
+    } finally {
+      setIsCorrecting(false);
+    }
+  };
+
+  const handleQuickWaiver = async (row) => {
+    if (!window.confirm(`Berikan dispensasi keterlambatan untuk ${row.name} pada tanggal ${row.date}? Status akan diset menjadi Hadir Normal dan penalti menit akan dinolkan.`)) {
+      return;
+    }
+    
+    setIsCorrecting(true);
+    try {
+      const payload = { 
+        status: 'PRESENT', 
+        notes: 'Dispensasi keterlambatan oleh HRD', 
+        overtimeHours: row.overtimeHours || 0,
+        checkInTime: parseTimeForInput(row.checkIn),
+        checkOutTime: parseTimeForInput(row.checkOut),
+        lateMinutes: 0,
+        attachment: ''
+      };
+      
+      const isPadded = String(row.id).startsWith('pad-');
+      if (isPadded) {
+        payload.employeeCode = row.employeeCode;
+        const parsed = new Date(row.date);
+        if (!isNaN(parsed.getTime())) {
+          payload.date = `${parsed.getFullYear()}-${String(parsed.getMonth()+1).padStart(2,'0')}-${String(parsed.getDate()).padStart(2,'0')}`;
+        }
+      }
+
+      await attendanceAPI.update(row.id, payload);
+      await queryClient.invalidateQueries({ queryKey: ['attendance'] });
+      alert('Dispensasi keterlambatan berhasil diberikan!');
+    } catch (err) {
+      alert(`Gagal memberikan dispensasi: ${err.message}`);
     } finally {
       setIsCorrecting(false);
     }
@@ -457,6 +593,32 @@ const Attendance = () => {
 
   const handleExportExcel = async () => {
     try {
+      if (activeViewTab === 'REKAPITULASI') {
+        const exportData = rekapData.map((g, idx) => {
+          const totalExcludeOff = g.total - g.other;
+          const rate = totalExcludeOff > 0 ? Math.round((g.present / totalExcludeOff) * 100) : 100;
+          return {
+            'No': idx + 1,
+            'Departemen': g.dept,
+            'Bagian / Seksi': g.section,
+            'Total Jadwal (Hari-Karyawan)': g.total,
+            'Kehadiran (Hadir/Telat)': g.present,
+            'Terlambat (Hari)': g.late,
+            'Mangkir (Hari)': g.mangkir,
+            'Alpa (Hari)': g.absent,
+            'Lainnya (Libur/Cuti/Sakit)': g.other,
+            'Persentase Kehadiran (%)': `${rate}%`,
+            'Akumulasi Keterlambatan': formatDuration(g.totalLateMinutes)
+          };
+        });
+
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Rekapitulasi');
+        XLSX.writeFile(wb, `Rekap_Absensi_Per_Dept_${appliedFilters.period}_${new Date().toISOString().split('T')[0]}.xlsx`);
+        return;
+      }
+
       // H6 FIX: Fetch ALL records from API, not just the current page
       const allParams = { ...appliedFilters, page: 1, limit: 99999 };
       const allDataResponse = await attendanceAPI.getAll(allParams);
@@ -469,14 +631,14 @@ const Attendance = () => {
         const isMangkir = (row.status === 'MANGKIR' || row.status === 'MISSING' || row.status === 'Mangkir');
         const penalty = isMangkir ? (allDataResponse?.summary?.mangkirPenalty || 30) : 0;
         return {
-          'Employee Name': row.name,
-          'Department': row.dept,
-          'Section': row.section,
-          'Position': row.position,
-          'Date': row.date,
-          'Check In': row.checkIn,
-          'Check Out': row.checkOut,
-          'Late Minutes': (row.lateMinutes || 0) + penalty,
+          'Nama Karyawan': row.name,
+          'Departemen': row.dept,
+          'Bagian': row.section,
+          'Jabatan': row.position,
+          'Tanggal': row.date,
+          'Jam Masuk': row.checkIn,
+          'Jam Keluar': row.checkOut,
+          'Menit Terlambat': (row.lateMinutes || 0) + penalty,
           'Status': getStatusLabel(row.status),
           'Mode': row.mode
         };
@@ -493,17 +655,60 @@ const Attendance = () => {
   };
 
   const handleExportPDF = () => {
+    if (activeViewTab === 'REKAPITULASI') {
+      const doc = new jsPDF('l', 'mm', 'a4');
+      const pageWidth = doc.internal.pageSize.getWidth();
+      
+      doc.setFontSize(20);
+      doc.setTextColor(37, 99, 235); // Blue 600 accent
+      doc.text('REKAPITULASI ABSENSI PER DEPARTEMEN & BAGIAN', 14, 20);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(`Periode Laporan: ${appliedFilters.period} (${appliedFilters.startDate || '-'} s/d ${appliedFilters.endDate || '-'})`, 14, 28);
+      doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 14, 33);
+
+      const tableData = rekapData.map(g => {
+        const totalExcludeOff = g.total - g.other;
+        const rate = totalExcludeOff > 0 ? Math.round((g.present / totalExcludeOff) * 100) : 100;
+        return [
+          g.dept,
+          g.section,
+          g.total,
+          g.present,
+          g.late,
+          g.mangkir,
+          g.absent,
+          g.other,
+          `${rate}%`,
+          formatDuration(g.totalLateMinutes)
+        ];
+      });
+
+      autoTable(doc, {
+        startY: 40,
+        head: [['Departemen', 'Bagian / Seksi', 'Total', 'Hadir', 'Terlambat', 'Mangkir', 'Alpa', 'Lainnya', 'Rasio %', 'Durasi Telat']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { fillColor: [248, 250, 252], textColor: [15, 23, 42], fontSize: 8, halign: 'center' },
+        styles: { fontSize: 8, cellPadding: 2.5, fillColor: [255, 255, 255], textColor: [51, 65, 85] }
+      });
+
+      doc.save(`Rekap_Absensi_Per_Dept_${new Date().getTime()}.pdf`);
+      return;
+    }
+
     const doc = new jsPDF('l', 'mm', 'a4');
     const pageWidth = doc.internal.pageSize.getWidth();
     
     doc.setFontSize(20);
     doc.setTextColor(37, 99, 235); // Blue 600 accent
-    doc.text('SMART ATTENDANCE PRO', 14, 20);
+    doc.text('LAPORAN ABSENSI', 14, 20);
     
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text(`Report Period: ${appliedFilters.period} (${appliedFilters.startDate || '-'} to ${appliedFilters.endDate || '-'})`, 14, 28);
-    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 33);
+    doc.text(`Periode Laporan: ${appliedFilters.period} (${appliedFilters.startDate || '-'} s/d ${appliedFilters.endDate || '-'})`, 14, 28);
+    doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 14, 33);
 
     const total = filteredData.length;
     const late = filteredData.filter(r => r.status === 'Terlambat').length;
@@ -514,10 +719,10 @@ const Attendance = () => {
     
     doc.setFontSize(8);
     doc.setTextColor(100, 116, 139); // slate-500
-    doc.text('SUMMARY STATISTICS', pageWidth - 76, 21);
+    doc.text('RINGKASAN STATISTIK', pageWidth - 76, 21);
     doc.setFontSize(11);
     doc.setTextColor(30, 41, 59); // slate-800
-    doc.text(`Total: ${total} | Late: ${late}`, pageWidth - 76, 28);
+    doc.text(`Total: ${total} | Terlambat: ${late}`, pageWidth - 76, 28);
 
     // Sort data ascending by date (oldest first)
     const sortedData = [...filteredData].sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -540,7 +745,7 @@ const Attendance = () => {
 
     autoTable(doc, {
       startY: 45,
-      head: [['Employee', 'Dept', 'Section', 'Position', 'Date', 'In', 'Out', 'Late', 'Status']],
+      head: [['Karyawan', 'Dept', 'Bagian', 'Jabatan', 'Tanggal', 'Masuk', 'Keluar', 'Telat', 'Status']],
       body: tableData,
       theme: 'grid',
       headStyles: { fillColor: [248, 250, 252], textColor: [15, 23, 42], fontSize: 8, halign: 'center' },
@@ -579,17 +784,17 @@ const Attendance = () => {
           <div className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center">
             <LayoutDashboard className="w-3 h-3 text-slate-400" />
           </div>
-          <span className="text-[10px] font-bold uppercase tracking-wider">Administrative Oversight</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider">Manajemen Administrasi</span>
           <div className="w-1 h-1 rounded-full bg-slate-300" />
-          <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Hardware Sync Hub</span>
+          <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Pusat Sinkronisasi Mesin</span>
         </div>
         
         <div className="flex flex-col md:flex-row md:items-center justify-between w-full gap-4">
           <h1 className="text-2xl xl:text-3xl font-bold text-slate-800 tracking-tight flex items-center gap-3 whitespace-nowrap">
-            <span>Attendance Archive</span>
+            <span>Arsip Absensi</span>
             <div className="px-3 py-1 rounded-lg bg-blue-50 border border-blue-100 text-blue-600 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
-              Live Terminal Feed
+              Data Realtime
             </div>
           </h1>
 
@@ -624,14 +829,14 @@ const Attendance = () => {
               <button 
                 onClick={openReportModal}
                 className="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-600 transition-all group shadow-sm"
-                title="Cetak Laporan Absen (Individu)"
+                title="Cetak Laporan Absensi (Individu)"
               >
                 <Printer className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500 group-hover:text-emerald-600 transition-all" />
               </button>
               <button 
                 onClick={handleExportPDF}
                 className="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 transition-all group shadow-sm"
-                title="Export PDF Document"
+                title="Ekspor Dokumen PDF"
               >
                 <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500 group-hover:text-rose-600 transition-all" />
               </button>
@@ -640,7 +845,7 @@ const Attendance = () => {
                 className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-bold uppercase tracking-wider transition-all shadow-sm active:scale-95 group"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:rotate-12 transition-transform" /> 
-                <span>Export Excel</span>
+                <span>Ekspor Excel</span>
               </button>
             </div>
           </div>
@@ -657,16 +862,138 @@ const Attendance = () => {
       {/* Operational Summary Metrics */}
       {!isLoading && displaySummary && (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+          {/* Visual Analytics Widget Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Widget 1: Attendance Rate Gauge */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between gap-6 hover:shadow-md transition-all">
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Tingkat Kehadiran</span>
+                <p className="text-3xl font-black text-slate-800 tracking-tight mt-1">
+                  {(() => {
+                    const totalHadir = (displaySummary.hadir || 0);
+                    const totalExcludeOff = (displaySummary.total || 0) - ((displaySummary.holiday || 0) + (displaySummary.cuti || 0) + (displaySummary.sakit || 0) + (displaySummary.izin || 0));
+                    return totalExcludeOff > 0 ? Math.round((totalHadir / totalExcludeOff) * 100) : 100;
+                  })()}%
+                </p>
+                <span className="text-[9px] font-bold text-emerald-600 uppercase flex items-center gap-1.5 mt-1">
+                  <ShieldCheck className="w-3.5 h-3.5" /> Hadir Normal & Tepat Waktu
+                </span>
+              </div>
+              
+              <div className="relative w-20 h-20 flex items-center justify-center shrink-0">
+                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                  <path
+                    className="text-slate-100"
+                    strokeWidth="3.5"
+                    stroke="currentColor"
+                    fill="none"
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  />
+                  <path
+                    className="text-emerald-500 transition-all duration-1000 ease-out"
+                    strokeDasharray={`${(() => {
+                      const totalHadir = (displaySummary.hadir || 0);
+                      const totalExcludeOff = (displaySummary.total || 0) - ((displaySummary.holiday || 0) + (displaySummary.cuti || 0) + (displaySummary.sakit || 0) + (displaySummary.izin || 0));
+                      return totalExcludeOff > 0 ? Math.round((totalHadir / totalExcludeOff) * 100) : 100;
+                    })()}, 100`}
+                    strokeWidth="3.5"
+                    strokeLinecap="round"
+                    stroke="currentColor"
+                    fill="none"
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  />
+                </svg>
+                <TrendingUp className="w-5 h-5 text-emerald-500 absolute" />
+              </div>
+            </div>
+
+            {/* Widget 2: Lateness Rate Gauge */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between gap-6 hover:shadow-md transition-all">
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Rasio Keterlambatan</span>
+                <p className="text-3xl font-black text-slate-800 tracking-tight mt-1">
+                  {(() => {
+                    const totalLateDays = (displaySummary.telat || 0);
+                    const totalDays = (displaySummary.total || 0);
+                    return totalDays > 0 ? Math.round((totalLateDays / totalDays) * 100) : 0;
+                  })()}%
+                </p>
+                <span className="text-[9px] font-bold text-amber-600 uppercase flex items-center gap-1.5 mt-1">
+                  <Clock className="w-3.5 h-3.5 animate-pulse" /> Terlambat Masuk Kerja
+                </span>
+              </div>
+              
+              <div className="relative w-20 h-20 flex items-center justify-center shrink-0">
+                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                  <path
+                    className="text-slate-100"
+                    strokeWidth="3.5"
+                    stroke="currentColor"
+                    fill="none"
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  />
+                  <path
+                    className="text-amber-500 transition-all duration-1000 ease-out"
+                    strokeDasharray={`${(() => {
+                      const totalLateDays = (displaySummary.telat || 0);
+                      const totalDays = (displaySummary.total || 0);
+                      return totalDays > 0 ? Math.round((totalLateDays / totalDays) * 100) : 0;
+                    })()}, 100`}
+                    strokeWidth="3.5"
+                    strokeLinecap="round"
+                    stroke="currentColor"
+                    fill="none"
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  />
+                </svg>
+                <Clock className="w-5 h-5 text-amber-500 absolute" />
+              </div>
+            </div>
+
+            {/* Widget 3: Anomalies Alert Card */}
+            <div className={`p-6 rounded-2xl border flex items-center justify-between gap-6 hover:shadow-md transition-all ${
+              data?.data?.filter(isAnomaly).length > 0 
+                ? 'bg-amber-50/50 border-amber-200 animate-pulse' 
+                : 'bg-white border-slate-200'
+            }`}>
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Anomali Absensi</span>
+                <p className="text-3xl font-black text-slate-800 tracking-tight mt-1">
+                  {data?.data?.filter(isAnomaly).length} Data
+                </p>
+                {data?.data?.filter(isAnomaly).length > 0 ? (
+                  <button 
+                    onClick={() => setAnomalyFilter('ANOMALY')}
+                    className="text-[9px] font-bold text-amber-600 hover:text-amber-800 underline uppercase flex items-center gap-1.5 transition-colors cursor-pointer mt-1"
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5" /> Tinjau Anomali
+                  </button>
+                ) : (
+                  <span className="text-[9px] font-bold text-emerald-600 uppercase flex items-center gap-1.5 mt-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Absensi Bersih & Valid
+                  </span>
+                )}
+              </div>
+              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center border transition-colors ${
+                data?.data?.filter(isAnomaly).length > 0
+                  ? 'bg-amber-100 border-amber-200 text-amber-600'
+                  : 'bg-slate-50 border-slate-100 text-slate-400'
+              }`}>
+                <ShieldAlert className="w-7 h-7" />
+              </div>
+            </div>
+          </div>
+
+          <div className={`grid grid-cols-2 md:grid-cols-4 lg:grid-cols-${displaySummary.uniqueEmployeeCount === 1 ? '7' : '6'} gap-4`}>
             {[
               { label: 'Total Data', value: displaySummary.total, color: 'blue', icon: Filter, desc: 'Semua Absen' },
               { label: 'Hadir', value: displaySummary.hadir, color: 'emerald', icon: CheckCircle2, desc: 'Tepat Waktu' },
               { label: 'Terlambat', value: displaySummary.telat, color: 'amber', icon: Clock, desc: 'Total Hari' },
               { label: 'Mangkir', value: displaySummary.mangkir, color: 'rose', icon: AlertCircle, desc: `Kurang Finger (+${displaySummary?.mangkirPenalty || 30}m)` },
               { label: 'Alpa', value: displaySummary.absen, color: 'red', icon: XCircle, desc: 'Tidak Ada Finger' },
-              { label: 'Total Terlambat', value: formatDuration(displaySummary.totalLate || 0), color: 'rose', icon: Clock, desc: 'Akumulasi Waktu' },
+              displaySummary.uniqueEmployeeCount === 1 && { label: 'Total Terlambat', value: formatDuration(displaySummary.totalLate || 0), color: 'rose', icon: Clock, desc: 'Akumulasi Waktu' },
               { label: 'Lainnya', value: (displaySummary.holiday || 0) + (displaySummary.cuti || 0) + (displaySummary.sakit || 0) + (displaySummary.izin || 0), color: 'slate', icon: Calendar, desc: 'Libur/Cuti/Sakit' },
-            ].map((item) => (
+            ].filter(Boolean).map((item) => (
               <div key={item.label} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-3 hover:shadow-md hover:border-blue-200 transition-all group">
                 <div className="flex justify-between items-start">
                   <div className={`w-8 h-8 rounded-xl bg-${item.color}-50 flex items-center justify-center border border-${item.color}-100 transition-transform group-hover:scale-110 group-hover:-rotate-3`}>
@@ -705,7 +1032,7 @@ const Attendance = () => {
                 </div>
                 <div className="hidden lg:block h-16 w-px bg-slate-100" />
                 <div className="hidden lg:flex flex-col items-end text-right">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Employee Profile</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Profil Karyawan</p>
                   <p className="text-2xl font-black text-slate-800 uppercase">{data?.data[0]?.name}</p>
                 </div>
               </div>
@@ -716,192 +1043,423 @@ const Attendance = () => {
 
       {/* Central Intelligence Data Grid */}
       <div className="bg-white border border-slate-200 shadow-sm overflow-hidden rounded-2xl">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+        {/* Primary View Tab Controls */}
+        <div className="flex border-b border-slate-100 bg-slate-50/50 print:hidden text-[11px] font-bold uppercase tracking-wider">
+          <button
+            onClick={() => setActiveViewTab('DETAIL')}
+            className={`flex-1 sm:flex-initial px-6 py-3.5 transition-all text-center border-b-2 ${
+              activeViewTab === 'DETAIL'
+                ? 'border-blue-600 text-blue-600 bg-white'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            Rincian Absensi (Detail)
+          </button>
+          <button
+            onClick={() => setActiveViewTab('REKAPITULASI')}
+            className={`flex-1 sm:flex-initial px-6 py-3.5 transition-all text-center border-b-2 ${
+              activeViewTab === 'REKAPITULASI'
+                ? 'border-blue-600 text-blue-600 bg-white'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            Rekapitulasi Departemen & Bagian
+          </button>
+        </div>
+
+        <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
           <div className="flex items-center gap-3">
             <div className="w-2 h-2 rounded-full bg-blue-600 animate-pulse shadow-[0_0_5px_rgba(37,99,235,0.5)]" />
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-              Data Absensi <span className="text-slate-300 mx-2">|</span> 
-              Total Data: <span className="text-slate-700 ml-1">{displaySummary?.total || 0} Baris</span>
+              {activeViewTab === 'DETAIL' ? 'Data Absensi' : 'Laporan Rekapitulasi'} <span className="text-slate-300 mx-2">|</span> 
+              Total: <span className="text-slate-700 ml-1">{activeViewTab === 'DETAIL' ? `${displaySummary?.total || 0} Baris` : `${rekapData.length} Kelompok`}</span>
             </p>
           </div>
+          
+          {/* Anomaly filter selector tabs */}
+          {activeViewTab === 'DETAIL' && (
+            <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-[9px] font-bold tracking-wider uppercase">
+               <button 
+                 onClick={() => setAnomalyFilter('ALL')}
+                 className={`px-3 py-1.5 rounded-md transition-all ${
+                   anomalyFilter === 'ALL' 
+                     ? 'bg-white text-blue-600 shadow-sm' 
+                     : 'text-slate-500 hover:text-slate-800'
+                 }`}
+               >
+                 Semua
+               </button>
+               <button 
+                 onClick={() => setAnomalyFilter('ANOMALY')}
+                 className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 ${
+                   anomalyFilter === 'ANOMALY' 
+                     ? 'bg-amber-500 text-white shadow-sm' 
+                     : 'text-slate-500 hover:text-slate-800'
+                 }`}
+               >
+                 <AlertTriangle className="w-3.5 h-3.5" />
+                 Hanya Anomali
+               </button>
+            </div>
+          )}
         </div>
         
-        <div className="relative overflow-auto min-h-[600px] hide-scrollbar custom-scrollbar">
-          <table className="w-full text-left whitespace-nowrap">
-            <thead className="sticky top-0 z-30 bg-slate-50 border-b border-slate-100 shadow-sm">
-              <tr className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">
-                <th className="px-6 py-4">
-                  <button onClick={() => handleSort('name')} className="flex items-center gap-2 group/btn">
-                    Nama Karyawan
-                    <SortIcon column="name" />
-                  </button>
-                </th>
-                <th className="px-4 py-4">
-                  <button onClick={() => handleSort('date')} className="flex items-center gap-2 group/btn">
-                    Tanggal
-                    <SortIcon column="date" />
-                  </button>
-                </th>
-                <th className="px-4 py-4 text-center">Jam Masuk</th>
-                <th className="px-4 py-4 text-center">Jam Keluar</th>
-                <th className="px-6 py-4">
-                  <button onClick={() => handleSort('status')} className="flex items-center gap-2 mx-auto group/btn">
-                    Status
-                    <SortIcon column="status" />
-                  </button>
-                </th>
-                <th className="px-4 py-4 text-center">Terlambat</th>
-                <th className="px-4 py-4 text-center">Lembur (Jam)</th>
-                <th className="px-4 py-4">
-                  <button onClick={() => handleSort('dept')} className="flex items-center gap-2 group/btn">
-                    Departemen
-                    <SortIcon column="dept" />
-                  </button>
-                </th>
-                <th className="px-4 py-4">Bagian / Seksi</th>
-                <th className="px-4 py-4">Jabatan</th>
-                <th className="px-4 py-4 text-center">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {isLoading ? (
-                <tr>
-                  <td colSpan="11" className="text-center py-24">
-                    <div className="flex flex-col items-center gap-4">
-                      <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest animate-pulse">Memuat Data...</p>
-                    </div>
-                  </td>
-                </tr>
-              ) : (!filteredData || filteredData.length === 0) ? (
-                <tr>
-                  <td colSpan="11" className="text-center py-24">
-                    <div className="flex flex-col items-center gap-4 opacity-70">
-                      <div className="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center border border-slate-100">
-                        <Calendar className="w-8 h-8 text-slate-400" />
-                      </div>
-                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Data Kosong</p>
-                      <p className="text-[9px] text-slate-400 uppercase font-medium">Tidak ada data absensi untuk periode ini</p>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                filteredData.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="group transition-all duration-300 hover:bg-blue-50/50"
-                  >
-                    <td 
-                      className="px-6 py-4 cursor-pointer group/name"
-                      onClick={() => {
-                        setAppliedFilters(prev => ({ ...prev, search: row.name, page: 1 }));
-                      }}
-                    >
-                      <div className="flex flex-col">
-                        <span className="text-xs font-bold text-slate-800 tracking-tight group-hover/name:text-blue-600 transition-colors uppercase">{row.name}</span>
-                        <span className="text-[9px] text-slate-500 font-semibold uppercase tracking-wider mt-0.5 group-hover/name:text-blue-400">{row.employeeCode || 'SYS_ID_ERR'}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-4">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                        <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">{row.date}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-4">
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-3.5 h-3.5 text-blue-500" />
-                        <span className="text-xs font-bold text-slate-800 tracking-widest">{row.checkIn || '--:--'}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-4">
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-3.5 h-3.5 text-rose-500" />
-                        <span className="text-xs font-bold text-slate-800 tracking-widest">{row.checkOut || '--:--'}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className={`inline-flex items-center px-3 py-1.5 rounded-md text-[9px] font-bold uppercase tracking-wider border transition-all ${getStatusColor(row.status)}`}>
-                        {getStatusLabel(row.status)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 text-center">
-                      {(row.status === 'Terlambat' || row.status === 'LATE') ? (
-                        <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">+{row.lateMinutes}m</span>
-                      ) : (row.status === 'Mangkir' || row.status === 'MANGKIR') ? (
-                        <span className="text-[10px] font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-200">+{displaySummary?.mangkirPenalty || 30}m</span>
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-4 text-center">
-                      {row.overtimeHours > 0 ? (
-                        <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">{row.overtimeHours}h</span>
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-4">
-                      <span className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 text-[10px] font-bold border border-slate-200 uppercase tracking-widest">{row.dept || 'N/A'}</span>
-                    </td>
-                    <td className="px-4 py-4 text-[10px] font-bold text-slate-600 uppercase tracking-wider">{row.section || '—'}</td>
-                    <td className="px-4 py-4 text-[10px] font-bold text-slate-600 uppercase tracking-wider">{row.position || '—'}</td>
-                    <td className="px-4 py-4 text-center">
-                      <button 
-                        onClick={() => setCorrectionModal({
-                          isOpen: true,
-                          recordId: row.id,
-                          employeeName: row.name,
-                          currentStatus: row.status,
-                          newStatus: row.status !== 'PRESENT' && row.status !== 'Hadir' ? 'PRESENT' : 'PRESENT',
-                          notes: '',
-                          overtimeHours: row.overtimeHours || 0,
-                          checkInTime: parseTimeForInput(row.checkIn),
-                          checkOutTime: parseTimeForInput(row.checkOut),
-                          lateMinutes: row.lateMinutes || 0,
-                          attachment: ''
-                        })}
-                        className="p-1.5 rounded-lg bg-slate-50 hover:bg-blue-50 text-slate-400 hover:text-blue-600 border border-slate-200 hover:border-blue-200 transition-all"
-                        title="Koreksi Status"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
+        {activeViewTab === 'DETAIL' ? (
+          <>
+            <div className="relative overflow-auto min-h-[600px] hide-scrollbar custom-scrollbar">
+              <table className="w-full text-left whitespace-nowrap">
+                <thead className="sticky top-0 z-30 bg-slate-50 border-b border-slate-100 shadow-sm">
+                  <tr className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+                    <th className="px-6 py-4">
+                      <button onClick={() => handleSort('name')} className="flex items-center gap-2 group/btn">
+                        Nama Karyawan
+                        <SortIcon column="name" />
                       </button>
+                    </th>
+                    <th className="px-4 py-4">
+                      <button onClick={() => handleSort('date')} className="flex items-center gap-2 group/btn">
+                        Tanggal
+                        <SortIcon column="date" />
+                      </button>
+                    </th>
+                    <th className="px-4 py-4 text-center">Jam Masuk</th>
+                    <th className="px-4 py-4 text-center">Jam Keluar</th>
+                    <th className="px-6 py-4">
+                      <button onClick={() => handleSort('status')} className="flex items-center gap-2 mx-auto group/btn">
+                        Status
+                        <SortIcon column="status" />
+                      </button>
+                    </th>
+                    <th className="px-4 py-4 text-center">Terlambat</th>
+                    <th className="px-4 py-4 text-center">Lembur (Jam)</th>
+                    <th className="px-4 py-4">
+                      <button onClick={() => handleSort('dept')} className="flex items-center gap-2 group/btn">
+                        Departemen
+                        <SortIcon column="dept" />
+                      </button>
+                    </th>
+                    <th className="px-4 py-4">Bagian / Seksi</th>
+                    <th className="px-4 py-4">Jabatan</th>
+                    <th className="px-4 py-4 text-center">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan="11" className="text-center py-24">
+                        <div className="flex flex-col items-center gap-4">
+                          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest animate-pulse">Memuat Data...</p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (!filteredData || filteredData.length === 0) ? (
+                    <tr>
+                      <td colSpan="11" className="text-center py-24">
+                        <div className="flex flex-col items-center gap-4 opacity-70">
+                          <div className="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center border border-slate-100">
+                            <Calendar className="w-8 h-8 text-slate-400" />
+                          </div>
+                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Data Kosong</p>
+                          <p className="text-[9px] text-slate-400 uppercase font-medium">Tidak ada data absensi untuk periode ini</p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredData.map((row) => (
+                      <tr
+                        key={row.id}
+                        className="group transition-all duration-300 hover:bg-blue-50/50"
+                      >
+                        <td 
+                          className="px-6 py-4 cursor-pointer group/name"
+                          onClick={() => {
+                            setAppliedFilters(prev => ({ ...prev, search: row.name, page: 1 }));
+                          }}
+                        >
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold text-slate-800 tracking-tight group-hover/name:text-blue-600 transition-colors uppercase">{row.name}</span>
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <span className="text-[9px] text-slate-500 font-semibold uppercase tracking-wider group-hover/name:text-blue-400">{row.employeeCode || 'SYS_ID_ERR'}</span>
+                              <span className="text-[8px] text-slate-300 font-black">•</span>
+                              <span 
+                                className="inline-flex items-center text-[8px] font-black bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 uppercase tracking-widest shadow-sm cursor-help hover:bg-blue-100 transition-all"
+                                title={`Jam Kerja: ${row.shiftTime || '08:00 - 17:00'}`}
+                              >
+                                {row.shiftName || 'Default Shift'}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="flex items-center gap-2">
+                            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                            <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">{row.date}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="flex items-center gap-2">
+                            <Clock className="w-3.5 h-3.5 text-blue-500" />
+                            <span className="text-xs font-bold text-slate-800 tracking-widest">{row.checkIn || '--:--'}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="flex items-center gap-2">
+                            <Clock className="w-3.5 h-3.5 text-rose-500" />
+                            <span className="text-xs font-bold text-slate-800 tracking-widest">{row.checkOut || '--:--'}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className={`inline-flex items-center px-3 py-1.5 rounded-md text-[9px] font-bold uppercase tracking-wider border transition-all ${getStatusColor(row.status)}`}>
+                            {getStatusLabel(row.status)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          {(row.status === 'Terlambat' || row.status === 'LATE') ? (
+                            <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">+{row.lateMinutes}m</span>
+                          ) : (row.status === 'Mangkir' || row.status === 'MANGKIR') ? (
+                            <span className="text-[10px] font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-200">+{displaySummary?.mangkirPenalty || 30}m</span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          {row.overtimeHours > 0 ? (
+                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">{row.overtimeHours}h</span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-4">
+                          <span className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 text-[10px] font-bold border border-slate-200 uppercase tracking-widest">{row.dept || 'N/A'}</span>
+                        </td>
+                        <td className="px-4 py-4 text-[10px] font-bold text-slate-600 uppercase tracking-wider">{row.section || '—'}</td>
+                        <td className="px-4 py-4 text-[10px] font-bold text-slate-600 uppercase tracking-wider">{row.position || '—'}</td>
+                        <td className="px-4 py-4 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            {(row.status === 'Terlambat' || row.status === 'LATE') && (
+                              <button
+                                onClick={() => handleQuickWaiver(row)}
+                                className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-255 hover:border-emerald-300 transition-all active:scale-95"
+                                title="Beri Dispensasi Keterlambatan"
+                              >
+                                <ShieldCheck className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            <button 
+                              onClick={() => setCorrectionModal({
+                                isOpen: true,
+                                recordId: row.id,
+                                employeeName: row.name,
+                                employeeCode: row.employeeCode,
+                                rawDate: row.date,
+                                currentStatus: row.status,
+                                newStatus: row.status !== 'PRESENT' && row.status !== 'Hadir' ? 'PRESENT' : 'PRESENT',
+                                notes: '',
+                                overtimeHours: row.overtimeHours || 0,
+                                checkInTime: parseTimeForInput(row.checkIn),
+                                checkOutTime: parseTimeForInput(row.checkOut),
+                                lateMinutes: row.lateMinutes || 0,
+                                attachment: ''
+                              })}
+                              className="p-1.5 rounded-lg bg-slate-50 hover:bg-blue-50 text-slate-400 hover:text-blue-600 border border-slate-200 hover:border-blue-200 transition-all active:scale-95"
+                              title="Koreksi Status"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Table Pagination Controller */}
+            {!isLoading && filteredData.length > 0 && (
+              <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+                    Halaman <span className="text-slate-800 mx-1">{appliedFilters.page}</span> / <span className="text-slate-600 ml-1">{data?.totalPages || 1}</span>
+                  </p>
+                  <div className="w-1 h-1 rounded-full bg-slate-300" />
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+                    Total Data: <span className="text-blue-600 font-bold">{data?.total || 0}</span>
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={appliedFilters.page <= 1}
+                    onClick={() => setAppliedFilters(prev => ({ ...prev, page: prev.page - 1 }))}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-slate-200 hover:bg-slate-50 transition-all disabled:opacity-50 active:scale-95 text-slate-600"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    disabled={appliedFilters.page >= (data?.totalPages || 1)}
+                    onClick={() => setAppliedFilters(prev => ({ ...prev, page: prev.page + 1 }))}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-slate-200 hover:bg-slate-50 transition-all disabled:opacity-50 active:scale-95 text-slate-600"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="relative overflow-auto min-h-[400px] hide-scrollbar custom-scrollbar animate-in fade-in duration-300">
+            <table className="w-full text-left whitespace-nowrap">
+              <thead className="sticky top-0 z-30 bg-slate-50 border-b border-slate-100 shadow-sm">
+                <tr className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+                  <th className="px-6 py-4 text-center">No</th>
+                  <th className="px-6 py-4">Karyawan</th>
+                  <th className="px-6 py-4">Departemen</th>
+                  <th className="px-4 py-4">Bagian / Seksi</th>
+                  <th className="px-4 py-4 text-center">Total Jadwal</th>
+                  <th className="px-4 py-4 text-center">Hadir</th>
+                  <th className="px-4 py-4 text-center">Terlambat</th>
+                  <th className="px-4 py-4 text-center">Mangkir</th>
+                  <th className="px-4 py-4 text-center">Alpa</th>
+                  <th className="px-4 py-4 text-center">Cuti/Sakit/Izin</th>
+                  <th className="px-6 py-4 text-center">Tingkat Kehadiran</th>
+                  <th className="px-6 py-4 text-center">Akumulasi Terlambat</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {isRekapLoading ? (
+                  <tr>
+                    <td colSpan="12" className="text-center py-24">
+                      <div className="flex flex-col items-center gap-4">
+                        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest animate-pulse">Menghitung Rekapitulasi...</p>
+                      </div>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ) : (!rekapData || rekapData.length === 0) ? (
+                  <tr>
+                    <td colSpan="12" className="text-center py-24">
+                      <div className="flex flex-col items-center gap-4 opacity-70">
+                        <div className="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center border border-slate-100">
+                          <Calendar className="w-8 h-8 text-slate-400" />
+                        </div>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Data Kosong</p>
+                        <p className="text-[9px] text-slate-400 uppercase font-medium">Tidak ada data untuk rekapitulasi</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  rekapData.map((row, index) => {
+                    const totalExcludeOff = row.total - row.other;
+                    const rate = totalExcludeOff > 0 ? Math.round((row.present / totalExcludeOff) * 100) : 100;
+                    
+                    return (
+                      <tr key={index} className="group transition-all duration-300 hover:bg-blue-50/50">
+                        <td className="px-6 py-4 text-xs font-semibold text-slate-500 text-center">{index + 1}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold text-slate-800 uppercase">{row.name}</span>
+                            <span className="text-[9px] text-slate-500 font-semibold uppercase mt-0.5">{row.employeeCode}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold border border-slate-200 uppercase tracking-widest">{row.dept}</span>
+                        </td>
+                        <td className="px-4 py-4 text-[10px] font-bold text-slate-700 uppercase tracking-wider">{row.section}</td>
+                        <td className="px-4 py-4 text-center text-xs font-bold text-slate-800">{row.total}</td>
+                        <td className="px-4 py-4 text-center text-xs font-bold text-emerald-600">{row.present}</td>
+                        {/* Terlambat Column with Tooltip */}
+                        <td className="relative group/tooltip px-4 py-4 text-center text-xs font-bold text-amber-600 cursor-help">
+                          <span className={row.late > 0 ? "underline decoration-dotted decoration-amber-450" : ""}>{row.late}</span>
+                          {row.late > 0 && (
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-none transition-all duration-200">
+                              <p className="font-extrabold border-b border-slate-700 pb-1 mb-1.5 text-[9px] uppercase tracking-wider text-amber-450">Detail Hari Terlambat</p>
+                              <div className="space-y-1 text-left max-h-[150px] overflow-y-auto custom-scrollbar">
+                                {row.lateDetails.map((d, i) => (
+                                  <div key={i} className="flex items-center justify-between gap-3 py-0.5 border-b border-slate-800 last:border-0">
+                                    <span className="font-bold text-slate-200">{d.date}</span>
+                                    <span className="text-slate-400 text-[9px]">IN {d.checkIn || '--:--'}</span>
+                                    <span className="text-amber-400 font-extrabold text-[9px]">+{d.lateMinutes}m</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </td>
+                        
+                        {/* Mangkir Column with Tooltip */}
+                        <td className="relative group/tooltip px-4 py-4 text-center text-xs font-bold text-orange-600 cursor-help">
+                          <span className={row.mangkir > 0 ? "underline decoration-dotted decoration-orange-400" : ""}>{row.mangkir}</span>
+                          {row.mangkir > 0 && (
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-none transition-all duration-200">
+                              <p className="font-extrabold border-b border-slate-700 pb-1 mb-1.5 text-[9px] uppercase tracking-wider text-orange-400">Detail Hari Mangkir</p>
+                              <div className="space-y-1 text-left max-h-[150px] overflow-y-auto custom-scrollbar">
+                                {row.mangkirDetails.map((d, i) => (
+                                  <div key={i} className="flex justify-between gap-4 py-0.5 border-b border-slate-850 last:border-0">
+                                    <span className="font-bold text-slate-250">{d.date}</span>
+                                    <span className="text-slate-400">({d.checkIn || '--:--'} - {d.checkOut || '--:--'})</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </td>
 
-        {/* Table Pagination Controller */}
-        {!isLoading && filteredData.length > 0 && (
-          <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-                Registry Page <span className="text-slate-800 mx-1">{appliedFilters.page}</span> / <span className="text-slate-600 ml-1">{data?.totalPages || 1}</span>
-              </p>
-              <div className="w-1 h-1 rounded-full bg-slate-300" />
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-                Total Nodes: <span className="text-blue-600 font-bold">{data?.total || 0}</span>
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                disabled={appliedFilters.page <= 1}
-                onClick={() => setAppliedFilters(prev => ({ ...prev, page: prev.page - 1 }))}
-                className="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-slate-200 hover:bg-slate-50 transition-all disabled:opacity-50 active:scale-95 text-slate-600"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button
-                disabled={appliedFilters.page >= (data?.totalPages || 1)}
-                onClick={() => setAppliedFilters(prev => ({ ...prev, page: prev.page + 1 }))}
-                className="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-slate-200 hover:bg-slate-50 transition-all disabled:opacity-50 active:scale-95 text-slate-600"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
+                        {/* Alpa Column with Tooltip */}
+                        <td className="relative group/tooltip px-4 py-4 text-center text-xs font-bold text-rose-600 cursor-help">
+                          <span className={row.absent > 0 ? "underline decoration-dotted decoration-rose-450" : ""}>{row.absent}</span>
+                          {row.absent > 0 && (
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-none transition-all duration-200">
+                              <p className="font-extrabold border-b border-slate-700 pb-1 mb-1.5 text-[9px] uppercase tracking-wider text-rose-400">Detail Hari Alpa</p>
+                              <div className="space-y-1 text-left max-h-[150px] overflow-y-auto custom-scrollbar">
+                                {row.absentDetails.map((d, i) => (
+                                  <div key={i} className="flex justify-between gap-4 py-0.5 border-b border-slate-850 last:border-0">
+                                    <span className="font-bold text-slate-250">{d.date}</span>
+                                    <span className="text-slate-450">Alpa</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Cuti/Sakit/Izin Column with Tooltip */}
+                        <td className="relative group/tooltip px-4 py-4 text-center text-xs font-bold text-slate-500 cursor-help">
+                          <span className={row.other > 0 ? "underline decoration-dotted decoration-slate-400" : ""}>{row.other}</span>
+                          {row.other > 0 && (
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-none transition-all duration-200">
+                              <p className="font-extrabold border-b border-slate-700 pb-1 mb-1.5 text-[9px] uppercase tracking-wider text-blue-400">Detail Ketidakhadiran</p>
+                              <div className="space-y-1 text-left max-h-[150px] overflow-y-auto custom-scrollbar">
+                                {row.otherDetails.map((d, i) => (
+                                  <div key={i} className="flex justify-between gap-4 py-0.5 border-b border-slate-850 last:border-0">
+                                    <span className="font-bold text-slate-250">{d.date}</span>
+                                    <span className="text-blue-400 font-extrabold uppercase text-[8px] tracking-wider bg-blue-950 px-1.5 py-0.5 rounded border border-blue-900">{getStatusLabel(d.status)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="px-6 py-4 text-center">
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${
+                            rate >= 95 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                            rate >= 90 ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                            rate >= 80 ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                            'bg-rose-50 text-rose-700 border-rose-200'
+                          }`}>
+                            {rate}%
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-center text-xs font-bold text-rose-600">
+                          {row.totalLateMinutes > 0 ? formatDuration(row.totalLateMinutes) : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -918,8 +1476,8 @@ const Attendance = () => {
                   <FileSpreadsheet className="w-6 h-6 text-blue-600" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-800 text-lg tracking-tight">Terminal Sync</h3>
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">Mass Biometric Ingestion</p>
+                  <h3 className="font-bold text-slate-800 text-lg tracking-tight">Sinkronisasi Mesin</h3>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">Impor Data Biometrik</p>
                 </div>
               </div>
               <button onClick={() => !isUploading && setImportOpen(false)} className="w-10 h-10 flex items-center justify-center hover:bg-slate-200 rounded-xl transition-all">
@@ -933,12 +1491,12 @@ const Attendance = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 group hover:border-blue-300 transition-all">
                       <Scan className="w-5 h-5 text-blue-600 mb-3" />
-                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Architecture</p>
+                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Arsitektur</p>
                       <p className="text-[10px] text-slate-800 font-bold uppercase tracking-tighter">NIK_PROTOCOL_V2</p>
                     </div>
                     <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 group hover:border-emerald-300 transition-all">
                       <Calendar className="w-5 h-5 text-emerald-600 mb-3" />
-                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Temporal Range</p>
+                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Rentang Waktu</p>
                       <p className="text-[10px] text-slate-800 font-bold uppercase tracking-tighter">MULTI_VECTOR_SYNC</p>
                     </div>
                   </div>
@@ -949,11 +1507,11 @@ const Attendance = () => {
                       <div className="w-16 h-16 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center mb-6 transition-all group-hover:scale-110 group-hover:border-blue-200">
                         <Upload className="w-8 h-8 text-slate-400 group-hover:text-blue-600" />
                       </div>
-                      <h4 className="font-bold text-slate-800 uppercase tracking-wider text-sm">Inject Local Archives</h4>
-                      <p className="text-[10px] text-slate-500 mt-2 font-bold uppercase tracking-wider">Matrix: XLSX, XLS, CSV</p>
+                      <h4 className="font-bold text-slate-800 uppercase tracking-wider text-sm">Unggah File Absensi</h4>
+                      <p className="text-[10px] text-slate-500 mt-2 font-bold uppercase tracking-wider">Format: XLSX, XLS, CSV</p>
                       
                       <div className="mt-8 px-8 py-3 bg-slate-100 group-hover:bg-blue-600 text-slate-600 group-hover:text-white rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all">
-                        SELECT TERMINAL LOG
+                        PILIH FILE ABSENSI
                       </div>
                     </div>
                   </label>
@@ -978,13 +1536,13 @@ const Attendance = () => {
                     
                     <div className="text-center">
                       <h4 className="font-bold text-slate-800 uppercase tracking-wider text-sm">
-                        {importProgress.phase === 'saving' ? 'Committing to Database' : 
-                         importProgress.phase === 'parsing' ? 'Parsing Matrix' :
-                         importProgress.phase === 'matching' ? 'Employee Mapping' :
-                         'Ingesting Log Nodes'}
+                        {importProgress.phase === 'saving' ? 'Menyimpan ke Database' : 
+                         importProgress.phase === 'parsing' ? 'Membaca Data' :
+                         importProgress.phase === 'matching' ? 'Mencocokkan Karyawan' :
+                         'Memproses Data'}
                       </h4>
                       <p className="text-[10px] text-slate-500 font-bold uppercase mt-2 tracking-widest animate-pulse">
-                        {importProgress.detail || 'Processing...'}
+                        {importProgress.detail || 'Sedang memproses...'}
                       </p>
                     </div>
                   </div>
@@ -1062,7 +1620,7 @@ const Attendance = () => {
                 <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center border border-blue-100 shadow-sm">
                   <RefreshCw className={`w-5 h-5 text-blue-600 ${isRecalculating ? 'animate-spin' : ''}`} />
                 </div>
-                <h3 className="font-bold text-slate-800 text-lg tracking-tight">Audit Recon</h3>
+                <h3 className="font-bold text-slate-800 text-lg tracking-tight">Audit Absensi</h3>
               </div>
               <button onClick={() => !isRecalculating && setRecalcModalOpen(false)} className="w-10 h-10 flex items-center justify-center hover:bg-slate-200 rounded-xl transition-all">
                 <X className="w-5 h-5 text-slate-500" />
@@ -1073,13 +1631,13 @@ const Attendance = () => {
               <div className="bg-blue-50 border border-blue-100 p-5 rounded-2xl flex gap-4">
                 <AlertCircle className="w-5 h-5 text-blue-600 shrink-0" />
                 <p className="text-[10px] text-blue-800 leading-relaxed font-bold uppercase tracking-wider">
-                  Caution: This protocol forces a deep recalculation of check-in latencies against defined shift parameters.
+                  Peringatan: Protokol ini akan memaksa perhitungan ulang mendalam untuk keterlambatan jam masuk berdasarkan parameter shift yang ditentukan.
                 </p>
               </div>
 
               <div className="grid grid-cols-1 gap-5">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Temporal Start</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Tanggal Mulai</label>
                   <input 
                     type="date" 
                     value={recalcRange.start}
@@ -1088,7 +1646,7 @@ const Attendance = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Temporal End</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Tanggal Selesai</label>
                   <input 
                     type="date" 
                     value={recalcRange.end}
@@ -1100,13 +1658,13 @@ const Attendance = () => {
             </div>
 
             <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">
-              <button onClick={() => setRecalcModalOpen(false)} className="flex-1 py-3 text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-xl uppercase tracking-wider transition-all">Abort</button>
+              <button onClick={() => setRecalcModalOpen(false)} className="flex-1 py-3 text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-xl uppercase tracking-wider transition-all">Batal</button>
               <button 
                 disabled={isRecalculating}
                 onClick={handleRecalculate}
                 className="flex-[2] py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-sm disabled:opacity-50 transition-all"
               >
-                {isRecalculating ? <Loader2 className="w-4 h-4 animate-spin inline mr-2" /> : 'Execute Audit'}
+                {isRecalculating ? <Loader2 className="w-4 h-4 animate-spin inline mr-2" /> : 'Jalankan Audit'}
               </button>
             </div>
           </div>
@@ -1536,7 +2094,7 @@ const FilterBar = ({ onApply, isLoading, currentSearch }) => {
             <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
               <Calendar className="w-4 h-4 text-blue-600" />
             </div>
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Temporal Scope:</label>
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Rentang Waktu:</label>
           </div>
           <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-200">
             {['Today', 'This Week', 'This Month', 'Custom'].map((period) => (
@@ -1549,7 +2107,7 @@ const FilterBar = ({ onApply, isLoading, currentSearch }) => {
                     : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                {period === 'Today' ? 'Today' : period === 'This Week' ? 'Week' : period === 'This Month' ? 'Month' : 'Manual'}
+                {period === 'Today' ? 'Hari Ini' : period === 'This Week' ? 'Minggu Ini' : period === 'This Month' ? 'Bulan Ini' : 'Pilih Tanggal'}
               </button>
             ))}
           </div>
@@ -1575,12 +2133,12 @@ const FilterBar = ({ onApply, isLoading, currentSearch }) => {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 items-end bg-slate-50 p-5 rounded-2xl border border-slate-100">
           <div className="space-y-2 lg:col-span-1 xl:col-span-1">
-            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">Personnel Filter</label>
+            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">Cari Karyawan</label>
             <div className="relative group">
               <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
               <input 
                 type="text" 
-                placeholder="ID SEQUENCE..." 
+                placeholder="NAMA / NIK..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleApply()}
@@ -1590,10 +2148,10 @@ const FilterBar = ({ onApply, isLoading, currentSearch }) => {
           </div>
 
           {[
-            { label: 'Department', val: filterDept, setter: setFilterDept, opts: masterOptions.departments.map(d => ({ v: d.name, l: d.name })), onChg: () => { setFilterSection(''); setFilterPosition(''); } },
-            { label: 'Section', val: filterSection, setter: setFilterSection, opts: masterOptions.sections.map(s => ({ v: s, l: s })) },
-            { label: 'Rank', val: filterPosition, setter: setFilterPosition, opts: masterOptions.positions.map(p => ({ v: p, l: p })) },
-            { label: 'Status Protocol', val: filterStatus, setter: setFilterStatus, opts: masterOptions.statuses.map(s => ({ v: s, l: STATUS_MAP[s] || s })) }
+            { label: 'Departemen', val: filterDept, setter: setFilterDept, opts: masterOptions.departments.map(d => ({ v: d.name, l: d.name })), onChg: () => { setFilterSection(''); setFilterPosition(''); } },
+            { label: 'Bagian / Seksi', val: filterSection, setter: setFilterSection, opts: masterOptions.sections.map(s => ({ v: s, l: s })) },
+            { label: 'Jabatan', val: filterPosition, setter: setFilterPosition, opts: masterOptions.positions.map(p => ({ v: p, l: p })) },
+            { label: 'Status Absensi', val: filterStatus, setter: setFilterStatus, opts: masterOptions.statuses.map(s => ({ v: s, l: STATUS_MAP[s] || s })) }
           ].map((field, idx) => (
             <div key={idx} className="space-y-2">
               <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">{field.label}</label>
@@ -1603,7 +2161,7 @@ const FilterBar = ({ onApply, isLoading, currentSearch }) => {
                   onChange={(e) => { field.setter(e.target.value); field.onChg?.(); }}
                   className="w-full bg-white border border-slate-200 rounded-xl pl-4 pr-10 py-3 text-[10px] font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 cursor-pointer appearance-none uppercase tracking-wider transition-all shadow-sm truncate"
                 >
-                  <option value="">GLOBAL ARCHIVE</option>
+                  <option value="">SEMUA</option>
                   {field.opts.map((o, i) => <option key={i} value={o.v}>{o.l}</option>)}
                 </select>
                 <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
@@ -1619,7 +2177,7 @@ const FilterBar = ({ onApply, isLoading, currentSearch }) => {
               className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 active:scale-95"
             >
             {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            <span className="text-[10px] font-bold tracking-wider uppercase">COMMIT FILTERS</span>
+            <span className="text-[10px] font-bold tracking-wider uppercase">Terapkan Filter</span>
           </button>
           </div>
         </div>

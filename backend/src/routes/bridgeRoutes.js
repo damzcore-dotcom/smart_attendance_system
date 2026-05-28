@@ -6,6 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prismaClient');
+const { verifyToken } = require('../middleware/auth');
 
 // ── Bridge Key Middleware ────────────────────────────────────────────────
 const verifyBridgeKey = (req, res, next) => {
@@ -20,16 +21,16 @@ const verifyBridgeKey = (req, res, next) => {
   next();
 };
 
-// Apply to all bridge routes
-router.use(verifyBridgeKey);
+// We no longer apply this globally, because some routes are for the Admin panel.
+// router.use(verifyBridgeKey);
 
 // ── Health Check ────────────────────────────────────────────────────────
-router.get('/health', (req, res) => {
+router.get('/health', verifyBridgeKey, (req, res) => {
   res.json({ success: true, status: 'ok', bridge: 'connected' });
 });
 
 // ── Get Employee + Active Shift ─────────────────────────────────────────
-router.get('/employee/:id', async (req, res) => {
+router.get('/employee/:id', verifyBridgeKey, async (req, res) => {
   try {
     const employee = await prisma.employee.findUnique({
       where: { id: parseInt(req.params.id) },
@@ -89,7 +90,7 @@ router.get('/employee/:id', async (req, res) => {
 });
 
 // ── Record Check-In from CCTV ───────────────────────────────────────────
-router.post('/checkin', async (req, res) => {
+router.post('/checkin', verifyBridgeKey, async (req, res) => {
   try {
     const { employeeId, date, timestamp, cameraId, similarity, photoUrl, status, source } = req.body;
 
@@ -239,7 +240,7 @@ router.post('/checkin', async (req, res) => {
 });
 
 // ── Log Face Event (audit trail) ────────────────────────────────────────
-router.post('/face-event', async (req, res) => {
+router.post('/face-event', verifyBridgeKey, async (req, res) => {
   try {
     const { cameraId, employeeId, eventTime, similarity, livenessScore, isUnknown, isSpoof, photoUrl, processed } = req.body;
 
@@ -265,7 +266,7 @@ router.post('/face-event', async (req, res) => {
 });
 
 // ── Unknown Face Alert ──────────────────────────────────────────────────
-router.post('/alert/unknown', async (req, res) => {
+router.post('/alert/unknown', verifyBridgeKey, async (req, res) => {
   try {
     const { cameraId, eventTime, photoUrl } = req.body;
 
@@ -285,7 +286,7 @@ router.post('/alert/unknown', async (req, res) => {
 });
 
 // ── Save Face Enrollment ────────────────────────────────────────────────
-router.post('/enrollment/save', async (req, res) => {
+router.post('/enrollment/save', verifyBridgeKey, async (req, res) => {
   try {
     const { employeeId, embedding, samplesCount } = req.body;
 
@@ -311,7 +312,7 @@ router.post('/enrollment/save', async (req, res) => {
 });
 
 // ── Get All Embeddings (for Redis cache reload) ─────────────────────────
-router.get('/embeddings', async (req, res) => {
+router.get('/embeddings', verifyBridgeKey, async (req, res) => {
   try {
     const employees = await prisma.employee.findMany({
       where: {
@@ -334,7 +335,7 @@ router.get('/embeddings', async (req, res) => {
 });
 
 // ── Broadcast Event (for WebSocket relay, placeholder) ──────────────────
-router.post('/event/broadcast', async (req, res) => {
+router.post('/event/broadcast', verifyBridgeKey, async (req, res) => {
   // TODO: Integrate with WebSocket manager when available
   // For now, just log the event
   const event = req.body;
@@ -347,7 +348,7 @@ router.post('/event/broadcast', async (req, res) => {
 // ══════════════════════════════════════════════════════════════════════════
 
 // Get all cameras
-router.get('/cameras', async (req, res) => {
+router.get('/cameras', verifyToken, async (req, res) => {
   try {
     const cameras = await prisma.camera.findMany({
       orderBy: { createdAt: 'desc' },
@@ -362,7 +363,7 @@ router.get('/cameras', async (req, res) => {
 });
 
 // Create camera
-router.post('/cameras', async (req, res) => {
+router.post('/cameras', verifyToken, async (req, res) => {
   try {
     const { id, name, location, ipAddress, rtspUrl, direction, captureInStart, captureInEnd, captureOutStart, captureOutEnd } = req.body;
     const camera = await prisma.camera.create({
@@ -380,7 +381,7 @@ router.post('/cameras', async (req, res) => {
 });
 
 // Update camera
-router.put('/cameras/:id', async (req, res) => {
+router.put('/cameras/:id', verifyToken, async (req, res) => {
   try {
     const { name, location, ipAddress, rtspUrl, direction, active, captureInStart, captureInEnd, captureOutStart, captureOutEnd } = req.body;
     const camera = await prisma.camera.update({
@@ -396,7 +397,7 @@ router.put('/cameras/:id', async (req, res) => {
 });
 
 // Delete camera
-router.delete('/cameras/:id', async (req, res) => {
+router.delete('/cameras/:id', verifyToken, async (req, res) => {
   try {
     await prisma.camera.delete({ where: { id: req.params.id } });
     res.json({ success: true });
@@ -406,7 +407,7 @@ router.delete('/cameras/:id', async (req, res) => {
 });
 
 // ── Get Unknown Face Alerts ─────────────────────────────────────────────
-router.get('/alerts/unknown', async (req, res) => {
+router.get('/alerts/unknown', verifyToken, async (req, res) => {
   try {
     const { resolved, limit = 50 } = req.query;
     const where = {};
@@ -425,7 +426,7 @@ router.get('/alerts/unknown', async (req, res) => {
 });
 
 // Resolve an unknown face alert
-router.put('/alerts/unknown/:id/resolve', async (req, res) => {
+router.put('/alerts/unknown/:id/resolve', verifyToken, async (req, res) => {
   try {
     const { resolvedBy, notes } = req.body;
     const alert = await prisma.unknownFaceAlert.update({
@@ -439,7 +440,7 @@ router.put('/alerts/unknown/:id/resolve', async (req, res) => {
 });
 
 // ── Get Face Events (for monitoring dashboard) ──────────────────────────
-router.get('/face-events', async (req, res) => {
+router.get('/face-events', verifyToken, async (req, res) => {
   try {
     const { cameraId, limit = 100, startDate, endDate } = req.query;
     const where = {};

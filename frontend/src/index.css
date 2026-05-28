@@ -65,3 +65,19 @@
   scrollbar-width: thin;
   scrollbar-color: #cbd5e1 #f1f5f9;
 }
+
+/* Floating Save Bar dynamic sidebar spacing */
+.floating-save-bar {
+  transition: left 0.3s ease-in-out;
+}
+.sidebar-open .floating-save-bar {
+  left: 288px !important; /* matches aside w-72 */
+}
+.sidebar-collapsed .floating-save-bar {
+  left: 80px !important; /* matches aside w-20 */
+}
+@media (max-width: 1023.98px) {
+  .floating-save-bar {
+    left: 0 !important;
+  }
+}
