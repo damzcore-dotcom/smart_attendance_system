@@ -308,6 +308,7 @@ const update = async (req, res) => {
     // Remove read-only fields and relation objects that shouldn't be updated directly
     delete data.employeeCode; delete data.dbId; delete data.id;
     delete data.shift; delete data.department; delete data.faceIdDisplay;
+    delete data.dailyRate; // Not a schema field, comes from frontend salary form
 
     if (data.profilePhoto && data.profilePhoto.startsWith('data:image')) {
       const base64Data = data.profilePhoto.replace(/^data:image\/\w+;base64,/, "");
