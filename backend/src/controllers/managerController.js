@@ -23,7 +23,11 @@ const getDashboard = async (req, res) => {
     const startOfDay = new Date(today.setHours(0, 0, 0, 0));
     const endOfDay = new Date(today.setHours(23, 59, 59, 999));
 
-    const empWhere = { status: 'ACTIVE' };
+    const empWhere = { 
+      status: 'ACTIVE',
+      employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] },
+      salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] }
+    };
     if (!isAllDepts) empWhere.departmentId = deptId;
 
     const employees = await prisma.employee.findMany({ where: empWhere });
@@ -97,8 +101,14 @@ const getAttendanceOptions = async (req, res) => {
       departments = await prisma.department.findMany({ where: { id: deptId } });
     }
 
-    const sections = [...new Set((await prisma.employee.findMany({ where: isAllDepts ? {} : { departmentId: deptId }, select: { section: true } })).map(e => e.section).filter(Boolean))];
-    const positions = [...new Set((await prisma.employee.findMany({ where: isAllDepts ? {} : { departmentId: deptId }, select: { position: true } })).map(e => e.position).filter(Boolean))];
+    const baseWhere = {
+      employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] },
+      salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] }
+    };
+    if (!isAllDepts) baseWhere.departmentId = deptId;
+
+    const sections = [...new Set((await prisma.employee.findMany({ where: baseWhere, select: { section: true } })).map(e => e.section).filter(Boolean))];
+    const positions = [...new Set((await prisma.employee.findMany({ where: baseWhere, select: { position: true } })).map(e => e.position).filter(Boolean))];
 
     const statuses = ['PRESENT', 'LATE', 'MANGKIR', 'HOLIDAY', 'CUTI', 'SAKIT', 'IZIN', 'ABSENT'];
 
@@ -138,7 +148,10 @@ const getAttendance = async (req, res) => {
     }
 
     const where = { date: dateRange };
-    const empWhere = {};
+    const empWhere = {
+      employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] },
+      salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] }
+    };
     if (!isAllDepts) empWhere.departmentId = managedDeptId;
     if (dept && dept !== 'All') empWhere.department = { name: dept };
     if (section && section !== 'All') empWhere.section = section;
@@ -310,8 +323,13 @@ const getLeaveRequests = async (req, res) => {
     const isAllDepts = ma?.manageAllDepts || false;
     const deptId = ma?.managedDeptId;
     
-    const leaveWhere = {};
-    if (!isAllDepts) leaveWhere.employee = { departmentId: deptId };
+    const leaveWhere = {
+      employee: {
+        employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] },
+        salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] }
+      }
+    };
+    if (!isAllDepts) leaveWhere.employee.departmentId = deptId;
 
     const requests = await prisma.leaveRequest.findMany({
       where: leaveWhere,

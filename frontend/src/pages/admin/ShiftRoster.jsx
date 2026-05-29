@@ -12,8 +12,8 @@ const ShiftRoster = () => {
   const [endDate, setEndDate] = useState('');
   
   const { data: employeesData, isLoading: empLoading } = useQuery({
-    queryKey: ['employees', { page: 1, limit: 1000 }],
-    queryFn: () => employeeAPI.getAll({ page: 1, limit: 1000 })
+    queryKey: ['employees', { page: 1, limit: 1000, excludeBhl: true }],
+    queryFn: () => employeeAPI.getAll({ page: 1, limit: 1000, excludeBhl: true })
   });
 
   const { data: shiftsData, isLoading: shiftLoading } = useQuery({

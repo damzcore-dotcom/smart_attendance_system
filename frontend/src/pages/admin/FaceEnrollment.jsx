@@ -41,8 +41,8 @@ const FaceEnrollment = () => {
 
   // Fetch employees
   const { data: employeesData, isLoading: loadingEmployees } = useQuery({
-    queryKey: ['employees-enrollment', { search: searchQuery, dept: deptFilter, position: positionFilter }],
-    queryFn: () => employeeAPI.getAll({ search: searchQuery, dept: deptFilter, position: positionFilter, limit: 100 }),
+    queryKey: ['employees-enrollment', { search: searchQuery, dept: deptFilter, position: positionFilter, excludeBhl: true }],
+    queryFn: () => employeeAPI.getAll({ search: searchQuery, dept: deptFilter, position: positionFilter, limit: 100, excludeBhl: true }),
     keepPreviousData: true,
   });
   const filteredEmployees = employeesData?.data || [];

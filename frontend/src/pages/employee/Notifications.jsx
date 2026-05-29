@@ -12,6 +12,17 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { authAPI, notificationAPI } from '../../services/api';
 
+const colorMap = {
+  blue: { bg: 'bg-blue-50', text: 'text-blue-500' },
+  green: { bg: 'bg-green-50', text: 'text-green-500' },
+  yellow: { bg: 'bg-yellow-50', text: 'text-yellow-500' },
+  red: { bg: 'bg-red-50', text: 'text-red-500' },
+  purple: { bg: 'bg-purple-50', text: 'text-purple-500' },
+  gray: { bg: 'bg-gray-50', text: 'text-gray-500' },
+  emerald: { bg: 'bg-emerald-50', text: 'text-emerald-500' },
+  amber: { bg: 'bg-amber-50', text: 'text-amber-500' },
+};
+
 const Notifications = () => {
   const [activeTab, setActiveTab] = useState('All');
   const queryClient = useQueryClient();
@@ -54,6 +65,22 @@ const Notifications = () => {
     }
   };
 
+  const formatTime = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-center px-2">
@@ -94,6 +121,7 @@ const Notifications = () => {
         ) : filteredNotifications.map((n) => {
           const Icon = getIcon(n.type);
           const color = getColor(n.type);
+          const mappedColor = colorMap[color] || colorMap.blue;
           return (
             <div 
               key={n.id} 
@@ -103,7 +131,7 @@ const Notifications = () => {
               }`}
             >
               <div className="flex gap-4">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 bg-${color}-50 text-${color}-500`}>
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${mappedColor.bg} ${mappedColor.text}`}>
                   <Icon className="w-6 h-6" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -111,22 +139,12 @@ const Notifications = () => {
                     <h3 className={`text-sm font-bold truncate pr-4 ${n.unread ? 'text-slate-900' : 'text-slate-500'}`}>
                       {n.title}
                     </h3>
-                    <span className="text-[10px] text-slate-400 font-medium shrink-0">{n.time}</span>
+                    <span className="text-[10px] text-slate-400 font-medium shrink-0">{formatTime(n.createdAt)}</span>
                   </div>
                   <p className={`text-xs line-clamp-2 leading-relaxed ${n.unread ? 'text-slate-600' : 'text-slate-400'}`}>
                     {n.message}
                   </p>
                 </div>
-              </div>
-
-              {/* Action Buttons (Swipe-like) */}
-              <div className="absolute right-4 bottom-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
-                  <Trash2 className="w-4 h-4" />
-                </button>
-                <button className="p-1.5 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors">
-                  <ChevronRight className="w-4 h-4" />
-                </button>
               </div>
             </div>
           );

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Calendar, 
   FileText, 
@@ -20,6 +20,8 @@ const Leave = () => {
   const empId = user?.employee?.id;
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [toast, setToast] = useState(null);
+  
   const [formData, setFormData] = useState({
     startDate: '',
     endDate: '',
@@ -27,6 +29,19 @@ const Leave = () => {
     reason: '',
     medicalAttachment: null
   });
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+  };
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   const compressImage = (file) => {
     return new Promise((resolve) => {
@@ -89,13 +104,30 @@ const Leave = () => {
   const leaveMutation = useMutation({
     mutationFn: (data) => leaveAPI.create(data),
     onSuccess: () => {
-      alert('Leave request submitted successfully!');
+      showToast('Leave request submitted successfully!', 'success');
       setIsModalOpen(false);
       setFormData({ startDate: '', endDate: '', type: 'Cuti', reason: '', medicalAttachment: null });
-      queryClient.invalidateQueries(['leave-requests']);
+      queryClient.invalidateQueries({ queryKey: ['leave-requests', empId] });
+      queryClient.invalidateQueries({ queryKey: ['me'] });
     },
-    onError: (err) => alert(`Error: ${err.message}`)
+    onError: (err) => showToast(err.message || 'Failed to submit request', 'error')
   });
+
+  const cancelMutation = useMutation({
+    mutationFn: (id) => leaveAPI.cancel(id),
+    onSuccess: () => {
+      showToast('Leave request cancelled successfully!', 'success');
+      queryClient.invalidateQueries({ queryKey: ['leave-requests', empId] });
+      queryClient.invalidateQueries({ queryKey: ['me'] });
+    },
+    onError: (err) => showToast(err.message || 'Failed to cancel leave request', 'error')
+  });
+
+  const handleCancel = (id) => {
+    if (window.confirm('Apakah Anda yakin ingin membatalkan pengajuan cuti ini?')) {
+      cancelMutation.mutate(id);
+    }
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -103,6 +135,9 @@ const Leave = () => {
   };
 
   const list = requests?.data || [];
+  const emp = userData?.user?.employee || user?.employee || {};
+  const remainingLeave = emp.remainingLeave ?? 0;
+  const leaveQuota = emp.leaveQuota ?? 12;
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-5 duration-500">
@@ -117,6 +152,22 @@ const Leave = () => {
         >
           <Plus className="w-6 h-6" />
         </button>
+      </div>
+
+      {/* Leave Quota Card */}
+      <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-6 rounded-[2rem] text-white shadow-xl shadow-blue-600/10 relative overflow-hidden">
+        <div className="relative z-10 flex justify-between items-center">
+          <div>
+            <p className="text-[10px] font-bold text-blue-200 uppercase tracking-widest mb-1.5">Sisa Jatah Cuti</p>
+            <h2 className="text-3xl font-black tracking-tight">
+              {remainingLeave} <span className="text-sm font-medium text-blue-200">dari {leaveQuota} Hari</span>
+            </h2>
+          </div>
+          <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shrink-0">
+            <Calendar className="w-6 h-6 text-white" />
+          </div>
+        </div>
+        <div className="absolute bottom-[-30px] right-[-30px] w-36 h-36 bg-white/5 rounded-full blur-2xl" />
       </div>
 
       {/* History List */}
@@ -146,6 +197,7 @@ const Leave = () => {
               <span className={`px-3 py-1.5 rounded-lg text-[10px] font-semibold border ${
                 item.status === 'PENDING' ? 'bg-amber-50 text-amber-700 border-amber-200' :
                 item.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                item.status === 'CANCELLED' ? 'bg-slate-100 text-slate-500 border-slate-200' :
                 'bg-rose-50 text-rose-700 border-rose-200'
               }`}>
                 {item.status}
@@ -166,6 +218,18 @@ const Leave = () => {
             {item.reason && (
               <div className="px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl">
                 <p className="text-xs text-slate-500 italic leading-relaxed">"{item.reason}"</p>
+              </div>
+            )}
+
+            {item.status === 'PENDING' && (
+              <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end">
+                <button 
+                  onClick={() => handleCancel(item.id)}
+                  disabled={cancelMutation.isPending}
+                  className="px-4 py-2 border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-500 hover:text-red-700 disabled:opacity-50 transition-all rounded-xl text-xs font-semibold active:scale-[0.98]"
+                >
+                  {cancelMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin text-red-600" /> : 'Batalkan Pengajuan'}
+                </button>
               </div>
             )}
           </div>
@@ -302,6 +366,17 @@ const Leave = () => {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className={`fixed bottom-24 left-1/2 -translate-x-1/2 px-6 py-3.5 rounded-2xl shadow-xl z-50 transition-all duration-300 flex items-center gap-2 border text-sm font-semibold animate-in fade-in slide-in-from-bottom-4 ${
+          toast.type === 'error' 
+            ? 'bg-rose-50 text-rose-700 border-rose-200' 
+            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+        }`}>
+          {toast.type === 'error' ? <AlertCircle className="w-4 h-4 text-rose-600" /> : <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+          {toast.message}
         </div>
       )}
     </div>

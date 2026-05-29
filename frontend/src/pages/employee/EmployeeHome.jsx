@@ -24,15 +24,38 @@ const EmployeeHome = () => {
   const user = authAPI.getStoredUser();
   const empId = user?.employee?.id;
 
+  const [toast, setToast] = useState(null);
+  const [timeState, setTimeState] = useState(new Date());
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+  };
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeState(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   const { data: userData, isLoading: userLoading } = useQuery({
     queryKey: ['me'],
     queryFn: () => authAPI.getMe(),
   });
 
   const { data: attendanceData, isLoading: attLoading } = useQuery({
-    queryKey: ['today-attendance'],
+    queryKey: ['today-attendance', empId],
     queryFn: () => attendanceAPI.getAll({ period: 'Today', search: user?.employee?.name }),
-    enabled: !!user?.employee?.name,
+    enabled: !!user?.employee?.name && !!empId,
   });
   
   const { data: annData } = useQuery({
@@ -76,7 +99,7 @@ const EmployeeHome = () => {
         }
         
         if (successCount > 0) {
-          alert(`Berhasil sinkronisasi ${successCount} rekam absen offline ke server!`);
+          showToast(`Berhasil sinkronisasi ${successCount} rekam absen offline ke server!`, 'success');
           localStorage.removeItem('pending_sync');
           queryClient.invalidateQueries({ queryKey: ['today-attendance'] });
         }
@@ -107,9 +130,9 @@ const EmployeeHome = () => {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['today-attendance'] });
-      alert(data.message);
+      showToast(data.message, 'success');
     },
-    onError: (err) => alert(err.message),
+    onError: (err) => showToast(err.message || 'Failed to check in', 'error'),
   });
 
   const checkOutMutation = useMutation({
@@ -130,14 +153,14 @@ const EmployeeHome = () => {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['today-attendance'] });
-      alert(data.message);
+      showToast(data.message, 'success');
     },
-    onError: (err) => alert(err.message),
+    onError: (err) => showToast(err.message || 'Failed to check out', 'error'),
   });
 
-  const todayRecord = attendanceData?.data?.[0];
-  const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const currentDate = new Date().toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' });
+  const todayRecord = attendanceData?.data?.find(r => r.employeeId === empId);
+  const currentTime = timeState.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const currentDate = timeState.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' });
 
   // Robust check: treat '-- : --' as empty/null
   const hasCheckedIn = todayRecord?.checkIn && todayRecord.checkIn !== '-- : --';
@@ -148,6 +171,8 @@ const EmployeeHome = () => {
   const shiftStart = shift?.startTime || '08:00';
   const shiftEnd = shift?.endTime || '17:00';
 
+  const hasFaceData = userData?.user?.faceDescriptor || userData?.user?.biometricKey || userData?.user?.employee?.faceDescriptor;
+
   if (userLoading || attLoading) {
     return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600 w-8 h-8" /></div>;
   }
@@ -155,6 +180,25 @@ const EmployeeHome = () => {
   return (
     <div className="min-h-screen relative overflow-hidden font-sans pb-20">
       <div className="relative z-10 p-2 space-y-5">
+        {/* Biometric Warning Banner */}
+        {!hasFaceData && (
+          <div className="bg-rose-50 border border-rose-100 p-4 rounded-2xl flex items-center justify-between gap-3 shadow-sm animate-in slide-in-from-top-4 duration-300">
+            <div className="flex gap-3">
+              <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-bold text-rose-800">Biometrik Wajah Belum Terdaftar</p>
+                <p className="text-[10px] text-rose-600 mt-0.5">Daftarkan wajah Anda di menu profil untuk melakukan presensi.</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => navigate('/employee/face-check')}
+              className="shrink-0 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all"
+            >
+              Daftar
+            </button>
+          </div>
+        )}
+
         {/* Header Info */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden">
           <div className="relative z-10">
@@ -333,6 +377,17 @@ const EmployeeHome = () => {
           </div>
         )}
       </div>
+
+      {toast && (
+        <div className={`fixed bottom-24 left-1/2 -translate-x-1/2 px-6 py-3.5 rounded-2xl shadow-xl z-50 transition-all duration-300 flex items-center gap-2 border text-sm font-semibold animate-in fade-in slide-in-from-bottom-4 ${
+          toast.type === 'error' 
+            ? 'bg-rose-50 text-rose-700 border-rose-200' 
+            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+        }`}>
+          {toast.type === 'error' ? <AlertCircle className="w-4 h-4 text-rose-600" /> : <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+          {toast.message}
+        </div>
+      )}
     </div>
   );
 };

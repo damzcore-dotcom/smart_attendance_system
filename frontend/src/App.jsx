@@ -43,6 +43,7 @@ import Scan from './pages/employee/Scan';
 import FaceCheck from './pages/employee/FaceCheck';
 import Leave from './pages/employee/Leave';
 import MySlips from './pages/employee/MySlips';
+import Calendar from './pages/employee/Calendar';
 import Users from './pages/admin/Users';
 import Login from './pages/Login';
 import NotFound from './pages/NotFound';
@@ -160,6 +161,7 @@ function App() {
             <Route path="face-check" element={<FaceCheck />} />
             <Route path="leave" element={<Leave />} />
             <Route path="slips" element={<MySlips />} />
+            <Route path="calendar" element={<Calendar />} />
           </Route>
 
           {/* Redirects */}

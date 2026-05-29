@@ -10,23 +10,41 @@ const getStats = async (req, res) => {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const totalEmployees = await prisma.employee.count({ where: { status: 'ACTIVE' } });
+    const nonBhlWhere = {
+      status: 'ACTIVE',
+      employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] },
+      salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] }
+    };
+
+    const totalEmployees = await prisma.employee.count({ where: nonBhlWhere });
     const prevTotal = await prisma.employee.count({ 
       where: { 
-        status: 'ACTIVE',
+        ...nonBhlWhere,
         createdAt: { lt: today }
       } 
     });
 
     const todayRecords = await prisma.attendance.findMany({
-      where: { date: { gte: today, lt: tomorrow } },
+      where: { 
+        date: { gte: today, lt: tomorrow },
+        employee: {
+          employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] },
+          salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] }
+        }
+      },
     });
 
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayEnd = new Date(today);
     const yesterdayRecords = await prisma.attendance.findMany({
-      where: { date: { gte: yesterday, lt: yesterdayEnd } },
+      where: { 
+        date: { gte: yesterday, lt: yesterdayEnd },
+        employee: {
+          employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] },
+          salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] }
+        }
+      },
     });
 
     const present = todayRecords.filter(r => r.status === 'PRESENT').length;
@@ -83,7 +101,13 @@ const getWeeklyTrends = async (req, res) => {
 
     // Single query: fetch all records in the 7-day range
     const records = await prisma.attendance.findMany({
-      where: { date: { gte: weekStart, lt: weekEnd } },
+      where: { 
+        date: { gte: weekStart, lt: weekEnd },
+        employee: {
+          employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] },
+          salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] }
+        }
+      },
       select: { date: true, status: true },
     });
 
@@ -128,7 +152,11 @@ const getDeptLateness = async (req, res) => {
         where: {
           date: { gte: startOfMonth },
           status: 'LATE',
-          employee: { departmentId: dept.id },
+          employee: { 
+            departmentId: dept.id,
+            employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] },
+            salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] }
+          },
         },
         _sum: { lateMinutes: true },
       });
@@ -153,7 +181,13 @@ const getDeptLateness = async (req, res) => {
 const getRecentLate = async (req, res) => {
   try {
     const records = await prisma.attendance.findMany({
-      where: { status: 'LATE' },
+      where: { 
+        status: 'LATE',
+        employee: {
+          employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] },
+          salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] }
+        }
+      },
       include: { employee: { include: { department: true } } },
       orderBy: { checkIn: 'desc' },
       take: 5,
@@ -184,7 +218,11 @@ const getAdminNotifications = async (req, res) => {
 
     // 1. Pending Face Enrollments
     const pendingFaces = await prisma.employee.findMany({
-      where: { faceStatus: 'PENDING' },
+      where: { 
+        faceStatus: 'PENDING',
+        employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] },
+        salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] }
+      },
       take: 5,
       orderBy: { createdAt: 'desc' }
     });

@@ -1,5 +1,12 @@
 const prisma = require('../prismaClient');
 const ZKLib = require('node-zklib');
+const crypto = require('crypto');
+const { recordAuditLog } = require('./auditLogController');
+
+// Short-lived cache for attendance sync preview data
+const attendanceSyncCache = new Map();
+const CACHE_TIMEOUT = 15 * 60 * 1000; // 15 minutes
+
 
 /**
  * Get all devices
@@ -81,6 +88,18 @@ const addDevice = async (req, res) => {
     const device = await prisma.device.create({
       data: { name, ipAddress, port: parseInt(port) || 4370, locationId: locationId ? parseInt(locationId) : null }
     });
+
+    await recordAuditLog({
+      userId: req.user.id,
+      username: req.user.username,
+      role: req.user.role,
+      action: 'CREATE',
+      entity: 'Device',
+      entityId: device.id,
+      details: JSON.stringify({ name: device.name, ipAddress: device.ipAddress, port: device.port }),
+      ipAddress: req.ip
+    });
+
     res.json({ success: true, data: device });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -93,7 +112,22 @@ const addDevice = async (req, res) => {
 const deleteDevice = async (req, res) => {
   try {
     const { id } = req.params;
+    const device = await prisma.device.findUnique({ where: { id: parseInt(id) } });
     await prisma.device.delete({ where: { id: parseInt(id) } });
+
+    if (device) {
+      await recordAuditLog({
+        userId: req.user.id,
+        username: req.user.username,
+        role: req.user.role,
+        action: 'DELETE',
+        entity: 'Device',
+        entityId: device.id,
+        details: JSON.stringify({ name: device.name, ipAddress: device.ipAddress }),
+        ipAddress: req.ip
+      });
+    }
+
     res.json({ success: true, message: 'Device deleted' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -342,6 +376,22 @@ const syncUsers = async (req, res) => {
         data: { status: 'ONLINE', lastSync: new Date() }
       });
 
+      await recordAuditLog({
+        userId: req.user.id,
+        username: req.user.username,
+        role: req.user.role,
+        action: 'SYNC',
+        entity: 'Device',
+        entityId: device.id,
+        details: JSON.stringify({
+          message: 'Sync personnel committed successfully',
+          autoLinked: committedLinked,
+          createdNew: committedNew,
+          device: device.name
+        }),
+        ipAddress: req.ip
+      });
+
       return res.json({
         success: true,
         message: `Berhasil disimpan! ${committedLinked} auto-link, ${committedNew} karyawan baru.`
@@ -387,12 +437,28 @@ const syncUsers = async (req, res) => {
     let inactiveCount = 0;
     const syncDetails = [];
 
-    // Preload all unlinked employees for fuzzy matching
+    // Preload all unlinked employees for fuzzy matching (excluding BHL)
     const unlinkedEmployees = await prisma.employee.findMany({
-      where: { 
-        OR: [
-          { fingerPrintId: null },
-          { fingerPrintId: '' }
+      where: {
+        AND: [
+          {
+            OR: [
+              { fingerPrintId: null },
+              { fingerPrintId: '' }
+            ]
+          },
+          {
+            OR: [
+              { employmentStatus: null },
+              { employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } }
+            ]
+          },
+          {
+            OR: [
+              { salaryCategory: null },
+              { salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } }
+            ]
+          }
         ]
       }
     });
@@ -612,7 +678,26 @@ const syncAttendance = async (req, res) => {
     console.log(`[Sync] Device log date range: ${earliestDeviceLog?.toLocaleDateString()} → ${latestDeviceLog?.toLocaleDateString()}`);
     // Cocokkan PIN mesin (AC No.) dengan fingerPrintId sebagai prioritas utama
     // Fallback ke employeeCode dan idNumber untuk backward compatibility
-    const employees = await prisma.employee.findMany({ include: { shift: true } });
+    // Exclude BHL daily workers from sync attendance operations
+    const employees = await prisma.employee.findMany({
+      where: {
+        AND: [
+          {
+            OR: [
+              { employmentStatus: null },
+              { employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } }
+            ]
+          },
+          {
+            OR: [
+              { salaryCategory: null },
+              { salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } }
+            ]
+          }
+        ]
+      },
+      include: { shift: true }
+    });
     const empByFingerPrint = {};
     const empByCode = {};
     const empById = {};
@@ -809,6 +894,18 @@ const syncAttendance = async (req, res) => {
     const isPreview = req.query.preview === 'true';
 
     if (isPreview) {
+      // Generate a unique sync token and cache the records on the backend
+      const syncToken = crypto.randomUUID();
+      attendanceSyncCache.set(syncToken, {
+        deviceId: parseInt(id),
+        records: recordsToCreate,
+        expiresAt: Date.now() + CACHE_TIMEOUT
+      });
+      // Automatically cleanup token after timeout
+      setTimeout(() => {
+        attendanceSyncCache.delete(syncToken);
+      }, CACHE_TIMEOUT);
+
       // Map back to a friendlier format for frontend display
       // Include employeeId so the frontend can send it back for direct commit
       const previewData = recordsToCreate.map(r => {
@@ -840,6 +937,7 @@ const syncAttendance = async (req, res) => {
       return res.json({ 
         success: true, 
         message,
+        syncToken, // <-- Secure session sync token
         data: previewData,
         rawRecords: recordsToCreate.length,
         diagnostics: {
@@ -943,6 +1041,21 @@ const syncAttendance = async (req, res) => {
       data: { lastSync: new Date(), status: 'ONLINE' }
     });
 
+    await recordAuditLog({
+      userId: req.user.id,
+      username: req.user.username,
+      role: req.user.role,
+      action: 'SYNC',
+      entity: 'Device',
+      entityId: device.id,
+      details: JSON.stringify({
+        message: 'Direct attendance sync completed successfully',
+        recordsSaved: saved,
+        device: device.name
+      }),
+      ipAddress: req.ip
+    });
+
     res.json({ success: true, message: `Sinkronisasi Absen berhasil. ${saved} record absen diperbarui. (Terbaik dari ${allAttemptCounts.length}x percobaan: [${allAttemptCounts.join(', ')}] log)` });
   } catch (err) {
     console.error(err);
@@ -994,6 +1107,23 @@ const updateDevice = async (req, res) => {
         autoSyncTime: autoSyncTime || null
       }
     });
+
+    await recordAuditLog({
+      userId: req.user.id,
+      username: req.user.username,
+      role: req.user.role,
+      action: 'UPDATE',
+      entity: 'Device',
+      entityId: device.id,
+      details: JSON.stringify({
+        name: device.name,
+        ipAddress: device.ipAddress,
+        port: device.port,
+        autoSyncEnabled: device.autoSyncEnabled,
+        autoSyncTime: device.autoSyncTime
+      }),
+      ipAddress: req.ip
+    });
     
     res.json({ success: true, message: 'Device updated successfully', data: device });
   } catch (err) {
@@ -1008,12 +1138,31 @@ const updateDevice = async (req, res) => {
  */
 const commitAttendance = async (req, res) => {
   const { id } = req.params;
-  const { records } = req.body; // Array of preview records from frontend
+  const { syncToken } = req.body;
 
-  console.log(`[Commit] Saving ${records?.length || 0} attendance records for device ID: ${id}`);
+  console.log(`[Commit] Saving attendance records for device ID: ${id} with syncToken: ${syncToken}`);
 
   try {
+    if (!syncToken) {
+      return res.status(400).json({ success: false, message: 'Token sinkronisasi diperlukan' });
+    }
+
+    const cachedData = attendanceSyncCache.get(syncToken);
+    if (!cachedData) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Sesi sinkronisasi tidak valid atau telah kedaluwarsa. Silakan jalankan sync ulang.' 
+      });
+    }
+
+    if (cachedData.deviceId !== parseInt(id)) {
+      return res.status(400).json({ success: false, message: 'Token sinkronisasi tidak cocok dengan mesin ini' });
+    }
+
+    const records = cachedData.records;
+
     if (!records || records.length === 0) {
+      attendanceSyncCache.delete(syncToken);
       return res.json({ success: true, message: 'Tidak ada data untuk disimpan.' });
     }
 
@@ -1023,7 +1172,27 @@ const commitAttendance = async (req, res) => {
     }
 
     const { calculateLateness, resolveStatus } = require('../utils/lateCalculator');
-    const employees = await prisma.employee.findMany({ include: { shift: true } });
+    
+    // Fetch non-BHL employees
+    const employees = await prisma.employee.findMany({
+      where: {
+        AND: [
+          {
+            OR: [
+              { employmentStatus: null },
+              { employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } }
+            ]
+          },
+          {
+            OR: [
+              { salaryCategory: null },
+              { salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } }
+            ]
+          }
+        ]
+      },
+      include: { shift: true }
+    });
     const empMap = {};
     employees.forEach(e => { empMap[e.id] = e; });
 
@@ -1036,19 +1205,19 @@ const commitAttendance = async (req, res) => {
         const checkIn = record.checkIn ? new Date(record.checkIn) : null;
         const checkOut = record.checkOut ? new Date(record.checkOut) : null;
 
-        if (!employeeId) {
-          console.warn(`[Commit] Skipping record with no employeeId`);
+        // Double check: if it's a BHL employee, we skip it
+        const emp = empMap[employeeId];
+        if (!emp) {
+          console.warn(`[Commit] Skipping record with no employeeId or BHL employee: ${employeeId}`);
           failed++;
           continue;
         }
 
         // Normalize date to UTC midnight for @db.Date compatibility
-        // This ensures consistent matching with the @@unique([employeeId, date]) constraint
         const rawDate = new Date(record.date);
         const date = new Date(Date.UTC(rawDate.getFullYear(), rawDate.getMonth(), rawDate.getDate()));
 
         // Recalculate status based on employee's shift
-        const emp = empMap[employeeId];
         const shiftStart = emp?.shift?.startTime || '08:00';
         const gracePeriod = emp?.shift?.gracePeriod || 15;
 
@@ -1057,8 +1226,47 @@ const commitAttendance = async (req, res) => {
           : { lateMinutes: 0, status: 'Mangkir' };
         const status = resolveStatus(checkIn, checkOut, calc.status);
 
-        // Use upsert to handle both new and existing records atomically
-        // This avoids the race condition of findUnique + create/update
+        // Fetch existing record first to merge check-in and check-out times
+        const existingRecord = await prisma.attendance.findUnique({
+          where: {
+            employeeId_date: {
+              employeeId: employeeId,
+              date: date
+            }
+          }
+        });
+
+        let mergedCheckIn = checkIn;
+        let mergedCheckOut = checkOut;
+        let finalStatus = status;
+        let lateMins = calc.lateMinutes;
+
+        if (existingRecord) {
+          if (checkIn) {
+            mergedCheckIn = existingRecord.checkIn 
+              ? (checkIn < existingRecord.checkIn ? checkIn : existingRecord.checkIn) 
+              : checkIn;
+          } else {
+            mergedCheckIn = existingRecord.checkIn;
+          }
+
+          if (checkOut) {
+            mergedCheckOut = existingRecord.checkOut 
+              ? (checkOut > existingRecord.checkOut ? checkOut : existingRecord.checkOut) 
+              : checkOut;
+          } else {
+            mergedCheckOut = existingRecord.checkOut;
+          }
+
+          // Recalculate based on merged
+          const calcMerged = mergedCheckIn
+            ? calculateLateness(mergedCheckIn, shiftStart, gracePeriod)
+            : { lateMinutes: 0, status: 'Mangkir' };
+          lateMins = calcMerged.lateMinutes;
+          finalStatus = resolveStatus(mergedCheckIn, mergedCheckOut, calcMerged.status);
+        }
+
+        // Concurrency-safe Upsert
         await prisma.attendance.upsert({
           where: {
             employeeId_date: {
@@ -1069,17 +1277,17 @@ const commitAttendance = async (req, res) => {
           create: {
             employeeId,
             date,
-            checkIn,
-            checkOut,
-            status,
-            lateMinutes: calc.lateMinutes,
+            checkIn: mergedCheckIn,
+            checkOut: mergedCheckOut,
+            status: finalStatus,
+            lateMinutes: lateMins,
             mode: 'Fingerprint'
           },
           update: {
-            checkIn: checkIn || undefined,
-            checkOut: checkOut || undefined,
-            status,
-            lateMinutes: calc.lateMinutes,
+            checkIn: mergedCheckIn || undefined,
+            checkOut: mergedCheckOut || undefined,
+            status: finalStatus,
+            lateMinutes: lateMins,
             mode: 'Fingerprint'
           }
         });
@@ -1095,6 +1303,26 @@ const commitAttendance = async (req, res) => {
     await prisma.device.update({
       where: { id: parseInt(id) },
       data: { lastSync: new Date(), status: 'ONLINE' }
+    });
+
+    // Cleanup cache
+    attendanceSyncCache.delete(syncToken);
+
+    // Audit log
+    await recordAuditLog({
+      userId: req.user.id,
+      username: req.user.username,
+      role: req.user.role,
+      action: 'SYNC',
+      entity: 'Device',
+      entityId: device.id,
+      details: JSON.stringify({
+        message: 'Attendance sync committed successfully via token',
+        recordsSaved: saved,
+        recordsFailed: failed,
+        device: device.name
+      }),
+      ipAddress: req.ip
     });
 
     console.log(`[Commit] Done. Saved: ${saved}, Failed: ${failed}`);

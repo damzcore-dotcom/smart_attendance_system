@@ -44,27 +44,41 @@ const History = () => {
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedDay, setSelectedDay] = useState(null);
+  const [toast, setToast] = useState(null);
   const [formData, setFormData] = useState({
-    type: 'IN',
+    type: 'In',
     requestedTime: '',
     reason: ''
   });
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+  };
 
   const queryClient = useQueryClient();
 
   const correctionMutation = useMutation({
     mutationFn: (data) => correctionAPI.create(data),
     onSuccess: () => {
-      alert('Correction request submitted successfully!');
+      showToast('Correction request submitted successfully!', 'success');
       setIsModalOpen(false);
-      setFormData({ type: 'IN', requestedTime: '', reason: '' });
+      setFormData({ type: 'In', requestedTime: '', reason: '' });
       queryClient.invalidateQueries(['attendance-history']);
     },
-    onError: (err) => alert(`Error: ${err.message}`),
+    onError: (err) => showToast(`Error: ${err.message}`, 'error'),
   });
 
   const handleDayClick = (item) => {
     if (item.status === 'Libur') return;
+    
+    const clickedDate = new Date(year, month - 1, item.day);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (clickedDate > today) {
+      showToast('Tidak bisa mengajukan koreksi untuk tanggal di masa depan!', 'error');
+      return;
+    }
+
     setSelectedDay(item);
     setIsModalOpen(true);
   };
@@ -87,15 +101,23 @@ const History = () => {
     else if (norm === 'LATE') acc.late++;
     else if (norm === 'MANGKIR') acc.mangkir++;
     else if (norm === 'ABSENT') acc.absent++;
+    
+    if (curr.overtimeHours && curr.overtimeHours > 0) {
+      acc.overtime += curr.overtimeHours;
+    }
     return acc;
-  }, { present: 0, late: 0, mangkir: 0, absent: 0 });
+  }, { present: 0, late: 0, mangkir: 0, absent: 0, overtime: 0 });
 
   const handlePrevMonth = () => {
-    setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() - 1)));
+    const d = new Date(currentDate);
+    d.setMonth(d.getMonth() - 1);
+    setCurrentDate(d);
   };
 
   const handleNextMonth = () => {
-    setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + 1)));
+    const d = new Date(currentDate);
+    d.setMonth(d.getMonth() + 1);
+    setCurrentDate(d);
   };
 
   return (
@@ -165,6 +187,16 @@ const History = () => {
             </div>
           </div>
 
+          {stats.overtime > 0 && (
+            <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl flex items-center justify-between text-emerald-800 text-xs font-semibold">
+              <span className="flex items-center gap-1.5">
+                <Clock className="w-4 h-4 text-emerald-600" />
+                Total Lembur Bulan Ini
+              </span>
+              <span>{stats.overtime.toFixed(1)} Jam</span>
+            </div>
+          )}
+
           {/* History List */}
           <div className="space-y-3">
             {isLoading ? (
@@ -200,6 +232,7 @@ const History = () => {
                       'text-slate-400'
                     }`}>
                       {getStatusLabel(item.status)}
+                      {normalizeStatus(item.status) === 'LATE' && item.lateMinutes > 0 && ` (${item.lateMinutes}m)`}
                     </span>
                     <div className="flex items-center gap-1.5">
                       {normalizeStatus(item.status) === 'PRESENT' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
@@ -222,6 +255,12 @@ const History = () => {
                       </p>
                     </div>
                   </div>
+                  {item.overtimeHours && item.overtimeHours > 0 && (
+                    <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] font-bold text-emerald-600">
+                      <span>WAKTU LEMBUR</span>
+                      <span>+{item.overtimeHours} Jam</span>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -315,18 +354,18 @@ const History = () => {
               <div className="grid grid-cols-2 gap-3">
                 <button 
                   type="button"
-                  onClick={() => setFormData({...formData, type: 'IN'})}
+                  onClick={() => setFormData({...formData, type: 'In'})}
                   className={`py-3.5 rounded-xl text-sm font-semibold border transition-all duration-300 ${
-                    formData.type === 'IN' ? 'bg-blue-600 border-blue-600 text-white shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300'
+                    formData.type === 'In' ? 'bg-blue-600 border-blue-600 text-white shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300'
                   }`}
                 >
                   Check In
                 </button>
                 <button 
                   type="button"
-                  onClick={() => setFormData({...formData, type: 'OUT'})}
+                  onClick={() => setFormData({...formData, type: 'Out'})}
                   className={`py-3.5 rounded-xl text-sm font-semibold border transition-all duration-300 ${
-                    formData.type === 'OUT' ? 'bg-blue-600 border-blue-600 text-white shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300'
+                    formData.type === 'Out' ? 'bg-blue-600 border-blue-600 text-white shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300'
                   }`}
                 >
                   Check Out
@@ -380,6 +419,17 @@ const History = () => {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className={`fixed bottom-24 left-1/2 -translate-x-1/2 px-6 py-3.5 rounded-2xl shadow-xl z-50 transition-all duration-300 flex items-center gap-2 border text-sm font-semibold animate-in fade-in slide-in-from-bottom-4 ${
+          toast.type === 'error' 
+            ? 'bg-rose-50 text-rose-700 border-rose-200' 
+            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+        }`}>
+          {toast.type === 'error' ? <AlertCircle className="w-4 h-4 text-rose-600" /> : <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+          {toast.message}
         </div>
       )}
     </div>

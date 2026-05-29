@@ -67,6 +67,25 @@ const getAll = async (req, res) => {
       where.status = status;
     }
 
+    // BHL Isolation Filters
+    if (req.query.excludeBhl === 'true') {
+      where.employee = {
+        ...where.employee,
+        employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] },
+        salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] }
+      };
+    }
+
+    if (req.query.onlyBhl === 'true') {
+      where.employee = {
+        ...where.employee,
+        OR: [
+          { employmentStatus: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } },
+          { salaryCategory: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } }
+        ]
+      };
+    }
+
     // Sorting Logic
     let orderBy = { date: 'desc' };
     if (sortBy) {

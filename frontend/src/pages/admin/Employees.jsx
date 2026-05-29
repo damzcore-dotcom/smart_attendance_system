@@ -412,6 +412,13 @@ const Employees = () => {
   const pkwtAlerts = pkwtAlertsData?.data || [];
   const criticalAlertsCount = pkwtAlerts.filter(a => a.daysLeft <= 30).length;
 
+  const { data: allEmployeesData } = useQuery({
+    queryKey: ['all-employees-biometrics'],
+    queryFn: () => employeeAPI.getAll({ limit: 10000, excludeBhl: true })
+  });
+  const allEmployees = allEmployeesData?.data || [];
+  const pendingBiometricsCount = allEmployees.filter(e => e.faceIdDisplay !== 'Enrolled').length;
+
   return (
     <div className="space-y-8 pb-12 animate-in fade-in duration-500">
       <div className="print:hidden space-y-8">
@@ -493,6 +500,39 @@ const Employees = () => {
           </button>
         </div>
       </div>
+
+      {/* Banners & Notices */}
+      {(pendingBiometricsCount > 0 || criticalAlertsCount > 0) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6 px-1">
+          {pendingBiometricsCount > 0 && (
+            <div className="flex items-center gap-4 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 rounded-2xl p-5 shadow-sm animate-in slide-in-from-top-4 fade-in duration-300">
+              <div className="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center border border-amber-200/50 shrink-0 shadow-inner">
+                <ScanFace className="w-6 h-6 animate-pulse" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-amber-800">Pendaftaran Biometrik Wajah Tertunda</h4>
+                <p className="text-xs text-amber-600/90 mt-1 leading-relaxed">
+                  Terdapat <span className="font-extrabold">{pendingBiometricsCount} karyawan</span> yang belum mendaftarkan data wajah mereka untuk absen CCTV.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {criticalAlertsCount > 0 && (
+            <div className="flex items-center gap-4 bg-gradient-to-r from-rose-50 to-orange-50/50 border border-rose-200/80 rounded-2xl p-5 shadow-sm animate-in slide-in-from-top-4 fade-in duration-300" style={{ animationDelay: '100ms' }}>
+              <div className="w-12 h-12 rounded-xl bg-rose-500/10 text-rose-600 flex items-center justify-center border border-rose-200/50 shrink-0 shadow-inner">
+                <AlertCircle className="w-6 h-6 animate-bounce" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-rose-800">Peringatan Kontrak Kerja (PKWT)</h4>
+                <p className="text-xs text-rose-600/90 mt-1 leading-relaxed">
+                  Ada <span className="font-extrabold">{criticalAlertsCount} kontrak karyawan</span> yang akan habis dalam waktu kurang dari 30 hari. Harap tinjau di menu PKWT.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 2. Global Filter Matrix */}
       <div className="bg-white p-6 border border-slate-200 rounded-2xl shadow-sm mb-6">
@@ -1846,7 +1886,7 @@ const SyncGajiNormalModal = ({ departments, onClose, onDone }) => {
   const fetchDeptEmployees = async (dept) => {
     setLoading(true);
     try {
-      const res = await employeeAPI.getAll({ dept, limit: 1000 });
+      const res = await employeeAPI.getAll({ dept, limit: 1000, excludeBhl: true });
       setEmployees(res.data || []);
       // Auto-select all by default
       setSelectedIds((res.data || []).map(e => e.id));

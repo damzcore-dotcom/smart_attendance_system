@@ -38,7 +38,7 @@ const DailyWorkerAttendance = () => {
 
   const { data: attendanceData, isLoading: attLoading } = useQuery({
     queryKey: ['attendance-for-bhl', selectedDate],
-    queryFn: () => attendanceAPI.getAll({ date: selectedDate, limit: 1000 }),
+    queryFn: () => attendanceAPI.getAll({ date: selectedDate, limit: 1000, onlyBhl: true }),
   });
 
   const selectedMonth = selectedDate.substring(0, 7);

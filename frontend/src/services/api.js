@@ -315,6 +315,7 @@ export const correctionAPI = {
     return apiFetch(`/corrections${q ? `?${q}` : ''}`);
   },
   review: (id, data) => apiFetch(`/corrections/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  getByEmployee: (empId) => apiFetch(`/corrections/employee/${empId}`),
 };
 
 // ─── Schedule API ────────────────────────────────
@@ -368,6 +369,7 @@ export const leaveAPI = {
   review: (id, data) => apiFetch(`/leave/${id}/review`, { method: 'PUT', body: JSON.stringify(data) }),
   massApply: (data) => apiFetch('/leave/mass', { method: 'POST', body: JSON.stringify(data) }),
   getMassLeaves: () => apiFetch('/leave/mass'),
+  cancel: (id) => apiFetch(`/leave/${id}/cancel`, { method: 'PUT' }),
 };
 
 // ─── Backup API ──────────────────────────────────

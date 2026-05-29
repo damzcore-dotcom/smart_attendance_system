@@ -36,12 +36,30 @@ const startCronJobs = () => {
             continue;
           }
 
-          const employees = await prisma.employee.findMany({ include: { shift: true } });
+          const employees = await prisma.employee.findMany({
+            where: {
+              AND: [
+                {
+                  OR: [
+                    { employmentStatus: null },
+                    { employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } }
+                  ]
+                },
+                {
+                  OR: [
+                    { salaryCategory: null },
+                    { salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } }
+                  ]
+                }
+              ]
+            },
+            include: { shift: true }
+          });
           const empByFingerPrint = {};
           const empByCode = {};
           employees.forEach(e => {
-            if (e.fingerPrintId) empByFingerPrint[String(e.fingerPrintId)] = e;
-            if (e.employeeCode) empByCode[String(e.employeeCode)] = e;
+            if (e.fingerPrintId) empByFingerPrint[String(e.fingerPrintId).trim()] = e;
+            if (e.employeeCode) empByCode[String(e.employeeCode).trim()] = e;
           });
 
           // Fetch Settings to check for Saturday Half-Day rules

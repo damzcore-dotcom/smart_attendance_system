@@ -240,7 +240,13 @@ const massApply = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Mass leave duration cannot exceed 30 days to prevent buffer overflow.' });
     }
 
-    const employees = await prisma.employee.findMany({ where: { status: 'ACTIVE' } });
+    const employees = await prisma.employee.findMany({ 
+      where: { 
+        status: 'ACTIVE',
+        employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] },
+        salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] }
+      } 
+    });
 
     // Transaction for safety
     await prisma.$transaction(async (tx) => {
@@ -314,4 +320,37 @@ const getMassLeaves = async (req, res) => {
   }
 };
 
-module.exports = { create, getAll, getByEmployee, review, massApply, getMassLeaves };
+/**
+ * PUT /api/leave/:id/cancel
+ * Employee cancels their own pending leave request
+ */
+const cancelLeave = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+
+    const leave = await prisma.leaveRequest.findUnique({ where: { id } });
+
+    if (!leave) {
+      return res.status(404).json({ success: false, message: 'Leave request not found' });
+    }
+
+    if (leave.status !== 'PENDING') {
+      return res.status(400).json({ success: false, message: 'Only pending leave requests can be cancelled' });
+    }
+
+    if (leave.employeeId !== req.user.employeeId) {
+      return res.status(403).json({ success: false, message: 'You can only cancel your own leave requests' });
+    }
+
+    const updated = await prisma.leaveRequest.update({
+      where: { id },
+      data: { status: 'CANCELLED' },
+    });
+
+    res.json({ success: true, message: 'Leave request cancelled successfully', data: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { create, getAll, getByEmployee, review, massApply, getMassLeaves, cancelLeave };

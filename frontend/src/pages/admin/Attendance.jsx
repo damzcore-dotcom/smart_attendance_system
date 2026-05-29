@@ -64,7 +64,8 @@ const Attendance = () => {
     status: '',
     search: '',
     sortBy: 'date',
-    order: 'desc'
+    order: 'desc',
+    excludeBhl: true
   });
 
   const [isReportModalOpen, setReportModalOpen] = useState(false);
@@ -98,7 +99,7 @@ const Attendance = () => {
     setReportDept('');
     fetchReportSettings();
     try {
-      const res = await employeeAPI.getAll({ limit: 10000 });
+      const res = await employeeAPI.getAll({ limit: 10000, excludeBhl: true });
       setReportEmployees(res.data || []);
     } catch (err) {
       console.error(err);

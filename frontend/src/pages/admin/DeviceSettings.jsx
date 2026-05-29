@@ -10,6 +10,7 @@ const DeviceSettings = () => {
   const [syncing, setSyncing] = useState(null);
   const [previewData, setPreviewData] = useState(null);
   const [activeDeviceId, setActiveDeviceId] = useState(null);
+  const [syncToken, setSyncToken] = useState(null);
   const [syncPersonnelResult, setSyncPersonnelResult] = useState(null);
   const [syncPersonnelFilter, setSyncPersonnelFilter] = useState('ALL');
   const [syncDiagnostics, setSyncDiagnostics] = useState(null);
@@ -148,6 +149,7 @@ const DeviceSettings = () => {
       }
 
       setPreviewData(data.data);
+      setSyncToken(data.syncToken); // <-- Store sync token
       setActiveDeviceId(id);
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to fetch attendance preview');
@@ -157,16 +159,16 @@ const DeviceSettings = () => {
   };
 
   const commitSyncAttendance = async () => {
-    if (!activeDeviceId || !previewData) return;
+    if (!activeDeviceId || !syncToken) return;
     try {
       setSyncing('commit-' + activeDeviceId);
-      // Send the already-fetched preview data directly to the commit endpoint
-      // This avoids re-fetching from the unreliable UDP fingerprint machine
+      // Send the syncToken to the commit endpoint
       const { data } = await api.post(`/devices/${activeDeviceId}/commit-attendance`, {
-        records: previewData
+        syncToken: syncToken
       });
       alert(data.message);
       setPreviewData(null);
+      setSyncToken(null);
       setActiveDeviceId(null);
       fetchDevices(); 
     } catch (err) {
@@ -388,7 +390,7 @@ const DeviceSettings = () => {
                 <p className="text-sm text-slate-500 mt-1">Ditemukan {previewData.length} record absensi dari mesin fingerprint.</p>
               </div>
               <button 
-                onClick={() => setPreviewData(null)}
+                onClick={() => { setPreviewData(null); setSyncToken(null); }}
                 className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors"
               >
                 ✕
@@ -437,7 +439,7 @@ const DeviceSettings = () => {
 
             <div className="p-6 border-t border-slate-100 bg-white flex justify-end gap-3 shrink-0">
               <button 
-                onClick={() => setPreviewData(null)}
+                onClick={() => { setPreviewData(null); setSyncToken(null); }}
                 className="px-6 py-2.5 rounded-xl font-bold text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-all"
               >
                 Batal

@@ -151,8 +151,8 @@ const AdminDashboard = () => {
     // ... [keep same PDF logic] ...
     try {
       const [employeesRes, attendanceRes] = await Promise.all([
-        employeeAPI.getAll({ limit: 10000 }),
-        attendanceAPI.getAll({ period: 'Today' })
+        employeeAPI.getAll({ limit: 10000, excludeBhl: true }),
+        attendanceAPI.getAll({ period: 'Today', excludeBhl: true })
       ]);
       
       const employees = employeesRes?.data || [];

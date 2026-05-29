@@ -11,7 +11,8 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { authAPI } from '../../services/api';
+import { useMemo } from 'react';
+import { authAPI, scheduleAPI } from '../../services/api';
 
 const Schedule = () => {
   const navigate = useNavigate();
@@ -20,6 +21,22 @@ const Schedule = () => {
     queryKey: ['me'],
     queryFn: () => authAPI.getMe(),
   });
+
+  const user = authAPI.getStoredUser();
+  const empId = user?.employee?.id;
+
+  const { data: overridesData } = useQuery({
+    queryKey: ['schedule-overrides', empId],
+    queryFn: () => scheduleAPI.getOverrides(),
+    enabled: !!empId,
+  });
+
+  const myOverrides = useMemo(() => {
+    const list = overridesData?.data || overridesData || [];
+    if (!Array.isArray(list) || !empId) return [];
+    return list.filter(o => o.employeeId === empId && new Date(o.endDate) >= new Date())
+      .sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+  }, [overridesData, empId]);
 
   const shift = userData?.user?.employee?.shift || { name: 'No Shift Assigned', startTime: '--:--', endTime: '--:--', breakStart: '12:00', breakEnd: '13:00', gracePeriod: 15 };
 
@@ -100,10 +117,35 @@ const Schedule = () => {
           </div>
           <div>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Work Location</p>
-            <p className="text-sm font-bold text-slate-800">HQ Office (Main Building)</p>
+            <p className="text-sm font-bold text-slate-800">
+              {userData?.user?.employee?.location || userData?.user?.location || 'Lokasi Kantor'}
+            </p>
           </div>
         </div>
       </div>
+
+      {/* Shift Overrides Section */}
+      {myOverrides && myOverrides.length > 0 && (
+        <div className="space-y-4">
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">Active / Upcoming Shift Overrides</h3>
+          {myOverrides.map((override) => (
+            <div key={override.id} className="bg-amber-50/50 border border-amber-100 p-5 rounded-3xl flex gap-4 relative overflow-hidden">
+              <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center shrink-0">
+                <Calendar className="w-6 h-6" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-sm font-bold text-slate-800">{override.shift?.name}</h4>
+                <p className="text-xs text-slate-500 mt-1">
+                  Override Periode: {new Date(override.startDate).toLocaleDateString()} s/d {new Date(override.endDate).toLocaleDateString()}
+                </p>
+              </div>
+              <div className="absolute top-0 right-0 bg-amber-500 text-white text-[9px] font-bold px-3 py-1 rounded-bl-xl uppercase tracking-wider">
+                Override
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="bg-slate-100 p-6 rounded-3xl flex gap-4">
         <Info className="w-6 h-6 text-slate-400 shrink-0" />

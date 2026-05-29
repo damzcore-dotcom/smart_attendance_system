@@ -149,4 +149,33 @@ const review = async (req, res) => {
   }
 };
 
-module.exports = { create, getAll, review };
+/**
+ * GET /api/corrections/employee/:empId
+ */
+const getByEmployee = async (req, res) => {
+  try {
+    const empId = parseInt(req.params.empId);
+    const corrections = await prisma.correctionRequest.findMany({
+      where: { employeeId: empId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json({
+      success: true,
+      data: corrections.map(c => ({
+        id: c.id,
+        date: c.date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
+        type: c.type,
+        time: c.time,
+        reason: c.reason,
+        status: c.status,
+        reviewNote: c.reviewNote,
+        createdAt: c.createdAt,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { create, getAll, review, getByEmployee };

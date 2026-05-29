@@ -14,16 +14,36 @@ import {
   Briefcase,
   Hash,
   Clock as ClockIcon,
-  Banknote
+  Banknote,
+  Calendar,
+  CalendarDays,
+  ScanFace,
+  Lock,
+  AlertCircle,
+  CheckCircle2
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { authAPI } from '../../services/api';
 
 const Profile = () => {
   const navigate = useNavigate();
   const [showPersonalInfo, setShowPersonalInfo] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+  };
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   const { data: userData, isLoading } = useQuery({
     queryKey: ['me'],
@@ -38,10 +58,17 @@ const Profile = () => {
     navigate('/login');
   };
 
+
+
   const menuItems = [
     { name: 'Personal Information', icon: User, color: 'blue', action: () => setShowPersonalInfo(true) },
     { name: 'Slip Gaji Saya', icon: Banknote, color: 'blue', path: '/employee/slips' },
+    { name: 'Jadwal Shift', icon: Calendar, color: 'blue', path: '/employee/schedule' },
+    { name: 'Kalender Perusahaan', icon: CalendarDays, color: 'blue', path: '/employee/calendar' },
+    { name: 'Pendaftaran Wajah', icon: ScanFace, color: 'blue', path: '/employee/face-check' },
   ];
+
+  const hasFaceData = user?.faceDescriptor || user?.biometricKey || employee?.faceDescriptor;
 
   if (isLoading) {
     return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600 w-8 h-8" /></div>;
@@ -57,17 +84,33 @@ const Profile = () => {
               <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${employee.name || 'user'}`} alt="profile" className="w-full h-full object-cover" />
             </div>
           </div>
-          <div className="absolute bottom-1 right-1 w-9 h-9 bg-blue-600 text-white rounded-xl flex items-center justify-center shadow-lg shadow-blue-600/20 border-2 border-white">
-            <ShieldCheck className="w-5 h-5" />
-          </div>
+          {hasFaceData ? (
+            <div className="absolute bottom-1 right-1 w-9 h-9 bg-blue-600 text-white rounded-xl flex items-center justify-center shadow-lg shadow-blue-600/20 border-2 border-white">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+          ) : (
+            <div className="absolute bottom-1 right-1 w-9 h-9 bg-rose-500 text-white rounded-xl flex items-center justify-center shadow-lg shadow-rose-500/20 border-2 border-white">
+              <X className="w-5 h-5" />
+            </div>
+          )}
         </div>
         <h2 className="text-2xl font-bold text-slate-800">{employee.name || 'Staff Member'}</h2>
         <p className="text-blue-600 font-semibold text-xs uppercase tracking-wider mt-1">{employee.position || 'Operational Personnel'}</p>
         
-        <div className="flex items-center gap-2 mt-4 px-4 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-[10px] font-semibold uppercase tracking-wider border border-emerald-200">
-          <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-          Verified
-        </div>
+        {hasFaceData ? (
+          <div className="flex items-center gap-2 mt-4 px-4 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-[10px] font-semibold uppercase tracking-wider border border-emerald-200">
+            <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+            Biometric Verified
+          </div>
+        ) : (
+          <button 
+            onClick={() => navigate('/employee/face-check')}
+            className="flex items-center gap-2 mt-4 px-4 py-1.5 bg-rose-50 text-rose-700 rounded-lg text-[10px] font-bold uppercase tracking-wider border border-rose-200 active:scale-95 transition-transform"
+          >
+            <div className="w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse" />
+            Biometric Unverified • Enroll Now
+          </button>
+        )}
       </div>
 
       {/* Info Cards */}
@@ -134,7 +177,7 @@ const Profile = () => {
       {showPersonalInfo && (
         <div className="fixed inset-0 z-[100] flex flex-col justify-end">
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setShowPersonalInfo(false)} />
-          <div className="relative bg-white border-t border-slate-200 rounded-t-3xl p-8 space-y-5 animate-in slide-in-from-bottom-20 duration-500 shadow-2xl">
+          <div className="relative bg-white border-t border-slate-200 rounded-t-3xl p-8 space-y-5 animate-in slide-in-from-bottom-20 duration-500 shadow-2xl max-h-[85vh] overflow-y-auto">
             <div className="w-12 h-1 bg-slate-200 rounded-full mx-auto mb-2" onClick={() => setShowPersonalInfo(false)} />
             <div className="flex justify-between items-center mb-4">
               <div>
@@ -147,6 +190,7 @@ const Profile = () => {
             </div>
             
             <div className="grid grid-cols-1 gap-3">
+              {/* NIK */}
               <div className="flex items-center gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl">
                 <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 border border-blue-100"><Hash className="w-5 h-5" /></div>
                 <div>
@@ -155,6 +199,7 @@ const Profile = () => {
                 </div>
               </div>
               
+              {/* Department */}
               <div className="flex items-center gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl">
                 <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600 border border-emerald-100"><Briefcase className="w-5 h-5" /></div>
                 <div>
@@ -163,6 +208,7 @@ const Profile = () => {
                 </div>
               </div>
               
+              {/* Position */}
               <div className="flex items-center gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl">
                 <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600 border border-amber-100"><User className="w-5 h-5" /></div>
                 <div>
@@ -171,6 +217,7 @@ const Profile = () => {
                 </div>
               </div>
 
+              {/* Shift */}
               <div className="flex items-center gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl">
                 <div className="w-10 h-10 bg-violet-50 rounded-xl flex items-center justify-center text-violet-600 border border-violet-100"><ClockIcon className="w-5 h-5" /></div>
                 <div>
@@ -178,10 +225,92 @@ const Profile = () => {
                   <p className="text-sm font-bold text-slate-800">{employee.shift?.name || 'Default'} ({employee.shift?.startTime} - {employee.shift?.endTime})</p>
                 </div>
               </div>
+
+              {/* Join Date */}
+              <div className="flex items-center gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 border border-indigo-100"><Calendar className="w-5 h-5" /></div>
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Join Date</p>
+                  <p className="text-sm font-bold text-slate-800">{employee.joinDate ? new Date(employee.joinDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Not set'}</p>
+                </div>
+              </div>
+
+              {/* Employment Status */}
+              <div className="flex items-center gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                <div className="w-10 h-10 bg-sky-50 rounded-xl flex items-center justify-center text-sky-600 border border-sky-100"><ShieldCheck className="w-5 h-5" /></div>
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Status Pekerjaan</p>
+                  <p className="text-sm font-bold text-slate-800">{employee.employmentStatus || 'Kontrak'}</p>
+                </div>
+              </div>
+
+              {/* Birth Date */}
+              <div className="flex items-center gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                <div className="w-10 h-10 bg-fuchsia-50 rounded-xl flex items-center justify-center text-fuchsia-600 border border-fuchsia-100"><User className="w-5 h-5" /></div>
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Tanggal Lahir</p>
+                  <p className="text-sm font-bold text-slate-800">{employee.birthDate ? new Date(employee.birthDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Not set'}</p>
+                </div>
+              </div>
+
+              {/* Address */}
+              <div className="flex items-center gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                <div className="w-10 h-10 bg-rose-50 rounded-xl flex items-center justify-center text-rose-600 border border-rose-100"><MapPin className="w-5 h-5" /></div>
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Alamat</p>
+                  <p className="text-sm font-bold text-slate-800">{employee.address || 'Not set'}</p>
+                </div>
+              </div>
+
+              {/* Bank Account */}
+              <div className="flex items-center gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600 border border-emerald-100"><Banknote className="w-5 h-5" /></div>
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Rekening Bank</p>
+                  <p className="text-sm font-bold text-slate-800">
+                    {employee.bankAccount 
+                      ? `${employee.bankName || 'Bank'} - ****${employee.bankAccount.slice(-4)}` 
+                      : 'Not set'}
+                  </p>
+                </div>
+              </div>
+
+              {/* BPJS */}
+              <div className="flex items-center gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                <div className="w-10 h-10 bg-teal-50 rounded-xl flex items-center justify-center text-teal-600 border border-teal-100"><ShieldCheck className="w-5 h-5" /></div>
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">BPJS TK & Kesehatan</p>
+                  <p className="text-sm font-bold text-slate-800">
+                    TK: {employee.bpjsTk ? `****${employee.bpjsTk.slice(-4)}` : 'Not set'} | Kes: {employee.bpjsKes ? `****${employee.bpjsKes.slice(-4)}` : 'Not set'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Emergency Contact */}
+              <div className="flex items-center gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center text-orange-600 border border-orange-100"><Phone className="w-5 h-5" /></div>
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Kontak Darurat</p>
+                  <p className="text-sm font-bold text-slate-800">{employee.emergencyContact || 'Not set'}</p>
+                </div>
+              </div>
             </div>
             
             <button onClick={() => setShowPersonalInfo(false)} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-xl text-sm font-semibold transition-all shadow-sm mt-2 active:scale-[0.98]">Close</button>
           </div>
+        </div>
+      )}
+
+
+
+      {toast && (
+        <div className={`fixed bottom-24 left-1/2 -translate-x-1/2 px-6 py-3.5 rounded-2xl shadow-xl z-50 transition-all duration-300 flex items-center gap-2 border text-sm font-semibold animate-in fade-in slide-in-from-bottom-4 ${
+          toast.type === 'error' 
+            ? 'bg-rose-50 text-rose-700 border-rose-200' 
+            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+        }`}>
+          {toast.type === 'error' ? <AlertCircle className="w-4 h-4 text-rose-600" /> : <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+          {toast.message}
         </div>
       )}
 

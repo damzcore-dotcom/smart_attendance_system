@@ -5,6 +5,7 @@
 
 const prisma = require('../prismaClient');
 const zkHelper = require('../utils/zkHelper');
+const { recordAuditLog } = require('./auditLogController');
 
 // ============================================================
 // GET DEVICE DETAIL (Users on device + info)
@@ -161,6 +162,23 @@ const pushUsersToDevice = async (req, res) => {
     }
 
     const successCount = results.filter(r => r.success).length;
+
+    await recordAuditLog({
+      userId: req.user.id,
+      username: req.user.username,
+      role: req.user.role,
+      action: 'SYNC',
+      entity: 'Device',
+      entityId: device.id,
+      details: JSON.stringify({
+        message: `Pushed users to device ${device.name}`,
+        totalRequested: employees.length,
+        successCount,
+        results: results.map(r => ({ name: r.name, success: r.success, fpPushed: r.fpPushed }))
+      }),
+      ipAddress: req.ip
+    });
+
     res.json({ 
       success: true, 
       message: `${successCount}/${employees.length} karyawan berhasil di-push ke mesin ${device.name}`,
@@ -251,6 +269,22 @@ const pullTemplatesFromDevice = async (req, res) => {
       }
     }
 
+    await recordAuditLog({
+      userId: req.user.id,
+      username: req.user.username,
+      role: req.user.role,
+      action: 'SYNC',
+      entity: 'Device',
+      entityId: device.id,
+      details: JSON.stringify({
+        message: `Pulled templates from device ${device.name}`,
+        savedCount,
+        skippedCount,
+        totalOnDevice: templates.length
+      }),
+      ipAddress: req.ip
+    });
+
     res.json({
       success: true,
       message: `${savedCount} template berhasil ditarik, ${skippedCount} dilewati (unlinked)`,
@@ -282,6 +316,21 @@ const deleteUserFromDevice = async (req, res) => {
     // Remove DeviceUser record by uid
     await prisma.deviceUser.deleteMany({ 
       where: { deviceId: device.id, uid: parseInt(uid) } 
+    });
+
+    await recordAuditLog({
+      userId: req.user.id,
+      username: req.user.username,
+      role: req.user.role,
+      action: 'DELETE',
+      entity: 'DeviceUser',
+      entityId: device.id,
+      details: JSON.stringify({
+        message: `Deleted user uid ${uid} from device ${device.name}`,
+        uid: parseInt(uid),
+        device: device.name
+      }),
+      ipAddress: req.ip
     });
 
     res.json({ success: true, message: `User uid ${uid} berhasil dihapus dari mesin` });
@@ -327,7 +376,23 @@ const getEmployeeTemplates = async (req, res) => {
 const getEmployeesWithFPStatus = async (req, res) => {
   try {
     const employees = await prisma.employee.findMany({
-      where: { status: 'ACTIVE' },
+      where: {
+        status: 'ACTIVE',
+        AND: [
+          {
+            OR: [
+              { employmentStatus: null },
+              { employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } }
+            ]
+          },
+          {
+            OR: [
+              { salaryCategory: null },
+              { salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } }
+            ]
+          }
+        ]
+      },
       select: {
         id: true, name: true, employeeCode: true, fingerPrintId: true,
         department: { select: { name: true } },

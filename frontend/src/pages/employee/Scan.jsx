@@ -1,7 +1,22 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { attendanceAPI, authAPI } from '../../services/api';
+import { attendanceAPI, authAPI, settingsAPI } from '../../services/api';
+
+const getDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371e3; // metres
+  const phi1 = (lat1 * Math.PI) / 180;
+  const phi2 = (lat2 * Math.PI) / 180;
+  const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;
+  const deltaLambda = ((lon2 - lon1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+    Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c; // in metres
+};
 import { 
   ChevronLeft, 
   ShieldCheck,
@@ -27,6 +42,7 @@ const Scan = () => {
   const coordsRef = useRef(null);
   const [modelsReady, setModelsReady] = useState(false);
   const [gpsReady, setGpsReady] = useState(false);
+  const [geofenceStatus, setGeofenceStatus] = useState({ checked: false, isInside: false, distance: null, name: '', radius: 100 });
 
   // Face guide
   const [faceGuideStatus, setFaceGuideStatus] = useState('none');
@@ -82,6 +98,51 @@ const Scan = () => {
       setStatusText('Arahkan wajah Anda ke kamera');
     }
   }, [modelsReady, gpsReady]);
+
+  // Geofence check
+  useEffect(() => {
+    if (gpsReady && coordsRef.current) {
+      settingsAPI.getLocations()
+        .then(res => {
+          const locations = res.data || [];
+          if (locations.length === 0) {
+            setGeofenceStatus({ checked: true, isInside: true, distance: 0, name: 'Tanpa batas', radius: 0 });
+            return;
+          }
+          let isInside = false;
+          let nearestDist = Infinity;
+          let matchedLoc = null;
+
+          const myLat = coordsRef.current.lat;
+          const myLng = coordsRef.current.lng;
+
+          for (const loc of locations) {
+            const dist = getDistance(myLat, myLng, parseFloat(loc.lat), parseFloat(loc.lng));
+            if (dist <= loc.radius) {
+              isInside = true;
+              matchedLoc = loc;
+              nearestDist = dist;
+              break;
+            }
+            if (dist < nearestDist) {
+              nearestDist = dist;
+              matchedLoc = loc;
+            }
+          }
+
+          setGeofenceStatus({
+            checked: true,
+            isInside,
+            distance: Math.round(nearestDist),
+            name: matchedLoc?.name || 'Kantor',
+            radius: matchedLoc?.radius || 100
+          });
+        })
+        .catch(err => {
+          console.error('Failed to load locations for geofencing check:', err);
+        });
+    }
+  }, [gpsReady]);
 
   // Attendance mutation
   const mutation = useMutation({
@@ -385,6 +446,23 @@ const Scan = () => {
 
       {/* Bottom Status Bar */}
       <div className="relative z-20 px-6 py-5 bg-gradient-to-t from-black/80 to-transparent">
+        {/* Geofencing Visual Feedback */}
+        {geofenceStatus.checked && (
+          <div className={`flex items-center justify-center gap-2 mb-3 py-1.5 px-4 rounded-full w-fit mx-auto border backdrop-blur-md text-[10px] font-bold uppercase tracking-wider ${
+            geofenceStatus.isInside 
+              ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400' 
+              : 'bg-rose-500/20 border-rose-500/30 text-rose-400 animate-pulse'
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${geofenceStatus.isInside ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-rose-400 shadow-[0_0_8px_rgba(251,113,133,0.8)] animate-ping'}`}></span>
+            <span>
+              {geofenceStatus.isInside 
+                ? `Area Absen Terverifikasi: ${geofenceStatus.name}` 
+                : `Di luar area: ±${geofenceStatus.distance}m dari ${geofenceStatus.name} (Max ${geofenceStatus.radius}m)`
+              }
+            </span>
+          </div>
+        )}
+
         {/* Face guide indicator */}
         {scanStatus === 'ready' && (
           <div className="flex items-center justify-center gap-2 mb-3">
