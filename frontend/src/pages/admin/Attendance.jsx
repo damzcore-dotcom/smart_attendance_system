@@ -50,12 +50,173 @@ const getReportPeriodLabel = (filters) => {
 const getRowPenalty = (row, mangkirPenalty = 30) => {
   const status = (row.status || '').toUpperCase();
   const isMangkir = (status === 'MANGKIR' || status === 'MISSING');
-  const isAlpa = (status === 'ABSENT' || status === 'ALPA' || status === 'TANPA KETERANGAN (ALPA)');
   
-  if (isMangkir || isAlpa) {
+  if (isMangkir) {
     return (row.lateMinutes || 0) === 0 ? mangkirPenalty : 0;
   }
   return 0;
+};
+
+const getPaddedRecords = (rawRecords, summary, appliedFilters, sortConfig) => {
+  if (!rawRecords || rawRecords.length === 0) return [];
+  
+  const uniqueEmployeeCount = summary?.uniqueEmployeeCount || 1;
+  
+  if (uniqueEmployeeCount === 1 && appliedFilters.search) {
+    let startDate, endDate;
+    const now = new Date();
+    
+    if (appliedFilters.period === 'This Month') {
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      endDate = new Date(); // Show all dates up to today/print date
+    } else if (appliedFilters.period === 'Custom' && appliedFilters.startDate && appliedFilters.endDate) {
+      startDate = new Date(appliedFilters.startDate);
+      endDate = new Date(appliedFilters.endDate);
+      if (endDate > now) {
+        endDate = now;
+      }
+    } else {
+      const sorted = [...rawRecords].sort((a, b) => new Date(a.date) - new Date(b.date));
+      return sortConfig?.order === 'desc' ? sorted.reverse() : sorted;
+    }
+
+    const padData = [];
+    const dataMap = {};
+    
+    rawRecords.forEach(r => {
+      const parsedObj = new Date(r.date);
+      if (!isNaN(parsedObj.getTime())) {
+        const isoMatch = `${parsedObj.getFullYear()}-${String(parsedObj.getMonth()+1).padStart(2,'0')}-${String(parsedObj.getDate()).padStart(2,'0')}`;
+        dataMap[isoMatch] = r; 
+      }
+    });
+
+    const empRef = rawRecords[0];
+    const overrides = summary?.calendarOverrides || [];
+    const overrideMap = {};
+    overrides.forEach(c => {
+       const dStr = c.date.split('T')[0];
+       overrideMap[dStr] = c.type;
+    });
+    const workingDays = summary?.workingDays || [1,2,3,4,5];
+
+    const start = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+    const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const isoKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      const displayDate = d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+      
+      if (dataMap[isoKey]) {
+        padData.push(dataMap[isoKey]);
+      } else {
+        const isoDate = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().split('T')[0];
+        const dayOfWeek = d.getDay();
+        const overrideType = overrideMap[isoDate];
+        
+        let isLibur = false;
+        if (overrideType) {
+           isLibur = overrideType === 'HOLIDAY';
+        } else {
+           isLibur = !workingDays.includes(dayOfWeek);
+        }
+
+        padData.push({
+          id: `pad-${d.getTime()}`,
+          name: empRef.name,
+          employeeCode: empRef.employeeCode,
+          dept: empRef.dept,
+          section: empRef.section,
+          position: empRef.position,
+          date: displayDate,
+          checkIn: '--:--',
+          checkOut: '--:--',
+          status: isLibur ? 'Libur' : 'Alpa',
+          lateMinutes: 0,
+          overtimeHours: 0,
+          mode: '-',
+        });
+      }
+    }
+    
+    const sorted = [...padData].sort((a, b) => new Date(a.date) - new Date(b.date));
+    return sortConfig?.order === 'desc' ? sorted.reverse() : sorted;
+  }
+  
+  const sorted = [...rawRecords].sort((a, b) => new Date(a.date) - new Date(b.date));
+  return sortConfig?.order === 'desc' ? sorted.reverse() : sorted;
+};
+
+const getPrintPaddedLogs = (rawLogs, emp, selectedMonth, summary) => {
+  const year = parseInt(selectedMonth.split('-')[0]);
+  const monthIdx = parseInt(selectedMonth.split('-')[1]) - 1;
+  const now = new Date();
+  
+  const start = new Date(year, monthIdx, 1);
+  let end = new Date(year, monthIdx + 1, 0);
+  
+  if (year === now.getFullYear() && monthIdx === now.getMonth()) {
+    end = now;
+  }
+  
+  const dataMap = {};
+  rawLogs.forEach(r => {
+    const parsedObj = new Date(r.date);
+    if (!isNaN(parsedObj.getTime())) {
+      const isoMatch = `${parsedObj.getFullYear()}-${String(parsedObj.getMonth()+1).padStart(2,'0')}-${String(parsedObj.getDate()).padStart(2,'0')}`;
+      dataMap[isoMatch] = r; 
+    }
+  });
+
+  const overrides = summary?.calendarOverrides || [];
+  const overrideMap = {};
+  overrides.forEach(c => {
+     const dStr = c.date.split('T')[0];
+     overrideMap[dStr] = c.type;
+  });
+  const workingDays = summary?.workingDays || [1,2,3,4,5];
+
+  const padData = [];
+  const loopStart = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const loopEnd = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+
+  for (let d = new Date(loopStart); d <= loopEnd; d.setDate(d.getDate() + 1)) {
+    const isoKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const displayDate = d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    
+    if (dataMap[isoKey]) {
+      padData.push(dataMap[isoKey]);
+    } else {
+      const isoDate = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().split('T')[0];
+      const dayOfWeek = d.getDay();
+      const overrideType = overrideMap[isoDate];
+      
+      let isLibur = false;
+      if (overrideType) {
+         isLibur = overrideType === 'HOLIDAY';
+      } else {
+         isLibur = !workingDays.includes(dayOfWeek);
+      }
+
+      padData.push({
+        id: `pad-${d.getTime()}`,
+        name: emp.name,
+        employeeCode: emp.id,
+        dept: emp.dept || 'UMUM',
+        section: emp.section || '—',
+        position: emp.position || '—',
+        date: displayDate,
+        checkIn: '--:--',
+        checkOut: '--:--',
+        status: isLibur ? 'Libur' : 'Alpa',
+        lateMinutes: 0,
+        overtimeHours: 0,
+        mode: '-',
+      });
+    }
+  }
+  
+  return [...padData].sort((a, b) => new Date(a.date) - new Date(b.date));
 };
 
 
@@ -172,20 +333,26 @@ const Attendance = () => {
       const reportsArray = [];
       for(const emp of filteredEmps) {
         const res = await attendanceAPI.getHistory(emp.dbId, { startDate, endDate });
-        const logs = res.data || [];
+        const rawLogs = res.data || [];
+        const logs = getPrintPaddedLogs(rawLogs, emp, selectedMonth, data?.summary);
         
         let daysPresent = 0;
         let daysLate = 0;
         let daysAbsent = 0;
         let totalLateMinutes = 0;
         logs.forEach(log => {
+          const status = (log.status || '').toUpperCase();
           if (isPresent(log.status)) {
             daysPresent++;
-            if (log.status === 'LATE' || log.status === 'Terlambat') daysLate++;
+            if (status === 'LATE' || status === 'TERLAMBAT') daysLate++;
             totalLateMinutes += (log.lateMinutes || 0);
-          } else if (isAbsent(log.status) || log.status === 'MISSING' || log.status === 'Tanpa Keterangan (Alpa)') {
+          } else if (status === 'MANGKIR' || status === 'MISSING') {
             daysAbsent++;
-            totalLateMinutes += parseInt(companySettings?.mangkirPenaltyMinutes) || 30;
+            const hasLate = (log.lateMinutes || 0) > 0;
+            const penalty = !hasLate ? (parseInt(companySettings?.mangkirPenaltyMinutes) || 30) : 0;
+            totalLateMinutes += (log.lateMinutes || 0) + penalty;
+          } else if (isAbsent(log.status) || status === 'TANPA KETERANGAN (ALPA)' || status === 'ABSENT' || status === 'ALPA') {
+            daysAbsent++;
           }
         });
         
@@ -225,20 +392,24 @@ const Attendance = () => {
       const endDate = new Date(year, monthIdx + 1, 0).toISOString().split('T')[0];
       
       const res = await attendanceAPI.getHistory(emp.dbId, { startDate, endDate });
-      const logs = res.data || [];
+      const rawLogs = res.data || [];
+      const logs = getPrintPaddedLogs(rawLogs, emp, selectedMonth, data?.summary);
       
       let daysPresent = 0;
       let totalLateMinutes = 0;
       
       logs.forEach(log => {
-        if (log.status === 'PRESENT' || log.status === 'LATE' || log.status === 'Hadir' || log.status === 'Terlambat') {
+        const status = (log.status || '').toUpperCase();
+        if (status === 'PRESENT' || status === 'LATE' || status === 'HADIR' || status === 'TERLAMBAT') {
            daysPresent++;
         }
-        if (log.status === 'LATE' || log.status === 'Terlambat') {
+        if (status === 'LATE' || status === 'TERLAMBAT') {
            totalLateMinutes += (log.lateMinutes || 0);
         }
-        if (log.status === 'MANGKIR' || log.status === 'MISSING' || log.status === 'ABSENT' || log.status === 'Tanpa Keterangan (Alpa)') {
-           totalLateMinutes += parseInt(companySettings?.mangkirPenaltyMinutes) || 30;
+        if (status === 'MANGKIR' || status === 'MISSING') {
+           const hasLate = (log.lateMinutes || 0) > 0;
+           const penalty = !hasLate ? (parseInt(companySettings?.mangkirPenaltyMinutes) || 30) : 0;
+           totalLateMinutes += (log.lateMinutes || 0) + penalty;
         }
       });
       
@@ -366,100 +537,27 @@ const Attendance = () => {
   }
 
   if (!isLoading && data?.summary?.uniqueEmployeeCount === 1 && appliedFilters.search && filteredData.length > 0) {
-    let startDate, endDate;
-    if (appliedFilters.period === 'This Month') {
-      const now = new Date();
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-      // Padded to the end of the month
-      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0); 
-    } else if (appliedFilters.period === 'Custom' && appliedFilters.startDate && appliedFilters.endDate) {
-      startDate = new Date(appliedFilters.startDate);
-      endDate = new Date(appliedFilters.endDate);
-    }
+    filteredData = getPaddedRecords(filteredData, data?.summary, appliedFilters, sortConfig);
 
-    if (startDate && endDate) {
-      const padData = [];
-      const dataMap = {};
-      
-      // Simpan data asli ke map untuk lookup cepat berdasarkan tanggal absolut ISO
-      filteredData.forEach(r => {
-        // Gunakan date parser yang kuat untuk menstandarisasi key
-        const parsedObj = new Date(r.date);
-        const isoMatch = `${parsedObj.getFullYear()}-${String(parsedObj.getMonth()+1).padStart(2,'0')}-${String(parsedObj.getDate()).padStart(2,'0')}`;
-        dataMap[isoMatch] = r; 
-      });
-
-      const empRef = filteredData[0]; // Ambil data master karyawan dari row pertama
-      const overrides = data?.summary?.calendarOverrides || [];
-      const overrideMap = {};
-      overrides.forEach(c => {
-         const dStr = c.date.split('T')[0];
-         overrideMap[dStr] = c.type;
-      });
-      const workingDays = data?.summary?.workingDays || [1,2,3,4,5]; // default mon-fri
-
-      for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-        const isoKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-        const displayDate = d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-        
-        if (dataMap[isoKey]) {
-          padData.push(dataMap[isoKey]);
-        } else {
-          const isoDate = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().split('T')[0];
-          const dayOfWeek = d.getDay();
-          const overrideType = overrideMap[isoDate];
-          
-          let isLibur = false;
-          if (overrideType) {
-             isLibur = overrideType === 'HOLIDAY';
-          } else {
-             isLibur = !workingDays.includes(dayOfWeek);
-          }
-
-          padData.push({
-            id: `pad-${d.getTime()}`, // Fake ID untuk key React
-            name: empRef.name,
-            employeeCode: empRef.employeeCode,
-            dept: empRef.dept,
-            section: empRef.section,
-            position: empRef.position,
-            date: displayDate,
-            checkIn: '--:--',
-            checkOut: '--:--',
-            status: isLibur ? 'Libur' : 'Alpa',
-            lateMinutes: 0, // Penalty is calculated dynamically in summary
-            overtimeHours: 0,
-            mode: '-',
-          });
-        }
-      }
-      // Adjust order based on sortConfig
-      if (sortConfig.order === 'desc') {
-        filteredData = padData.reverse(); 
-      } else {
-        filteredData = padData; 
-      }
-
-      // Compute displaySummary from the padded data 
-      displaySummary = {
-        total: filteredData.length,
-        hadir: filteredData.filter(d => d.status === 'Hadir' || d.status === 'PRESENT').length,
-        telat: filteredData.filter(d => d.status === 'Terlambat' || d.status === 'LATE').length,
-        mangkir: filteredData.filter(d => d.status === 'Mangkir' || d.status === 'MANGKIR').length,
-        absen: filteredData.filter(d => d.status === 'Alpa' || d.status === 'ABSENT').length,
-        holiday: filteredData.filter(d => d.status === 'Libur' || d.status === 'HOLIDAY').length,
-        cuti: filteredData.filter(d => d.status === 'Cuti' || d.status === 'CUTI').length,
-        sakit: filteredData.filter(d => d.status === 'Sakit' || d.status === 'SAKIT').length,
-        izin: filteredData.filter(d => d.status === 'Izin' || d.status === 'IZIN').length,
-        totalLate: filteredData.reduce((sum, d) => {
-          const hasLate = (d.lateMinutes || 0) > 0;
-          const isMangkirOrAlpa = d.status === 'Mangkir' || d.status === 'Alpa' || d.status === 'MANGKIR' || d.status === 'ABSENT' || d.status === 'Alpa';
-          const penalty = (isMangkirOrAlpa && !hasLate) ? (data?.summary?.mangkirPenalty || 30) : 0;
-          return sum + (d.lateMinutes || 0) + penalty;
-        }, 0),
-        uniqueEmployeeCount: 1
-      };
-    }
+    // Compute displaySummary from the padded data 
+    displaySummary = {
+      total: filteredData.length,
+      hadir: filteredData.filter(d => d.status === 'Hadir' || d.status === 'PRESENT').length,
+      telat: filteredData.filter(d => d.status === 'Terlambat' || d.status === 'LATE').length,
+      mangkir: filteredData.filter(d => d.status === 'Mangkir' || d.status === 'MANGKIR').length,
+      absen: filteredData.filter(d => d.status === 'Alpa' || d.status === 'ABSENT').length,
+      holiday: filteredData.filter(d => d.status === 'Libur' || d.status === 'HOLIDAY').length,
+      cuti: filteredData.filter(d => d.status === 'Cuti' || d.status === 'CUTI').length,
+      sakit: filteredData.filter(d => d.status === 'Sakit' || d.status === 'SAKIT').length,
+      izin: filteredData.filter(d => d.status === 'Izin' || d.status === 'IZIN').length,
+      totalLate: filteredData.reduce((sum, d) => {
+        const hasLate = (d.lateMinutes || 0) > 0;
+        const isMangkir = d.status === 'Mangkir' || d.status === 'MANGKIR' || d.status === 'MISSING';
+        const penalty = (isMangkir && !hasLate) ? (data?.summary?.mangkirPenalty || 30) : 0;
+        return sum + (d.lateMinutes || 0) + penalty;
+      }, 0),
+      uniqueEmployeeCount: 1
+    };
   }
 
   const handleSort = (key) => {
@@ -661,7 +759,12 @@ const Attendance = () => {
       // H6 FIX: Fetch ALL records from API, not just the current page
       const allParams = { ...appliedFilters, page: 1, limit: 99999 };
       const allDataResponse = await attendanceAPI.getAll(allParams);
-      const allRecords = allDataResponse?.data || filteredData;
+      let allRecords = allDataResponse?.data || filteredData;
+
+      // Pad records for single employee to ensure completeness in Excel
+      if (allDataResponse?.summary?.uniqueEmployeeCount === 1 && appliedFilters.search && allRecords.length > 0) {
+        allRecords = getPaddedRecords(allRecords, allDataResponse?.summary, appliedFilters, { order: 'asc' });
+      }
 
       // Sort data ascending by date (oldest first)
       const sortedData = [...allRecords].sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -693,14 +796,14 @@ const Attendance = () => {
     }
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     const drawKpiBlock = (doc, x, y, width, height, label, value, theme) => {
       doc.setDrawColor(theme.stroke[0], theme.stroke[1], theme.stroke[2]);
       doc.setFillColor(theme.fill[0], theme.fill[1], theme.fill[2]);
       doc.roundedRect(x, y, width, height, 1.5, 1.5, 'FD');
       
       doc.setFontSize(7);
-      doc.setTextColor(100, 116, 139); // slate-500
+      doc.setTextColor(100, 116, 139);
       doc.text(label.toUpperCase(), x + 3, y + 4.5);
       
       doc.setFontSize(10);
@@ -714,147 +817,133 @@ const Attendance = () => {
       emerald: { fill: [240, 253, 244], stroke: [187, 247, 208], text: [21, 128, 61] },
       blue: { fill: [239, 246, 255], stroke: [191, 219, 254], text: [29, 78, 216] },
       sky: { fill: [240, 249, 255], stroke: [186, 230, 253], text: [3, 105, 161] },
+      violet: { fill: [250, 245, 255], stroke: [233, 213, 255], text: [109, 40, 217] },
       amber: { fill: [255, 251, 235], stroke: [254, 243, 199], text: [180, 83, 9] },
       rose: { fill: [254, 242, 242], stroke: [254, 202, 202], text: [185, 28, 28] },
-      violet: { fill: [250, 245, 255], stroke: [233, 213, 255], text: [109, 40, 217] }
+      fuchsia: { fill: [253, 242, 248], stroke: [251, 207, 232], text: [190, 24, 93] }
     };
 
-    if (activeViewTab === 'REKAPITULASI') {
+    try {
+      // H6 FIX: Fetch ALL records from API, not just the current page
+      const allParams = { ...appliedFilters, page: 1, limit: 99999 };
+      const allDataResponse = await attendanceAPI.getAll(allParams);
+      let rawLogs = allDataResponse?.data || filteredData;
+
+      if (anomalyFilter === 'ANOMALY') {
+        rawLogs = rawLogs.filter(isAnomaly);
+      }
+
+      // Pad records for single employee to ensure completeness in PDF
+      if (allDataResponse?.summary?.uniqueEmployeeCount === 1 && appliedFilters.search && rawLogs.length > 0) {
+        rawLogs = getPaddedRecords(rawLogs, allDataResponse?.summary, appliedFilters, { order: 'asc' });
+      }
+
       const doc = new jsPDF('l', 'mm', 'a4');
-      const pageWidth = doc.internal.pageSize.getWidth();
-      
       doc.setFontSize(20);
-      doc.setTextColor(37, 99, 235); // Blue 600 accent
-      doc.text('REKAPITULASI ABSENSI PER DEPARTEMEN & BAGIAN', 14, 20);
+      doc.setTextColor(37, 99, 235);
+      doc.text(activeViewTab === 'REKAPITULASI' ? 'REKAPITULASI ABSENSI' : 'LAPORAN ABSENSI', 14, 20);
       
       doc.setFontSize(10);
       doc.setTextColor(100);
-      doc.text(`Periode Laporan: ${getReportPeriodLabel(appliedFilters)}`, 14, 28);
-      doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 14, 33);
+      doc.text(`Periode: ${getReportPeriodLabel(appliedFilters)}`, 14, 28);
+      doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}`, 14, 33);
 
-      const rawLogs = fullDataForRekap?.data || [];
-      const totalHadir = rawLogs.filter(d => d.status === 'Hadir' || d.status === 'PRESENT').length;
-      const totalSakit = rawLogs.filter(d => d.status === 'Sakit' || d.status === 'SAKIT').length;
-      const totalIzin = rawLogs.filter(d => d.status === 'Izin' || d.status === 'IZIN').length;
-      const totalMangkir = rawLogs.filter(d => d.status === 'Mangkir' || d.status === 'MANGKIR').length;
-      const totalAlpa = rawLogs.filter(d => d.status === 'Alpa' || d.status === 'ABSENT').length;
-      const totalLateMinutes = rawLogs.reduce((sum, d) => {
+      const logsForKpis = activeViewTab === 'REKAPITULASI' ? (fullDataForRekap?.data || []) : rawLogs;
+      const totalHadir = logsForKpis.filter(d => d.status === 'Hadir' || d.status === 'PRESENT' || d.status === 'Terlambat' || d.status === 'LATE').length;
+      const totalSakit = logsForKpis.filter(d => d.status === 'Sakit' || d.status === 'SAKIT').length;
+      const totalIzin = logsForKpis.filter(d => d.status === 'Izin' || d.status === 'IZIN').length;
+      const totalCuti = logsForKpis.filter(d => d.status === 'Cuti' || d.status === 'CUTI').length;
+      const totalMangkir = logsForKpis.filter(d => d.status === 'Mangkir' || d.status === 'MANGKIR').length;
+      const totalAlpa = logsForKpis.filter(d => d.status === 'Alpa' || d.status === 'ABSENT').length;
+
+      const totalLateMinutes = logsForKpis.reduce((sum, d) => {
         const isMangkir = (d.status === 'Mangkir' || d.status === 'MANGKIR' || d.status === 'MISSING');
-        const isAlpa = (d.status === 'Alpa' || d.status === 'ABSENT');
-        const penalty = ((isMangkir || isAlpa) && (d.lateMinutes || 0) === 0) ? (fullDataForRekap?.summary?.mangkirPenalty || 30) : 0;
+        const hasLate = (d.lateMinutes || 0) > 0;
+        const penalty = (isMangkir && !hasLate) ? (allDataResponse?.summary?.mangkirPenalty || displaySummary?.mangkirPenalty || 30) : 0;
         return sum + (d.lateMinutes || 0) + penalty;
       }, 0);
 
-      // Draw KPI Cards Row
-      const blockWidth = 42;
+      // Draw 7 KPI Cards (Hadir, Sakit, Izin, Cuti, Mangkir, Alpa, Total Jam Terlambat)
+      const blockWidth = 35;
       const blockHeight = 14;
-      const gap = 3.4;
+      const gap = 4.0;
+
       drawKpiBlock(doc, 14, 37, blockWidth, blockHeight, 'Hadir', totalHadir, themes.emerald);
       drawKpiBlock(doc, 14 + 1 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Sakit', totalSakit, themes.blue);
       drawKpiBlock(doc, 14 + 2 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Izin', totalIzin, themes.sky);
-      drawKpiBlock(doc, 14 + 3 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Mangkir', totalMangkir, themes.amber);
-      drawKpiBlock(doc, 14 + 4 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Alpa', totalAlpa, themes.rose);
-      drawKpiBlock(doc, 14 + 5 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Total Jam Terlambat', formatDuration(totalLateMinutes), themes.violet);
+      drawKpiBlock(doc, 14 + 3 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Cuti', totalCuti, themes.violet);
+      drawKpiBlock(doc, 14 + 4 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Mangkir', totalMangkir, themes.amber);
+      drawKpiBlock(doc, 14 + 5 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Alpa', totalAlpa, themes.rose);
+      drawKpiBlock(doc, 14 + 6 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Total Jam Terlambat', formatDuration(totalLateMinutes), themes.fuchsia);
 
-      const tableData = rekapData.map(g => {
-        const totalExcludeOff = g.total - g.other;
-        const rate = totalExcludeOff > 0 ? Math.round((g.present / totalExcludeOff) * 100) : 100;
+      if (activeViewTab === 'REKAPITULASI') {
+        const tableData = rekapData.map((g, idx) => {
+          const totalExcludeOff = g.total - g.other;
+          const rate = totalExcludeOff > 0 ? Math.round((g.present / totalExcludeOff) * 100) : 100;
+          return [
+            g.dept,
+            g.section,
+            g.total,
+            g.present,
+            g.late,
+            g.mangkir,
+            g.absent,
+            g.other,
+            `${rate}%`,
+            formatDuration(g.totalLateMinutes)
+          ];
+        });
+
+        autoTable(doc, {
+          startY: 56,
+          head: [['Departemen', 'Bagian / Seksi', 'Total', 'Hadir', 'Terlambat', 'Mangkir', 'Alpa', 'Lainnya', 'Rasio %', 'Durasi Telat']],
+          body: tableData,
+          theme: 'grid',
+          headStyles: { fillColor: [248, 250, 252], textColor: [15, 23, 42], fontSize: 8, halign: 'center' },
+          styles: { fontSize: 8, cellPadding: 2.5, fillColor: [255, 255, 255], textColor: [51, 65, 85] }
+        });
+
+        doc.save(`Rekap_Absensi_Per_Dept_${new Date().getTime()}.pdf`);
+        return;
+      }
+
+      // Sort data ascending by date (oldest first)
+      const sortedData = [...rawLogs].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+      const tableData = sortedData.map(row => {
+        const isMangkir = (row.status === 'MANGKIR' || row.status === 'MISSING' || row.status === 'Mangkir');
+        const penalty = (isMangkir && (row.lateMinutes || 0) === 0) ? (allDataResponse?.summary?.mangkirPenalty || displaySummary?.mangkirPenalty || 30) : 0;
         return [
-          g.dept,
-          g.section,
-          g.total,
-          g.present,
-          g.late,
-          g.mangkir,
-          g.absent,
-          g.other,
-          `${rate}%`,
-          formatDuration(g.totalLateMinutes)
+          row.name,
+          row.dept,
+          row.section,
+          row.position,
+          row.date,
+          row.checkIn,
+          row.checkOut,
+          `${(row.lateMinutes || 0) + penalty} min`,
+          getStatusLabel(row.status)
         ];
       });
 
       autoTable(doc, {
         startY: 56,
-        head: [['Departemen', 'Bagian / Seksi', 'Total', 'Hadir', 'Terlambat', 'Mangkir', 'Alpa', 'Lainnya', 'Rasio %', 'Durasi Telat']],
+        head: [['Karyawan', 'Dept', 'Bagian', 'Jabatan', 'Tanggal', 'Masuk', 'Keluar', 'Telat', 'Status']],
         body: tableData,
         theme: 'grid',
         headStyles: { fillColor: [248, 250, 252], textColor: [15, 23, 42], fontSize: 8, halign: 'center' },
-        styles: { fontSize: 8, cellPadding: 2.5, fillColor: [255, 255, 255], textColor: [51, 65, 85] }
+        styles: { fontSize: 7, cellPadding: 2, fillColor: [255, 255, 255], textColor: [51, 65, 85] },
+        columnStyles: {
+          7: { halign: 'center', fontStyle: 'bold' },
+          8: { halign: 'center' }
+        }
       });
 
-      doc.save(`Rekap_Absensi_Per_Dept_${new Date().getTime()}.pdf`);
-      return;
+      doc.save(`Attendance_Report_${new Date().getTime()}.pdf`);
+    } catch (err) {
+      console.error('Export error:', err);
+      alert('Gagal export PDF: ' + err.message);
     }
-
-    const doc = new jsPDF('l', 'mm', 'a4');
-    const pageWidth = doc.internal.pageSize.getWidth();
-    
-    doc.setFontSize(20);
-    doc.setTextColor(37, 99, 235); // Blue 600 accent
-    doc.text('LAPORAN ABSENSI', 14, 20);
-    
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text(`Periode Laporan: ${getReportPeriodLabel(appliedFilters)}`, 14, 28);
-    doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 14, 33);
-
-    const rawLogs = filteredData;
-    const totalHadir = rawLogs.filter(d => d.status === 'Hadir' || d.status === 'PRESENT').length;
-    const totalSakit = rawLogs.filter(d => d.status === 'Sakit' || d.status === 'SAKIT').length;
-    const totalIzin = rawLogs.filter(d => d.status === 'Izin' || d.status === 'IZIN').length;
-    const totalMangkir = rawLogs.filter(d => d.status === 'Mangkir' || d.status === 'MANGKIR').length;
-    const totalAlpa = rawLogs.filter(d => d.status === 'Alpa' || d.status === 'ABSENT').length;
-    const totalLateMinutes = rawLogs.reduce((sum, d) => {
-      const isMangkir = (d.status === 'Mangkir' || d.status === 'MANGKIR' || d.status === 'MISSING');
-      const isAlpa = (d.status === 'Alpa' || d.status === 'ABSENT');
-      const penalty = ((isMangkir || isAlpa) && (d.lateMinutes || 0) === 0) ? (displaySummary?.mangkirPenalty || 30) : 0;
-      return sum + (d.lateMinutes || 0) + penalty;
-    }, 0);
-
-    // Draw KPI Cards Row
-    const blockWidth = 42;
-    const blockHeight = 14;
-    const gap = 3.4;
-    drawKpiBlock(doc, 14, 37, blockWidth, blockHeight, 'Hadir', totalHadir, themes.emerald);
-    drawKpiBlock(doc, 14 + 1 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Sakit', totalSakit, themes.blue);
-    drawKpiBlock(doc, 14 + 2 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Izin', totalIzin, themes.sky);
-    drawKpiBlock(doc, 14 + 3 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Mangkir', totalMangkir, themes.amber);
-    drawKpiBlock(doc, 14 + 4 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Alpa', totalAlpa, themes.rose);
-    drawKpiBlock(doc, 14 + 5 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Total Jam Terlambat', formatDuration(totalLateMinutes), themes.violet);
-
-    // Sort data ascending by date (oldest first)
-    const sortedData = [...filteredData].sort((a, b) => new Date(a.date) - new Date(b.date));
-
-    const tableData = sortedData.map(row => {
-      const isMangkir = (row.status === 'MANGKIR' || row.status === 'MISSING' || row.status === 'Mangkir');
-      const penalty = (isMangkir && (row.lateMinutes || 0) === 0) ? (displaySummary?.mangkirPenalty || 30) : 0;
-      return [
-        row.name,
-        row.dept,
-        row.section,
-        row.position,
-        row.date,
-        row.checkIn,
-        row.checkOut,
-        `${(row.lateMinutes || 0) + penalty} min`,
-        getStatusLabel(row.status)
-      ];
-    });
-
-    autoTable(doc, {
-      startY: 56,
-      head: [['Karyawan', 'Dept', 'Bagian', 'Jabatan', 'Tanggal', 'Masuk', 'Keluar', 'Telat', 'Status']],
-      body: tableData,
-      theme: 'grid',
-      headStyles: { fillColor: [248, 250, 252], textColor: [15, 23, 42], fontSize: 8, halign: 'center' },
-      styles: { fontSize: 7, cellPadding: 2, fillColor: [255, 255, 255], textColor: [51, 65, 85] },
-      columnStyles: {
-        7: { halign: 'center', fontStyle: 'bold' },
-        8: { halign: 'center' }
-      }
-    });
-
-    doc.save(`Attendance_Report_${new Date().getTime()}.pdf`);
   };
 
   const handleDownloadTemplate = async () => {
@@ -1121,10 +1210,6 @@ const Attendance = () => {
                     <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Akumulasi Terlambat Personal</h3>
                     <p className="text-3xl font-black text-slate-800 tracking-tight mt-1">
                       {formatDuration(displaySummary.totalLate)}
-                    </p>
-                    <p className="text-[10px] font-bold text-rose-500 uppercase mt-2 flex items-center gap-2">
-                      <AlertCircle className="w-3.5 h-3.5" />
-                      Termasuk sanksi alpa (+{displaySummary?.mangkirPenalty || 30} menit/hari)
                     </p>
                   </div>
                 </div>
