@@ -178,6 +178,26 @@ const DeviceSettings = () => {
     }
   };
 
+  const clearLogs = async (device) => {
+    if (!window.confirm(`⚠️ PERINGATAN KELAS BERBAHAYA:\nTindakan ini akan menghapus SELURUH data log absensi di dalam mesin "${device.name}" (${device.ipAddress}).\n\nPastikan semua data absensi penting sudah ditarik/disinkronkan terlebih dahulu ke database. Data yang telah terhapus dari mesin TIDAK dapat dikembalikan.\n\nApakah Anda yakin ingin melanjutkan?`)) {
+      return;
+    }
+    if (!window.confirm(`Konfirmasi Akhir: Apakah Anda benar-benar yakin ingin menghapus seluruh data log absensi pada mesin "${device.name}"?`)) {
+      return;
+    }
+
+    try {
+      setSyncing('clear-' + device.id);
+      const { data } = await api.post(`/devices/${device.id}/clear-logs`);
+      alert(data.message || 'Log absensi di mesin berhasil dihapus.');
+      fetchDevices();
+    } catch (err) {
+      alert(err.response?.data?.message || err.message || 'Gagal menghapus log mesin');
+    } finally {
+      setSyncing(null);
+    }
+  };
+
   return (
     <div className="space-y-8 pb-12 animate-in fade-in duration-500">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 px-1">
@@ -370,7 +390,20 @@ const DeviceSettings = () => {
                         ) : (
                           <Download className="w-4 h-4" />
                         )}
-                      Sync Attendance Logs
+                        Sync Attendance Logs
+                      </button>
+
+                      <button 
+                        onClick={() => clearLogs(device)}
+                        disabled={syncing !== null}
+                        className="flex-1 bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 text-xs uppercase tracking-wider transition-all shadow-sm disabled:opacity-50 active:scale-95"
+                      >
+                        {syncing === 'clear-' + device.id ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                        Hapus Log Mesin
                       </button>
                       </div>
                     </div>

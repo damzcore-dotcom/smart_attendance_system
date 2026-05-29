@@ -338,6 +338,10 @@ export const fingerprintAPI = {
   pushUsers: (deviceId, employeeIds) => apiFetch(`/fingerprint/devices/${deviceId}/push`, { method: 'POST', body: JSON.stringify({ employeeIds }) }),
   pullTemplates: (deviceId, uids) => apiFetch(`/fingerprint/devices/${deviceId}/pull`, { method: 'POST', body: JSON.stringify({ uids }) }),
   deleteDeviceUser: (deviceId, uid) => apiFetch(`/fingerprint/devices/${deviceId}/users/${uid}`, { method: 'DELETE' }),
+  linkUser: (deviceId, uid, employeeId) => apiFetch(`/fingerprint/devices/${deviceId}/users/${uid}/link`, { method: 'POST', body: JSON.stringify({ employeeId }) }),
+  enrollUser: (deviceId, employeeId, fingerId) => apiFetch(`/fingerprint/devices/${deviceId}/users/enroll`, { method: 'POST', body: JSON.stringify({ employeeId, fingerId }) }),
+  verifyEnroll: (deviceId, employeeId, fingerId) => apiFetch(`/fingerprint/devices/${deviceId}/users/enroll/verify`, { method: 'POST', body: JSON.stringify({ employeeId, fingerId }) }),
+  clearLogs: (deviceId) => apiFetch(`/devices/${deviceId}/clear-logs`, { method: 'POST' }),
 };
 
 // ─── Notification API ────────────────────────────

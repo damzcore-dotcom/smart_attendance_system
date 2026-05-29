@@ -12,5 +12,6 @@ router.post('/:id/sync-users', verifyToken, requireAdmin, deviceController.syncU
 router.post('/:id/sync-attendance', verifyToken, requireAdmin, deviceController.syncAttendance);
 router.post('/:id/commit-attendance', verifyToken, requireAdmin, deviceController.commitAttendance);
 router.get('/:id/stats', verifyToken, requireAdmin, deviceController.getDeviceStats);
+router.post('/:id/clear-logs', verifyToken, requireAdmin, deviceController.clearDeviceLogs);
 
 module.exports = router;

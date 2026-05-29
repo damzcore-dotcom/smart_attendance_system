@@ -55,6 +55,33 @@ const FingerprintManagement = () => {
   const [pushDeviceId, setPushDeviceId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
+  // New States for Link and Remote Enrollment
+  const [linkingUser, setLinkingUser] = useState(null);
+  const [selectedEmpForLink, setSelectedEmpForLink] = useState('');
+  const [enrollState, setEnrollState] = useState({
+    open: false,
+    step: 1, // 1: Form, 2: Scanning, 3: Success
+    employeeId: '',
+    fingerId: '0',
+    status: 'idle',
+    message: '',
+    uid: null,
+    acNo: null
+  });
+
+  const FINGER_MAP = [
+    { id: '0', name: 'Jempol Kanan' },
+    { id: '1', name: 'Telunjuk Kanan' },
+    { id: '2', name: 'Tengah Kanan' },
+    { id: '3', name: 'Manis Kanan' },
+    { id: '4', name: 'Kelingking Kanan' },
+    { id: '5', name: 'Jempol Kiri' },
+    { id: '6', name: 'Telunjuk Kiri' },
+    { id: '7', name: 'Tengah Kiri' },
+    { id: '8', name: 'Manis Kiri' },
+    { id: '9', name: 'Kelingking Kiri' },
+  ];
+
   // Fetch all devices
   const { data: devicesData, isLoading: devicesLoading } = useQuery({
     queryKey: ['fp-devices'],
@@ -68,11 +95,11 @@ const FingerprintManagement = () => {
     enabled: !!selectedDeviceId && activeTab === 'detail',
   });
 
-  // Fetch employees with FP status for push tab
+  // Fetch employees with FP status for push tab, enroll modal, and link dialog
   const { data: employeesData, isLoading: empLoading } = useQuery({
     queryKey: ['fp-employees'],
     queryFn: () => fingerprintAPI.getEmployees(),
-    enabled: activeTab === 'push',
+    enabled: activeTab === 'push' || enrollState.open || !!linkingUser,
   });
 
   // Fetch devices list for dropdown
@@ -109,6 +136,69 @@ const FingerprintManagement = () => {
       refetchDetail();
     },
     onError: (err) => alert(err.message)
+  });
+
+  const linkMutation = useMutation({
+    mutationFn: ({ deviceId, uid, employeeId }) => fingerprintAPI.linkUser(deviceId, uid, employeeId),
+    onSuccess: (data) => {
+      alert(data.message);
+      setLinkingUser(null);
+      setSelectedEmpForLink('');
+      refetchDetail();
+      queryClient.invalidateQueries({ queryKey: ['fp-employees'] });
+    },
+    onError: (err) => alert(err.response?.data?.message || err.message)
+  });
+
+  const enrollMutation = useMutation({
+    mutationFn: ({ deviceId, employeeId, fingerId }) => fingerprintAPI.enrollUser(deviceId, employeeId, fingerId),
+    onSuccess: (data) => {
+      setEnrollState(prev => ({
+        ...prev,
+        step: 2,
+        status: 'enrolling',
+        message: data.message,
+        uid: data.data.uid,
+        acNo: data.data.acNo
+      }));
+    },
+    onError: (err) => {
+      setEnrollState(prev => ({
+        ...prev,
+        status: 'error',
+        message: err.response?.data?.message || err.message
+      }));
+    }
+  });
+
+  const verifyMutation = useMutation({
+    mutationFn: ({ deviceId, employeeId, fingerId }) => fingerprintAPI.verifyEnroll(deviceId, employeeId, fingerId),
+    onSuccess: (data) => {
+      setEnrollState(prev => ({
+        ...prev,
+        step: 3,
+        status: 'success',
+        message: data.message
+      }));
+      refetchDetail();
+      queryClient.invalidateQueries({ queryKey: ['fp-employees'] });
+    },
+    onError: (err) => {
+      setEnrollState(prev => ({
+        ...prev,
+        status: 'error',
+        message: err.response?.data?.message || err.message
+      }));
+    }
+  });
+
+  const clearLogsMutation = useMutation({
+    mutationFn: (deviceId) => fingerprintAPI.clearLogs(deviceId),
+    onSuccess: (data) => {
+      alert(data.message);
+      refetchDetail();
+    },
+    onError: (err) => alert(err.response?.data?.message || err.message)
   });
 
   const devices = devicesData?.data || [];
@@ -251,7 +341,7 @@ const FingerprintManagement = () => {
                   </div>
                 </div>
 
-                <div className="flex gap-3 mt-6">
+                <div className="flex flex-wrap gap-3 mt-6">
                   <button onClick={() => refetchDetail()} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-slate-50 transition-all">
                     <RefreshCw className="w-4 h-4" /> Refresh
                   </button>
@@ -259,6 +349,22 @@ const FingerprintManagement = () => {
                     className="px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all disabled:opacity-50">
                     {pullMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                     Tarik FP ke Database
+                  </button>
+                  <button onClick={() => setEnrollState({ open: true, step: 1, employeeId: '', fingerId: '0', status: 'idle', message: '', uid: null, acNo: null })}
+                    className="px-4 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-sm">
+                    <Fingerprint className="w-4 h-4" /> Registrasi Jari Baru
+                  </button>
+                  <button 
+                    onClick={() => {
+                      if (confirm(`⚠️ PERINGATAN: Hapus seluruh data log absensi di mesin "${detail.device.name}"?\n\nTindakan ini tidak dapat dibatalkan dan semua log yang belum disinkronkan ke sistem akan hilang permanen!`)) {
+                        clearLogsMutation.mutate(selectedDeviceId);
+                      }
+                    }}
+                    disabled={clearLogsMutation.isPending}
+                    className="px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl text-xs font-bold flex items-center gap-2 transition-all disabled:opacity-50 animate-in fade-in"
+                  >
+                    {clearLogsMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                    Hapus Log Mesin
                   </button>
                 </div>
               </div>
@@ -304,7 +410,12 @@ const FingerprintManagement = () => {
                                 <span className="text-xs text-slate-400 ml-2">{mu.employee.employeeCode}</span>
                               </div>
                             ) : (
-                              <span className="text-slate-400 text-xs">—</span>
+                              <button 
+                                onClick={() => { setLinkingUser(mu); setSelectedEmpForLink(''); }}
+                                className="px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 rounded-lg text-xs font-bold transition-all"
+                              >
+                                Hubungkan Karyawan
+                              </button>
                             )}
                           </td>
                           <td className="p-3 text-center">
@@ -422,6 +533,202 @@ const FingerprintManagement = () => {
                 Push ke Mesin
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* ════════════════ MODAL: LINK MACHINE USER TO EMPLOYEE ════════════════ */}
+      {linkingUser && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-slate-800">🔗 Hubungkan User Mesin ke Karyawan</h3>
+              <button onClick={() => { setLinkingUser(null); setSelectedEmpForLink(''); }} className="text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+            
+            <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+              Hubungkan PIN mesin <strong>{linkingUser.userId}</strong> ({linkingUser.name || 'No Name'}) ke profil karyawan di database. Sistem juga akan otomatis memindahkan sidik jari yang ada di mesin ke database.
+            </p>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Pilih Karyawan Tujuan</label>
+                <select 
+                  value={selectedEmpForLink} 
+                  onChange={e => setSelectedEmpForLink(e.target.value)}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="">-- Pilih Karyawan --</option>
+                  {employees
+                    .filter(emp => !emp.fingerPrintId) // Only show unlinked employees
+                    .map(emp => (
+                      <option key={emp.id} value={emp.id}>{emp.name} ({emp.employeeCode})</option>
+                    ))
+                  }
+                </select>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button 
+                onClick={() => { setLinkingUser(null); setSelectedEmpForLink(''); }}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-slate-600 transition-all"
+              >
+                Batal
+              </button>
+              <button 
+                onClick={() => linkMutation.mutate({ deviceId: selectedDeviceId, uid: linkingUser.uid, employeeId: selectedEmpForLink })}
+                disabled={!selectedEmpForLink || linkMutation.isPending}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold disabled:opacity-50 transition-all shadow-sm flex items-center gap-1.5"
+              >
+                {linkMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Simpan Link
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════ MODAL: REMOTE FINGERPRINT ENROLLMENT WIZARD ════════════════ */}
+      {enrollState.open && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Fingerprint className="w-5 h-5 text-blue-600" /> Registrasi Sidik Jari Baru</h3>
+              <button onClick={() => setEnrollState({ open: false })} className="text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+
+            {/* STEP 1: Select Employee & Finger */}
+            {enrollState.step === 1 && (
+              <div className="space-y-4">
+                <p className="text-xs text-slate-500">Pilih karyawan dan jari yang ingin didaftarkan secara remote pada sensor fisik mesin.</p>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Karyawan</label>
+                  <select 
+                    value={enrollState.employeeId}
+                    onChange={e => setEnrollState(prev => ({ ...prev, employeeId: e.target.value }))}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none"
+                  >
+                    <option value="">-- Pilih Karyawan --</option>
+                    {employees.map(emp => (
+                      <option key={emp.id} value={emp.id}>{emp.name} ({emp.employeeCode})</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Pilih Jari</label>
+                  <select 
+                    value={enrollState.fingerId}
+                    onChange={e => setEnrollState(prev => ({ ...prev, fingerId: e.target.value }))}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none"
+                  >
+                    {FINGER_MAP.map(finger => (
+                      <option key={finger.id} value={finger.id}>{finger.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="pt-2 flex justify-end gap-3">
+                  <button 
+                    onClick={() => setEnrollState({ open: false })}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-slate-600 transition-all"
+                  >
+                    Batal
+                  </button>
+                  <button 
+                    onClick={() => enrollMutation.mutate({ deviceId: selectedDeviceId, employeeId: enrollState.employeeId, fingerId: enrollState.fingerId })}
+                    disabled={!enrollState.employeeId || enrollMutation.isPending}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold disabled:opacity-50 transition-all shadow-sm flex items-center gap-1.5"
+                  >
+                    {enrollMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    Mulai Registrasi
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 2: Enrolling mode active on device */}
+            {enrollState.step === 2 && (
+              <div className="space-y-5 text-center py-4">
+                {enrollState.status === 'enrolling' && (
+                  <>
+                    <div className="w-16 h-16 bg-blue-50 border border-blue-200 rounded-full flex items-center justify-center mx-auto mb-2 animate-pulse">
+                      <Fingerprint className="w-8 h-8 text-blue-600" />
+                    </div>
+                    <h4 className="font-bold text-slate-800">Mesin Siap Menerima Scan</h4>
+                    <p className="text-xs text-slate-500 px-4 leading-relaxed">
+                      Sensor pada mesin sidik jari sekarang menyala. Silakan pandu karyawan untuk menempelkan jari <strong>{FINGER_MAP.find(f => f.id === enrollState.fingerId)?.name}</strong> ke sensor mesin sebanyak <strong>3 kali</strong> hingga mesin berbunyi bip sukses.
+                    </p>
+                    {enrollState.message && <p className="text-xs text-blue-600 font-semibold">{enrollState.message}</p>}
+                  </>
+                )}
+
+                {enrollState.status === 'verifying' && (
+                  <>
+                    <Loader2 className="w-10 h-10 animate-spin text-blue-600 mx-auto my-4" />
+                    <h4 className="font-bold text-slate-800">Memverifikasi Data Sidik Jari...</h4>
+                    <p className="text-xs text-slate-500">Sedang menarik data sidik jari baru dari mesin dan menyimpannya ke database.</p>
+                  </>
+                )}
+
+                {enrollState.status === 'error' && (
+                  <>
+                    <div className="w-14 h-14 bg-red-50 border border-red-200 rounded-full flex items-center justify-center mx-auto mb-2">
+                      <XCircle className="w-8 h-8 text-red-500" />
+                    </div>
+                    <h4 className="font-bold text-red-600">Registrasi Gagal / Tertunda</h4>
+                    <p className="text-xs text-slate-500 px-4 leading-relaxed">{enrollState.message || 'Sensor mesin tidak membaca jari dengan benar.'}</p>
+                    <button 
+                      onClick={() => setEnrollState(prev => ({ ...prev, status: 'enrolling', message: '' }))}
+                      className="mt-2 text-xs font-bold text-blue-600 hover:underline"
+                    >
+                      Coba Tempel Jari Lagi
+                    </button>
+                  </>
+                )}
+
+                <div className="pt-4 border-t border-slate-100 flex justify-between gap-3">
+                  <button 
+                    onClick={() => setEnrollState(prev => ({ ...prev, step: 1, status: 'idle', message: '' }))}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-slate-600 transition-all"
+                  >
+                    Kembali
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setEnrollState(prev => ({ ...prev, status: 'verifying' }));
+                      verifyMutation.mutate({ deviceId: selectedDeviceId, employeeId: enrollState.employeeId, fingerId: enrollState.fingerId });
+                    }}
+                    disabled={enrollState.status === 'verifying'}
+                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1.5"
+                  >
+                    {verifyMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    Verifikasi & Simpan
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 3: Enrollment Success */}
+            {enrollState.step === 3 && (
+              <div className="space-y-4 text-center py-4">
+                <div className="w-16 h-16 bg-emerald-50 border border-emerald-200 rounded-full flex items-center justify-center mx-auto mb-2">
+                  <CheckCircle2 className="w-9 h-9 text-emerald-600" />
+                </div>
+                <h4 className="font-bold text-emerald-700">Registrasi Berhasil!</h4>
+                <p className="text-xs text-slate-500 px-4 leading-relaxed">
+                  Sidik jari karyawan berhasil disimpan dan dihubungkan ke profil database. Karyawan sekarang sudah bisa menggunakan sidik jari ini untuk melakukan scan kehadiran di mesin.
+                </p>
+
+                <div className="pt-4 flex justify-center">
+                  <button 
+                    onClick={() => setEnrollState({ open: false })}
+                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+                  >
+                    Selesai
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

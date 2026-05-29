@@ -5,7 +5,10 @@ const {
   pullTemplatesFromDevice, 
   deleteUserFromDevice, 
   getEmployeeTemplates, 
-  getEmployeesWithFPStatus 
+  getEmployeesWithFPStatus,
+  linkUserToEmployee,
+  startDeviceEnrollment,
+  verifyAndSaveEnrollment
 } = require('../controllers/fingerprintController');
 const { verifyToken, requireAdmin } = require('../middleware/auth');
 
@@ -20,5 +23,8 @@ router.get('/devices/:id/detail', getDeviceDetail);
 router.post('/devices/:id/push', requireAdmin, pushUsersToDevice);
 router.post('/devices/:id/pull', requireAdmin, pullTemplatesFromDevice);
 router.delete('/devices/:id/users/:uid', requireAdmin, deleteUserFromDevice);
+router.post('/devices/:id/users/:uid/link', requireAdmin, linkUserToEmployee);
+router.post('/devices/:id/users/enroll', requireAdmin, startDeviceEnrollment);
+router.post('/devices/:id/users/enroll/verify', requireAdmin, verifyAndSaveEnrollment);
 
 module.exports = router;

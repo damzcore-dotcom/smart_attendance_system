@@ -1336,6 +1336,45 @@ const commitAttendance = async (req, res) => {
   }
 };
 
+/**
+ * Clear Attendance Logs from device
+ */
+const clearDeviceLogs = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const device = await prisma.device.findUnique({ where: { id: parseInt(id) } });
+    if (!device) return res.status(404).json({ success: false, message: 'Device not found' });
+
+    console.log(`[Device] Clearing attendance logs for device ${device.name}...`);
+
+    const zkInstance = new ZKLib(device.ipAddress, device.port, 15000, 15000);
+    await zkInstance.createSocket();
+    await zkInstance.clearAttendanceLog();
+    await zkInstance.disconnect();
+
+    await recordAuditLog({
+      userId: req.user.id,
+      username: req.user.username,
+      role: req.user.role,
+      action: 'DELETE',
+      entity: 'Device',
+      entityId: device.id,
+      details: JSON.stringify({
+        message: `Cleared all attendance logs from device ${device.name}`,
+        device: device.name,
+        ipAddress: device.ipAddress
+      }),
+      ipAddress: req.ip
+    });
+
+    res.json({ success: true, message: `Seluruh data log absensi di mesin ${device.name} berhasil dihapus.` });
+  } catch (err) {
+    console.error('[Device] clearDeviceLogs error:', err);
+    res.status(500).json({ success: false, message: 'Gagal menghapus log mesin: ' + err.message });
+  }
+};
+
 module.exports = {
   getDevices,
   addDevice,
@@ -1345,5 +1384,6 @@ module.exports = {
   syncUsers,
   syncAttendance,
   commitAttendance,
-  getDeviceStats
+  getDeviceStats,
+  clearDeviceLogs
 };
