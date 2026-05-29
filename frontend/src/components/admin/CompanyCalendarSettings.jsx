@@ -13,7 +13,7 @@ const CompanyCalendarSettings = () => {
   const todayObj = new Date();
   const todayStr = `${todayObj.getFullYear()}-${String(todayObj.getMonth()+1).padStart(2,'0')}-${String(todayObj.getDate()).padStart(2,'0')}`;
 
-  const [form, setForm] = useState({ date: '', type: 'HOLIDAY', description: '' });
+  const [form, setForm] = useState({ date: '', swapDate: '', type: 'HOLIDAY', description: '' });
 
   const { data: settingsData } = useQuery({
     queryKey: ['settings'],
@@ -37,7 +37,7 @@ const CompanyCalendarSettings = () => {
     mutationFn: (data) => calendarAPI.upsert(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['calendar'] });
-      setForm({ date: '', type: 'HOLIDAY', description: '' });
+      setForm({ date: '', swapDate: '', type: 'HOLIDAY', description: '' });
     },
   });
 
@@ -52,8 +52,7 @@ const CompanyCalendarSettings = () => {
     e.preventDefault();
     if (!form.date || !form.description) return alert('Lengkapi data');
     
-    if (form.type === 'SWAP') {
-      if (!form.swapDate) return alert('Lengkapi tanggal pengganti libur');
+    if (form.type === 'WORKDAY' && form.swapDate) {
       try {
         const workdayDesc = `Tukar Hari (Wajib Masuk): ${form.description} (Diganti ke ${form.swapDate})`;
         const holidayDesc = `Tukar Hari (Libur Pengganti): ${form.description} (Dari ${form.date})`;
@@ -139,45 +138,34 @@ const CompanyCalendarSettings = () => {
               >
                 <option value="HOLIDAY">Tanggal Merah / Libur / Cuti Bersama</option>
                 <option value="WORKDAY">Wajib Masuk (Tukar Hari Libur)</option>
-                <option value="SWAP">Tukar Hari Kerja / Libur (Swap)</option>
               </select>
             </div>
 
-            {form.type === 'SWAP' ? (
-              <div className="space-y-4 p-4 bg-blue-50/50 rounded-2xl border border-blue-100/50 mt-2">
-                <div>
-                  <label className="text-[10px] font-bold text-blue-700 uppercase tracking-wider block mb-1">Tanggal Masuk (Wajib Kerja)</label>
-                  <input 
-                    type="date" 
-                    value={form.date} 
-                    onChange={e => setForm({...form, date: e.target.value})} 
-                    className="w-full bg-white border border-blue-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 focus:outline-none" 
-                    required 
-                  />
-                  <p className="text-[9px] text-blue-500 font-semibold mt-1">Tanggal di mana karyawan harusnya libur tetapi diwajibkan masuk kerja.</p>
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-blue-700 uppercase tracking-wider block mb-1">Tanggal Libur (Hari Pengganti)</label>
-                  <input 
-                    type="date" 
-                    value={form.swapDate || ''} 
-                    onChange={e => setForm({...form, swapDate: e.target.value})} 
-                    className="w-full bg-white border border-blue-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 focus:outline-none" 
-                    required 
-                  />
-                  <p className="text-[9px] text-blue-500 font-semibold mt-1">Tanggal di mana karyawan harusnya masuk tetapi diliburkan sebagai pengganti.</p>
-                </div>
-              </div>
-            ) : (
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Tanggal</label>
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                {form.type === 'WORKDAY' ? 'Tanggal Wajib Masuk' : 'Tanggal'}
+              </label>
+              <input 
+                type="date" 
+                value={form.date} 
+                onChange={e => setForm({...form, date: e.target.value})} 
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                required 
+              />
+            </div>
+
+            {form.type === 'WORKDAY' && (
+              <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl space-y-2 mt-2">
+                <label className="text-[10px] font-bold text-blue-700 uppercase tracking-wider block">Tanggal Libur Pengganti (Opsional)</label>
                 <input 
                   type="date" 
-                  value={form.date} 
-                  onChange={e => setForm({...form, date: e.target.value})} 
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700" 
-                  required 
+                  value={form.swapDate || ''} 
+                  onChange={e => setForm({...form, swapDate: e.target.value})} 
+                  className="w-full bg-white border border-blue-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500" 
                 />
+                <p className="text-[9px] text-blue-500 font-medium leading-normal">
+                  Jika diisi, sistem otomatis membuat hari libur (HOLIDAY) pada tanggal pengganti tersebut agar Anda tidak perlu input 2x.
+                </p>
               </div>
             )}
 
@@ -188,7 +176,7 @@ const CompanyCalendarSettings = () => {
                 placeholder="Misal: Tukar Libur Waisak" 
                 value={form.description} 
                 onChange={e => setForm({...form, description: e.target.value})} 
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700" 
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500" 
                 required 
               />
             </div>
