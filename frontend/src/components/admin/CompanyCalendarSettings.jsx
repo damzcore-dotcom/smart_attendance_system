@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Calendar, Save, Plus, Trash2, Loader2, AlertCircle, Edit } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { calendarAPI } from '../../services/api';
+import { calendarAPI, settingsAPI } from '../../services/api';
 
 const CompanyCalendarSettings = () => {
   const queryClient = useQueryClient();
@@ -11,6 +11,19 @@ const CompanyCalendarSettings = () => {
   const [activeView, setActiveView] = useState('grid'); // 'grid' | 'list'
 
   const [form, setForm] = useState({ date: '', type: 'HOLIDAY', description: '' });
+
+  const { data: settingsData } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => settingsAPI.getAll(),
+  });
+
+  const settingsList = settingsData?.data || {};
+  let workingDays = [1, 2, 3, 4, 5];
+  try {
+    if (settingsList.workingDays) {
+      workingDays = JSON.parse(settingsList.workingDays);
+    }
+  } catch (e) {}
 
   const { data: calendarData, isLoading } = useQuery({
     queryKey: ['calendar', selectedYear, selectedMonth],
@@ -220,7 +233,7 @@ const CompanyCalendarSettings = () => {
                     const dateStr = `${year}-${month}-${dateNum}`;
                     
                     const exception = holidays.find(h => h.date.split('T')[0] === dateStr);
-                    const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+                    const isWeekend = !workingDays.includes(day.getDay());
                     
                     let bgClass = "bg-white border-slate-200 text-slate-700 hover:border-blue-400 hover:bg-blue-50/40";
                     let label = "";
