@@ -14,6 +14,7 @@ const CompanyCalendarSettings = () => {
   const todayStr = `${todayObj.getFullYear()}-${String(todayObj.getMonth()+1).padStart(2,'0')}-${String(todayObj.getDate()).padStart(2,'0')}`;
 
   const [form, setForm] = useState({ date: '', swapDate: '', type: 'HOLIDAY', description: '' });
+  const [editingId, setEditingId] = useState(null);
 
   const { data: settingsData } = useQuery({
     queryKey: ['settings'],
@@ -38,6 +39,7 @@ const CompanyCalendarSettings = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['calendar'] });
       setForm({ date: '', swapDate: '', type: 'HOLIDAY', description: '' });
+      setEditingId(null);
     },
   });
 
@@ -45,6 +47,8 @@ const CompanyCalendarSettings = () => {
     mutationFn: (id) => calendarAPI.remove(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['calendar'] });
+      setEditingId(null);
+      setForm({ date: '', swapDate: '', type: 'HOLIDAY', description: '' });
     },
   });
 
@@ -73,13 +77,26 @@ const CompanyCalendarSettings = () => {
   };
 
   const handleEdit = (holiday) => {
-    // Parse ISO date back to YYYY-MM-DD local format
     const dateStr = holiday.date.split('T')[0];
+    setEditingId(holiday.id);
     setForm({
       date: dateStr,
+      swapDate: '',
       type: holiday.type,
       description: holiday.description
     });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setForm({ date: '', swapDate: '', type: 'HOLIDAY', description: '' });
+  };
+
+  const handleDeleteFromForm = () => {
+    if (!editingId) return;
+    if (confirm('Hapus pengecualian kalender ini?')) {
+      deleteMutation.mutate(editingId);
+    }
   };
 
   const parseLocalDateString = (dateStr) => {
@@ -127,8 +144,19 @@ const CompanyCalendarSettings = () => {
         {/* Left Form Panel */}
         <div className="md:col-span-1 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-fit">
           <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4 text-sm">
-            <Plus className="w-4 h-4 text-emerald-500" /> Atur Pengecualian
+            {editingId ? (
+              <><Edit className="w-4 h-4 text-blue-500" /> Edit Pengecualian</>
+            ) : (
+              <><Plus className="w-4 h-4 text-emerald-500" /> Tambah Pengecualian</>
+            )}
           </h3>
+
+          {editingId && (
+            <div className="flex items-center gap-2 mb-4 p-2.5 bg-amber-50 border border-amber-200 rounded-xl">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span className="text-[10px] font-bold text-amber-700">Mode Edit — mengubah data pengecualian yang sudah ada.</span>
+            </div>
+          )}
           <form onSubmit={handleUpsert} className="space-y-4">
             <div>
               <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Tipe Pengecualian</label>
@@ -185,10 +213,29 @@ const CompanyCalendarSettings = () => {
             <button 
               type="submit"
               disabled={upsertMutation.isPending} 
-              className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl py-2.5 text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2"
+              className={`w-full ${editingId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-emerald-600 hover:bg-emerald-700'} disabled:opacity-50 text-white rounded-xl py-2.5 text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2`}
             >
-              {upsertMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Simpan
+              {upsertMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} {editingId ? 'Update' : 'Simpan'}
             </button>
+            {editingId && (
+              <div className="flex gap-2 mt-2">
+                <button 
+                  type="button"
+                  onClick={handleDeleteFromForm}
+                  disabled={deleteMutation.isPending}
+                  className="flex-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl py-2 text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {deleteMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />} Hapus
+                </button>
+                <button 
+                  type="button"
+                  onClick={handleCancelEdit}
+                  className="flex-1 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-xl py-2 text-[10px] font-bold uppercase tracking-wider transition-all"
+                >
+                  Batal
+                </button>
+              </div>
+            )}
           </form>
         </div>
 
@@ -312,11 +359,17 @@ const CompanyCalendarSettings = () => {
                         key={dateStr}
                         type="button"
                         onClick={() => {
-                          setForm({
-                            date: dateStr,
-                            type: exception?.type || 'HOLIDAY',
-                            description: exception?.description || ''
-                          });
+                          if (exception) {
+                            handleEdit(exception);
+                          } else {
+                            setEditingId(null);
+                            setForm({
+                              date: dateStr,
+                              swapDate: '',
+                              type: 'HOLIDAY',
+                              description: ''
+                            });
+                          }
                         }}
                         title={titleText}
                         className={`aspect-square flex flex-col items-center justify-between p-2 border rounded-2xl transition-all text-xs font-semibold relative focus:outline-none ${bgClass}`}
