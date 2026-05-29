@@ -10,6 +10,9 @@ const CompanyCalendarSettings = () => {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [activeView, setActiveView] = useState('grid'); // 'grid' | 'list'
 
+  const todayObj = new Date();
+  const todayStr = `${todayObj.getFullYear()}-${String(todayObj.getMonth()+1).padStart(2,'0')}-${String(todayObj.getDate()).padStart(2,'0')}`;
+
   const [form, setForm] = useState({ date: '', type: 'HOLIDAY', description: '' });
 
   const { data: settingsData } = useQuery({
@@ -232,6 +235,7 @@ const CompanyCalendarSettings = () => {
                     const dateNum = String(day.getDate()).padStart(2, '0');
                     const dateStr = `${year}-${month}-${dateNum}`;
                     
+                    const isToday = dateStr === todayStr;
                     const exception = holidays.find(h => h.date.split('T')[0] === dateStr);
                     const isWeekend = !workingDays.includes(day.getDay());
                     
@@ -253,9 +257,17 @@ const CompanyCalendarSettings = () => {
                       bgClass = "bg-slate-100/50 border-slate-1.50 text-slate-400 hover:border-blue-300 hover:bg-blue-50/30";
                     }
 
-                    const titleText = exception 
+                    if (isToday) {
+                      bgClass += " ring-2 ring-blue-500 ring-offset-1 z-10 border-blue-500 shadow-sm shadow-blue-500/10";
+                    }
+
+                    let titleText = exception 
                       ? `${exception.description} (${exception.type === 'HOLIDAY' ? 'Libur' : 'Wajib Masuk'})` 
                       : (isWeekend ? "Akhir Pekan" : "Hari Kerja Normal");
+
+                    if (isToday) {
+                      titleText += " (Hari Ini)";
+                    }
 
                     return (
                       <button
@@ -271,10 +283,14 @@ const CompanyCalendarSettings = () => {
                         title={titleText}
                         className={`aspect-square flex flex-col items-center justify-between p-2 border rounded-2xl transition-all text-xs font-semibold relative focus:outline-none ${bgClass}`}
                       >
-                        <span className={`self-start text-[10px] leading-none px-1.5 py-0.5 rounded-md ${isWeekend && !exception ? 'text-red-500' : ''}`}>{day.getDate()}</span>
+                        <span className={`self-start text-[10px] leading-none px-1.5 py-0.5 rounded-md ${isWeekend && !exception ? 'text-red-500' : ''} ${isToday ? 'bg-blue-600 text-white font-bold' : ''}`}>{day.getDate()}</span>
                         {label ? (
                           <span className={`text-[7px] font-black tracking-wider px-1 py-0.5 rounded-sm ${labelClass} w-full text-center leading-none mt-1`}>
                             {label}
+                          </span>
+                        ) : isToday ? (
+                          <span className="text-[7px] font-black tracking-wider px-1 py-0.5 rounded-sm bg-blue-100 text-blue-700 w-full text-center leading-none mt-1">
+                            HARI INI
                           </span>
                         ) : (
                           <span className="h-2" />
