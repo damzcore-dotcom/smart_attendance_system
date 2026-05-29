@@ -443,14 +443,14 @@ const Attendance = () => {
       // Compute displaySummary from the padded data 
       displaySummary = {
         total: filteredData.length,
-        hadir: filteredData.filter(d => d.status === 'Hadir').length,
-        telat: filteredData.filter(d => d.status === 'Terlambat').length,
-        mangkir: filteredData.filter(d => d.status === 'Mangkir').length,
-        absen: filteredData.filter(d => d.status === 'Alpa').length,
-        holiday: filteredData.filter(d => d.status === 'Libur').length,
-        cuti: filteredData.filter(d => d.status === 'Cuti').length,
-        sakit: filteredData.filter(d => d.status === 'Sakit').length,
-        izin: filteredData.filter(d => d.status === 'Izin').length,
+        hadir: filteredData.filter(d => d.status === 'Hadir' || d.status === 'PRESENT').length,
+        telat: filteredData.filter(d => d.status === 'Terlambat' || d.status === 'LATE').length,
+        mangkir: filteredData.filter(d => d.status === 'Mangkir' || d.status === 'MANGKIR').length,
+        absen: filteredData.filter(d => d.status === 'Alpa' || d.status === 'ABSENT').length,
+        holiday: filteredData.filter(d => d.status === 'Libur' || d.status === 'HOLIDAY').length,
+        cuti: filteredData.filter(d => d.status === 'Cuti' || d.status === 'CUTI').length,
+        sakit: filteredData.filter(d => d.status === 'Sakit' || d.status === 'SAKIT').length,
+        izin: filteredData.filter(d => d.status === 'Izin' || d.status === 'IZIN').length,
         totalLate: filteredData.reduce((sum, d) => {
           const hasLate = (d.lateMinutes || 0) > 0;
           const isMangkirOrAlpa = d.status === 'Mangkir' || d.status === 'Alpa' || d.status === 'MANGKIR' || d.status === 'ABSENT' || d.status === 'Alpa';
@@ -968,7 +968,7 @@ const Attendance = () => {
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Tingkat Kehadiran</span>
                 <p className="text-3xl font-black text-slate-800 tracking-tight mt-1">
                   {(() => {
-                    const totalHadir = (displaySummary.hadir || 0);
+                    const totalHadir = (displaySummary.hadir || 0) + (displaySummary.telat || 0);
                     const totalExcludeOff = (displaySummary.total || 0) - ((displaySummary.holiday || 0) + (displaySummary.cuti || 0) + (displaySummary.sakit || 0) + (displaySummary.izin || 0));
                     return totalExcludeOff > 0 ? Math.round((totalHadir / totalExcludeOff) * 100) : 100;
                   })()}%
@@ -990,7 +990,7 @@ const Attendance = () => {
                   <path
                     className="text-emerald-500 transition-all duration-1000 ease-out"
                     strokeDasharray={`${(() => {
-                      const totalHadir = (displaySummary.hadir || 0);
+                      const totalHadir = (displaySummary.hadir || 0) + (displaySummary.telat || 0);
                       const totalExcludeOff = (displaySummary.total || 0) - ((displaySummary.holiday || 0) + (displaySummary.cuti || 0) + (displaySummary.sakit || 0) + (displaySummary.izin || 0));
                       return totalExcludeOff > 0 ? Math.round((totalHadir / totalExcludeOff) * 100) : 100;
                     })()}, 100`}
