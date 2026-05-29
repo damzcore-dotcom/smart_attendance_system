@@ -62,10 +62,11 @@ const startCronJobs = () => {
             if (e.employeeCode) empByCode[String(e.employeeCode).trim()] = e;
           });
 
-          // Fetch Settings to check for Saturday Half-Day rules
+          // Fetch Settings to check for Saturday Half-Day rules & global grace period
           const settingsList = await prisma.settings.findMany();
           const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
           const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
+          const globalGracePeriod = parseInt(settingsList.find(s => s.key === 'gracePeriod')?.value || '15', 10);
 
           // Only process logs from today (auto-sync is daily, no need to reprocess old data)
           // lastSync is used as a cutoff: process logs since last sync or since start of today
@@ -104,14 +105,18 @@ const startCronJobs = () => {
           const recordsToCreate = [];
           for (const entry of Object.values(grouped)) {
             const emp = entry.employee;
-            const shiftStart = emp.shift?.startTime || '08:00';
-            let shiftEnd = emp.shift?.endTime || '17:00';
-            const gracePeriod = emp.shift?.gracePeriod || 15;
+            const empShift = emp.shift || null;
+            const shiftStart = empShift?.startTime || '08:00';
+            let shiftEnd = empShift?.endTime || '17:00';
+            const gracePeriod = empShift ? empShift.gracePeriod : globalGracePeriod;
             
-            // Override shiftEnd for Saturday if half-day is enabled
+            // Override shiftEnd for Saturday if Saturday protocols match
             const dayOfWeek = entry.date.getUTCDay(); // 0=Sun, 6=Sat
-            if (dayOfWeek === 6 && isSaturdayHalfDay) {
-              shiftEnd = satCheckoutTime;
+            if (dayOfWeek === 6) {
+              const satType = empShift?.saturdayType || (isSaturdayHalfDay ? 'HALF_DAY' : 'FULL_DAY');
+              if (satType === 'HALF_DAY') {
+                shiftEnd = empShift?.saturdayEndTime || satCheckoutTime;
+              }
             }
             
             // Sort all scans chronologically
@@ -133,12 +138,22 @@ const startCronJobs = () => {
               const [startH, startM] = shiftStart.split(':').map(Number);
               const [endH, endM] = shiftEnd.split(':').map(Number);
               const shiftStartMinutes = startH * 60 + startM;
-              const shiftEndMinutes = endH * 60 + endM;
+              let shiftEndMinutes = endH * 60 + endM;
+              
+              if (shiftEndMinutes < shiftStartMinutes) {
+                shiftEndMinutes += 24 * 60; // Handle night shift crossing midnight
+              }
+              
               const midpointMinutes = Math.floor((shiftStartMinutes + shiftEndMinutes) / 2);
               
               const scanHour = earliest.getHours();
               const scanMinute = earliest.getMinutes();
-              const scanMinutes = scanHour * 60 + scanMinute;
+              let scanMinutes = scanHour * 60 + scanMinute;
+              
+              // If it's a night shift and the scan is in the morning (after midnight)
+              if (shiftEndMinutes > 1440 && scanMinutes < shiftStartMinutes - 6 * 60) {
+                scanMinutes += 24 * 60;
+              }
               
               if (scanMinutes <= midpointMinutes) {
                 checkIn = earliest;
@@ -153,7 +168,7 @@ const startCronJobs = () => {
             }
             
             const calc = checkIn 
-              ? calculateLateness(checkIn, shiftStart, gracePeriod)
+              ? calculateLateness(checkIn, shiftStart, gracePeriod, shiftEnd)
               : { lateMinutes: 0, status: 'Mangkir' };
             
             const status = resolveStatus(checkIn, checkOut, calc.status);

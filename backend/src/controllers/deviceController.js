@@ -787,6 +787,7 @@ const syncAttendance = async (req, res) => {
     const settingsList = await prisma.settings.findMany();
     const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
     const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
+    const globalGracePeriod = parseInt(settingsList.find(s => s.key === 'gracePeriod')?.value || '15', 10);
     
     // Fetch Overrides for all active employees within this sync date range
     const allOverrides = await prisma.employeeShiftOverride.findMany({
@@ -819,12 +820,15 @@ const syncAttendance = async (req, res) => {
 
       const shiftStart = effectiveShift?.startTime || '08:00';
       let shiftEnd = effectiveShift?.endTime || '17:00';
-      const gracePeriod = effectiveShift?.gracePeriod || 15;
+      const gracePeriod = effectiveShift ? effectiveShift.gracePeriod : globalGracePeriod;
       
-      // Override shiftEnd untuk hari Sabtu jika half-day aktif
+      // Override shiftEnd untuk hari Sabtu sesuai shift protocol
       const dayOfWeek = entry.date.getUTCDay(); // 0=Sun, 6=Sat
-      if (dayOfWeek === 6 && isSaturdayHalfDay) {
-        shiftEnd = satCheckoutTime; // e.g. '13:00'
+      if (dayOfWeek === 6) {
+        const satType = effectiveShift?.saturdayType || (isSaturdayHalfDay ? 'HALF_DAY' : 'FULL_DAY');
+        if (satType === 'HALF_DAY') {
+          shiftEnd = effectiveShift?.saturdayEndTime || satCheckoutTime;
+        }
       }
       
       // Sort all scans chronologically
@@ -847,14 +851,22 @@ const syncAttendance = async (req, res) => {
         const [startH, startM] = shiftStart.split(':').map(Number);
         const [endH, endM] = shiftEnd.split(':').map(Number);
         const shiftStartMinutes = startH * 60 + startM;
-        const shiftEndMinutes = endH * 60 + endM;
+        let shiftEndMinutes = endH * 60 + endM;
+        
+        if (shiftEndMinutes < shiftStartMinutes) {
+          shiftEndMinutes += 24 * 60; // Handle night shift crossing midnight
+        }
+        
         const midpointMinutes = Math.floor((shiftStartMinutes + shiftEndMinutes) / 2);
-        // e.g. Senin-Jumat 08:00-17:00 → midpoint = 12:30
-        // e.g. Sabtu       08:00-12:00 → midpoint = 10:00
         
         const scanHour = earliest.getHours();
         const scanMinute = earliest.getMinutes();
-        const scanMinutes = scanHour * 60 + scanMinute;
+        let scanMinutes = scanHour * 60 + scanMinute;
+        
+        // If it's a night shift and the scan is in the morning (after midnight)
+        if (shiftEndMinutes > 1440 && scanMinutes < shiftStartMinutes - 6 * 60) {
+          scanMinutes += 24 * 60;
+        }
         
         if (scanMinutes <= midpointMinutes) {
           // Scan sebelum/saat tengah shift → ini MASUK (checkIn)
@@ -873,7 +885,7 @@ const syncAttendance = async (req, res) => {
       
       // Calculate Lateness (only if checkIn exists)
       const calc = checkIn 
-        ? calculateLateness(checkIn, shiftStart, gracePeriod)
+        ? calculateLateness(checkIn, shiftStart, gracePeriod, shiftEnd)
         : { lateMinutes: 0, status: 'Mangkir' };
       
       // Resolve status using updated logic
@@ -886,7 +898,10 @@ const syncAttendance = async (req, res) => {
         checkOut: checkOut,
         status: status,
         lateMinutes: calc.lateMinutes,
-        mode: 'Fingerprint'
+        mode: 'Fingerprint',
+        shiftStart,
+        shiftEnd,
+        gracePeriod
       });
     }
 
@@ -997,12 +1012,8 @@ const syncAttendance = async (req, res) => {
           }
 
           // Recalculate status and lateness based on merged times
-          const emp = empById[record.employeeId];
-          const shiftStart = emp?.shift?.startTime || '08:00';
-          const gracePeriod = emp?.shift?.gracePeriod || 15;
-          
           const calc = mergedCheckIn 
-            ? calculateLateness(mergedCheckIn, shiftStart, gracePeriod)
+            ? calculateLateness(mergedCheckIn, record.shiftStart, record.gracePeriod, record.shiftEnd)
             : { lateMinutes: 0, status: 'Mangkir' };
           
           lateMins = calc.lateMinutes;
@@ -1196,6 +1207,12 @@ const commitAttendance = async (req, res) => {
     const empMap = {};
     employees.forEach(e => { empMap[e.id] = e; });
 
+    // Fetch Saturday Half-Day settings
+    const settingsList = await prisma.settings.findMany();
+    const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
+    const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
+    const globalGracePeriod = parseInt(settingsList.find(s => s.key === 'gracePeriod')?.value || '15', 10);
+
     let saved = 0;
     let failed = 0;
 
@@ -1217,12 +1234,21 @@ const commitAttendance = async (req, res) => {
         const rawDate = new Date(record.date);
         const date = new Date(Date.UTC(rawDate.getFullYear(), rawDate.getMonth(), rawDate.getDate()));
 
-        // Recalculate status based on employee's shift
-        const shiftStart = emp?.shift?.startTime || '08:00';
-        const gracePeriod = emp?.shift?.gracePeriod || 15;
+        // Recalculate status based on employee's shift and overrides if not in record
+        const shiftStart = record.shiftStart || emp?.shift?.startTime || '08:00';
+        const gracePeriod = record.gracePeriod !== undefined ? record.gracePeriod : (emp?.shift?.gracePeriod || globalGracePeriod);
+        let shiftEnd = record.shiftEnd || emp?.shift?.endTime || '17:00';
+
+        // Apply Saturday shift protocol fallback if not stored
+        if (!record.shiftEnd && date.getUTCDay() === 6) {
+          const satType = emp?.shift?.saturdayType || (isSaturdayHalfDay ? 'HALF_DAY' : 'FULL_DAY');
+          if (satType === 'HALF_DAY') {
+            shiftEnd = emp?.shift?.saturdayEndTime || satCheckoutTime;
+          }
+        }
 
         const calc = checkIn
-          ? calculateLateness(checkIn, shiftStart, gracePeriod)
+          ? calculateLateness(checkIn, shiftStart, gracePeriod, shiftEnd)
           : { lateMinutes: 0, status: 'Mangkir' };
         const status = resolveStatus(checkIn, checkOut, calc.status);
 
@@ -1260,7 +1286,7 @@ const commitAttendance = async (req, res) => {
 
           // Recalculate based on merged
           const calcMerged = mergedCheckIn
-            ? calculateLateness(mergedCheckIn, shiftStart, gracePeriod)
+            ? calculateLateness(mergedCheckIn, shiftStart, gracePeriod, shiftEnd)
             : { lateMinutes: 0, status: 'Mangkir' };
           lateMins = calcMerged.lateMinutes;
           finalStatus = resolveStatus(mergedCheckIn, mergedCheckOut, calcMerged.status);

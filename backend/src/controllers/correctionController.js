@@ -97,6 +97,27 @@ const review = async (req, res) => {
         include: { shift: true },
       });
 
+      // Fetch global settings
+      const settingsList = await prisma.settings.findMany();
+      const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
+      const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
+      const globalGracePeriod = parseInt(settingsList.find(s => s.key === 'gracePeriod')?.value || '15', 10);
+
+      // Fetch shift overrides for today
+      const dateStart = new Date(today);
+      dateStart.setHours(0, 0, 0, 0);
+      const dateEnd = new Date(today);
+      dateEnd.setHours(23, 59, 59, 999);
+      const override = await prisma.employeeShiftOverride.findFirst({
+        where: {
+          employeeId,
+          startDate: { lte: dateEnd },
+          endDate: { gte: dateStart }
+        },
+        include: { shift: true }
+      });
+      const effectiveShift = override?.shift || employee.shift || null;
+
       // Parse correction time (HH:mm)
       const [h, m] = time.split(':').map(Number);
       const correctionDateTime = new Date(today);
@@ -121,9 +142,18 @@ const review = async (req, res) => {
       let lateMinutes = 0;
 
       if (finalCheckIn) {
-        const shiftStart = employee.shift?.startTime || '08:00';
-        const gracePeriod = employee.shift?.gracePeriod || 15;
-        const calc = calculateLateness(finalCheckIn, shiftStart, gracePeriod);
+        const shiftStart = effectiveShift?.startTime || '08:00';
+        let shiftEnd = effectiveShift?.endTime || '17:00';
+        const gracePeriod = effectiveShift ? effectiveShift.gracePeriod : globalGracePeriod;
+
+        if (today.getDay() === 6) {
+          const satType = effectiveShift?.saturdayType || (isSaturdayHalfDay ? 'HALF_DAY' : 'FULL_DAY');
+          if (satType === 'HALF_DAY') {
+            shiftEnd = effectiveShift?.saturdayEndTime || satCheckoutTime;
+          }
+        }
+
+        const calc = calculateLateness(finalCheckIn, shiftStart, gracePeriod, shiftEnd);
         attStatus = calc.status;
         lateMinutes = calc.lateMinutes;
       }

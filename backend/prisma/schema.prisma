@@ -170,15 +170,17 @@ model Department {
 }
 
 model Shift {
-  id          Int        @id @default(autoincrement())
-  name        String
-  startTime   String     // "08:00"
-  endTime     String     // "17:00"
-  breakStart  String?    // "12:00"
-  breakEnd    String?    // "13:00"
-  gracePeriod Int        @default(15)
-  employees   Employee[]
-  shiftOverrides EmployeeShiftOverride[]
+  id              Int                     @id @default(autoincrement())
+  name            String
+  startTime       String                  // "08:00"
+  endTime         String                  // "17:00"
+  breakStart      String?                 // "12:00"
+  breakEnd        String?                 // "13:00"
+  gracePeriod     Int                     @default(15)
+  saturdayType    String                  @default("HALF_DAY") // "FULL_DAY", "HALF_DAY", "OFF"
+  saturdayEndTime String?                 @default("13:00") // e.g. "13:00"
+  employees       Employee[]
+  shiftOverrides  EmployeeShiftOverride[]
 }
 
 model EmployeeShiftOverride {

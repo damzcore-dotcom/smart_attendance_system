@@ -18,7 +18,8 @@ import {
   CheckCircle2,
   AlertCircle,
   FileText,
-  CreditCard
+  CreditCard,
+  Edit
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { settingsAPI, authAPI } from '../../services/api';
@@ -43,7 +44,7 @@ const Settings = () => {
   const [isMapModalOpen, setMapModalOpen] = useState(false);
   const [editingShift, setEditingShift] = useState(null);
   const [locationForm, setLocationForm] = useState({ name: '', address: '', lat: '', lng: '', radius: 100 });
-  const [shiftForm, setShiftForm] = useState({ name: '', startTime: '08:00', endTime: '17:00', breakStart: '12:00', breakEnd: '13:00', gracePeriod: 15 });
+  const [shiftForm, setShiftForm] = useState({ name: '', startTime: '08:00', endTime: '17:00', breakStart: '12:00', breakEnd: '13:00', gracePeriod: 15, saturdayType: 'HALF_DAY', saturdayEndTime: '13:00' });
 
   const { data: settingsData, isLoading: settingsLoading } = useQuery({
     queryKey: ['settings'],
@@ -185,7 +186,9 @@ const Settings = () => {
       endTime: shift.endTime,
       breakStart: shift.breakStart || '12:00',
       breakEnd: shift.breakEnd || '13:00',
-      gracePeriod: shift.gracePeriod
+      gracePeriod: shift.gracePeriod,
+      saturdayType: shift.saturdayType || 'HALF_DAY',
+      saturdayEndTime: shift.saturdayEndTime || '13:00'
     });
     setShiftModalOpen(true);
   };
@@ -547,7 +550,7 @@ const Settings = () => {
                     </div>
                   </div>
                   <button 
-                    onClick={() => { setShiftForm({ name: '', startTime: '08:00', endTime: '17:00', breakStart: '12:00', breakEnd: '13:00', gracePeriod: 15 }); setShiftModalOpen(true); }}
+                    onClick={() => { setShiftForm({ name: '', startTime: '08:00', endTime: '17:00', breakStart: '12:00', breakEnd: '13:00', gracePeriod: 15, saturdayType: 'HALF_DAY', saturdayEndTime: '13:00' }); setShiftModalOpen(true); }}
                     className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-sm"
                   >
                     <Plus className="w-4 h-4" /> NEW SHIFT
@@ -555,45 +558,72 @@ const Settings = () => {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  {shifts.map(shift => (
-                    <div key={shift.id} className="group relative bg-white border border-slate-200 rounded-2xl p-6 hover:border-blue-300 hover:shadow-md transition-all duration-300">
-                      <div className="flex justify-between items-start mb-5">
-                        <div className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 group-hover:text-blue-600 group-hover:bg-blue-50 border border-slate-100 group-hover:border-blue-100 transition-all duration-300">
-                          <Clock className="w-6 h-6" />
+                  {shifts.map(shift => {
+                    const departments = Array.from(new Set(
+                      shift.employees
+                        ?.map(e => e.department?.name)
+                        .filter(Boolean)
+                    ));
+                    return (
+                      <div key={shift.id} className="group relative bg-white border border-slate-200 rounded-2xl p-6 hover:border-blue-300 hover:shadow-md transition-all duration-300">
+                        <div className="flex justify-between items-start mb-5">
+                          <div className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 group-hover:text-blue-600 group-hover:bg-blue-50 border border-slate-100 group-hover:border-blue-100 transition-all duration-300">
+                            <Clock className="w-6 h-6" />
+                          </div>
+                          <div className="flex gap-2">
+                            <button 
+                              onClick={() => handleOpenEditShift(shift)}
+                              title="Edit Shift"
+                              className="w-9 h-9 flex items-center justify-center bg-white hover:bg-slate-50 text-slate-400 hover:text-blue-600 rounded-lg transition-all border border-slate-200 hover:border-blue-200"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => { if(confirm('Permanently delete shift protocol?')) deleteShiftMutation.mutate(shift.id) }}
+                              className="w-9 h-9 flex items-center justify-center bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-all border border-slate-200 hover:border-rose-200"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex gap-2">
-                          <button 
-                            onClick={() => handleOpenEditShift(shift)}
-                            className="w-9 h-9 flex items-center justify-center bg-white hover:bg-slate-50 text-slate-400 hover:text-blue-600 rounded-lg transition-all border border-slate-200 hover:border-blue-200"
-                          >
-                            <Save className="w-4 h-4" />
-                          </button>
-                          <button 
-                            onClick={() => { if(confirm('Permanently delete shift protocol?')) deleteShiftMutation.mutate(shift.id) }}
-                            className="w-9 h-9 flex items-center justify-center bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-all border border-slate-200 hover:border-rose-200"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                      <h4 className="text-base font-bold text-slate-800 tracking-tight group-hover:text-blue-600 transition-colors uppercase mb-4">{shift.name}</h4>
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 rounded-lg border border-slate-100">
-                          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Active Span</span>
-                          <span className="text-xs font-bold text-slate-700">{shift.startTime} <span className="text-slate-400 mx-1">—</span> {shift.endTime}</span>
-                        </div>
-                        <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 rounded-lg border border-slate-100">
-                          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Grace Tolerance</span>
-                          <span className="text-xs font-bold text-amber-600">{shift.gracePeriod}m PROTOCOL</span>
-                        </div>
-                        <div className="flex items-center gap-3 pt-2">
-                          <div className="px-3 py-1 bg-emerald-50 text-emerald-700 text-[9px] font-bold uppercase tracking-widest rounded-md border border-emerald-100">
-                            {shift._count?.employees || 0} Assets Assigned
+                        <h4 className="text-base font-bold text-slate-800 tracking-tight group-hover:text-blue-600 transition-colors uppercase mb-4">{shift.name}</h4>
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Active Span</span>
+                            <span className="text-xs font-bold text-slate-700">{shift.startTime} <span className="text-slate-400 mx-1">—</span> {shift.endTime}</span>
+                          </div>
+                          <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                             <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Grace Tolerance</span>
+                             <span className="text-xs font-bold text-amber-600">{shift.gracePeriod}m PROTOCOL</span>
+                           </div>
+                           <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                             <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Hari Sabtu</span>
+                             <span className="text-xs font-bold text-indigo-600 uppercase">
+                               {
+                                 shift.saturdayType === 'OFF' ? 'Libur' :
+                                 shift.saturdayType === 'FULL_DAY' ? 'Kerja Penuh' :
+                                 `Setengah Hari (${shift.saturdayEndTime || '13:00'})`
+                               }
+                             </span>
+                           </div>
+                          <div className="flex flex-wrap gap-2 pt-2 items-center">
+                            <div className="px-3 py-1 bg-emerald-50 text-emerald-700 text-[9px] font-bold uppercase tracking-widest rounded-md border border-emerald-100">
+                              {shift._count?.employees || 0} Assets Assigned
+                            </div>
+                            {departments.length > 0 && (
+                              <div className="flex flex-wrap gap-1">
+                                {departments.map(dept => (
+                                  <span key={dept} className="px-2 py-0.5 bg-blue-50 text-blue-700 text-[9px] font-bold uppercase tracking-wider rounded-md border border-blue-100">
+                                    {dept}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {shifts.length === 0 && (
                     <div className="col-span-1 md:col-span-2 py-16 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
                       <Clock className="w-10 h-10 text-slate-300 mx-auto mb-3" />
@@ -1153,6 +1183,33 @@ const Settings = () => {
                   onChange={(e) => setShiftForm({...shiftForm, gracePeriod: parseInt(e.target.value)})}
                   className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-5">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Protokol Hari Sabtu</label>
+                  <select 
+                    value={shiftForm.saturdayType || 'HALF_DAY'}
+                    onChange={(e) => setShiftForm({...shiftForm, saturdayType: e.target.value})}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm"
+                  >
+                    <option value="HALF_DAY">Setengah Hari (Half-Day)</option>
+                    <option value="FULL_DAY">Hari Kerja Penuh (Full-Day)</option>
+                    <option value="OFF">Hari Libur (Off-Day)</option>
+                  </select>
+                </div>
+                {(shiftForm.saturdayType || 'HALF_DAY') === 'HALF_DAY' && (
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Jam Pulang Sabtu</label>
+                    <input 
+                      type="time" 
+                      required={(shiftForm.saturdayType || 'HALF_DAY') === 'HALF_DAY'}
+                      value={shiftForm.saturdayEndTime || '13:00'}
+                      onChange={(e) => setShiftForm({...shiftForm, saturdayEndTime: e.target.value})}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm animate-in slide-in-from-top-2 duration-200"
+                    />
+                  </div>
+                )}
               </div>
               
               <div className="flex gap-3 pt-4 border-t border-slate-100">

@@ -6,7 +6,18 @@ const prisma = require('../prismaClient');
 const getAll = async (req, res) => {
   try {
     const shifts = await prisma.shift.findMany({
-      include: { _count: { select: { employees: true } } },
+      include: {
+        _count: { select: { employees: true } },
+        employees: {
+          select: {
+            department: {
+              select: {
+                name: true
+              }
+            }
+          }
+        }
+      },
     });
     res.json({ success: true, data: shifts });
   } catch (err) {
@@ -19,9 +30,18 @@ const getAll = async (req, res) => {
  */
 const create = async (req, res) => {
   try {
-    const { name, startTime, endTime, breakStart, breakEnd, gracePeriod } = req.body;
+    const { name, startTime, endTime, breakStart, breakEnd, gracePeriod, saturdayType, saturdayEndTime } = req.body;
     const shift = await prisma.shift.create({
-      data: { name, startTime, endTime, breakStart, breakEnd, gracePeriod: Math.max(0, parseInt(gracePeriod) || 0) },
+      data: { 
+        name, 
+        startTime, 
+        endTime, 
+        breakStart, 
+        breakEnd, 
+        gracePeriod: Math.max(0, parseInt(gracePeriod) || 0),
+        saturdayType: saturdayType || "HALF_DAY",
+        saturdayEndTime: saturdayEndTime !== undefined ? saturdayEndTime : "13:00"
+      },
     });
     res.status(201).json({ success: true, data: shift });
   } catch (err) {
@@ -58,10 +78,19 @@ const getEmployeeShift = async (req, res) => {
 const update = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, startTime, endTime, breakStart, breakEnd, gracePeriod } = req.body;
+    const { name, startTime, endTime, breakStart, breakEnd, gracePeriod, saturdayType, saturdayEndTime } = req.body;
     const shift = await prisma.shift.update({
       where: { id: parseInt(id) },
-      data: { name, startTime, endTime, breakStart, breakEnd, gracePeriod: Math.max(0, parseInt(gracePeriod) || 0) },
+      data: { 
+        name, 
+        startTime, 
+        endTime, 
+        breakStart, 
+        breakEnd, 
+        gracePeriod: Math.max(0, parseInt(gracePeriod) || 0),
+        saturdayType: saturdayType || "HALF_DAY",
+        saturdayEndTime: saturdayEndTime !== undefined ? saturdayEndTime : "13:00"
+      },
     });
     res.json({ success: true, data: shift });
   } catch (err) {
@@ -114,15 +143,67 @@ const createOverrides = async (req, res) => {
     const end = new Date(endDate);
     
     // Pastikan tidak ada conflict
-    // Karena kita tidak ingin ada multiple overrides for the same exact date,
-    // Kita bisa delete override lama yang berada di rentang ini untuk employee tersebut
-    await prisma.employeeShiftOverride.deleteMany({
-      where: {
-        employeeId: { in: employeeIds },
-        startDate: { lte: end },
-        endDate: { gte: start }
+    // Selesaikan konflik tumpang tindih (Roster Collision) dengan cara memotong/membagi range tanggal
+    for (const empId of employeeIds) {
+      const parsedEmpId = parseInt(empId);
+      
+      const overlapping = await prisma.employeeShiftOverride.findMany({
+        where: {
+          employeeId: parsedEmpId,
+          startDate: { lte: end },
+          endDate: { gte: start }
+        }
+      });
+      
+      for (const ov of overlapping) {
+        const ovStart = new Date(ov.startDate);
+        const ovEnd = new Date(ov.endDate);
+        
+        if (ovStart.getTime() >= start.getTime() && ovEnd.getTime() <= end.getTime()) {
+          // Kasus 1: Seluruhnya berada di dalam range baru -> Hapus
+          await prisma.employeeShiftOverride.delete({ where: { id: ov.id } });
+        } else if (ovStart.getTime() < start.getTime() && ovEnd.getTime() > end.getTime()) {
+          // Kasus 2: Menutupi seluruh range baru -> Potong menjadi dua bagian (Kiri dan Kanan)
+          const endBefore = new Date(start);
+          endBefore.setDate(endBefore.getDate() - 1);
+          
+          await prisma.employeeShiftOverride.update({
+            where: { id: ov.id },
+            data: { endDate: endBefore }
+          });
+          
+          const startAfter = new Date(end);
+          startAfter.setDate(startAfter.getDate() + 1);
+          
+          await prisma.employeeShiftOverride.create({
+            data: {
+              employeeId: parsedEmpId,
+              shiftId: ov.shiftId,
+              startDate: startAfter,
+              endDate: ovEnd
+            }
+          });
+        } else if (ovStart.getTime() < start.getTime() && ovEnd.getTime() >= start.getTime() && ovEnd.getTime() <= end.getTime()) {
+          // Kasus 3: Menumpuk di bagian awal range baru -> Kecilkan endDate
+          const endBefore = new Date(start);
+          endBefore.setDate(endBefore.getDate() - 1);
+          
+          await prisma.employeeShiftOverride.update({
+            where: { id: ov.id },
+            data: { endDate: endBefore }
+          });
+        } else if (ovStart.getTime() >= start.getTime() && ovStart.getTime() <= end.getTime() && ovEnd.getTime() > end.getTime()) {
+          // Kasus 4: Menumpuk di bagian akhir range baru -> Kecilkan startDate
+          const startAfter = new Date(end);
+          startAfter.setDate(startAfter.getDate() + 1);
+          
+          await prisma.employeeShiftOverride.update({
+            where: { id: ov.id },
+            data: { startDate: startAfter }
+          });
+        }
       }
-    });
+    }
 
     const overrideData = employeeIds.map(empId => ({
       employeeId: parseInt(empId),

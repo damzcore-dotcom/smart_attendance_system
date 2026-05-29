@@ -10,7 +10,7 @@
  * @param {number} gracePeriodMinutes - Grace period in minutes
  * @returns {{ lateMinutes: number, status: 'PRESENT' | 'LATE' }}
  */
-function calculateLateness(checkInTime, shiftStartTime, gracePeriodMinutes = 15) {
+function calculateLateness(checkInTime, shiftStartTime, gracePeriodMinutes = 15, shiftEndTime = null) {
   const checkIn = new Date(checkInTime);
   
   // Parse shift start time (e.g. "08:00")
@@ -24,9 +24,24 @@ function calculateLateness(checkInTime, shiftStartTime, gracePeriodMinutes = 15)
   let shiftMins = shiftHour * 60 + shiftMinute;
   let checkInMins = checkInHour * 60 + checkInMinute;
 
-  // Handle Night Shift logic (If shift starts late at night e.g. 22:00, and checkIn is early morning e.g. 02:00)
-  if (shiftHour >= 18 && checkInHour <= 6) {
-    checkInMins += 24 * 60; // Push checkIn into the "next day" continuum
+  // Handle Night Shift logic
+  let isNightShift = false;
+  if (shiftEndTime) {
+    const [endHour, endMinute] = shiftEndTime.split(':').map(Number);
+    const shiftEndMins = endHour * 60 + endMinute;
+    isNightShift = shiftEndMins < shiftMins;
+  } else {
+    // Backward compatibility fallback
+    isNightShift = shiftHour >= 18;
+  }
+
+  if (isNightShift) {
+    // If checkIn happens after midnight (e.g., 01:00 AM or late morning like 07:15 AM)
+    // it will be far smaller than shift start mins (e.g., 22:00 = 1320 mins).
+    // If it's more than 6 hours before the shift starts, we treat it as next day check-in.
+    if (checkInMins < shiftMins - 6 * 60) {
+      checkInMins += 24 * 60; // Push checkIn into the "next day" continuum
+    }
   }
 
   // Grace deadline in minutes
