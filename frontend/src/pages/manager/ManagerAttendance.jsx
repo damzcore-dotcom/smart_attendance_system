@@ -95,7 +95,7 @@ const ManagerAttendance = () => {
   const handleExport = () => {
     const sortedRecords = [...records].sort((a, b) => new Date(a.date) - new Date(b.date));
     const rows = sortedRecords.map(r => {
-      const penalty = (r.status === 'MANGKIR' || r.status === 'MISSING') ? (summary.mangkirPenalty || 30) : 0;
+      const penalty = ((r.status === 'MANGKIR' || r.status === 'MISSING') && (r.lateMinutes || 0) === 0) ? (summary.mangkirPenalty || 30) : 0;
       return {
         'NIK': r.employeeCode,
         'Nama': r.name,
@@ -341,7 +341,7 @@ const ManagerAttendance = () => {
                       {r.status === 'LATE' && r.lateMinutes > 0 ? (
                         <span className="text-xs font-black text-rose-600 tracking-tighter">+{r.lateMinutes}m</span>
                       ) : (r.status === 'MANGKIR' || r.status === 'MISSING') ? (
-                        <span className="text-xs font-black text-slate-500 tracking-tighter">+{summary?.mangkirPenalty || 30}m</span>
+                        <span className="text-xs font-black text-slate-500 tracking-tighter">+{ (r.lateMinutes || 0) + ((r.lateMinutes || 0) === 0 ? (summary?.mangkirPenalty || 30) : 0) }m</span>
                       ) : (
                         <span className="text-slate-200 font-black">—</span>
                       )}

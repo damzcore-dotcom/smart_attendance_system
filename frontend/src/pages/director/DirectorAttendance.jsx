@@ -97,7 +97,7 @@ const DirectorAttendance = () => {
   const handleExport = () => {
     const sortedRecords = [...records].sort((a, b) => new Date(a.date) - new Date(b.date));
     const rows = sortedRecords.map(r => {
-      const penalty = (r.status === 'MANGKIR' || r.status === 'MISSING') ? 30 : 0;
+      const penalty = ((r.status === 'MANGKIR' || r.status === 'MISSING') && (r.lateMinutes || 0) === 0) ? 30 : 0;
       return {
         'NIK': r.employeeCode,
         'Nama': r.name,
@@ -346,7 +346,7 @@ const DirectorAttendance = () => {
                       ) : (r.status === 'MANGKIR' || r.status === 'MISSING') ? (
                         <div className="flex items-center justify-center gap-1.5">
                           <div className="w-1.5 h-1.5 bg-slate-400 rounded-full" />
-                          <span className="text-xs font-bold text-slate-500">+{30}m</span>
+                          <span className="text-xs font-bold text-slate-500">+{ (r.lateMinutes || 0) + ((r.lateMinutes || 0) === 0 ? 30 : 0) }m</span>
                         </div>
                       ) : (
                         <span className="text-slate-200 font-black">—</span>

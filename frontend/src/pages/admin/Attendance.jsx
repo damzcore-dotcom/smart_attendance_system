@@ -27,6 +27,38 @@ const formatDuration = (minutes) => {
   return `${h} jam ${m} menit`;
 };
 
+const getReportPeriodLabel = (filters) => {
+  const monthsIndo = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+  let dateObj = new Date();
+  if (filters.startDate) {
+    const parsed = new Date(filters.startDate);
+    if (!isNaN(parsed.getTime())) {
+      dateObj = parsed;
+    }
+  } else if (filters.endDate) {
+    const parsed = new Date(filters.endDate);
+    if (!isNaN(parsed.getTime())) {
+      dateObj = parsed;
+    }
+  }
+  return `${monthsIndo[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
+};
+
+const getRowPenalty = (row, mangkirPenalty = 30) => {
+  const status = (row.status || '').toUpperCase();
+  const isMangkir = (status === 'MANGKIR' || status === 'MISSING');
+  const isAlpa = (status === 'ABSENT' || status === 'ALPA' || status === 'TANPA KETERANGAN (ALPA)');
+  
+  if (isMangkir || isAlpa) {
+    return (row.lateMinutes || 0) === 0 ? mangkirPenalty : 0;
+  }
+  return 0;
+};
+
+
 const Attendance = () => {
   const queryClient = useQueryClient();
   const [isImportOpen, setImportOpen] = useState(false);
@@ -295,7 +327,8 @@ const Attendance = () => {
         g.lateDetails.push({ date: row.date, checkIn: row.checkIn, lateMinutes: row.lateMinutes || 0 });
       } else if (status === 'MANGKIR' || status === 'Mangkir') {
         g.mangkir++;
-        g.totalLateMinutes += (fullDataForRekap?.summary?.mangkirPenalty || 30);
+        const penalty = (row.lateMinutes || 0) === 0 ? (fullDataForRekap?.summary?.mangkirPenalty || 30) : 0;
+        g.totalLateMinutes += (row.lateMinutes || 0) + penalty;
         g.mangkirDetails.push({ date: row.date, checkIn: row.checkIn, checkOut: row.checkOut });
       } else if (status === 'ABSENT' || status === 'Alpa' || status === 'MISSING') {
         g.absent++;
@@ -418,7 +451,12 @@ const Attendance = () => {
         cuti: filteredData.filter(d => d.status === 'Cuti').length,
         sakit: filteredData.filter(d => d.status === 'Sakit').length,
         izin: filteredData.filter(d => d.status === 'Izin').length,
-        totalLate: filteredData.reduce((sum, d) => sum + (d.lateMinutes || 0) + ((d.status === 'Mangkir' || d.status === 'Alpa') ? (data?.summary?.mangkirPenalty || 30) : 0), 0),
+        totalLate: filteredData.reduce((sum, d) => {
+          const hasLate = (d.lateMinutes || 0) > 0;
+          const isMangkirOrAlpa = d.status === 'Mangkir' || d.status === 'Alpa' || d.status === 'MANGKIR' || d.status === 'ABSENT' || d.status === 'Alpa';
+          const penalty = (isMangkirOrAlpa && !hasLate) ? (data?.summary?.mangkirPenalty || 30) : 0;
+          return sum + (d.lateMinutes || 0) + penalty;
+        }, 0),
         uniqueEmployeeCount: 1
       };
     }
@@ -630,7 +668,7 @@ const Attendance = () => {
 
       const exportData = sortedData.map(row => {
         const isMangkir = (row.status === 'MANGKIR' || row.status === 'MISSING' || row.status === 'Mangkir');
-        const penalty = isMangkir ? (allDataResponse?.summary?.mangkirPenalty || 30) : 0;
+        const penalty = (isMangkir && (row.lateMinutes || 0) === 0) ? (allDataResponse?.summary?.mangkirPenalty || 30) : 0;
         return {
           'Nama Karyawan': row.name,
           'Departemen': row.dept,
@@ -656,6 +694,31 @@ const Attendance = () => {
   };
 
   const handleExportPDF = () => {
+    const drawKpiBlock = (doc, x, y, width, height, label, value, theme) => {
+      doc.setDrawColor(theme.stroke[0], theme.stroke[1], theme.stroke[2]);
+      doc.setFillColor(theme.fill[0], theme.fill[1], theme.fill[2]);
+      doc.roundedRect(x, y, width, height, 1.5, 1.5, 'FD');
+      
+      doc.setFontSize(7);
+      doc.setTextColor(100, 116, 139); // slate-500
+      doc.text(label.toUpperCase(), x + 3, y + 4.5);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(theme.text[0], theme.text[1], theme.text[2]);
+      doc.setFont('helvetica', 'bold');
+      doc.text(String(value), x + 3, y + 10.5);
+      doc.setFont('helvetica', 'normal');
+    };
+
+    const themes = {
+      emerald: { fill: [240, 253, 244], stroke: [187, 247, 208], text: [21, 128, 61] },
+      blue: { fill: [239, 246, 255], stroke: [191, 219, 254], text: [29, 78, 216] },
+      sky: { fill: [240, 249, 255], stroke: [186, 230, 253], text: [3, 105, 161] },
+      amber: { fill: [255, 251, 235], stroke: [254, 243, 199], text: [180, 83, 9] },
+      rose: { fill: [254, 242, 242], stroke: [254, 202, 202], text: [185, 28, 28] },
+      violet: { fill: [250, 245, 255], stroke: [233, 213, 255], text: [109, 40, 217] }
+    };
+
     if (activeViewTab === 'REKAPITULASI') {
       const doc = new jsPDF('l', 'mm', 'a4');
       const pageWidth = doc.internal.pageSize.getWidth();
@@ -666,8 +729,32 @@ const Attendance = () => {
       
       doc.setFontSize(10);
       doc.setTextColor(100);
-      doc.text(`Periode Laporan: ${appliedFilters.period} (${appliedFilters.startDate || '-'} s/d ${appliedFilters.endDate || '-'})`, 14, 28);
+      doc.text(`Periode Laporan: ${getReportPeriodLabel(appliedFilters)}`, 14, 28);
       doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 14, 33);
+
+      const rawLogs = fullDataForRekap?.data || [];
+      const totalHadir = rawLogs.filter(d => d.status === 'Hadir' || d.status === 'PRESENT').length;
+      const totalSakit = rawLogs.filter(d => d.status === 'Sakit' || d.status === 'SAKIT').length;
+      const totalIzin = rawLogs.filter(d => d.status === 'Izin' || d.status === 'IZIN').length;
+      const totalMangkir = rawLogs.filter(d => d.status === 'Mangkir' || d.status === 'MANGKIR').length;
+      const totalAlpa = rawLogs.filter(d => d.status === 'Alpa' || d.status === 'ABSENT').length;
+      const totalLateMinutes = rawLogs.reduce((sum, d) => {
+        const isMangkir = (d.status === 'Mangkir' || d.status === 'MANGKIR' || d.status === 'MISSING');
+        const isAlpa = (d.status === 'Alpa' || d.status === 'ABSENT');
+        const penalty = ((isMangkir || isAlpa) && (d.lateMinutes || 0) === 0) ? (fullDataForRekap?.summary?.mangkirPenalty || 30) : 0;
+        return sum + (d.lateMinutes || 0) + penalty;
+      }, 0);
+
+      // Draw KPI Cards Row
+      const blockWidth = 42;
+      const blockHeight = 14;
+      const gap = 3.4;
+      drawKpiBlock(doc, 14, 37, blockWidth, blockHeight, 'Hadir', totalHadir, themes.emerald);
+      drawKpiBlock(doc, 14 + 1 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Sakit', totalSakit, themes.blue);
+      drawKpiBlock(doc, 14 + 2 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Izin', totalIzin, themes.sky);
+      drawKpiBlock(doc, 14 + 3 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Mangkir', totalMangkir, themes.amber);
+      drawKpiBlock(doc, 14 + 4 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Alpa', totalAlpa, themes.rose);
+      drawKpiBlock(doc, 14 + 5 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Total Jam Terlambat', formatDuration(totalLateMinutes), themes.violet);
 
       const tableData = rekapData.map(g => {
         const totalExcludeOff = g.total - g.other;
@@ -687,7 +774,7 @@ const Attendance = () => {
       });
 
       autoTable(doc, {
-        startY: 40,
+        startY: 56,
         head: [['Departemen', 'Bagian / Seksi', 'Total', 'Hadir', 'Terlambat', 'Mangkir', 'Alpa', 'Lainnya', 'Rasio %', 'Durasi Telat']],
         body: tableData,
         theme: 'grid',
@@ -708,29 +795,39 @@ const Attendance = () => {
     
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text(`Periode Laporan: ${appliedFilters.period} (${appliedFilters.startDate || '-'} s/d ${appliedFilters.endDate || '-'})`, 14, 28);
+    doc.text(`Periode Laporan: ${getReportPeriodLabel(appliedFilters)}`, 14, 28);
     doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 14, 33);
 
-    const total = filteredData.length;
-    const late = filteredData.filter(r => r.status === 'Terlambat').length;
-    
-    doc.setDrawColor(226, 232, 240); // slate-200
-    doc.setFillColor(248, 250, 252); // slate-50
-    doc.roundedRect(pageWidth - 80, 15, 66, 22, 3, 3, 'FD');
-    
-    doc.setFontSize(8);
-    doc.setTextColor(100, 116, 139); // slate-500
-    doc.text('RINGKASAN STATISTIK', pageWidth - 76, 21);
-    doc.setFontSize(11);
-    doc.setTextColor(30, 41, 59); // slate-800
-    doc.text(`Total: ${total} | Terlambat: ${late}`, pageWidth - 76, 28);
+    const rawLogs = filteredData;
+    const totalHadir = rawLogs.filter(d => d.status === 'Hadir' || d.status === 'PRESENT').length;
+    const totalSakit = rawLogs.filter(d => d.status === 'Sakit' || d.status === 'SAKIT').length;
+    const totalIzin = rawLogs.filter(d => d.status === 'Izin' || d.status === 'IZIN').length;
+    const totalMangkir = rawLogs.filter(d => d.status === 'Mangkir' || d.status === 'MANGKIR').length;
+    const totalAlpa = rawLogs.filter(d => d.status === 'Alpa' || d.status === 'ABSENT').length;
+    const totalLateMinutes = rawLogs.reduce((sum, d) => {
+      const isMangkir = (d.status === 'Mangkir' || d.status === 'MANGKIR' || d.status === 'MISSING');
+      const isAlpa = (d.status === 'Alpa' || d.status === 'ABSENT');
+      const penalty = ((isMangkir || isAlpa) && (d.lateMinutes || 0) === 0) ? (displaySummary?.mangkirPenalty || 30) : 0;
+      return sum + (d.lateMinutes || 0) + penalty;
+    }, 0);
+
+    // Draw KPI Cards Row
+    const blockWidth = 42;
+    const blockHeight = 14;
+    const gap = 3.4;
+    drawKpiBlock(doc, 14, 37, blockWidth, blockHeight, 'Hadir', totalHadir, themes.emerald);
+    drawKpiBlock(doc, 14 + 1 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Sakit', totalSakit, themes.blue);
+    drawKpiBlock(doc, 14 + 2 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Izin', totalIzin, themes.sky);
+    drawKpiBlock(doc, 14 + 3 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Mangkir', totalMangkir, themes.amber);
+    drawKpiBlock(doc, 14 + 4 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Alpa', totalAlpa, themes.rose);
+    drawKpiBlock(doc, 14 + 5 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Total Jam Terlambat', formatDuration(totalLateMinutes), themes.violet);
 
     // Sort data ascending by date (oldest first)
     const sortedData = [...filteredData].sort((a, b) => new Date(a.date) - new Date(b.date));
 
     const tableData = sortedData.map(row => {
       const isMangkir = (row.status === 'MANGKIR' || row.status === 'MISSING' || row.status === 'Mangkir');
-      const penalty = isMangkir ? (displaySummary?.mangkirPenalty || 30) : 0;
+      const penalty = (isMangkir && (row.lateMinutes || 0) === 0) ? (displaySummary?.mangkirPenalty || 30) : 0;
       return [
         row.name,
         row.dept,
@@ -745,7 +842,7 @@ const Attendance = () => {
     });
 
     autoTable(doc, {
-      startY: 45,
+      startY: 56,
       head: [['Karyawan', 'Dept', 'Bagian', 'Jabatan', 'Tanggal', 'Masuk', 'Keluar', 'Telat', 'Status']],
       body: tableData,
       theme: 'grid',
@@ -1219,7 +1316,9 @@ const Attendance = () => {
                           {(row.status === 'Terlambat' || row.status === 'LATE') ? (
                             <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">+{row.lateMinutes}m</span>
                           ) : (row.status === 'Mangkir' || row.status === 'MANGKIR') ? (
-                            <span className="text-[10px] font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-200">+{displaySummary?.mangkirPenalty || 30}m</span>
+                            <span className="text-[10px] font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-200">
+                              +{ (row.lateMinutes || 0) + ((row.lateMinutes || 0) === 0 ? (displaySummary?.mangkirPenalty || 30) : 0) }m
+                            </span>
                           ) : (
                             <span className="text-slate-400">—</span>
                           )}

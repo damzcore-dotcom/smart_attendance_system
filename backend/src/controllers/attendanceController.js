@@ -105,7 +105,7 @@ const getAll = async (req, res) => {
     const skip = (page - 1) * limit;
 
     // 3. Optimized Summary Calculation (O(1) Memory footprint via DB Aggregation)
-    const [total, records, groupStats, uniqueEmpRecords, absentRecords, calendarOverrides, rosterOverrides] = await Promise.all([
+    const [total, records, groupStats, uniqueEmpRecords, absentRecords, calendarOverrides, rosterOverrides, mangkirZeroLateCount] = await Promise.all([
       prisma.attendance.count({ where }),
       prisma.attendance.findMany({
         where,
@@ -146,6 +146,9 @@ const getAll = async (req, res) => {
           endDate: { gte: where.date.gte || now }
         } : {},
         include: { shift: true }
+      }),
+      prisma.attendance.count({
+        where: { ...where, status: 'MANGKIR', lateMinutes: 0 }
       })
     ]);
 
@@ -165,7 +168,11 @@ const getAll = async (req, res) => {
       else if (s === 'IZIN') izinCount += count;
       else absenCount += count;
 
-      totalLate += late + (s === 'MANGKIR' ? count * mangkirPenalty : 0);
+      if (s === 'MANGKIR') {
+        totalLate += late + (mangkirZeroLateCount * mangkirPenalty);
+      } else {
+        totalLate += late;
+      }
     });
 
     const overrideMap = {};
@@ -623,7 +630,9 @@ const getHistory = async (req, res) => {
         in: r.checkIn ? r.checkIn.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-- : --',
         out: r.checkOut ? r.checkOut.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-- : --',
         status: r.status,
-        lateMinutes: (r.status === 'MANGKIR' || r.status === 'MISSING') ? dynamicMangkirPenalty : r.lateMinutes,
+        lateMinutes: (r.status === 'MANGKIR' || r.status === 'MISSING')
+          ? ((r.lateMinutes || 0) > 0 ? r.lateMinutes : dynamicMangkirPenalty)
+          : r.lateMinutes,
       })),
     });
   } catch (err) {
