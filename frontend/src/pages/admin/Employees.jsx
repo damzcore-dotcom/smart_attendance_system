@@ -271,6 +271,16 @@ const Employees = () => {
     });
     setAddModalOpen(true);
   };
+
+  const closeAddModal = () => {
+    if (faceGuideRef.current) clearInterval(faceGuideRef.current);
+    setScanStatus('ready');
+    setIsCapturing(false);
+    setAddModalOpen(false);
+    setNewEmployee(emptyEmployee);
+    setActiveTab('basic');
+    setNikError('');
+  };
   
   const handleNikBlur = async () => {
     if (!newEmployee.employeeCode || newEmployee.dbId) {
@@ -493,7 +503,12 @@ const Employees = () => {
             <Printer className="w-4 h-4" /> Print ID Cards (Bulk)
           </button>
           <button 
-            onClick={() => setAddModalOpen(true)} 
+            onClick={() => {
+              setNewEmployee(emptyEmployee);
+              setActiveTab('basic');
+              setNikError('');
+              setAddModalOpen(true);
+            }} 
             className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.98]"
           >
             <UserPlus className="w-4 h-4" /> Enlist Personnel
@@ -954,12 +969,7 @@ const Employees = () => {
       {/* Tabbed Add Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 print:hidden">
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => {
-            if (faceGuideRef.current) clearInterval(faceGuideRef.current);
-            setScanStatus('ready');
-            setIsCapturing(false);
-            setAddModalOpen(false);
-          }}></div>
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300" onClick={closeAddModal}></div>
           <div className="bg-white w-full max-w-5xl relative z-10 overflow-hidden flex flex-col max-h-[90vh] shadow-2xl animate-in zoom-in-95 duration-300 rounded-3xl">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <div className="flex items-center gap-4">
@@ -974,12 +984,7 @@ const Employees = () => {
                 </div>
               </div>
               <button 
-                onClick={() => {
-                  if (faceGuideRef.current) clearInterval(faceGuideRef.current);
-                  setScanStatus('ready');
-                  setIsCapturing(false);
-                  setAddModalOpen(false);
-                }} 
+                onClick={closeAddModal} 
                 className="w-10 h-10 flex items-center justify-center hover:bg-slate-200 text-slate-500 rounded-xl transition-all"
               >
                 <X className="w-5 h-5 text-slate-500" />
@@ -1532,7 +1537,7 @@ const Employees = () => {
               </form>
             </div>
             <div className="p-6 border-t border-slate-100 flex justify-end gap-3 bg-slate-50">
-              <button onClick={() => setAddModalOpen(false)} className="px-6 py-2.5 rounded-xl font-bold text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-200 transition-all">Cancel</button>
+              <button onClick={closeAddModal} className="px-6 py-2.5 rounded-xl font-bold text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-200 transition-all">Cancel</button>
               <button 
                 type="submit" 
                 form="add-emp-form" 
