@@ -991,6 +991,7 @@ const importFromExcel = async (req, res) => {
  */
 const recalculate = async (req, res) => {
   try {
+    const { startDate, endDate } = req.body;
     const start = new Date(startDate);
     const end = new Date(endDate);
     end.setHours(23, 59, 59, 999);

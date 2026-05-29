@@ -51,10 +51,11 @@ function calculateLateness(checkInTime, shiftStartTime, gracePeriodMinutes = 15,
     return { lateMinutes: 0, status: 'PRESENT' };
   }
   
-  // Hitung jumlah menit terlambat (secara REAK/RIL, tanpa pembagian block 30 menit)
   const exactLateMinutes = checkInMins - shiftMins;
+  // Pembulatan ke atas per 30 menit (Math.ceil ke kelipatan 30)
+  const roundedLateMinutes = Math.ceil(exactLateMinutes / 30) * 30;
   
-  return { lateMinutes: exactLateMinutes, status: 'LATE' };
+  return { lateMinutes: roundedLateMinutes, status: 'LATE' };
 }
 
 /**

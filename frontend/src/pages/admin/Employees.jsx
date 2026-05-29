@@ -1340,7 +1340,22 @@ const Employees = () => {
                             <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5 ml-1">Select Attendance Machine</label>
                             <select
                               value={selectedDeviceForFinger}
-                              onChange={(e) => setSelectedDeviceForFinger(e.target.value)}
+                              onChange={async (e) => {
+                                const deviceId = e.target.value;
+                                setSelectedDeviceForFinger(deviceId);
+                                if (deviceId && !newEmployee.fingerPrintId) {
+                                  try {
+                                    const res = await employeeAPI.getNextFingerId();
+                                    if (res.success) {
+                                      const updatedEmployee = { ...newEmployee, fingerPrintId: res.nextFingerId };
+                                      setNewEmployee(updatedEmployee);
+                                      updateMutation.mutate({ id: newEmployee.dbId, data: updatedEmployee });
+                                    }
+                                  } catch (err) {
+                                    console.error('Failed to auto-generate Finger ID:', err);
+                                  }
+                                }
+                              }}
                               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 appearance-none cursor-pointer"
                             >
                               <option value="">-- Choose Machine --</option>
