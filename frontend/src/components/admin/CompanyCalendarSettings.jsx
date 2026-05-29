@@ -48,10 +48,28 @@ const CompanyCalendarSettings = () => {
     },
   });
 
-  const handleUpsert = (e) => {
+  const handleUpsert = async (e) => {
     e.preventDefault();
     if (!form.date || !form.description) return alert('Lengkapi data');
-    upsertMutation.mutate(form);
+    
+    if (form.type === 'SWAP') {
+      if (!form.swapDate) return alert('Lengkapi tanggal pengganti libur');
+      try {
+        const workdayDesc = `Tukar Hari (Wajib Masuk): ${form.description} (Diganti ke ${form.swapDate})`;
+        const holidayDesc = `Tukar Hari (Libur Pengganti): ${form.description} (Dari ${form.date})`;
+        
+        await calendarAPI.upsert({ date: form.date, type: 'WORKDAY', description: workdayDesc });
+        await calendarAPI.upsert({ date: form.swapDate, type: 'HOLIDAY', description: holidayDesc });
+        
+        queryClient.invalidateQueries({ queryKey: ['calendar'] });
+        setForm({ date: '', swapDate: '', type: 'HOLIDAY', description: '' });
+        alert('Tukar hari berhasil disimpan!');
+      } catch (err) {
+        alert('Gagal memproses tukar hari: ' + err.message);
+      }
+    } else {
+      upsertMutation.mutate(form);
+    }
   };
 
   const handleEdit = (holiday) => {
@@ -113,31 +131,61 @@ const CompanyCalendarSettings = () => {
           </h3>
           <form onSubmit={handleUpsert} className="space-y-4">
             <div>
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Tanggal</label>
-              <input 
-                type="date" 
-                value={form.date} 
-                onChange={e => setForm({...form, date: e.target.value})} 
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700" 
-                required 
-              />
-            </div>
-            <div>
               <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Tipe Pengecualian</label>
               <select 
                 value={form.type} 
-                onChange={e => setForm({...form, type: e.target.value})} 
+                onChange={e => setForm({...form, type: e.target.value, swapDate: ''})} 
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700"
               >
                 <option value="HOLIDAY">Tanggal Merah / Libur / Cuti Bersama</option>
                 <option value="WORKDAY">Wajib Masuk (Tukar Hari Libur)</option>
+                <option value="SWAP">Tukar Hari Kerja / Libur (Swap)</option>
               </select>
             </div>
+
+            {form.type === 'SWAP' ? (
+              <div className="space-y-4 p-4 bg-blue-50/50 rounded-2xl border border-blue-100/50 mt-2">
+                <div>
+                  <label className="text-[10px] font-bold text-blue-700 uppercase tracking-wider block mb-1">Tanggal Masuk (Wajib Kerja)</label>
+                  <input 
+                    type="date" 
+                    value={form.date} 
+                    onChange={e => setForm({...form, date: e.target.value})} 
+                    className="w-full bg-white border border-blue-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 focus:outline-none" 
+                    required 
+                  />
+                  <p className="text-[9px] text-blue-500 font-semibold mt-1">Tanggal di mana karyawan harusnya libur tetapi diwajibkan masuk kerja.</p>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-blue-700 uppercase tracking-wider block mb-1">Tanggal Libur (Hari Pengganti)</label>
+                  <input 
+                    type="date" 
+                    value={form.swapDate || ''} 
+                    onChange={e => setForm({...form, swapDate: e.target.value})} 
+                    className="w-full bg-white border border-blue-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 focus:outline-none" 
+                    required 
+                  />
+                  <p className="text-[9px] text-blue-500 font-semibold mt-1">Tanggal di mana karyawan harusnya masuk tetapi diliburkan sebagai pengganti.</p>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Tanggal</label>
+                <input 
+                  type="date" 
+                  value={form.date} 
+                  onChange={e => setForm({...form, date: e.target.value})} 
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700" 
+                  required 
+                />
+              </div>
+            )}
+
             <div>
               <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Keterangan</label>
               <input 
                 type="text" 
-                placeholder="Misal: Tahun Baru" 
+                placeholder="Misal: Tukar Libur Waisak" 
                 value={form.description} 
                 onChange={e => setForm({...form, description: e.target.value})} 
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700" 
