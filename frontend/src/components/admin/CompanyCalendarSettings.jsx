@@ -52,7 +52,8 @@ const CompanyCalendarSettings = () => {
     e.preventDefault();
     if (!form.date || !form.description) return alert('Lengkapi data');
     
-    if (form.type === 'WORKDAY' && form.swapDate) {
+    if (form.type === 'WORKDAY') {
+      if (!form.swapDate) return alert('Tanggal Libur Pengganti wajib diisi untuk Tukar Hari!');
       try {
         const workdayDesc = `Tukar Hari (Wajib Masuk): ${form.description} (Diganti ke ${form.swapDate})`;
         const holidayDesc = `Tukar Hari (Libur Pengganti): ${form.description} (Dari ${form.date})`;
@@ -156,15 +157,16 @@ const CompanyCalendarSettings = () => {
 
             {form.type === 'WORKDAY' && (
               <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl space-y-2 mt-2">
-                <label className="text-[10px] font-bold text-blue-700 uppercase tracking-wider block">Tanggal Libur Pengganti (Opsional)</label>
+                <label className="text-[10px] font-bold text-blue-700 uppercase tracking-wider block">Tanggal Libur Pengganti <span className="text-red-500">*</span></label>
                 <input 
                   type="date" 
                   value={form.swapDate || ''} 
                   onChange={e => setForm({...form, swapDate: e.target.value})} 
                   className="w-full bg-white border border-blue-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                  required 
                 />
                 <p className="text-[9px] text-blue-500 font-medium leading-normal">
-                  Jika diisi, sistem otomatis membuat hari libur (HOLIDAY) pada tanggal pengganti tersebut agar Anda tidak perlu input 2x.
+                  Sistem otomatis membuat hari libur (HOLIDAY) pada tanggal ini sebagai pengganti, sehingga Anda cukup input 1x saja.
                 </p>
               </div>
             )}
