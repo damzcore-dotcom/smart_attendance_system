@@ -643,6 +643,37 @@ const checkDuplicate = async (req, res) => {
   }
 };
 
+const getNextFingerId = async (req, res) => {
+  try {
+    const employees = await prisma.employee.findMany({
+      where: {
+        NOT: [
+          { fingerPrintId: null },
+          { fingerPrintId: '' }
+        ]
+      },
+      select: {
+        fingerPrintId: true
+      }
+    });
+
+    let maxId = 0;
+    for (const emp of employees) {
+      const num = parseInt(emp.fingerPrintId, 10);
+      if (!isNaN(num)) {
+        if (num > maxId) {
+          maxId = num;
+        }
+      }
+    }
+
+    const nextId = maxId > 0 ? maxId + 1 : 10001;
+    res.json({ success: true, nextFingerId: String(nextId) });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 const batchUpdateSalaryCategory = async (req, res) => {
   try {
     const { employeeIds, salaryCategory } = req.body;
@@ -672,4 +703,4 @@ const batchUpdateSalaryCategory = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, create, update, remove, importExcel, getProgress, getMasterOptions, batchUpdateShift, batchUpdateSalaryCategory, checkDuplicate };
+module.exports = { getAll, getById, create, update, remove, importExcel, getProgress, getMasterOptions, batchUpdateShift, batchUpdateSalaryCategory, checkDuplicate, getNextFingerId };

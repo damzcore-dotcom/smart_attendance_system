@@ -19,7 +19,8 @@ const emptyEmployee = {
   birthPlace: '', address: '', education: '', major: '', religion: '', maritalStatus: '', numberOfChildren: 0, 
   fatherName: '', motherName: '', spouseName: '', emergencyContact: '', notes: '',
   joinDate: '', contractEnd: '', birthDate: '',
-  leaveQuota: 12, remainingLeave: 12, profilePhoto: ''
+  leaveQuota: 12, remainingLeave: 12, profilePhoto: '',
+  status: 'Active'
 };
 
 const Employees = () => {
@@ -1029,15 +1030,33 @@ const Employees = () => {
                           <AlertCircle className="w-3.5 h-3.5" /> {nikError}
                         </p>
                       )}
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">ID Finger (AC No.)</label>
-                      <input
-                        value={newEmployee.fingerPrintId || ''}
-                        onChange={e => setNewEmployee({...newEmployee, fingerPrintId: e.target.value})}
-                        placeholder="Device User ID"
-                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 transition-all text-slate-800 placeholder:text-slate-400"
-                      />
+                      <div>
+                        <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">ID Finger (AC No.)</label>
+                        <div className="flex gap-2">
+                          <input
+                            value={newEmployee.fingerPrintId || ''}
+                            onChange={e => setNewEmployee({...newEmployee, fingerPrintId: e.target.value})}
+                            placeholder="Device User ID"
+                            className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 transition-all text-slate-800 placeholder:text-slate-400"
+                          />
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                const res = await employeeAPI.getNextFingerId();
+                                if (res.success) {
+                                  setNewEmployee({...newEmployee, fingerPrintId: res.nextFingerId});
+                                }
+                              } catch (err) {
+                                alert(`Failed to generate Finger ID: ${err.message}`);
+                              }
+                            }}
+                            className="bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-600 px-3 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 shrink-0"
+                          >
+                            Auto
+                          </button>
+                        </div>
+                      </div>
                     </div>
                     <div>
                       <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">Full Name</label>
@@ -1289,8 +1308,30 @@ const Employees = () => {
                         <div className="space-y-5">
                           <div>
                             <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5 ml-1">AC No. / Finger ID</label>
-                            <div className="bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl text-slate-700 font-mono font-bold">
-                              {newEmployee.fingerPrintId || '-'}
+                            <div className="flex gap-2">
+                              <div className="flex-1 bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl text-slate-700 font-mono font-bold">
+                                {newEmployee.fingerPrintId || '-'}
+                              </div>
+                              {!newEmployee.fingerPrintId && (
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    try {
+                                      const res = await employeeAPI.getNextFingerId();
+                                      if (res.success) {
+                                        const updatedEmployee = { ...newEmployee, fingerPrintId: res.nextFingerId };
+                                        setNewEmployee(updatedEmployee);
+                                        updateMutation.mutate({ id: newEmployee.dbId, data: updatedEmployee });
+                                      }
+                                    } catch (err) {
+                                      alert(`Failed to generate Finger ID: ${err.message}`);
+                                    }
+                                  }}
+                                  className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-600 px-4 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 shrink-0"
+                                >
+                                  Generate Auto ID
+                                </button>
+                              )}
                             </div>
                             <p className="text-[10px] text-slate-400 mt-1 ml-1">If this is empty, a new ID will be generated by the machine or you can set it in Core Info.</p>
                           </div>
@@ -1343,6 +1384,18 @@ const Employees = () => {
                 )}
                 {activeTab === 'hr' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 block">Status Keaktifan</label>
+                      <select 
+                        value={newEmployee.status || 'Active'} 
+                        onChange={e => setNewEmployee({...newEmployee, status: e.target.value})}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all appearance-none cursor-pointer"
+                      >
+                        <option value="Active">Active</option>
+                        <option value="On Leave">On Leave</option>
+                        <option value="Terminated">Terminated</option>
+                      </select>
+                    </div>
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 block">Work Shift</label>
                       <select 
