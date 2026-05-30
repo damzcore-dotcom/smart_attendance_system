@@ -40,59 +40,59 @@ const AdminLayout = () => {
 
   const menuGroups = [
     {
-      title: 'Main',
+      title: 'Utama',
       items: [
         { name: 'Dashboard', path: '/admin', icon: LayoutDashboard, key: 'dashboard' },
-        { name: 'Announcements', path: '/admin/announcements', icon: Megaphone, key: 'announcements' },
+        { name: 'Pengumuman', path: '/admin/announcements', icon: Megaphone, key: 'announcements' },
       ]
     },
     {
-      title: 'Workforce',
+      title: 'Tenaga Kerja',
       items: [
-        { name: 'Employees', path: '/admin/employees', icon: Users, key: 'employees' },
-        { name: 'Rolling Shift', path: '/admin/shift-roster', icon: CalendarCheck, key: 'shift-roster' },
+        { name: 'Karyawan', path: '/admin/employees', icon: Users, key: 'employees' },
+        { name: 'Rotasi Shift', path: '/admin/shift-roster', icon: CalendarCheck, key: 'shift-roster' },
         { name: 'Cuti & Kalender', path: '/admin/leave-requests', icon: CalendarCheck, key: 'leave-requests' }
       ]
     },
     {
-      title: 'Attendance',
+      title: 'Absensi',
       items: [
         { name: 'Data Absensi', path: '/admin/attendance', icon: CalendarCheck, key: 'attendance' },
         { name: 'Lembur (SPL)', path: '/admin/overtime-spl', icon: Clock, key: 'overtime-spl' },
         { name: 'Absen Harian (BHL)', path: '/admin/daily-workers', icon: HardHat, key: 'daily-workers' },
         { name: 'Koreksi Manual HRD', path: '/admin/manual-correction', icon: Edit3, key: 'manual-correction' },
-        { name: 'Koreksi Request', path: '/admin/corrections', icon: Edit3, key: 'corrections' }
+        { name: 'Permintaan Koreksi', path: '/admin/corrections', icon: Edit3, key: 'corrections' }
       ]
     },
     {
-      title: 'Payroll',
+      title: 'Penggajian',
       items: [
-        { name: 'Payroll', path: '/admin/payroll', icon: Banknote, key: 'payroll' },
-        { name: 'Payroll Settings', path: '/admin/payroll-settings', icon: Receipt, key: 'payroll-settings' }
+        { name: 'Proses Payroll', path: '/admin/payroll', icon: Banknote, key: 'payroll' },
+        { name: 'Pengaturan Payroll', path: '/admin/payroll-settings', icon: Receipt, key: 'payroll-settings' }
       ]
     },
     {
-      title: 'Face Recognition CCTV',
+      title: 'CCTV Deteksi Wajah',
       items: [
-        { name: 'Face Check Log', path: '/admin/face-check', icon: ScanFace, key: 'face-check' },
-        { name: 'CCTV Enrollment', path: '/admin/face-enrollment', icon: Camera, key: 'face-check' },
-        { name: 'Live Camera', path: '/admin/cameras', icon: Video, key: 'settings' },
+        { name: 'Log Deteksi Wajah', path: '/admin/face-check', icon: ScanFace, key: 'face-check' },
+        { name: 'Pendaftaran CCTV', path: '/admin/face-enrollment', icon: Camera, key: 'face-check' },
+        { name: 'Kamera Langsung', path: '/admin/cameras', icon: Video, key: 'settings' },
         { name: 'Alert Wajah Asing', path: '/admin/unknown-alerts', icon: AlertTriangle, key: 'settings' }
       ]
     },
     {
-      title: 'Fingerprint',
+      title: 'Sidik Jari',
       items: [
         { name: 'Mesin Finger', path: '/admin/devices', icon: Fingerprint, key: 'devices' },
         { name: 'Data Sidik Jari', path: '/admin/fingerprint', icon: Fingerprint, key: 'fingerprint' }
       ]
     },
     {
-      title: 'IT & System',
+      title: 'IT & Sistem',
       items: [
-        { name: 'User Access', path: '/admin/users', icon: UserCircle, key: 'users' },
+        { name: 'Hak Akses User', path: '/admin/users', icon: UserCircle, key: 'users' },
         { name: 'Backup Data', path: '/admin/backup', icon: Database, key: 'backup' },
-        { name: 'Settings', path: '/admin/settings', icon: Settings, key: 'settings' }
+        { name: 'Pengaturan', path: '/admin/settings', icon: Settings, key: 'settings' }
       ]
     }
   ];
@@ -100,7 +100,7 @@ const AdminLayout = () => {
   const superAdminGroup = {
     title: 'Super Admin',
     items: [
-      { name: 'Audit Log', path: '/admin/audit-log', icon: Shield, key: 'audit-log' }
+      { name: 'Log Audit', path: '/admin/audit-log', icon: Shield, key: 'audit-log' }
     ]
   };
 
@@ -208,7 +208,7 @@ const AdminLayout = () => {
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all duration-200 group"
           >
             <LogOut className="w-5 h-5 shrink-0 group-hover:-translate-x-0.5 transition-transform" />
-            {isSidebarOpen && <span className="text-sm font-medium">Logout</span>}
+            {isSidebarOpen && <span className="text-sm font-medium">Keluar</span>}
           </button>
         </div>
       </aside>
@@ -229,7 +229,7 @@ const AdminLayout = () => {
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
               <input 
                 type="text" 
-                placeholder="Search..." 
+                placeholder="Cari..." 
                 className="bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 w-64 focus:w-96 transition-all text-slate-700 placeholder:text-slate-400"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -256,11 +256,11 @@ const AdminLayout = () => {
                   <div className="absolute right-0 mt-2 w-96 bg-white border border-slate-200 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200 origin-top-right rounded-2xl shadow-xl">
                     <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                       <div className="flex flex-col">
-                        <span className="font-bold text-slate-800 text-sm">Notifications</span>
-                        <span className="text-xs text-slate-500 mt-0.5">Real-time alerts</span>
+                        <span className="font-bold text-slate-800 text-sm">Notifikasi</span>
+                        <span className="text-xs text-slate-500 mt-0.5">Peringatan real-time</span>
                       </div>
                       {unreadCount > 0 && (
-                        <span className="text-xs bg-blue-600 text-white px-2.5 py-1 rounded-lg font-semibold">{unreadCount} New</span>
+                        <span className="text-xs bg-blue-600 text-white px-2.5 py-1 rounded-lg font-semibold">{unreadCount} Baru</span>
                       )}
                     </div>
                     <div className="max-h-96 overflow-y-auto p-2 space-y-1">
@@ -276,7 +276,7 @@ const AdminLayout = () => {
                       ) : (
                         <div className="py-12 text-center flex flex-col items-center gap-3">
                           <Bell className="w-8 h-8 text-slate-300" />
-                          <span className="text-xs text-slate-400 font-medium">No notifications</span>
+                          <span className="text-xs text-slate-400 font-medium">Tidak ada notifikasi</span>
                         </div>
                       )}
                     </div>

@@ -34,11 +34,11 @@ const EmployeeLayout = () => {
   const unreadCount = notificationsData?.data?.filter(n => n.unread).length || 0;
 
   const navItems = [
-    { name: 'Home', path: '/employee', icon: Home },
-    { name: 'History', path: '/employee/history', icon: History },
+    { name: 'Beranda', path: '/employee', icon: Home },
+    { name: 'Riwayat', path: '/employee/history', icon: History },
     { name: 'Absen', path: '/employee/scan', icon: Scan, primary: true },
-    { name: 'Leave', path: '/employee/leave', icon: ShieldCheck },
-    { name: 'Profile', path: '/employee/profile', icon: User },
+    { name: 'Cuti', path: '/employee/leave', icon: ShieldCheck },
+    { name: 'Profil', path: '/employee/profile', icon: User },
   ];
 
   // Check if we are on the scan page to hide the layout chrome
@@ -63,8 +63,8 @@ const EmployeeLayout = () => {
               <AppLogo className="w-full h-auto max-h-full object-contain object-left" />
             </div>
             <div className="flex flex-col">
-              <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Welcome</span>
-              <span className="font-semibold text-slate-800 tracking-tight text-sm">{employee.name || 'Staff Member'}</span>
+              <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Selamat Datang</span>
+              <span className="font-semibold text-slate-800 tracking-tight text-sm">{employee.name || 'Karyawan'}</span>
             </div>
           </div>
           <Link to="/employee/notifications" className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-slate-50 text-slate-400 relative transition-all">
