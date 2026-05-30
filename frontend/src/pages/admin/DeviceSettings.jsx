@@ -15,6 +15,7 @@ const DeviceSettings = () => {
   const [syncPersonnelFilter, setSyncPersonnelFilter] = useState('ALL');
   const [syncDiagnostics, setSyncDiagnostics] = useState(null);
   const [selectedPersonnel, setSelectedPersonnel] = useState({}); // Toggles for the personnel checkbox
+  const [viewMode, setViewMode] = useState('card');
   
   const now = new Date();
   const today = now.toISOString().split('T')[0];
@@ -267,7 +268,55 @@ const DeviceSettings = () => {
         {/* Daftar Mesin */}
         <div className="flex-1">
           <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
-            <h3 className="font-bold text-slate-800 mb-6 uppercase tracking-tight">Connected Devices</h3>
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6 pb-4 border-b border-slate-100">
+              <h3 className="font-bold text-slate-800 uppercase tracking-tight">Connected Devices</h3>
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('card')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    viewMode === 'card'
+                      ? 'bg-white text-slate-800 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Card View
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('list')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    viewMode === 'list'
+                      ? 'bg-white text-slate-800 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  List View
+                </button>
+              </div>
+            </div>
+
+            {viewMode === 'list' && devices.length > 0 && (
+              <div className="flex flex-col sm:flex-row gap-3 items-center bg-slate-50 p-4 rounded-2xl border border-slate-200 mb-6 text-xs font-bold">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Range Tarik Data (Global):</span>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <input 
+                    type="date"
+                    value={syncDates.startDate}
+                    onChange={(e) => setSyncDates({...syncDates, startDate: e.target.value})}
+                    className="w-full sm:w-auto bg-white border border-slate-200 rounded-lg px-3 py-2 font-bold text-slate-700 outline-none focus:border-blue-500"
+                  />
+                  <span className="text-[10px] font-bold text-slate-400">S/D</span>
+                  <input 
+                    type="date"
+                    value={syncDates.endDate}
+                    onChange={(e) => setSyncDates({...syncDates, endDate: e.target.value})}
+                    className="w-full sm:w-auto bg-white border border-slate-200 rounded-lg px-3 py-2 font-bold text-slate-700 outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+            )}
+
             {loading ? (
               <div className="flex justify-center py-20">
                 <RefreshCw className="w-8 h-8 animate-spin text-blue-600" />
@@ -279,7 +328,7 @@ const DeviceSettings = () => {
                 </div>
                 <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">No devices registered yet.</p>
               </div>
-            ) : (
+            ) : viewMode === 'card' ? (
               <div className="space-y-5">
                 {devices.map(device => (
                   <div key={device.id} className="p-6 border border-slate-200 rounded-2xl hover:border-blue-300 hover:shadow-sm transition-all bg-white group">
@@ -409,6 +458,115 @@ const DeviceSettings = () => {
                     </div>
                   </div>
                 ))}
+              </div>
+            ) : (
+              <div className="border border-slate-200 rounded-2xl overflow-hidden overflow-x-auto shadow-sm bg-white">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      <th className="px-5 py-4">Nama Mesin</th>
+                      <th className="px-5 py-4">IP & Port</th>
+                      <th className="px-5 py-4">Auto Sync</th>
+                      <th className="px-5 py-4">Terakhir Sync</th>
+                      <th className="px-5 py-4 text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {devices.map(device => (
+                      <tr key={device.id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-5 py-4 font-bold text-slate-800">
+                          <div className="flex items-center gap-2">
+                            {device.name}
+                            <span className={`text-[8px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ${device.status === 'ONLINE' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                              {device.status}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-4 text-slate-600 font-semibold font-mono">
+                          {device.ipAddress}:{device.port}
+                        </td>
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-2">
+                            <input 
+                              type="checkbox" 
+                              checked={device.autoSyncEnabled} 
+                              onChange={(e) => handleUpdate(device.id, { ...device, autoSyncEnabled: e.target.checked })}
+                              className="w-3.5 h-3.5 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+                            />
+                            {device.autoSyncEnabled ? (
+                              <input 
+                                type="time" 
+                                value={device.autoSyncTime || ''}
+                                onChange={(e) => handleUpdate(device.id, { ...device, autoSyncTime: e.target.value })}
+                                className="bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 text-[10px] font-bold text-slate-700 outline-none focus:border-blue-500"
+                              />
+                            ) : (
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">OFF</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-5 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                          {device.lastSync ? new Date(device.lastSync).toLocaleString('id-ID', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : 'Never'}
+                        </td>
+                        <td className="px-5 py-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => testConnection(device)}
+                              disabled={syncing === 'test-' + device.id}
+                              className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg flex items-center justify-center transition-colors border border-blue-100"
+                              title="Test Connection"
+                            >
+                              <Wifi className={`w-3.5 h-3.5 ${syncing === 'test-' + device.id ? 'animate-pulse' : ''}`} />
+                            </button>
+                            <button
+                              onClick={() => syncUsers(device.id)}
+                              disabled={syncing !== null}
+                              className="p-2 text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg flex items-center justify-center transition-colors border border-slate-200"
+                              title="Sync Personnel"
+                            >
+                              {syncing === 'users-' + device.id ? (
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Users className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => syncAttendance(device.id)}
+                              disabled={syncing !== null}
+                              className="p-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center justify-center transition-colors shadow-sm"
+                              title="Sync Attendance Logs"
+                            >
+                              {syncing === 'attend-' + device.id ? (
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Download className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => clearLogs(device)}
+                              disabled={syncing !== null}
+                              className="p-2 text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg flex items-center justify-center transition-colors border border-rose-100"
+                              title="Hapus Log Mesin"
+                            >
+                              {syncing === 'clear-' + device.id ? (
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => handleDelete(device.id)}
+                              className="p-2 text-rose-700 hover:bg-slate-100 rounded-lg flex items-center justify-center transition-colors ml-2"
+                              title="Delete Device"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-slate-400 hover:text-rose-600" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
