@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const { getAll, create, getEmployeeShift, update, remove, getOverrides, createOverrides, deleteOverride } = require('../controllers/scheduleController');
+const { getAll, create, getEmployeeShift, update, remove, getOverrides, createOverrides, deleteOverride, bulkGenerateOverrides } = require('../controllers/scheduleController');
 const { verifyToken, requireAdmin } = require('../middleware/auth');
 
 router.use(verifyToken);
@@ -7,6 +7,7 @@ router.use(verifyToken);
 // Overrides Routes
 router.get('/overrides', getOverrides);
 router.post('/overrides', requireAdmin, createOverrides);
+router.post('/overrides/bulk-generate', requireAdmin, bulkGenerateOverrides);
 router.delete('/overrides/:id', requireAdmin, deleteOverride);
 
 // Standard Shift Routes

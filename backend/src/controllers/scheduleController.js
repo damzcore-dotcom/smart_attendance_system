@@ -223,6 +223,134 @@ const createOverrides = async (req, res) => {
 };
 
 /**
+ * POST /api/shifts/overrides/bulk-generate
+ */
+const bulkGenerateOverrides = async (req, res) => {
+  try {
+    const { startDate, endDate, groups } = req.body;
+
+    if (!startDate || !endDate || !groups || !Array.isArray(groups)) {
+      return res.status(400).json({ success: false, message: 'Data tidak lengkap atau format salah' });
+    }
+
+    // Parse dates to UTC midnight safely
+    const [sYear, sMonth, sDay] = startDate.split('-').map(Number);
+    const [eYear, eMonth, eDay] = endDate.split('-').map(Number);
+    const start = new Date(Date.UTC(sYear, sMonth - 1, sDay));
+    const end = new Date(Date.UTC(eYear, eMonth - 1, eDay));
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
+      return res.status(400).json({ success: false, message: 'Rentang tanggal tidak valid' });
+    }
+
+    // Get all employee IDs across all groups to clear potential overlap records
+    const allEmployeeIds = [];
+    groups.forEach(g => {
+      if (g.employeeIds && Array.isArray(g.employeeIds)) {
+        g.employeeIds.forEach(id => {
+          const parsed = parseInt(id);
+          if (!isNaN(parsed) && !allEmployeeIds.includes(parsed)) {
+            allEmployeeIds.push(parsed);
+          }
+        });
+      }
+    });
+
+    if (allEmployeeIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'Tidak ada karyawan yang dipilih' });
+    }
+
+    // 1. Clear existing overrides for selected employees in the range
+    await prisma.employeeShiftOverride.deleteMany({
+      where: {
+        employeeId: { in: allEmployeeIds },
+        startDate: { lte: end },
+        endDate: { gte: start }
+      }
+    });
+
+    const overridesToCreate = [];
+
+    // 2. Loop through each group and generate dates
+    for (const group of groups) {
+      const empIds = (group.employeeIds || []).map(id => parseInt(id)).filter(id => !isNaN(id));
+      const pattern = group.pattern; // array of shiftId or null (represented as OFF)
+      
+      if (empIds.length === 0 || !pattern || !Array.isArray(pattern) || pattern.length === 0) {
+        continue;
+      }
+
+      let current = new Date(start);
+      let diffDays = 0;
+
+      while (current <= end) {
+        const cycleIndex = diffDays % pattern.length;
+        const shiftId = pattern[cycleIndex];
+
+        // Only create an override if the shift is NOT null/undefined (which represents OFF)
+        if (shiftId !== null && shiftId !== undefined && shiftId !== "") {
+          const targetDate = new Date(current);
+          const parsedShiftId = parseInt(shiftId);
+
+          if (!isNaN(parsedShiftId)) {
+            empIds.forEach(empId => {
+              overridesToCreate.push({
+                employeeId: empId,
+                shiftId: parsedShiftId,
+                startDate: targetDate,
+                endDate: targetDate
+              });
+            });
+          }
+        }
+
+        // Move to the next day in UTC
+        current.setUTCDate(current.getUTCDate() + 1);
+        diffDays++;
+      }
+    }
+
+    // 3. Insert all new overrides
+    if (overridesToCreate.length > 0) {
+      await prisma.employeeShiftOverride.createMany({
+        data: overridesToCreate
+      });
+    }
+
+    // Record audit log
+    if (req.user) {
+      try {
+        const { recordAuditLog } = require('./auditLogController');
+        recordAuditLog({
+          userId: req.user.id,
+          username: req.user.username,
+          role: req.user.role,
+          action: 'CREATE',
+          entity: 'EmployeeShiftOverride',
+          details: {
+            startDate,
+            endDate,
+            employeeCount: allEmployeeIds.length,
+            recordsCreated: overridesToCreate.length
+          },
+          ipAddress: req.ip
+        });
+      } catch (auditErr) {
+        console.error('Gagal mencatat audit log roster bulk-generate:', auditErr.message);
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      message: `Roster berhasil dibuat. Menghasilkan ${overridesToCreate.length} jadwal override untuk ${allEmployeeIds.length} karyawan.`
+    });
+
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
  * DELETE /api/shifts/overrides/:id
  */
 const deleteOverride = async (req, res) => {
@@ -234,4 +362,4 @@ const deleteOverride = async (req, res) => {
   }
 };
 
-module.exports = { getAll, create, getEmployeeShift, update, remove, getOverrides, createOverrides, deleteOverride };
+module.exports = { getAll, create, getEmployeeShift, update, remove, getOverrides, createOverrides, deleteOverride, bulkGenerateOverrides };

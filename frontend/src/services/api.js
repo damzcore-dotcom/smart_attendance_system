@@ -327,6 +327,7 @@ export const scheduleAPI = {
   getEmployeeShift: (empId) => apiFetch(`/shifts/employee/${empId}`),
   getOverrides: () => apiFetch('/shifts/overrides'),
   createOverrides: (data) => apiFetch('/shifts/overrides', { method: 'POST', body: JSON.stringify(data) }),
+  bulkGenerateOverrides: (data) => apiFetch('/shifts/overrides/bulk-generate', { method: 'POST', body: JSON.stringify(data) }),
   deleteOverride: (id) => apiFetch(`/shifts/overrides/${id}`, { method: 'DELETE' }),
 };
 
