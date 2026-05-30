@@ -8,6 +8,8 @@ const DeviceSettings = () => {
   const [loading, setLoading] = useState(true);
   const [newDevice, setNewDevice] = useState({ name: '', ipAddress: '', port: 4370 });
   const [editingDevice, setEditingDevice] = useState(null);
+  const [selectedDeviceIds, setSelectedDeviceIds] = useState([]);
+  const [bulkProgress, setBulkProgress] = useState(null);
   const [syncing, setSyncing] = useState(null);
   const [previewData, setPreviewData] = useState(null);
   const [activeDeviceId, setActiveDeviceId] = useState(null);
@@ -31,11 +33,33 @@ const DeviceSettings = () => {
       const { data } = await api.get('/devices');
       if (data.success) {
         setDevices(data.data);
+        // Initialize/update selected device IDs
+        setSelectedDeviceIds(prev => {
+          const validIds = data.data.map(d => d.id);
+          if (prev.length > 0) {
+            return prev.filter(id => validIds.includes(id));
+          }
+          return validIds;
+        });
       }
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const toggleDeviceSelection = (id) => {
+    setSelectedDeviceIds(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleAllDevices = () => {
+    if (selectedDeviceIds.length === devices.length) {
+      setSelectedDeviceIds([]);
+    } else {
+      setSelectedDeviceIds(devices.map(d => d.id));
     }
   };
 
@@ -104,6 +128,157 @@ const DeviceSettings = () => {
     } catch (err) {
       alert(err.response?.data?.message || err.message || 'Failed to update device');
     }
+  };
+
+  const runBulkAction = async (actionType) => {
+    if (selectedDeviceIds.length === 0) {
+      alert('Silakan pilih minimal satu mesin terlebih dahulu.');
+      return;
+    }
+
+    const selectedDevices = devices.filter(d => selectedDeviceIds.includes(d.id));
+    
+    // Initialize bulkProgress state
+    const initialStatuses = {};
+    selectedDevices.forEach(d => {
+      initialStatuses[d.id] = {
+        name: d.name,
+        ipAddress: d.ipAddress,
+        port: d.port,
+        status: 'pending',
+        message: 'Menunggu antrean...'
+      };
+    });
+
+    let actionTitle = 'Aksi Massal';
+    if (actionType === 'test') actionTitle = 'Test Koneksi Massal';
+    if (actionType === 'sync-users') actionTitle = 'Sync Karyawan Massal';
+    if (actionType === 'sync-attendance') actionTitle = 'Tarik Absensi Massal';
+
+    setBulkProgress({
+      isOpen: true,
+      title: actionTitle,
+      deviceStatuses: initialStatuses,
+      isRunning: true
+    });
+
+    // Execute sequentially
+    for (let i = 0; i < selectedDevices.length; i++) {
+      const device = selectedDevices[i];
+      
+      // Update status to running
+      setBulkProgress(prev => {
+        if (!prev) return null;
+        const newStatuses = { ...prev.deviceStatuses };
+        newStatuses[device.id] = {
+          ...newStatuses[device.id],
+          status: 'running',
+          message: actionType === 'test' ? 'Menghubungkan ke mesin...' 
+                 : actionType === 'sync-users' ? 'Memindai data karyawan di mesin...' 
+                 : 'Menarik log absensi dari mesin...'
+        };
+        return { ...prev, deviceStatuses: newStatuses };
+      });
+
+      try {
+        if (actionType === 'test') {
+          const { data } = await api.post('/devices/test-connection', { 
+            id: device.id, ipAddress: device.ipAddress, port: device.port 
+          });
+          setBulkProgress(prev => {
+            if (!prev) return null;
+            const newStatuses = { ...prev.deviceStatuses };
+            newStatuses[device.id] = {
+              ...newStatuses[device.id],
+              status: 'success',
+              message: data.message || 'Koneksi Berhasil!'
+            };
+            return { ...prev, deviceStatuses: newStatuses };
+          });
+        } 
+        else if (actionType === 'sync-users') {
+          // Step 1: Preview to see if there are any new/linked users
+          const { data: previewData } = await api.post(`/devices/${device.id}/sync-users?preview=true`);
+          const detailsToCommit = (previewData.data?.details || []).filter(item => item.status === 'new' || item.status === 'linked');
+          
+          if (detailsToCommit.length > 0) {
+            // Update message that we are saving X users
+            setBulkProgress(prev => {
+              if (!prev) return null;
+              const newStatuses = { ...prev.deviceStatuses };
+              newStatuses[device.id] = {
+                ...newStatuses[device.id],
+                message: `Menyimpan ${detailsToCommit.length} karyawan baru...`
+              };
+              return { ...prev, deviceStatuses: newStatuses };
+            });
+
+            // Step 2: Commit
+            const { data: commitData } = await api.post(`/devices/${device.id}/sync-users?preview=false`, {
+              selectedUsers: detailsToCommit
+            });
+
+            setBulkProgress(prev => {
+              if (!prev) return null;
+              const newStatuses = { ...prev.deviceStatuses };
+              newStatuses[device.id] = {
+                ...newStatuses[device.id],
+                status: 'success',
+                message: commitData.message || 'Sinkronisasi Karyawan Berhasil!'
+              };
+              return { ...prev, deviceStatuses: newStatuses };
+            });
+          } else {
+            setBulkProgress(prev => {
+              if (!prev) return null;
+              const newStatuses = { ...prev.deviceStatuses };
+              newStatuses[device.id] = {
+                ...newStatuses[device.id],
+                status: 'success',
+                message: 'Sukses (Tidak ada data karyawan baru untuk disinkronkan)'
+              };
+              return { ...prev, deviceStatuses: newStatuses };
+            });
+          }
+        } 
+        else if (actionType === 'sync-attendance') {
+          // Direct commit
+          const { data } = await api.post(`/devices/${device.id}/sync-attendance?preview=false&start=${syncDates.startDate}&end=${syncDates.endDate}`);
+          setBulkProgress(prev => {
+            if (!prev) return null;
+            const newStatuses = { ...prev.deviceStatuses };
+            newStatuses[device.id] = {
+              ...newStatuses[device.id],
+              status: 'success',
+              message: data.message || 'Tarik Absensi Berhasil!'
+            };
+            return { ...prev, deviceStatuses: newStatuses };
+          });
+        }
+      } catch (err) {
+        console.error(err);
+        const errMsg = err.response?.data?.message || err.message || 'Gagal memproses aksi.';
+        setBulkProgress(prev => {
+          if (!prev) return null;
+          const newStatuses = { ...prev.deviceStatuses };
+          newStatuses[device.id] = {
+            ...newStatuses[device.id],
+            status: 'error',
+            message: errMsg
+          };
+          return { ...prev, deviceStatuses: newStatuses };
+        });
+      }
+    }
+
+    // Mark as not running
+    setBulkProgress(prev => {
+      if (!prev) return null;
+      return { ...prev, isRunning: false };
+    });
+
+    // Refresh devices list
+    fetchDevices();
   };
 
   const syncUsers = async (id) => {
@@ -399,6 +574,46 @@ const DeviceSettings = () => {
               </div>
             )}
 
+            {devices.length > 0 && (
+              <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="flex items-center gap-3">
+                  <div className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse" />
+                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Aksi Massal ({selectedDeviceIds.length} dari {devices.length} mesin terpilih)
+                  </span>
+                </div>
+                
+                <div className="flex flex-wrap gap-2">
+                  <button 
+                    onClick={() => runBulkAction('test')}
+                    disabled={selectedDeviceIds.length === 0}
+                    className="bg-white border border-slate-200 text-blue-600 hover:border-blue-300 font-bold py-2.5 px-4 rounded-xl flex items-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    <Wifi className="w-3.5 h-3.5" />
+                    Test Koneksi
+                  </button>
+                  
+                  <button 
+                    onClick={() => runBulkAction('sync-users')}
+                    disabled={selectedDeviceIds.length === 0}
+                    className="bg-white border border-slate-200 text-slate-700 hover:border-slate-300 font-bold py-2.5 px-4 rounded-xl flex items-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    Sync Karyawan
+                  </button>
+                  
+                  <button 
+                    onClick={() => runBulkAction('sync-attendance')}
+                    disabled={selectedDeviceIds.length === 0}
+                    className="bg-blue-600 text-white hover:bg-blue-700 font-bold py-2.5 px-4 rounded-xl flex items-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Tarik Absensi
+                  </button>
+                </div>
+              </div>
+            )}
+
             {loading ? (
               <div className="flex justify-center py-20">
                 <RefreshCw className="w-8 h-8 animate-spin text-blue-600" />
@@ -416,8 +631,16 @@ const DeviceSettings = () => {
                   <div key={device.id} className="p-6 border border-slate-200 rounded-2xl hover:border-blue-300 hover:shadow-sm transition-all bg-white group">
                     <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4 mb-6">
                       <div className="flex items-start gap-4">
-                        <div className="w-12 h-12 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-center shrink-0">
-                          <MonitorSmartphone className="w-6 h-6 text-slate-400 group-hover:text-blue-600 transition-colors" />
+                        <div className="flex items-center gap-3 shrink-0">
+                          <input 
+                            type="checkbox" 
+                            checked={selectedDeviceIds.includes(device.id)}
+                            onChange={() => toggleDeviceSelection(device.id)}
+                            className="w-4.5 h-4.5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer shadow-sm shrink-0"
+                          />
+                          <div className="w-12 h-12 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-center shrink-0">
+                            <MonitorSmartphone className="w-6 h-6 text-slate-400 group-hover:text-blue-600 transition-colors" />
+                          </div>
                         </div>
                         <div>
                           <h4 className="font-bold text-slate-800 flex items-center gap-3 text-lg">
@@ -553,6 +776,14 @@ const DeviceSettings = () => {
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      <th className="px-5 py-4 w-12 text-center">
+                        <input 
+                          type="checkbox"
+                          checked={devices.length > 0 && selectedDeviceIds.length === devices.length}
+                          onChange={toggleAllDevices}
+                          className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                        />
+                      </th>
                       <th className="px-5 py-4">Nama Mesin</th>
                       <th className="px-5 py-4">IP & Port</th>
                       <th className="px-5 py-4">Auto Sync</th>
@@ -563,6 +794,14 @@ const DeviceSettings = () => {
                   <tbody className="divide-y divide-slate-100">
                     {devices.map(device => (
                       <tr key={device.id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-5 py-4 w-12 text-center">
+                          <input 
+                            type="checkbox"
+                            checked={selectedDeviceIds.includes(device.id)}
+                            onChange={() => toggleDeviceSelection(device.id)}
+                            className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                          />
+                        </td>
                         <td className="px-5 py-4 font-bold text-slate-800">
                           <div className="flex items-center gap-2">
                             {device.name}
@@ -1008,6 +1247,74 @@ const DeviceSettings = () => {
               >
                 <Users className="w-4 h-4" />
                 Jalankan Sync Personnel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Progress Modal */}
+      {bulkProgress && bulkProgress.isOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">{bulkProgress.title}</h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  {bulkProgress.isRunning ? 'Sedang memproses mesin absensi secara berurutan...' : 'Proses selesai! Silakan periksa hasil di bawah.'}
+                </p>
+              </div>
+              {!bulkProgress.isRunning && (
+                <button 
+                  onClick={() => setBulkProgress(null)}
+                  className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors cursor-pointer"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            
+            <div className="flex-1 overflow-auto p-6 bg-slate-50 space-y-4">
+              {Object.entries(bulkProgress.deviceStatuses).map(([id, item]) => (
+                <div key={id} className="bg-white p-4 rounded-2xl border border-slate-200 flex items-center justify-between gap-4 shadow-sm">
+                  <div className="min-w-0">
+                    <h4 className="font-bold text-slate-800 truncate">{item.name}</h4>
+                    <p className="text-xs text-slate-500 font-mono mt-0.5">{item.ipAddress}:{item.port}</p>
+                    <p className={`text-xs mt-1.5 font-medium ${
+                      item.status === 'success' ? 'text-emerald-600' :
+                      item.status === 'error' ? 'text-rose-600 font-semibold' :
+                      item.status === 'running' ? 'text-blue-600 animate-pulse' :
+                      'text-slate-400'
+                    }`}>
+                      {item.message}
+                    </p>
+                  </div>
+                  
+                  <div className="shrink-0">
+                    {item.status === 'success' && (
+                      <span className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center font-bold text-sm">✓</span>
+                    )}
+                    {item.status === 'error' && (
+                      <span className="w-8 h-8 rounded-full bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center font-bold text-sm">✕</span>
+                    )}
+                    {item.status === 'running' && (
+                      <RefreshCw className="w-5 h-5 text-blue-600 animate-spin" />
+                    )}
+                    {item.status === 'pending' && (
+                      <span className="w-8 h-8 rounded-full bg-slate-50 text-slate-400 border border-slate-200 flex items-center justify-center font-medium text-xs">...</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="p-6 border-t border-slate-100 bg-white flex justify-end shrink-0">
+              <button 
+                onClick={() => setBulkProgress(null)}
+                disabled={bulkProgress.isRunning}
+                className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed px-8 py-3 rounded-xl font-bold text-sm shadow-sm transition-all text-center cursor-pointer"
+              >
+                {bulkProgress.isRunning ? 'Memproses...' : 'Tutup'}
               </button>
             </div>
           </div>
