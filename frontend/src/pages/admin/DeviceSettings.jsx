@@ -1282,8 +1282,9 @@ const DeviceSettings = () => {
                 </div>
                 <div>
                   <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Berhasil</p>
-                  <p className="text-xl font-bold text-emerald-800 mt-0.5">
+                  <p className="text-xl font-bold text-emerald-800 mt-0.5 flex items-baseline gap-1">
                     {Object.values(bulkProgress.deviceStatuses).filter(s => s.status === 'success').length}
+                    <span className="text-xs font-normal text-emerald-600">/ {Object.keys(bulkProgress.deviceStatuses).length} Mesin</span>
                   </p>
                 </div>
               </div>
@@ -1293,8 +1294,9 @@ const DeviceSettings = () => {
                 </div>
                 <div>
                   <p className="text-[10px] font-bold text-rose-600 uppercase tracking-wider">Gagal</p>
-                  <p className="text-xl font-bold text-rose-800 mt-0.5">
+                  <p className="text-xl font-bold text-rose-800 mt-0.5 flex items-baseline gap-1">
                     {Object.values(bulkProgress.deviceStatuses).filter(s => s.status === 'error').length}
+                    <span className="text-xs font-normal text-rose-600">/ {Object.keys(bulkProgress.deviceStatuses).length} Mesin</span>
                   </p>
                 </div>
               </div>
