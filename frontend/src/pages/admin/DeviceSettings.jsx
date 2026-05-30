@@ -1274,6 +1274,32 @@ const DeviceSettings = () => {
               )}
             </div>
             
+            {/* Summary Cards */}
+            <div className="px-6 py-4 bg-slate-50/50 flex gap-4 border-b border-slate-100">
+              <div className="flex-1 bg-emerald-50 border border-emerald-200/60 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold text-base border border-emerald-200">
+                  ✓
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Berhasil</p>
+                  <p className="text-xl font-bold text-emerald-800 mt-0.5">
+                    {Object.values(bulkProgress.deviceStatuses).filter(s => s.status === 'success').length}
+                  </p>
+                </div>
+              </div>
+              <div className="flex-1 bg-rose-50 border border-rose-200/60 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+                <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-600 flex items-center justify-center font-bold text-base border border-rose-200">
+                  ✕
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-rose-600 uppercase tracking-wider">Gagal</p>
+                  <p className="text-xl font-bold text-rose-800 mt-0.5">
+                    {Object.values(bulkProgress.deviceStatuses).filter(s => s.status === 'error').length}
+                  </p>
+                </div>
+              </div>
+            </div>
+            
             <div className="flex-1 overflow-auto p-6 bg-slate-50 space-y-4">
               {Object.entries(bulkProgress.deviceStatuses).map(([id, item]) => (
                 <div key={id} className="bg-white p-4 rounded-2xl border border-slate-200 flex items-center justify-between gap-4 shadow-sm">
