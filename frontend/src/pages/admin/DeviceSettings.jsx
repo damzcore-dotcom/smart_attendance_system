@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Plus, RefreshCw, Wifi, Download, Users, MonitorSmartphone, Clock, CheckCircle, AlertTriangle, Info } from 'lucide-react';
+import { Trash2, Plus, RefreshCw, Wifi, Download, Users, MonitorSmartphone, Clock, CheckCircle, AlertTriangle, Info, Pencil, Eraser } from 'lucide-react';
 import api from '../../services/api';
 import { getStatusLabel, getStatusColor } from '../../utils/statusUtils';
 
@@ -7,6 +7,7 @@ const DeviceSettings = () => {
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newDevice, setNewDevice] = useState({ name: '', ipAddress: '', port: 4370 });
+  const [editingDevice, setEditingDevice] = useState(null);
   const [syncing, setSyncing] = useState(null);
   const [previewData, setPreviewData] = useState(null);
   const [activeDeviceId, setActiveDeviceId] = useState(null);
@@ -85,6 +86,23 @@ const DeviceSettings = () => {
       fetchDevices();
     } catch (err) {
       alert(err.message || 'Failed to update device');
+    }
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    if (!editingDevice) return;
+    try {
+      await api.put(`/devices/${editingDevice.id}`, {
+        name: editingDevice.name,
+        ipAddress: editingDevice.ipAddress,
+        port: editingDevice.port
+      });
+      setEditingDevice(null);
+      fetchDevices();
+      alert('Device updated successfully!');
+    } catch (err) {
+      alert(err.response?.data?.message || err.message || 'Failed to update device');
     }
   };
 
@@ -222,46 +240,110 @@ const DeviceSettings = () => {
       </div>
 
       <div className="flex flex-col lg:flex-row gap-8">
-        {/* Form Tambah */}
+        {/* Form Tambah / Edit */}
         <div className="w-full lg:w-1/3 shrink-0">
           <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
-            <h3 className="font-bold text-slate-800 mb-6 uppercase tracking-tight">Register New Device</h3>
-            <form onSubmit={handleAdd} className="space-y-5">
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Device Name</label>
-                <input 
-                  required 
-                  value={newDevice.name} 
-                  onChange={e => setNewDevice({...newDevice, name: e.target.value})} 
-                  placeholder="Main Lobby" 
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm placeholder:text-slate-400"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">IP Address</label>
-                <input 
-                  required 
-                  value={newDevice.ipAddress} 
-                  onChange={e => setNewDevice({...newDevice, ipAddress: e.target.value})} 
-                  placeholder="192.168.1.201" 
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm placeholder:text-slate-400"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Port (Default 4370)</label>
-                <input 
-                  type="number" 
-                  required 
-                  value={newDevice.port} 
-                  onChange={e => setNewDevice({...newDevice, port: parseInt(e.target.value)})} 
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm placeholder:text-slate-400"
-                />
-              </div>
-              <button type="submit" className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-sm flex items-center justify-center gap-2 hover:bg-blue-700 transition-all active:scale-95 text-xs uppercase tracking-wider mt-2">
-                <Plus className="w-4 h-4" />
-                Register Device
-              </button>
-            </form>
+            {editingDevice ? (
+              <>
+                <h3 className="font-bold text-slate-800 mb-6 uppercase tracking-tight flex items-center justify-between">
+                  <span>Edit Device</span>
+                  <button 
+                    onClick={() => setEditingDevice(null)}
+                    className="text-xs text-slate-400 hover:text-slate-600 font-semibold"
+                  >
+                    Batal
+                  </button>
+                </h3>
+                <form onSubmit={handleEditSubmit} className="space-y-5">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Device Name</label>
+                    <input 
+                      required 
+                      value={editingDevice.name} 
+                      onChange={e => setEditingDevice({...editingDevice, name: e.target.value})} 
+                      placeholder="Main Lobby" 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm placeholder:text-slate-400"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">IP Address</label>
+                    <input 
+                      required 
+                      value={editingDevice.ipAddress} 
+                      onChange={e => setEditingDevice({...editingDevice, ipAddress: e.target.value})} 
+                      placeholder="192.168.1.201" 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm placeholder:text-slate-400"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Port (Default 4370)</label>
+                    <input 
+                      type="number" 
+                      required 
+                      value={editingDevice.port} 
+                      onChange={e => setEditingDevice({...editingDevice, port: parseInt(e.target.value) || 0})} 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm placeholder:text-slate-400"
+                    />
+                  </div>
+                  <div className="flex gap-3">
+                    <button 
+                      type="button" 
+                      onClick={() => setEditingDevice(null)}
+                      className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-4 rounded-xl flex items-center justify-center text-xs uppercase tracking-wider transition-all"
+                    >
+                      Batal
+                    </button>
+                    <button 
+                      type="submit" 
+                      className="flex-[2] bg-blue-600 text-white font-bold py-4 rounded-xl shadow-sm flex items-center justify-center gap-2 hover:bg-blue-700 transition-all active:scale-95 text-xs uppercase tracking-wider"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      Simpan
+                    </button>
+                  </div>
+                </form>
+              </>
+            ) : (
+              <>
+                <h3 className="font-bold text-slate-800 mb-6 uppercase tracking-tight">Register New Device</h3>
+                <form onSubmit={handleAdd} className="space-y-5">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Device Name</label>
+                    <input 
+                      required 
+                      value={newDevice.name} 
+                      onChange={e => setNewDevice({...newDevice, name: e.target.value})} 
+                      placeholder="Main Lobby" 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm placeholder:text-slate-400"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">IP Address</label>
+                    <input 
+                      required 
+                      value={newDevice.ipAddress} 
+                      onChange={e => setNewDevice({...newDevice, ipAddress: e.target.value})} 
+                      placeholder="192.168.1.201" 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm placeholder:text-slate-400"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Port (Default 4370)</label>
+                    <input 
+                      type="number" 
+                      required 
+                      value={newDevice.port} 
+                      onChange={e => setNewDevice({...newDevice, port: parseInt(e.target.value) || 0})} 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm placeholder:text-slate-400"
+                    />
+                  </div>
+                  <button type="submit" className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-sm flex items-center justify-center gap-2 hover:bg-blue-700 transition-all active:scale-95 text-xs uppercase tracking-wider mt-2">
+                    <Plus className="w-4 h-4" />
+                    Register Device
+                  </button>
+                </form>
+              </>
+            )}
           </div>
         </div>
 
@@ -386,6 +468,13 @@ const DeviceSettings = () => {
                           <Wifi className={`w-4 h-4 ${syncing === 'test-' + device.id ? 'animate-pulse' : ''}`} />
                         </button>
                         <button 
+                          onClick={() => setEditingDevice({ ...device })}
+                          className="p-3 text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-xl flex items-center justify-center transition-colors border border-slate-200"
+                          title="Edit Device"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button 
                           onClick={() => handleDelete(device.id)}
                           className="p-3 text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl flex items-center justify-center transition-colors border border-rose-200"
                           title="Delete Device"
@@ -450,7 +539,7 @@ const DeviceSettings = () => {
                         {syncing === 'clear-' + device.id ? (
                           <RefreshCw className="w-4 h-4 animate-spin" />
                         ) : (
-                          <Trash2 className="w-4 h-4" />
+                          <Eraser className="w-4 h-4" />
                         )}
                         Hapus Log Mesin
                       </button>
@@ -551,12 +640,19 @@ const DeviceSettings = () => {
                               {syncing === 'clear-' + device.id ? (
                                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                               ) : (
-                                <Trash2 className="w-3.5 h-3.5" />
+                                <Eraser className="w-3.5 h-3.5" />
                               )}
                             </button>
                             <button
+                              onClick={() => setEditingDevice({ ...device })}
+                              className="p-2 text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg flex items-center justify-center transition-colors border border-slate-200"
+                              title="Edit Device"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
                               onClick={() => handleDelete(device.id)}
-                              className="p-2 text-rose-700 hover:bg-slate-100 rounded-lg flex items-center justify-center transition-colors ml-2"
+                              className="p-2 text-rose-700 hover:bg-slate-100 rounded-lg flex items-center justify-center transition-colors ml-1.5"
                               title="Delete Device"
                             >
                               <Trash2 className="w-3.5 h-3.5 text-slate-400 hover:text-rose-600" />
