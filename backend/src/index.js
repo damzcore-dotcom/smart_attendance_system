@@ -92,6 +92,7 @@ app.use('/api/audit-logs', require('./routes/auditLogRoutes'));
 app.use('/api/payroll', require('./routes/payrollRoutes'));
 app.use('/api/calendar', require('./routes/calendar'));
 app.use('/api/bridge', require('./routes/bridgeRoutes'));
+app.use('/api/chat', require('./routes/chatRoutes'));
 // Global error handler — production-safe (no stack traces leaked)
 app.use((err, req, res, next) => {
   console.error('❌ Error:', err.message, err.stack);

@@ -30,6 +30,7 @@ import { useQuery } from '@tanstack/react-query';
 import { authAPI, dashboardAPI } from '../../services/api';
 import { AppLogo } from '../AppLogo';
 import LicenseFooter from '../LicenseFooter';
+import AiAssistantChat from '../chat/AiAssistantChat';
 
 const AdminLayout = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(true);
@@ -309,6 +310,7 @@ const AdminLayout = () => {
         <div className="print:hidden">
           <LicenseFooter />
         </div>
+        <AiAssistantChat />
       </div>
     </div>
   );

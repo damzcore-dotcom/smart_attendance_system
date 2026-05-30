@@ -15,6 +15,7 @@ import { useQuery } from '@tanstack/react-query';
 import { authAPI, dashboardAPI } from '../../services/api';
 import { AppLogo } from '../AppLogo';
 import LicenseFooter from '../LicenseFooter';
+import AiAssistantChat from '../chat/AiAssistantChat';
 
 const ManagerLayout = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(window.innerWidth > 1024);
@@ -198,6 +199,7 @@ const ManagerLayout = () => {
         <div className="print:hidden">
           <LicenseFooter />
         </div>
+        <AiAssistantChat />
       </div>
     </div>
   );
