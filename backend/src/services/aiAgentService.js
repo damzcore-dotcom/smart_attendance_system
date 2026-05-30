@@ -381,12 +381,10 @@ const runAiChat = async (message, chatHistory, userContext) => {
 
     // Handle tool execution loop (supports multiple/chain tool execution)
     let loopCount = 0;
-    while (response.functionCalls && response.functionCalls.length > 0 && loopCount < 5) {
+    let calls = typeof response.functionCalls === 'function' ? response.functionCalls() : response.functionCalls;
+    while (calls && calls.length > 0 && loopCount < 5) {
       loopCount++;
-      const functionCalls = response.functionCalls;
-      
-      // Execute the first function call requested by the model
-      const call = functionCalls[0];
+      const call = calls[0];
       const { name, args } = call;
 
       let toolResult;
@@ -407,6 +405,7 @@ const runAiChat = async (message, chatHistory, userContext) => {
         }
       ]);
       response = result.response;
+      calls = typeof response.functionCalls === 'function' ? response.functionCalls() : response.functionCalls;
     }
 
     return response.text();
