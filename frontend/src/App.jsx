@@ -140,6 +140,7 @@ function App() {
             <Route path="attendance" element={<DirectorAttendance />} />
             <Route path="leave" element={<DirectorLeave />} />
             <Route path="payroll" element={<DirectorPayroll />} />
+            <Route path="audit-log" element={<AuditLog />} />
           </Route>
 
           {/* Manager Routes */}
@@ -147,6 +148,7 @@ function App() {
             <Route index element={<ManagerDashboard />} />
             <Route path="attendance" element={<ManagerAttendance />} />
             <Route path="leave" element={<ManagerLeave />} />
+            <Route path="audit-log" element={<AuditLog />} />
           </Route>
 
           {/* Employee Routes */}

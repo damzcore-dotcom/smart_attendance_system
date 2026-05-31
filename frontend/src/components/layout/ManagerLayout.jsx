@@ -8,7 +8,8 @@ import {
   X,
   UserCircle,
   Building2,
-  Users
+  Users,
+  Shield
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -43,6 +44,7 @@ const ManagerLayout = () => {
     { name: 'Dashboard', path: '/manager', icon: LayoutDashboard },
     { name: 'Leave Approval', path: '/manager/leave', icon: Users },
     { name: 'Attendance', path: '/manager/attendance', icon: CalendarCheck },
+    { name: 'Log Audit', path: '/manager/audit-log', icon: Shield },
   ];
 
   const { data: userData } = useQuery({

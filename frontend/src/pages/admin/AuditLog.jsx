@@ -19,6 +19,7 @@ const ACTION_ICONS = {
 };
 
 const AuditLog = () => {
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
   const [filters, setFilters] = useState({
     page: 1,
     action: '',
@@ -63,7 +64,9 @@ const AuditLog = () => {
           <div className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center">
             <Shield className="w-3 h-3 text-slate-400" />
           </div>
-          <span className="text-[10px] font-bold uppercase tracking-wider">Super Admin Access</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider">
+            {user.role === 'SUPER_ADMIN' ? 'Super Admin Access' : `${user.role || 'User'} Access`}
+          </span>
           <div className="w-1 h-1 rounded-full bg-slate-300" />
           <span className="text-[10px] font-bold text-rose-600 uppercase tracking-wider">Restricted Zone</span>
         </div>
