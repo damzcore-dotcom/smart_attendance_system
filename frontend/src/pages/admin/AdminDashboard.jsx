@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, 
   Clock, 
@@ -14,7 +14,11 @@ import {
   FileText,
   Activity,
   UserPlus,
-  Video
+  Video,
+  Wifi,
+  WifiOff,
+  CheckSquare,
+  Bell
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { jsPDF } from 'jspdf';
@@ -32,7 +36,8 @@ import {
   Cell
 } from 'recharts';
 import { useQuery } from '@tanstack/react-query';
-import { dashboardAPI, employeeAPI, attendanceAPI } from '../../services/api';
+import api, { dashboardAPI, employeeAPI, attendanceAPI, deviceAPI } from '../../services/api';
+
 
 const StatCard = ({ title, value, change, icon: Icon, color, delay }) => (
   <div 
@@ -60,10 +65,42 @@ const StatCard = ({ title, value, change, icon: Icon, color, delay }) => (
 
 const AdminDashboard = () => {
   const [time, setTime] = useState(new Date());
+  const [activeAlertTab, setActiveAlertTab] = useState('late'); // 'late' | 'live'
+  const [liveEvents, setLiveEvents] = useState([]);
+  const wsRef = useRef(null);
 
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  // WebSocket for real-time capture
+  useEffect(() => {
+    const wsUrl = import.meta.env.VITE_WS_URL || `ws://${window.location.hostname}:5000`;
+    try {
+      const ws = new WebSocket(`${wsUrl}/ws/live`);
+      ws.onmessage = (msg) => {
+        try {
+          const event = JSON.parse(msg.data);
+          if (event.type === 'ATTENDANCE_CHECKIN' || event.type === 'UNKNOWN_FACE_ALERT') {
+            const payload = event.payload;
+            setLiveEvents(prev => [
+              {
+                name: payload.name || (payload.isUnknown ? 'Wajah Tidak Dikenal' : `Karyawan #${payload.employeeId}`),
+                dept: payload.dept || 'Lobby / Security',
+                time: new Date(payload.eventTime || payload.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+                status: payload.isSpoof ? 'SPOOF' : payload.isUnknown ? 'UNKNOWN' : payload.status || 'PRESENT',
+                avatar: payload.name ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${payload.name}` : null
+              },
+              ...prev.slice(0, 19)
+            ]);
+          }
+        } catch {}
+      };
+      ws.onclose = () => setTimeout(() => {}, 3000);
+      wsRef.current = ws;
+    } catch {}
+    return () => wsRef.current?.close();
   }, []);
 
   const { data: statsData, isLoading: statsLoading } = useQuery({
@@ -87,12 +124,53 @@ const AdminDashboard = () => {
     queryFn: dashboardAPI.getRecentLate,
   });
 
+  const { data: notificationsData, isLoading: notificationsLoading } = useQuery({
+    queryKey: ['dashboard-notifications'],
+    queryFn: dashboardAPI.getAdminNotifications,
+    refetchInterval: 30000
+  });
+
+  const { data: camerasData } = useQuery({
+    queryKey: ['cameras-summary'],
+    queryFn: () => api.get('/bridge/cameras').then(r => r.data),
+    refetchInterval: 20000
+  });
+
+  const { data: devicesData } = useQuery({
+    queryKey: ['devices-summary'],
+    queryFn: () => deviceAPI.getAll().then(r => r.data),
+    refetchInterval: 20000
+  });
+
+  const { data: aiStatus } = useQuery({
+    queryKey: ['ai-engine-status-dashboard'],
+    queryFn: async () => {
+      try {
+        const aiUrl = import.meta.env.VITE_AI_ENGINE_URL || 'http://localhost:8001';
+        const r = await fetch(`${aiUrl}/health`);
+        return await r.json();
+      } catch {
+        return { status: 'offline' };
+      }
+    },
+    refetchInterval: 20000
+  });
+
   const stats = statsData?.data || { totalEmployees: 0, presentToday: 0, lateArrivals: 0, avgLateTime: '0m' };
   const weeklyTrends = trendsData?.data || [];
   const lateByDept = deptData?.data || [];
   const recentLate = recentLateData?.data || [];
+  const notifications = notificationsData?.data || [];
+  const cameras = camerasData?.data || [];
+  const devices = devicesData?.data || [];
+
+  // Filter out departments with 0 lateness and sort descending to avoid overlap and duplicates
+  const sortedDeptData = [...lateByDept].sort((a, b) => b.minutes - a.minutes);
+  const activeDeptData = sortedDeptData.filter(d => d.minutes > 0);
+  const chartData = activeDeptData.length > 0 ? activeDeptData.slice(0, 6) : sortedDeptData.slice(0, 5);
 
   const navigate = useNavigate();
+
 
   const generateInsights = () => {
     const insights = [];
@@ -231,10 +309,18 @@ const AdminDashboard = () => {
 
         <div className="relative z-10 flex flex-col xl:flex-row xl:items-center justify-between gap-8">
           <div className="space-y-3">
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <div className="px-3 py-1 rounded-full bg-white/10 border border-white/20 backdrop-blur-md text-[10px] font-bold text-blue-200 uppercase tracking-widest flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse shadow-[0_0_8px_rgba(96,165,250,0.8)]" />
-                Live Feed Active
+                <div className={`w-2 h-2 rounded-full ${aiStatus?.status === 'ok' ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-rose-500'}`} />
+                AI Engine: {aiStatus?.status === 'ok' ? 'Online' : 'Offline'}
+              </div>
+              <div className="px-3 py-1 rounded-full bg-white/10 border border-white/20 backdrop-blur-md text-[10px] font-bold text-blue-200 uppercase tracking-widest flex items-center gap-2">
+                <Video className="w-3.5 h-3.5 text-blue-300" />
+                CCTV: {cameras.filter(c => c.active).length}/{cameras.length} Online
+              </div>
+              <div className="px-3 py-1 rounded-full bg-white/10 border border-white/20 backdrop-blur-md text-[10px] font-bold text-blue-200 uppercase tracking-widest flex items-center gap-2">
+                <Clock className="w-3.5 h-3.5 text-blue-300" />
+                Fingerprint: {devices.length} Devices
               </div>
               <div className="px-3 py-1 rounded-full bg-white/5 border border-white/10 backdrop-blur-md text-[10px] font-bold text-slate-300 uppercase tracking-widest">
                 {time.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}
@@ -333,56 +419,119 @@ const AdminDashboard = () => {
           </div>
         </div>
 
-        {/* Recent Late Arrivals */}
+        {/* Recent Alerts & Live Capture Card */}
         <div className="bg-white/80 backdrop-blur-xl p-6 xl:p-8 border border-slate-200/60 shadow-lg shadow-slate-200/40 flex flex-col rounded-3xl">
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h3 className="font-extrabold text-xl text-slate-800 tracking-tight">Recent Alerts</h3>
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">Live Lateness Logs</p>
+          <div className="flex items-center justify-between mb-6 pb-2 border-b border-slate-100">
+            <div className="flex gap-4">
+              <button
+                type="button"
+                onClick={() => setActiveAlertTab('late')}
+                className={`pb-1 text-xs font-black uppercase tracking-wider transition-all border-b-2 ${
+                  activeAlertTab === 'late'
+                    ? 'text-slate-800 border-blue-600 font-bold'
+                    : 'text-slate-400 border-transparent hover:text-slate-600'
+                }`}
+              >
+                Keterlambatan
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveAlertTab('live')}
+                className={`pb-1 text-xs font-black uppercase tracking-wider transition-all border-b-2 flex items-center gap-1.5 ${
+                  activeAlertTab === 'live'
+                    ? 'text-slate-800 border-blue-600 font-bold'
+                    : 'text-slate-400 border-transparent hover:text-slate-600'
+                }`}
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                Live CCTV Capture
+              </button>
             </div>
-            <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center border border-rose-100 shadow-inner">
-              <AlertCircle className="w-5 h-5" />
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${activeAlertTab === 'late' ? 'bg-rose-50 text-rose-500 border border-rose-100' : 'bg-emerald-50 text-emerald-500 border border-emerald-100'}`}>
+              {activeAlertTab === 'late' ? <AlertCircle className="w-4 h-4" /> : <Activity className="w-4 h-4" />}
             </div>
           </div>
           
-          <div className="space-y-3 flex-1 overflow-y-auto hide-scrollbar">
-            {recentLateLoading ? (
-              <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>
-            ) : recentLate.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center space-y-4 py-10">
-                <div className="w-20 h-20 rounded-full bg-slate-50 flex items-center justify-center">
-                  <CalendarCheck className="w-8 h-8 text-slate-300" />
+          <div className="space-y-3 flex-1 overflow-y-auto hide-scrollbar max-h-[300px]">
+            {activeAlertTab === 'late' ? (
+              recentLateLoading ? (
+                <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>
+              ) : recentLate.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center space-y-4 py-10">
+                  <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center">
+                    <CalendarCheck className="w-6 h-6 text-slate-300" />
+                  </div>
+                  <p className="text-slate-405 font-bold text-xs tracking-wide">Clear skies today.<br/>No late arrivals detected.</p>
                 </div>
-                <p className="text-slate-400 font-bold text-sm tracking-wide">Clear skies today.<br/>No late arrivals detected.</p>
-              </div>
-            ) : (
-              recentLate.map((row, i) => (
-                <div key={i} className="flex items-center gap-4 group p-3 -mx-3 rounded-2xl hover:bg-slate-50 transition-all duration-300 cursor-pointer border border-transparent hover:border-slate-200 hover:shadow-md">
-                  <div className="w-12 h-12 rounded-2xl bg-white overflow-hidden shrink-0 border border-slate-200 shadow-sm group-hover:shadow-rose-200 group-hover:border-rose-300 transition-all duration-300">
-                    <img src={row.avatar} alt="user" className="w-full h-full object-cover" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-extrabold text-slate-800 truncate group-hover:text-rose-600 transition-colors">{row.name}</p>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{row.dept}</p>
-                  </div>
-                  <div className="text-right flex flex-col items-end">
-                    <div className="inline-flex items-center px-2 py-1 rounded-lg bg-gradient-to-r from-rose-50 to-rose-100/50 text-rose-600 text-[10px] font-bold uppercase tracking-wider border border-rose-200/50 mb-1">
-                      {row.lateMinutes} mins late
+              ) : (
+                recentLate.map((row, i) => (
+                  <div key={i} className="flex items-center gap-3 group p-2.5 -mx-2.5 rounded-2xl hover:bg-slate-50 transition-all duration-300 cursor-pointer border border-transparent hover:border-slate-200">
+                    <div className="w-10 h-10 rounded-xl bg-white overflow-hidden shrink-0 border border-slate-200">
+                      <img src={row.avatar} alt="user" className="w-full h-full object-cover" />
                     </div>
-                    <p className="text-[10px] font-bold text-slate-400">{row.checkIn}</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-slate-800 truncate">{row.name}</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{row.dept}</p>
+                    </div>
+                    <div className="text-right flex flex-col items-end">
+                      <div className="inline-flex items-center px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 text-[9px] font-bold border border-rose-100 mb-0.5">
+                        +{row.lateMinutes}m
+                      </div>
+                      <p className="text-[9px] font-bold text-slate-400">{row.checkIn}</p>
+                    </div>
                   </div>
+                ))
+              )
+            ) : (
+              liveEvents.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center space-y-4 py-10">
+                  <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center">
+                    <Video className="w-6 h-6 text-slate-300" />
+                  </div>
+                  <p className="text-slate-400 font-bold text-xs tracking-wide">Menunggu tangkapan kamera...<br/>Berdiri di depan CCTV untuk tes.</p>
                 </div>
-              ))
+              ) : (
+                liveEvents.map((row, i) => (
+                  <div key={i} className="flex items-center gap-3 p-2.5 rounded-xl bg-white border border-slate-100 hover:border-slate-200 hover:shadow-sm transition-all animate-in slide-in-from-top-2 duration-300">
+                    <div className="w-10 h-10 rounded-xl bg-slate-100 overflow-hidden shrink-0 flex items-center justify-center border border-slate-200 text-slate-500 text-base font-bold">
+                      {row.avatar ? (
+                        <img src={row.avatar} alt="user" className="w-full h-full object-cover" />
+                      ) : (
+                        row.status === 'UNKNOWN' ? '👤' : '📸'
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-slate-800 truncate">{row.name}</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{row.dept}</p>
+                    </div>
+                    <div className="text-right flex flex-col items-end shrink-0">
+                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-black border uppercase tracking-wider ${
+                        row.status === 'SPOOF' ? 'bg-red-50 text-red-600 border-red-150' :
+                        row.status === 'UNKNOWN' ? 'bg-amber-50 text-amber-600 border-amber-155' :
+                        row.status === 'LATE' ? 'bg-rose-50 text-rose-600 border-rose-150' :
+                        'bg-emerald-50 text-emerald-600 border-emerald-150'
+                      }`}>
+                        {row.status}
+                      </span>
+                      <p className="text-[9px] font-bold text-slate-400 mt-1">{row.time}</p>
+                    </div>
+                  </div>
+                ))
+              )
             )}
           </div>
-          <button onClick={() => navigate('/admin/attendance')} className="w-full mt-4 py-3 text-xs font-black uppercase tracking-widest text-slate-500 bg-white hover:bg-slate-800 hover:text-white border border-slate-200 rounded-2xl transition-all duration-300 shadow-sm active:scale-95">
+          <button onClick={() => navigate('/admin/attendance')} className="w-full mt-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500 bg-white hover:bg-slate-800 hover:text-white border border-slate-200 rounded-2xl transition-all duration-300 shadow-sm active:scale-95 cursor-pointer">
             Audit Full Logs
           </button>
         </div>
       </div>
 
-      {/* Lateness by Department & AI Insights */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      {/* Lateness by Department, Pending Actions & AI Insights */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        {/* Dept Heatmap */}
         <div className="bg-white/80 backdrop-blur-xl p-6 xl:p-8 rounded-3xl border border-slate-200/60 shadow-lg shadow-slate-200/40 group relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-indigo-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-1000"></div>
           
@@ -400,17 +549,25 @@ const AdminDashboard = () => {
               <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={lateByDept} layout="vertical" margin={{ left: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f1f5f9" />
-                  <XAxis type="number" hide />
-                  <YAxis dataKey="dept" type="category" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 11, fontWeight: 700}} width={90} />
+                <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#f1f5f9" />
+                  <XAxis type="number" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 9, fontWeight: 700}} />
+                  <YAxis 
+                    dataKey="fullName" 
+                    type="category" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{fill: '#64748b', fontSize: 10, fontWeight: 700}} 
+                    width={95}
+                    tickFormatter={(val) => val.length > 12 ? `${val.substring(0, 10)}...` : val}
+                  />
                   <Tooltip 
                     cursor={{fill: '#f8fafc'}}
                     contentStyle={{backgroundColor: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(8px)', borderRadius: '16px', border: '1px solid #e2e8f0', color: '#1e293b', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)'}}
                   />
-                  <Bar dataKey="minutes" radius={[0, 8, 8, 0]} barSize={28} animationDuration={1500}>
-                    {lateByDept.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={index === 0 ? '#4f46e5' : '#cbd5e1'} className="transition-all duration-300 hover:opacity-80" />
+                  <Bar dataKey="minutes" radius={[0, 6, 6, 0]} barSize={18} name="Mulai Terlambat (Menit)" animationDuration={1500}>
+                    {chartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color || (index === 0 ? '#4f46e5' : '#cbd5e1')} className="transition-all duration-300 hover:opacity-80" />
                     ))}
                   </Bar>
                 </BarChart>
@@ -419,6 +576,73 @@ const AdminDashboard = () => {
           </div>
         </div>
 
+        {/* Pending Actions Feed */}
+        <div className="bg-white/80 backdrop-blur-xl p-6 xl:p-8 rounded-3xl border border-slate-200/60 shadow-lg shadow-slate-200/40 flex flex-col group relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-blue-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-1000"></div>
+          
+          <div className="flex justify-between items-center mb-6 relative z-10">
+            <div>
+              <h3 className="font-extrabold text-xl text-slate-800 tracking-tight">Tindakan Tertunda</h3>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">Persetujuan & Aksi</p>
+            </div>
+            <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-500 flex items-center justify-center border border-amber-100 shadow-inner shrink-0">
+              <Bell className="w-5 h-5 animate-bounce" />
+            </div>
+          </div>
+
+          <div className="space-y-2.5 flex-1 overflow-y-auto hide-scrollbar max-h-[280px] relative z-10">
+            {notificationsLoading ? (
+              <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>
+            ) : notifications.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center space-y-4 py-8">
+                <div className="w-14 h-14 rounded-full bg-slate-50 flex items-center justify-center">
+                  <CheckSquare className="w-6 h-6 text-slate-350" />
+                </div>
+                <p className="text-slate-400 font-bold text-xs tracking-wide">Semua beres!<br/>Tidak ada tindakan tertunda.</p>
+              </div>
+            ) : (
+              notifications.map((n) => {
+                let badgeClass = "bg-blue-55 text-blue-600 border-blue-150";
+                let path = "/admin/settings/users";
+                if (n.title.toLowerCase().includes("face") || n.title.toLowerCase().includes("wajah")) {
+                  badgeClass = "bg-amber-50 text-amber-600 border-amber-150";
+                  path = "/admin/face-enrollment";
+                } else if (n.title.toLowerCase().includes("leave") || n.title.toLowerCase().includes("izin") || n.title.toLowerCase().includes("cuti")) {
+                  badgeClass = "bg-purple-50 text-purple-600 border-purple-150";
+                  path = "/admin/leave-requests";
+                } else if (n.title.toLowerCase().includes("correction") || n.title.toLowerCase().includes("koreksi")) {
+                  badgeClass = "bg-pink-50 text-pink-600 border-pink-150";
+                  path = "/admin/corrections";
+                }
+
+                return (
+                  <div
+                    key={n.id}
+                    onClick={() => navigate(path)}
+                    className="p-3 rounded-2xl border border-slate-100 hover:border-slate-200 bg-white hover:bg-slate-50 transition-all flex items-start justify-between gap-3 cursor-pointer hover:shadow-sm group/item"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border ${badgeClass}`}>
+                          {n.title.toLowerCase().includes("face") ? "Wajah" : n.title.toLowerCase().includes("leave") ? "Izin" : "Koreksi"}
+                        </span>
+                        <p className="text-xs font-bold text-slate-700 truncate group-hover/item:text-blue-650 transition-colors">
+                          {n.desc}
+                        </p>
+                      </div>
+                      <span className="text-[9px] text-slate-400 font-semibold block mt-1.5">
+                        Status: {n.time}
+                      </span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-300 group-hover/item:translate-x-1 transition-transform shrink-0 self-center" />
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* AI Insights */}
         <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-6 xl:p-8 rounded-3xl border border-slate-700 shadow-2xl shadow-slate-900/50 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-[60px] pointer-events-none"></div>
           
