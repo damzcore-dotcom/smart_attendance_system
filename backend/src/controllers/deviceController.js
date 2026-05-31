@@ -1089,34 +1089,39 @@ const updateDevice = async (req, res) => {
     const { id } = req.params;
     const { name, ipAddress, port, locationId, autoSyncEnabled, autoSyncTime } = req.body;
     
-    // Check for duplicate IP or Name excluding current device
-    const existingDevice = await prisma.device.findFirst({
-      where: {
-        id: { not: parseInt(id) },
-        OR: [
-          { name: name },
-          { ipAddress: ipAddress }
-        ]
-      }
-    });
+    // Check for duplicate IP or Name excluding current device, only for fields that are provided
+    const orConditions = [];
+    if (name !== undefined && name !== null) orConditions.push({ name });
+    if (ipAddress !== undefined && ipAddress !== null) orConditions.push({ ipAddress });
 
-    if (existingDevice) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `Device with same ${existingDevice.name === name ? 'name' : 'IP address'} already exists.` 
+    if (orConditions.length > 0) {
+      const existingDevice = await prisma.device.findFirst({
+        where: {
+          id: { not: parseInt(id) },
+          OR: orConditions
+        }
       });
+
+      if (existingDevice) {
+        return res.status(400).json({ 
+          success: false, 
+          message: `Device with same ${existingDevice.name === name ? 'name' : 'IP address'} already exists.` 
+        });
+      }
     }
+
+    // Build update payload dynamically to avoid overriding undefined fields with defaults
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (ipAddress !== undefined) updateData.ipAddress = ipAddress;
+    if (port !== undefined) updateData.port = parseInt(port) || 4370;
+    if (locationId !== undefined) updateData.locationId = locationId ? parseInt(locationId) : null;
+    if (autoSyncEnabled !== undefined) updateData.autoSyncEnabled = !!autoSyncEnabled;
+    if (autoSyncTime !== undefined) updateData.autoSyncTime = autoSyncTime || null;
 
     const device = await prisma.device.update({
       where: { id: parseInt(id) },
-      data: {
-        name,
-        ipAddress,
-        port: parseInt(port) || 4370,
-        locationId: locationId ? parseInt(locationId) : null,
-        autoSyncEnabled: !!autoSyncEnabled,
-        autoSyncTime: autoSyncTime || null
-      }
+      data: updateData
     });
 
     await recordAuditLog({

@@ -109,7 +109,7 @@ const DeviceSettings = () => {
       await api.put(`/devices/${id}`, data);
       fetchDevices();
     } catch (err) {
-      alert(err.message || 'Failed to update device');
+      alert(err.response?.data?.message || err.message || 'Failed to update device');
     }
   };
 
