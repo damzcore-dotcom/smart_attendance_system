@@ -57,6 +57,20 @@ try {
     fs.copyFileSync(path.join(rootDir, 'frontend', '.env.example'), path.join(releaseDir, 'frontend', '.env.example'));
   }
 
+  // Include AI Engine & Docker Compose for Face Recognition (excluding weights/git/cache)
+  if (fs.existsSync(path.join(rootDir, 'ai_bridge'))) {
+    console.log('📦 Packaging AI CCTV Engine files (excluding weights)...');
+    fs.cpSync(path.join(rootDir, 'ai_bridge'), path.join(releaseDir, 'ai_bridge'), { 
+      recursive: true, 
+      filter: (src) => !src.includes('__pycache__') && !src.includes('.git') && !src.includes('models')
+    });
+    // Create empty models directory for layout structure
+    fs.mkdirSync(path.join(releaseDir, 'ai_bridge', 'models'), { recursive: true });
+  }
+  if (fs.existsSync(path.join(rootDir, 'docker-compose.yml'))) {
+    fs.copyFileSync(path.join(rootDir, 'docker-compose.yml'), path.join(releaseDir, 'docker-compose.yml'));
+  }
+
   // 6. Create START.bat for Client
   const batContent = `@echo off
 title Smart Attendance Pro
@@ -101,6 +115,82 @@ echo ===================================================
 pause
 `;
   fs.writeFileSync(path.join(releaseDir, 'START_APP.bat'), batContent);
+
+  // Create START_AI_ENGINE.bat
+  const aiBatContent = `@echo off
+title Smart Attendance Pro - AI Engine Launcher
+color 0E
+echo ===================================================
+echo    Smart Attendance Pro - AI Engine Launcher
+echo ===================================================
+echo.
+
+docker -v >nul 2>&1
+if %errorlevel% neq 0 (
+  echo [ERROR] Docker tidak terdeteksi!
+  echo         Silakan instal Docker Desktop terlebih dahulu untuk menggunakan AI.
+  echo         Unduh: https://www.docker.com/products/docker-desktop/
+  echo.
+  pause
+  exit /b
+)
+
+echo [✓] Docker terdeteksi. Menyalakan AI Face Recognition Engine...
+echo     (Redis, MinIO, dan AI Engine akan berjalan di latar belakang)
+echo.
+
+docker-compose up -d --build ai-engine redis minio
+
+echo.
+echo ===================================================
+echo   AI Face Recognition Engine berhasil dinyalakan!
+echo   - AI Service   : http://localhost:8001/health
+echo   - MinIO Console: http://localhost:9001 (user: minioadmin / pass: minioadmin123)
+echo ===================================================
+echo.
+pause
+`;
+  fs.writeFileSync(path.join(releaseDir, 'START_AI_ENGINE.bat'), aiBatContent);
+
+  // Create PANDUAN_AKTIVASI_AI_CCTV.txt
+  const aiGuideContent = `══════════════════════════════════════════════════════════════════════
+  🏢 SMART ATTENDANCE PRO — PANDUAN AKTIVASI AI CCTV FACE RECOGNITION
+══════════════════════════════════════════════════════════════════════
+
+Fitur AI Face Recognition (pengenalan wajah melalui kamera CCTV) adalah
+modul opsional yang membutuhkan spesifikasi hardware khusus dan Docker.
+
+Langkah-langkah untuk mengaktifkannya di server klien:
+
+1. PRASYARAT HARDWARE & SOFTWARE
+   - Sistem Operasi: Windows 10/11 64-bit (Pro/Enterprise direkomendasikan).
+   - RAM: Minimum 8 GB (16 GB direkomendasikan).
+   - Processor: Intel Core i5/i7 Generasi 8 ke atas.
+   - Perangkat Lunak: Wajib menginstal DOCKER DESKTOP.
+     Unduh di: https://www.docker.com/products/docker-desktop/
+
+2. MENYIAPKAN FILE MODEL (WEIGHTS)
+   - Modul AI membutuhkan file bobot model pengenal wajah agar dapat mendeteksi wajah.
+   - Masukkan file weights model Anda ke dalam folder:
+     [direktori_aplikasi]/ai_bridge/models/
+   - Pastikan model-model pendeteksi wajah (seperti FaceNet/Dlib weights) telah diletakkan di sana sebelum memulai service.
+
+3. MENYALAKAN SERVICE AI
+   - Pastikan aplikasi Docker Desktop sudah terbuka dan berjalan (indikator berwarna hijau).
+   - Double-klik berkas "START_AI_ENGINE.bat" di folder utama aplikasi.
+   - Program akan mengunduh dan membangun kontainer Docker (ai-engine, redis, dan minio).
+   - Proses pertama kali membutuhkan koneksi internet untuk mengunduh base image Docker.
+
+4. MENGHUBUNGKAN DENGAN APLIKASI UTAMA
+   - Buka browser dan login ke web Smart Attendance Pro (http://localhost:5173).
+   - Masuk ke menu Settings -> CCTV & Cameras.
+   - Tambahkan IP kamera CCTV dan tentukan arah deteksi (Masuk/Keluar).
+   - Indikator "AI Engine" di header dashboard Command Center akan otomatis berubah menjadi "Online".
+
+══════════════════════════════════════════════════════════════════════
+© 2026 Adam Rizky — Smart Attendance Pro
+`;
+  fs.writeFileSync(path.join(releaseDir, 'PANDUAN_AKTIVASI_AI_CCTV.txt'), aiGuideContent);
 
   console.log('\n✅ PROSES SELESAI!');
   console.log('===================================================');
