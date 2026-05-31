@@ -9,7 +9,8 @@ import {
   UserCircle,
   Building2,
   Users,
-  Shield
+  Shield,
+  FileText
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -44,6 +45,7 @@ const DirectorLayout = () => {
     { name: 'Leave Approval', path: '/director/leave', icon: Users },
     { name: 'Attendance', path: '/director/attendance', icon: CalendarCheck },
     { name: 'Payroll Approval', path: '/director/payroll', icon: Building2 },
+    { name: 'Kontrak Kerja (PKWT)', path: '/director/contracts', icon: FileText },
     { name: 'Log Audit', path: '/director/audit-log', icon: Shield },
   ];
 

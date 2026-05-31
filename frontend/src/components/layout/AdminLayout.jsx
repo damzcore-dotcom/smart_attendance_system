@@ -25,7 +25,8 @@ import {
   AlertTriangle,
   Camera,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  FileText
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -65,6 +66,7 @@ const AdminLayout = () => {
       title: 'Tenaga Kerja',
       items: [
         { name: 'Karyawan', path: '/admin/employees', icon: Users, key: 'employees' },
+        { name: 'Kontrak Kerja (PKWT)', path: '/admin/contracts', icon: FileText, key: 'contracts' },
         { name: 'Rotasi Shift', path: '/admin/shift-roster', icon: CalendarCheck, key: 'shift-roster' },
         { name: 'Cuti & Kalender', path: '/admin/leave-requests', icon: CalendarCheck, key: 'leave-requests' }
       ]

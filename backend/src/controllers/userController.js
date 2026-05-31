@@ -143,7 +143,7 @@ const create = async (req, res) => {
 
     if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
       const menus = [
-        'dashboard', 'announcements', 'employees', 'shift-roster', 'leave-requests', 
+        'dashboard', 'announcements', 'employees', 'contracts', 'shift-roster', 'leave-requests', 
         'attendance', 'overtime-spl', 'daily-workers', 'manual-correction', 'corrections', 
         'payroll', 'payroll-settings', 'face-check', 'devices', 'fingerprint', 
         'users', 'backup', 'settings'

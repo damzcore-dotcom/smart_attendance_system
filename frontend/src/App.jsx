@@ -14,6 +14,7 @@ import ManagerAttendance from './pages/manager/ManagerAttendance';
 import ManagerLeave from './pages/manager/ManagerLeave';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import Employees from './pages/admin/Employees';
+import EmployeeContracts from './pages/admin/EmployeeContracts';
 import Announcements from './pages/admin/Announcements';
 import AdminFaceCheck from './pages/admin/FaceCheck';
 import AdminLeaveRequests from './pages/admin/LeaveRequests';
@@ -112,6 +113,7 @@ function App() {
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<PermissionRoute menuKey="dashboard"><AdminDashboard /></PermissionRoute>} />
             <Route path="employees" element={<PermissionRoute menuKey="employees"><Employees /></PermissionRoute>} />
+            <Route path="contracts" element={<PermissionRoute menuKey="contracts"><EmployeeContracts /></PermissionRoute>} />
             <Route path="users" element={<PermissionRoute menuKey="users"><Users /></PermissionRoute>} />
             <Route path="attendance" element={<PermissionRoute menuKey="attendance"><Attendance /></PermissionRoute>} />
             <Route path="overtime-spl" element={<PermissionRoute menuKey="overtime-spl"><OvertimeSPL /></PermissionRoute>} />
@@ -140,6 +142,7 @@ function App() {
             <Route path="attendance" element={<DirectorAttendance />} />
             <Route path="leave" element={<DirectorLeave />} />
             <Route path="payroll" element={<DirectorPayroll />} />
+            <Route path="contracts" element={<EmployeeContracts isReadOnly={true} />} />
             <Route path="audit-log" element={<AuditLog />} />
           </Route>
 
@@ -148,6 +151,7 @@ function App() {
             <Route index element={<ManagerDashboard />} />
             <Route path="attendance" element={<ManagerAttendance />} />
             <Route path="leave" element={<ManagerLeave />} />
+            <Route path="contracts" element={<EmployeeContracts isReadOnly={true} />} />
             <Route path="audit-log" element={<AuditLog />} />
           </Route>
 

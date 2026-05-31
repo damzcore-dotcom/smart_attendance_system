@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { employeeAPI, settingsAPI, payrollAPI, deviceAPI, fingerprintAPI, getFileUrl } from '../../services/api';
 import CreatableSelect from 'react-select/creatable';
 import Webcam from 'react-webcam';
@@ -25,6 +26,8 @@ const emptyEmployee = {
 
 const Employees = () => {
   const queryClient = useQueryClient();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
   const [sectionFilter, setSectionFilter] = useState('');
@@ -102,6 +105,26 @@ const Employees = () => {
     };
     fetchSettings();
   }, []);
+
+  useEffect(() => {
+    if (location.state && location.state.editEmployeeCode) {
+      const code = location.state.editEmployeeCode;
+      // Clear navigation state to prevent re-opening modal on refresh
+      navigate(location.pathname, { replace: true, state: null });
+      
+      const fetchAndEdit = async () => {
+        try {
+          const res = await employeeAPI.getAll({ search: code });
+          if (res.success && res.data && res.data.length > 0) {
+            handleEditEmployee(res.data[0]);
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      };
+      fetchAndEdit();
+    }
+  }, [location.state]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['employees', { search: searchTerm, dept: deptFilter, section: sectionFilter, position: positionFilter, empStatus: empStatusFilter, page, sortBy: sortConfig.key, order: sortConfig.direction }],
@@ -537,7 +560,10 @@ const Employees = () => {
         </div>
 
         {/* Card 4: Jatuh Tempo PKWT */}
-        <div className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm flex items-center justify-between hover:border-orange-300 transition-all group">
+        <div 
+          onClick={() => navigate('/admin/contracts', { state: { filter: 'critical' } })}
+          className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm flex items-center justify-between hover:border-orange-300 transition-all group cursor-pointer active:scale-[0.98]"
+        >
           <div className="space-y-1.5">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Kontrak Segera Berakhir</span>
             <div className="text-2xl font-bold text-orange-600 tracking-tight">
@@ -598,11 +624,11 @@ const Employees = () => {
           </button>
 
           <button 
-            onClick={() => setPkwtModalOpen(true)} 
+            onClick={() => navigate('/admin/contracts')} 
             className="bg-white border border-slate-200 text-slate-700 hover:border-orange-300 hover:text-orange-600 font-bold py-2.5 px-4 rounded-xl flex items-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all active:scale-95 cursor-pointer relative"
           >
             <FileText className="w-3.5 h-3.5 text-orange-500" />
-            Peringatan PKWT
+            Kontrak Kerja (PKWT)
             {criticalAlertsCount > 0 && (
               <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
                 {criticalAlertsCount}
