@@ -637,8 +637,9 @@ const getMySlips = async (req, res) => {
   try {
     const empId = parseInt(req.params.empId);
 
-    // Security: Validate that the requesting user owns this employee record
-    if (req.user.role === 'EMPLOYEE' && req.user.employeeId !== empId) {
+    // Security: Validate that the requesting user owns this employee record (unless they are Admin/Accounting)
+    const allowedPrivilegedRoles = ['SUPER_ADMIN', 'ADMIN', 'ACCOUNTING'];
+    if (!allowedPrivilegedRoles.includes(req.user.role) && req.user.employeeId !== empId) {
       return res.status(403).json({ success: false, message: 'You can only view your own payslips' });
     }
 

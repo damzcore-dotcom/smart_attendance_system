@@ -457,7 +457,22 @@ router.get('/face-events', verifyToken, async (req, res) => {
       take: parseInt(limit),
       include: { camera: true }
     });
-    res.json({ success: true, data: events });
+
+    // Ambil info nama & code karyawan secara paralel di memori
+    const employeeIds = [...new Set(events.map(e => e.employeeId).filter(Boolean))];
+    const employees = await prisma.employee.findMany({
+      where: { id: { in: employeeIds } },
+      select: { id: true, name: true, employeeCode: true }
+    });
+    const empMap = new Map(employees.map(e => [e.id, e]));
+
+    const mappedEvents = events.map(e => ({
+      ...e,
+      employeeName: e.employeeId ? (empMap.get(e.employeeId)?.name || 'Karyawan Aktif') : null,
+      employeeCode: e.employeeId ? (empMap.get(e.employeeId)?.employeeCode || '') : null
+    }));
+
+    res.json({ success: true, data: mappedEvents });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

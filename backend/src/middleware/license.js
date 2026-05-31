@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const prisma = require('../prismaClient');
 
-const MASTER_SECRET = process.env.LICENSE_SECRET || 'CHANGE_THIS_SECRET_IN_ENV';
+const MASTER_SECRET = process.env.LICENSE_SECRET || 'd94795ad7e96949a882a1f45a4206a69184172efc14f226f4c49def1bf9bdfc1';
 
 let cachedLicenseStatus = null;
 let lastCheckTime = 0;

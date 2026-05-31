@@ -123,6 +123,15 @@ console.log('');
     fs.writeFileSync(path.join(releaseDir, licenseFileName), licenseContent);
     console.log(`   🔑 ${licenseFileName} berhasil dibuat`);
 
+    // Inject initial license key into release backend/.env.example
+    const releaseEnvExamplePath = path.join(releaseDir, 'backend', '.env.example');
+    if (fs.existsSync(releaseEnvExamplePath)) {
+      let content = fs.readFileSync(releaseEnvExamplePath, 'utf8');
+      content = content.replace(/INITIAL_LICENSE_KEY="[^"]*"/, `INITIAL_LICENSE_KEY="${licenseKey}"`);
+      fs.writeFileSync(releaseEnvExamplePath, content);
+      console.log(`   📝 INITIAL_LICENSE_KEY berhasil disuntikkan ke .env.example klien`);
+    }
+
     // ─── STEP 4: CREATE LAUNCHERS & GUIDES ───
     console.log('\n── [5/5] Creating Launchers & Guides ───────────────────');
     const bat = `@echo off

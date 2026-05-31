@@ -47,26 +47,32 @@ console.log('');
     const frontendPort = await ask('   Frontend port [5173]       : ') || '5173';
     const apiUrl = await ask(`   Backend API URL [http://localhost:${serverPort}] : `) || `http://localhost:${serverPort}`;
 
-    // ─── Step 4: License ───
-    console.log('\n── STEP 4: Konfigurasi Lisensi ─────────────────────────');
-    const maxEmployees = await ask('   Maksimal karyawan [100]    : ') || '100';
-    const licenseExpiry = await ask('   Tanggal expired [2027-12-31] : ') || '2027-12-31';
+    // ─── Read INITIAL_LICENSE_KEY from backend/.env.example ───
+    let initialLicenseKey = '';
+    let maxEmployees = '100';
+    let licenseExpiry = '2027-12-31';
+
+    const envExamplePath = path.join(__dirname, 'backend', '.env.example');
+    if (fs.existsSync(envExamplePath)) {
+      const exampleContent = fs.readFileSync(envExamplePath, 'utf8');
+      const match = exampleContent.match(/^INITIAL_LICENSE_KEY="?([^"\r\n]+)"?/m);
+      if (match) {
+        initialLicenseKey = match[1];
+        try {
+          const [payloadB64] = initialLicenseKey.split('.');
+          const payload = JSON.parse(Buffer.from(payloadB64, 'base64').toString('utf8'));
+          if (payload.limit) maxEmployees = String(payload.limit);
+          if (payload.expiry) licenseExpiry = payload.expiry;
+        } catch (e) {
+          // Fallback parsing error
+        }
+      }
+    }
 
     // ─── Generate Secrets ───
     console.log('\n⏳ Generating unique security keys...');
     const jwtSecret = generateSecret(48);
     const jwtRefreshSecret = generateSecret(48);
-    // Master License Secret — TETAP SAMA untuk semua klien
-    // Ini adalah "cetakan kunci" milik Anda. Jangan pernah bagikan!
-    const licenseSecret = 'd94795ad7e96949a882a1f45a4206a69184172efc14f226f4c49def1bf9bdfc1';
-
-    // Auto-generate license key based on wizard inputs
-    const payload = { client: clientName, expiry: licenseExpiry, limit: parseInt(maxEmployees) };
-    const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64');
-    const hmac = crypto.createHmac('sha256', licenseSecret);
-    hmac.update(payloadB64);
-    const signature = hmac.digest('hex');
-    const autoLicenseKey = `${payloadB64}.${signature}`;
 
     // ─── Write backend/.env ───
     const envPath = path.join(__dirname, 'backend', '.env');
@@ -88,9 +94,8 @@ console.log('');
       `JWT_SECRET="${jwtSecret}"`,
       `JWT_REFRESH_SECRET="${jwtRefreshSecret}"`,
       ``,
-      `# License System (auto-generated — DO NOT SHARE)`,
-      `LICENSE_SECRET="${licenseSecret}"`,
-      `INITIAL_LICENSE_KEY="${autoLicenseKey}"`,
+      `# License System (read from builder — DO NOT SHARE)`,
+      `INITIAL_LICENSE_KEY="${initialLicenseKey}"`,
       ``
     ].join('\n');
 
@@ -125,7 +130,7 @@ console.log('');
       `═══════════════════════════════════════════════════`,
       ``,
       `LICENSE KEY:`,
-      autoLicenseKey,
+      initialLicenseKey,
       ``,
       `═══════════════════════════════════════════════════`,
       `Masukkan key di atas ke menu Settings → License`,

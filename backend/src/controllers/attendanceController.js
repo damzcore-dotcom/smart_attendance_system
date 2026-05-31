@@ -292,6 +292,13 @@ const getAll = async (req, res) => {
           lateMinutes: r.lateMinutes,
           overtimeHours: r.overtimeHours,
           mode: r.mode,
+          source: r.source,
+          checkinPhotoUrl: r.checkinPhotoUrl,
+          checkoutPhotoUrl: r.checkoutPhotoUrl,
+          checkinSimilarity: r.checkinSimilarity,
+          checkoutSimilarity: r.checkoutSimilarity,
+          checkinCameraId: r.checkinCameraId,
+          checkoutCameraId: r.checkoutCameraId,
           shiftName: r.employee.shift?.name || 'Default Shift',
           shiftTime: r.employee.shift ? `${r.employee.shift.startTime} - ${r.employee.shift.endTime}` : '08:00 - 17:00',
         };

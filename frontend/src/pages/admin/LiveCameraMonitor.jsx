@@ -148,9 +148,18 @@ const LiveCameraMonitor = () => {
             {aiStatus?.cameras > 0 && ` (${aiStatus.cameras} cam)`}
           </div>
 
+           <button
+            onClick={() => setIsSimulationOpen(true)}
+            className="flex items-center gap-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95 uppercase tracking-wider"
+          >
+            <Activity className="w-3.5 h-3.5 text-purple-500" />
+            <span>Simulasi CCTV</span>
+          </button>
+
           <button
             onClick={() => refetchCameras()}
             className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 transition-all"
+            title="Refresh Kamera"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
@@ -259,6 +268,7 @@ const LiveCameraMonitor = () => {
                     <div className="font-medium text-slate-800 truncate">
                       {event.isSpoof ? 'Spoof Detected' :
                        event.isUnknown ? 'Unknown Face' :
+                       event.employeeName ? `${event.employeeName} (${event.employeeCode || ''})` :
                        `Employee #${event.employeeId}`}
                     </div>
                     <div className="text-xs text-slate-400 flex gap-3">

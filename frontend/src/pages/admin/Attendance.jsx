@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { attendanceAPI, employeeAPI, payrollAPI, settingsAPI } from '../../services/api';
 import PrintableAttendanceReport from '../../components/payroll/PrintableAttendanceReport';
-import { Edit2, LayoutDashboard, Calendar, Clock, RefreshCw, Upload, AlertCircle, CheckCircle2, XCircle, Search, Filter, Scan, X, FileSpreadsheet, Printer, FileText, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, ArrowRight, Loader2, AlertTriangle, ShieldCheck, ShieldAlert, TrendingUp } from 'lucide-react';
+import { Edit2, LayoutDashboard, Calendar, Clock, RefreshCw, Upload, AlertCircle, CheckCircle2, XCircle, Search, Filter, Scan, X, FileSpreadsheet, Printer, FileText, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, ArrowRight, Loader2, AlertTriangle, ShieldCheck, ShieldAlert, TrendingUp, Fingerprint, Camera, Eye } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -233,6 +233,16 @@ const Attendance = () => {
   const [importResult, setImportResult] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: 'date', order: 'desc' });
   const [correctionModal, setCorrectionModal] = useState({ isOpen: false, recordId: null, employeeName: '', currentStatus: '', newStatus: 'CUTI', notes: '', overtimeHours: 0, checkInTime: '', checkOutTime: '', lateMinutes: 0, attachment: '' });
+  
+  const [photoModal, setPhotoModal] = useState({
+    isOpen: false,
+    photoUrl: '',
+    employeeName: '',
+    date: '',
+    type: '',
+    similarity: null,
+    cameraId: ''
+  });
 
   const parseTimeForInput = (timeStr) => {
     if (!timeStr || timeStr.includes('--')) return '';
@@ -1305,6 +1315,7 @@ const Attendance = () => {
                         <SortIcon column="date" />
                       </button>
                     </th>
+                    <th className="px-4 py-4 text-center">Metode</th>
                     <th className="px-4 py-4 text-center">Jam Masuk</th>
                     <th className="px-4 py-4 text-center">Jam Keluar</th>
                     <th className="px-6 py-4">
@@ -1329,7 +1340,7 @@ const Attendance = () => {
                 <tbody className="divide-y divide-slate-100">
                   {isLoading ? (
                     <tr>
-                      <td colSpan="11" className="text-center py-24">
+                      <td colSpan="12" className="text-center py-24">
                         <div className="flex flex-col items-center gap-4">
                           <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
                           <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest animate-pulse">Memuat Data...</p>
@@ -1338,7 +1349,7 @@ const Attendance = () => {
                     </tr>
                   ) : (!filteredData || filteredData.length === 0) ? (
                     <tr>
-                      <td colSpan="11" className="text-center py-24">
+                      <td colSpan="12" className="text-center py-24">
                         <div className="flex flex-col items-center gap-4 opacity-70">
                           <div className="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center border border-slate-100">
                             <Calendar className="w-8 h-8 text-slate-400" />
@@ -1380,22 +1391,86 @@ const Attendance = () => {
                             <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">{row.date}</span>
                           </div>
                         </td>
+                        <td className="px-4 py-4 text-center">
+                          {row.source === 'face_cctv' ? (
+                            <span className="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-755 px-2 py-1 rounded-lg text-[10px] font-bold border border-indigo-100 shadow-sm" title="CCTV Face Detection">
+                              <Camera className="w-3.5 h-3.5 text-indigo-500" />
+                              CCTV
+                            </span>
+                          ) : row.source === 'fingerprint' ? (
+                            <span className="inline-flex items-center gap-1.5 bg-sky-50 text-sky-750 px-2 py-1 rounded-lg text-[10px] font-bold border border-sky-100 shadow-sm" title="Sidik Jari (Fingerprint)">
+                              <Fingerprint className="w-3.5 h-3.5 text-sky-500" />
+                              Finger
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 bg-slate-50 text-slate-600 px-2 py-1 rounded-lg text-[10px] font-bold border border-slate-200 shadow-sm" title="Manual / Koreksi HRD">
+                              <Edit2 className="w-3.5 h-3.5 text-slate-400" />
+                              Manual
+                            </span>
+                          )}
+                        </td>
                         <td className="px-4 py-4">
                           <div className="flex items-center gap-2">
                             <Clock className="w-3.5 h-3.5 text-blue-500" />
                             <span className="text-xs font-bold text-slate-800 tracking-widest">{row.checkIn || '--:--'}</span>
+                            {row.checkinPhotoUrl && (
+                              <button
+                                onClick={() => setPhotoModal({
+                                  isOpen: true,
+                                  photoUrl: row.checkinPhotoUrl,
+                                  employeeName: row.name,
+                                  date: row.date,
+                                  type: 'Check-In',
+                                  similarity: row.checkinSimilarity,
+                                  cameraId: row.checkinCameraId
+                                })}
+                                className="p-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 hover:text-indigo-700 text-indigo-500 border border-indigo-100 transition-all hover:scale-110 active:scale-95 ml-1"
+                                title="Lihat Foto CCTV Masuk"
+                              >
+                                <Camera className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </td>
                         <td className="px-4 py-4">
                           <div className="flex items-center gap-2">
                             <Clock className="w-3.5 h-3.5 text-rose-500" />
                             <span className="text-xs font-bold text-slate-800 tracking-widest">{row.checkOut || '--:--'}</span>
+                            {row.checkoutPhotoUrl && (
+                              <button
+                                onClick={() => setPhotoModal({
+                                  isOpen: true,
+                                  photoUrl: row.checkoutPhotoUrl,
+                                  employeeName: row.name,
+                                  date: row.date,
+                                  type: 'Check-Out',
+                                  similarity: row.checkoutSimilarity,
+                                  cameraId: row.checkoutCameraId
+                                })}
+                                className="p-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 hover:text-indigo-700 text-indigo-500 border border-indigo-100 transition-all hover:scale-110 active:scale-95 ml-1"
+                                title="Lihat Foto CCTV Pulang"
+                              >
+                                <Camera className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </td>
                         <td className="px-6 py-4 text-center">
-                          <span className={`inline-flex items-center px-3 py-1.5 rounded-md text-[9px] font-bold uppercase tracking-wider border transition-all ${getStatusColor(row.status)}`}>
-                            {getStatusLabel(row.status)}
-                          </span>
+                          <div className="flex flex-col items-center gap-1">
+                            <span className={`inline-flex items-center px-3 py-1.5 rounded-md text-[9px] font-bold uppercase tracking-wider border transition-all ${getStatusColor(row.status)}`}>
+                              {getStatusLabel(row.status)}
+                            </span>
+                            {row.source === 'face_cctv' && (row.checkinSimilarity || row.checkoutSimilarity) && (
+                              <div className="flex flex-col items-center gap-0.5 mt-0.5 text-[8px] font-black text-indigo-600 bg-indigo-50/50 border border-indigo-100/50 px-1.5 py-0.5 rounded uppercase tracking-wider">
+                                {row.checkinSimilarity && (
+                                  <span>In: {Math.round(row.checkinSimilarity * 100)}%</span>
+                                )}
+                                {row.checkoutSimilarity && (
+                                  <span>Out: {Math.round(row.checkoutSimilarity * 100)}%</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-4 text-center">
                           {(row.status === 'Terlambat' || row.status === 'LATE') ? (
@@ -2218,6 +2293,80 @@ const Attendance = () => {
               />
             </div>
           ))}
+        </div>
+      )}
+
+      {/* CCTV Photo Modal */}
+      {photoModal.isOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 print:hidden animate-in fade-in duration-200">
+          <div 
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-md" 
+            onClick={() => setPhotoModal(prev => ({ ...prev, isOpen: false }))} 
+          />
+          
+          <div className="bg-white w-full max-w-lg relative z-10 overflow-hidden shadow-2xl rounded-3xl border border-slate-100 animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center border border-indigo-100 shadow-sm">
+                  <Camera className="w-5 h-5 text-indigo-600" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 text-sm tracking-tight">Foto Capture CCTV</h3>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">{photoModal.employeeName}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setPhotoModal(prev => ({ ...prev, isOpen: false }))} 
+                className="w-8 h-8 flex items-center justify-center hover:bg-slate-200 rounded-lg transition-all"
+              >
+                <X className="w-4 h-4 text-slate-500" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4">
+              <div className="relative aspect-video w-full bg-slate-950 rounded-2xl overflow-hidden border border-slate-200 flex items-center justify-center shadow-inner">
+                {photoModal.photoUrl ? (
+                  <img 
+                    src={photoModal.photoUrl} 
+                    alt="CCTV Snap" 
+                    className="w-full h-full object-contain"
+                  />
+                ) : (
+                  <p className="text-slate-500 text-xs uppercase font-bold tracking-widest">Foto tidak ditemukan</p>
+                )}
+                {photoModal.similarity && (
+                  <div className="absolute bottom-4 right-4 bg-slate-900/80 backdrop-blur text-white px-3 py-1.5 rounded-xl text-[10px] font-black border border-slate-700 shadow flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>AI MATCH: {Math.round(photoModal.similarity * 100)}%</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Metadata Info */}
+              <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100 text-xs font-bold text-slate-700">
+                <div className="space-y-1">
+                  <span className="block text-[9px] text-slate-400 uppercase tracking-wider">Tipe Deteksi</span>
+                  <span className="text-slate-800 uppercase">{photoModal.type}</span>
+                </div>
+                <div className="space-y-1">
+                  <span className="block text-[9px] text-slate-400 uppercase tracking-wider">Kamera / Gate</span>
+                  <span className="text-slate-800 uppercase">{photoModal.cameraId || 'CAMERA_01'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+              <button 
+                onClick={() => setPhotoModal(prev => ({ ...prev, isOpen: false }))}
+                className="px-6 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all active:scale-95 shadow-sm"
+              >
+                Tutup Preview
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
