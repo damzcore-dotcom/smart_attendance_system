@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Plus, RefreshCw, Wifi, Download, Users, MonitorSmartphone, Clock, CheckCircle, AlertTriangle, Info, Pencil, Eraser } from 'lucide-react';
+import { Trash2, Plus, RefreshCw, Wifi, Download, Users, MonitorSmartphone, Clock, CheckCircle, AlertTriangle, Info, Pencil, Eraser, FileText } from 'lucide-react';
 import api from '../../services/api';
 import { getStatusLabel, getStatusColor } from '../../utils/statusUtils';
 
@@ -247,7 +247,9 @@ const DeviceSettings = () => {
             newStatuses[device.id] = {
               ...newStatuses[device.id],
               status: 'success',
-              message: data.message || 'Tarik Absensi Berhasil!'
+              message: data.message || 'Tarik Absensi Berhasil!',
+              savedCount: data.savedCount || 0,
+              employeeCount: data.employeeCount || 0
             };
             return { ...prev, deviceStatuses: newStatuses };
           });
@@ -1272,8 +1274,10 @@ const DeviceSettings = () => {
             </div>
             
             {/* Summary Cards */}
-            <div className="px-6 py-4 bg-slate-50/50 flex gap-4 border-b border-slate-100">
-              <div className="flex-1 bg-emerald-50 border border-emerald-200/60 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+            <div className={`px-6 py-4 bg-slate-50/50 grid gap-4 border-b border-slate-100 ${
+              bulkProgress.title === 'Tarik Absensi Massal' ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-2'
+            }`}>
+              <div className="bg-emerald-50 border border-emerald-200/60 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
                 <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold text-base border border-emerald-200">
                   ✓
                 </div>
@@ -1285,7 +1289,7 @@ const DeviceSettings = () => {
                   </p>
                 </div>
               </div>
-              <div className="flex-1 bg-rose-50 border border-rose-200/60 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+              <div className="bg-rose-50 border border-rose-200/60 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
                 <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-600 flex items-center justify-center font-bold text-base border border-rose-200">
                   ✕
                 </div>
@@ -1297,6 +1301,34 @@ const DeviceSettings = () => {
                   </p>
                 </div>
               </div>
+              {bulkProgress.title === 'Tarik Absensi Massal' && (
+                <>
+                  <div className="bg-blue-50 border border-blue-200/60 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center border border-blue-200">
+                      <FileText className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Total Record</p>
+                      <p className="text-xl font-bold text-blue-800 mt-0.5 flex items-baseline gap-1">
+                        {Object.values(bulkProgress.deviceStatuses).reduce((sum, s) => sum + (s.savedCount || 0), 0)}
+                        <span className="text-xs font-normal text-blue-600">Log</span>
+                      </p>
+                    </div>
+                  </div>
+                  <div className="bg-violet-50 border border-violet-200/60 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+                    <div className="w-10 h-10 rounded-xl bg-violet-500/10 text-violet-600 flex items-center justify-center border border-violet-200">
+                      <Users className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-violet-600 uppercase tracking-wider">Karyawan</p>
+                      <p className="text-xl font-bold text-violet-800 mt-0.5 flex items-baseline gap-1">
+                        {Object.values(bulkProgress.deviceStatuses).reduce((sum, s) => sum + (s.employeeCount || 0), 0)}
+                        <span className="text-xs font-normal text-violet-600">Orang</span>
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
             
             <div className="flex-1 overflow-auto p-6 bg-slate-50 space-y-4">

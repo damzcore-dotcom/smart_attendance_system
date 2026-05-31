@@ -658,6 +658,8 @@ const syncAttendance = async (req, res) => {
         success: true, 
         message: `Tidak ada data log di mesin. (${allAttemptCounts.length}x percobaan, hasil: [${allAttemptCounts.join(', ')}])`, 
         rawRecords: 0, 
+        savedCount: 0,
+        employeeCount: 0,
         diagnostics: { 
           totalLogsFromDevice: 0, logsInRange: 0, logsMatchedEmployee: 0, 
           unmatchedPinCount: 0, unmatchedPins: [], linkedEmployeeCount: 0, 
@@ -976,6 +978,7 @@ const syncAttendance = async (req, res) => {
 
     // Bulk Upsert (preserves and merges check-in/out times for multi-device support)
     let saved = 0;
+    const savedEmployees = new Set();
     for (const record of recordsToCreate) {
       try {
         // Fetch existing record first to merge check-in and check-out times
@@ -1043,6 +1046,7 @@ const syncAttendance = async (req, res) => {
           }
         });
         saved++;
+        savedEmployees.add(record.employeeId);
       } catch (e) {
         console.error(`[Sync] Failed record for emp ${record.employeeId}:`, e.message);
       }
@@ -1069,7 +1073,12 @@ const syncAttendance = async (req, res) => {
       ipAddress: req.ip
     });
 
-    res.json({ success: true, message: `Sinkronisasi Absen berhasil. ${saved} record absen diperbarui. (Terbaik dari ${allAttemptCounts.length}x percobaan: [${allAttemptCounts.join(', ')}] log)` });
+    res.json({ 
+      success: true, 
+      message: `Sinkronisasi Absen berhasil. ${saved} record absen diperbarui. (Terbaik dari ${allAttemptCounts.length}x percobaan: [${allAttemptCounts.join(', ')}] log)`,
+      savedCount: saved,
+      employeeCount: savedEmployees.size
+    });
   } catch (err) {
     console.error(err);
     // Tandai offline jika gagal
