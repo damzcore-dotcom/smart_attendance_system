@@ -9,7 +9,6 @@ const DeviceSettings = () => {
   const [newDevice, setNewDevice] = useState({ name: '', ipAddress: '', port: 4370 });
   const [editingDevice, setEditingDevice] = useState(null);
   const [selectedDeviceIds, setSelectedDeviceIds] = useState([]);
-  const [hasInitializedSelection, setHasInitializedSelection] = useState(false);
   const [bulkProgress, setBulkProgress] = useState(null);
   const [syncing, setSyncing] = useState(null);
   const [previewData, setPreviewData] = useState(null);
@@ -37,10 +36,6 @@ const DeviceSettings = () => {
         // Initialize/update selected device IDs
         setSelectedDeviceIds(prev => {
           const validIds = data.data.map(d => d.id);
-          if (!hasInitializedSelection) {
-            setHasInitializedSelection(true);
-            return validIds;
-          }
           return prev.filter(id => validIds.includes(id));
         });
       }
