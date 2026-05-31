@@ -33,25 +33,25 @@ const DirectorPayroll = () => {
   };
 
   const handleApprove = async (id) => {
-    if (!window.confirm('Setujui draft payroll ini?')) return;
+    if (!window.confirm('Approve this draft payroll?')) return;
     try {
       await payrollAPI.approve(id);
-      alert('Payroll berhasil disetujui.');
+      alert('Payroll successfully approved.');
       fetchPayrolls();
     } catch (err) {
-      alert('Gagal menyetujui: ' + err.message);
+      alert('Failed to approve: ' + err.message);
     }
   };
 
   const handleReject = async (id) => {
-    const reason = window.prompt('Alasan penolakan:');
+    const reason = window.prompt('Reason for rejection:');
     if (reason === null) return;
     try {
       await payrollAPI.reject(id, { note: reason });
-      alert('Payroll ditolak.');
+      alert('Payroll rejected.');
       fetchPayrolls();
     } catch (err) {
-      alert('Gagal menolak: ' + err.message);
+      alert('Failed to reject: ' + err.message);
     }
   };
 
@@ -66,7 +66,7 @@ const DirectorPayroll = () => {
       link.click();
       link.remove();
     } catch (err) {
-      alert('Gagal export data');
+      alert('Failed to export data');
     }
   };
 
@@ -80,7 +80,7 @@ const DirectorPayroll = () => {
             <Banknote className="text-blue-600" />
             Payroll Approval
           </h1>
-          <p className="text-gray-500 mt-1">Tinjau dan setujui draft gaji bulanan karyawan</p>
+          <p className="text-gray-500 mt-1">Review and approve draft monthly payroll for employees</p>
         </div>
       </div>
 
@@ -88,12 +88,12 @@ const DirectorPayroll = () => {
         <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
           <div className="text-sm font-medium text-gray-500 mb-1">Awaiting Approval</div>
           <div className="text-2xl font-bold text-yellow-600">{pendingPayrolls.length}</div>
-          <div className="text-xs text-yellow-600 mt-2 font-medium">Butuh Persetujuan</div>
+          <div className="text-xs text-yellow-600 mt-2 font-medium">Awaiting Approval</div>
         </div>
         <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm md:col-span-2">
           <div className="text-sm font-medium text-gray-500 mb-1">Total Payroll</div>
           <div className="text-2xl font-bold text-gray-800">{payrolls.length}</div>
-          <div className="text-xs text-gray-500 mt-2 font-medium">Seluruh Periode</div>
+          <div className="text-xs text-gray-500 mt-2 font-medium">All Periods</div>
         </div>
       </div>
 
@@ -101,18 +101,18 @@ const DirectorPayroll = () => {
         <table className="w-full text-left">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              <th className="px-6 py-4 font-medium text-gray-600">Periode</th>
-              <th className="px-6 py-4 font-medium text-gray-600">Karyawan</th>
+              <th className="px-6 py-4 font-medium text-gray-600">Period</th>
+              <th className="px-6 py-4 font-medium text-gray-600">Employees</th>
               <th className="px-6 py-4 font-medium text-gray-600">Total Net (Rp)</th>
               <th className="px-6 py-4 font-medium text-gray-600">Status</th>
-              <th className="px-6 py-4 font-medium text-gray-600 text-right">Aksi</th>
+              <th className="px-6 py-4 font-medium text-gray-600 text-right">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {payrolls.map((p) => (
               <tr key={p.id} className="hover:bg-gray-50 transition-colors">
                 <td className="px-6 py-4 font-medium text-gray-800">{p.periodName}</td>
-                <td className="px-6 py-4 text-gray-600">{p.totalEmployees} Orang</td>
+                <td className="px-6 py-4 text-gray-600">{p.totalEmployees} Employees</td>
                 <td className="px-6 py-4 font-semibold text-gray-800">
                   {p.totalNet.toLocaleString('id-ID')}
                 </td>
@@ -133,14 +133,14 @@ const DirectorPayroll = () => {
                       <button 
                         onClick={() => handleApprove(p.id)}
                         className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                        title="Setujui"
+                        title="Approve"
                       >
                         <CheckCircle className="w-5 h-5" />
                       </button>
                       <button 
                         onClick={() => handleReject(p.id)}
                         className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Tolak"
+                        title="Reject"
                       >
                         <XCircle className="w-5 h-5" />
                       </button>
@@ -166,7 +166,7 @@ const DirectorPayroll = () => {
             {payrolls.length === 0 && !loading && (
               <tr>
                 <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
-                  Belum ada data payroll
+                  No payroll data available
                 </td>
               </tr>
             )}
@@ -180,7 +180,7 @@ const DirectorPayroll = () => {
           <div className="bg-white rounded-xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center">
               <div>
-                <h2 className="text-xl font-bold text-gray-800">Detail Payroll: {selectedPayroll.periodName}</h2>
+                <h2 className="text-xl font-bold text-gray-800">Payroll Details: {selectedPayroll.periodName}</h2>
                 <p className="text-sm text-gray-500 mt-1">Status: {selectedPayroll.status}</p>
               </div>
               <button onClick={() => setSelectedPayroll(null)} className="p-2 hover:bg-gray-100 rounded-lg">
@@ -191,12 +191,12 @@ const DirectorPayroll = () => {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 text-gray-600 sticky top-0">
                   <tr>
-                    <th className="p-3 text-left">Karyawan</th>
+                    <th className="p-3 text-left">Employee</th>
                     <th className="p-3 text-left">Dept</th>
-                    <th className="p-3 text-right">Gaji Pokok</th>
-                    <th className="p-3 text-right">Kehadiran</th>
-                    <th className="p-3 text-right">Lembur</th>
-                    <th className="p-3 text-right">Potongan</th>
+                    <th className="p-3 text-right">Base Salary</th>
+                    <th className="p-3 text-right">Attendance</th>
+                    <th className="p-3 text-right">Overtime</th>
+                    <th className="p-3 text-right">Deduction</th>
                     <th className="p-3 text-right font-bold">Net Pay</th>
                   </tr>
                 </thead>
@@ -210,8 +210,8 @@ const DirectorPayroll = () => {
                       <td className="p-3">{d.department}</td>
                       <td className="p-3 text-right">Rp {d.baseSalary.toLocaleString('id-ID')}</td>
                       <td className="p-3 text-right">
-                        <div>Hadir: {d.daysPresent}</div>
-                        <div className="text-red-500 text-xs">Telat: {d.totalLateMinutes}m</div>
+                        <div>Present: {d.daysPresent}</div>
+                        <div className="text-red-500 text-xs">Late: {d.totalLateMinutes}m</div>
                       </td>
                       <td className="p-3 text-right">Rp {d.overtimePay.toLocaleString('id-ID')}</td>
                       <td className="p-3 text-right text-red-600">Rp {d.totalDeduction.toLocaleString('id-ID')}</td>
@@ -227,13 +227,13 @@ const DirectorPayroll = () => {
                   onClick={() => { setSelectedPayroll(null); handleReject(selectedPayroll.id); }}
                   className="px-6 py-2.5 bg-red-100 text-red-700 hover:bg-red-200 font-semibold rounded-lg"
                 >
-                  Tolak
+                  Reject
                 </button>
                 <button 
                   onClick={() => { setSelectedPayroll(null); handleApprove(selectedPayroll.id); }}
                   className="px-6 py-2.5 bg-green-600 text-white hover:bg-green-700 font-semibold rounded-lg"
                 >
-                  Setujui Payroll
+                  Approve Payroll
                 </button>
               </div>
             )}

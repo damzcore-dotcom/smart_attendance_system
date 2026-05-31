@@ -20,6 +20,30 @@ export const usePermission = (menuKey) => {
     return { canRead: false, canCreate: false, canUpdate: false, canDelete: false, isLoading: false };
   }
 
+  if (menuKey === 'settings') {
+    const masterPerm = user.permissions.find(p => p.menuKey === 'settings');
+    if (masterPerm && masterPerm.canRead) {
+      return {
+        canRead: true,
+        canCreate: masterPerm.canCreate,
+        canUpdate: masterPerm.canUpdate,
+        canDelete: masterPerm.canDelete,
+        isLoading: false
+      };
+    }
+    
+    const subPerms = user.permissions.filter(p => p.menuKey.startsWith('settings-') && p.canRead);
+    if (subPerms.length > 0) {
+      return {
+        canRead: true,
+        canCreate: subPerms.some(p => p.canCreate),
+        canUpdate: subPerms.some(p => p.canUpdate),
+        canDelete: subPerms.some(p => p.canDelete),
+        isLoading: false
+      };
+    }
+  }
+
   const perm = user.permissions.find(p => p.menuKey === menuKey);
   
   return {

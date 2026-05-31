@@ -164,16 +164,32 @@ const Users = () => {
       
       const menus = [
         { key: 'dashboard', label: 'Dashboard' },
-        { key: 'attendance', label: 'Attendance' },
-        { key: 'employees', label: 'Employee Master' },
-        { key: 'shifts', label: 'Shift Schedules' },
-        { key: 'locations', label: 'Locations' },
-        { key: 'leave-requests', label: 'Leave Requests' },
-        { key: 'corrections', label: 'Corrections' },
         { key: 'announcements', label: 'Announcements' },
-        { key: 'backup', label: 'Database Backup' },
+        { key: 'employees', label: 'Employee Master' },
+        { key: 'shift-roster', label: 'Shift Roster' },
+        { key: 'leave-requests', label: 'Leave Requests' },
+        { key: 'attendance', label: 'Attendance Management' },
+        { key: 'overtime-spl', label: 'Overtime (SPL)' },
+        { key: 'daily-workers', label: 'Daily Workers (BHL)' },
+        { key: 'manual-correction', label: 'Manual Correction' },
+        { key: 'corrections', label: 'Corrections' },
+        { key: 'payroll', label: 'Payroll Processing' },
+        { key: 'payroll-settings', label: 'Payroll Settings' },
+        { key: 'face-check', label: 'Face Recognition CCTV' },
+        { key: 'devices', label: 'Fingerprint Devices' },
+        { key: 'fingerprint', label: 'Fingerprint Data' },
         { key: 'users', label: 'User Management' },
-        { key: 'settings', label: 'System Settings' }
+        { key: 'backup', label: 'Database Backup' },
+        { key: 'settings', label: 'System Settings' },
+        { key: 'settings-company-profile', label: '↳ Company Profile' },
+        { key: 'settings-geofencing', label: '↳ Geofencing' },
+        { key: 'settings-shift-rules', label: '↳ Shift Rules' },
+        { key: 'settings-calendar', label: '↳ Calendar & Holidays' },
+        { key: 'settings-biometrics', label: '↳ Biometrics' },
+        { key: 'settings-cctv', label: '↳ CCTV AI Cameras' },
+        { key: 'settings-slip', label: '↳ Slip Configuration' },
+        { key: 'settings-report', label: '↳ Attendance Report' },
+        { key: 'settings-id-card', label: '↳ ID Card Template' }
       ];
 
       const merged = menus.map(m => {
@@ -981,25 +997,30 @@ const PermissionModal = ({ isOpen, onClose, user, initialPermissions, onSave, is
                 </tr>
               </thead>
               <tbody>
-                {permissions.map((perm) => (
-                  <tr key={perm.menuKey} className="bg-slate-50 hover:bg-slate-100/50 transition-colors">
-                    <td className="py-3.5 pl-4 rounded-l-xl border-y border-l border-slate-100">
-                      <span className="text-sm font-semibold text-slate-700">{perm.label}</span>
-                    </td>
-                    <td className="py-3.5 text-center border-y border-slate-100">
-                      <input type="checkbox" checked={perm.canRead} onChange={() => togglePermission(perm.menuKey, 'canRead')} className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500/20 cursor-pointer" />
-                    </td>
-                    <td className="py-3.5 text-center border-y border-slate-100">
-                      <input type="checkbox" checked={perm.canCreate} onChange={() => togglePermission(perm.menuKey, 'canCreate')} className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500/20 cursor-pointer" />
-                    </td>
-                    <td className="py-3.5 text-center border-y border-slate-100">
-                      <input type="checkbox" checked={perm.canUpdate} onChange={() => togglePermission(perm.menuKey, 'canUpdate')} className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500/20 cursor-pointer" />
-                    </td>
-                    <td className="py-3.5 text-center rounded-r-xl border-y border-r border-slate-100">
-                      <input type="checkbox" checked={perm.canDelete} onChange={() => togglePermission(perm.menuKey, 'canDelete')} className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500/20 cursor-pointer" />
-                    </td>
-                  </tr>
-                ))}
+                {permissions.map((perm) => {
+                  const isSubSettings = perm.menuKey.startsWith('settings-');
+                  return (
+                    <tr key={perm.menuKey} className="bg-slate-50 hover:bg-slate-100/50 transition-colors">
+                      <td className={`py-3.5 rounded-l-xl border-y border-l border-slate-100 ${
+                        isSubSettings ? 'pl-10 text-slate-400 font-medium italic text-xs' : 'pl-4'
+                      }`}>
+                        <span className={`text-sm font-semibold ${isSubSettings ? 'text-slate-500' : 'text-slate-700'}`}>{perm.label}</span>
+                      </td>
+                      <td className="py-3.5 text-center border-y border-slate-100">
+                        <input type="checkbox" checked={perm.canRead} onChange={() => togglePermission(perm.menuKey, 'canRead')} className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500/20 cursor-pointer" />
+                      </td>
+                      <td className="py-3.5 text-center border-y border-slate-100">
+                        <input type="checkbox" checked={perm.canCreate} onChange={() => togglePermission(perm.menuKey, 'canCreate')} className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500/20 cursor-pointer" />
+                      </td>
+                      <td className="py-3.5 text-center border-y border-slate-100">
+                        <input type="checkbox" checked={perm.canUpdate} onChange={() => togglePermission(perm.menuKey, 'canUpdate')} className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500/20 cursor-pointer" />
+                      </td>
+                      <td className="py-3.5 text-center rounded-r-xl border-y border-r border-slate-100">
+                        <input type="checkbox" checked={perm.canDelete} onChange={() => togglePermission(perm.menuKey, 'canDelete')} className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500/20 cursor-pointer" />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

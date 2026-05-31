@@ -3,7 +3,7 @@ import { Calendar, Save, Plus, Trash2, Loader2, AlertCircle, Edit } from 'lucide
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { calendarAPI, settingsAPI } from '../../services/api';
 
-const CompanyCalendarSettings = () => {
+const CompanyCalendarSettings = ({ permissions = { canCreate: true, canUpdate: true, canDelete: true } }) => {
   const queryClient = useQueryClient();
   const [currentYear] = useState(new Date().getFullYear());
   const [selectedYear, setSelectedYear] = useState(currentYear);
@@ -163,7 +163,8 @@ const CompanyCalendarSettings = () => {
               <select 
                 value={form.type} 
                 onChange={e => setForm({...form, type: e.target.value, swapDate: ''})} 
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700"
+                disabled={(!editingId && !permissions.canCreate) || (editingId && !permissions.canUpdate)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 disabled:opacity-60"
               >
                 <option value="HOLIDAY">Tanggal Merah / Libur / Cuti Bersama</option>
                 <option value="WORKDAY">Wajib Masuk (Tukar Hari Libur)</option>
@@ -178,7 +179,8 @@ const CompanyCalendarSettings = () => {
                 type="date" 
                 value={form.date} 
                 onChange={e => setForm({...form, date: e.target.value})} 
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                disabled={(!editingId && !permissions.canCreate) || (editingId && !permissions.canUpdate)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60" 
                 required 
               />
             </div>
@@ -190,7 +192,8 @@ const CompanyCalendarSettings = () => {
                   type="date" 
                   value={form.swapDate || ''} 
                   onChange={e => setForm({...form, swapDate: e.target.value})} 
-                  className="w-full bg-white border border-blue-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                  disabled={(!editingId && !permissions.canCreate) || (editingId && !permissions.canUpdate)}
+                  className="w-full bg-white border border-blue-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60" 
                   required 
                 />
                 <p className="text-[9px] text-blue-500 font-medium leading-normal">
@@ -206,14 +209,15 @@ const CompanyCalendarSettings = () => {
                 placeholder="Misal: Tukar Libur Waisak" 
                 value={form.description} 
                 onChange={e => setForm({...form, description: e.target.value})} 
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                disabled={(!editingId && !permissions.canCreate) || (editingId && !permissions.canUpdate)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60" 
                 required 
               />
             </div>
             <button 
               type="submit"
-              disabled={upsertMutation.isPending} 
-              className={`w-full ${editingId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-emerald-600 hover:bg-emerald-700'} disabled:opacity-50 text-white rounded-xl py-2.5 text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2`}
+              disabled={upsertMutation.isPending || (!editingId && !permissions.canCreate) || (editingId && !permissions.canUpdate)} 
+              className={`w-full ${editingId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-emerald-600 hover:bg-emerald-700'} disabled:opacity-50 text-white rounded-xl py-2.5 text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer`}
             >
               {upsertMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} {editingId ? 'Update' : 'Simpan'}
             </button>
@@ -222,15 +226,15 @@ const CompanyCalendarSettings = () => {
                 <button 
                   type="button"
                   onClick={handleDeleteFromForm}
-                  disabled={deleteMutation.isPending}
-                  className="flex-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl py-2 text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  disabled={deleteMutation.isPending || !permissions.canDelete}
+                  className="flex-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl py-2 text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
                 >
                   {deleteMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />} Hapus
                 </button>
                 <button 
                   type="button"
                   onClick={handleCancelEdit}
-                  className="flex-1 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-xl py-2 text-[10px] font-bold uppercase tracking-wider transition-all"
+                  className="flex-1 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-xl py-2 text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer"
                 >
                   Batal
                 </button>
@@ -360,19 +364,25 @@ const CompanyCalendarSettings = () => {
                         type="button"
                         onClick={() => {
                           if (exception) {
-                            handleEdit(exception);
+                            if (permissions.canUpdate) handleEdit(exception);
                           } else {
-                            setEditingId(null);
-                            setForm({
-                              date: dateStr,
-                              swapDate: '',
-                              type: 'HOLIDAY',
-                              description: ''
-                            });
+                            if (permissions.canCreate) {
+                              setEditingId(null);
+                              setForm({
+                                date: dateStr,
+                                swapDate: '',
+                                type: 'HOLIDAY',
+                                description: ''
+                              });
+                            }
                           }
                         }}
                         title={titleText}
-                        className={`aspect-square flex flex-col items-center justify-between p-2 border rounded-2xl transition-all text-xs font-semibold relative focus:outline-none ${bgClass}`}
+                        className={`aspect-square flex flex-col items-center justify-between p-2 border rounded-2xl transition-all text-xs font-semibold relative focus:outline-none ${bgClass} ${
+                          (!exception && !permissions.canCreate) || (exception && !permissions.canUpdate)
+                            ? 'cursor-default'
+                            : 'cursor-pointer'
+                        }`}
                       >
                         <span className={`self-start text-[10px] leading-none px-1.5 py-0.5 rounded-md ${isWeekend && !exception ? 'text-red-500' : ''} ${isToday ? 'bg-blue-600 text-white font-bold' : ''}`}>{day.getDate()}</span>
                         {label ? (
@@ -418,23 +428,27 @@ const CompanyCalendarSettings = () => {
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <button 
-                        type="button"
-                        onClick={() => handleEdit(h)} 
-                        className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-slate-100 hover:border-blue-100"
-                        title="Edit Pengecualian"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button 
-                        type="button"
-                        onClick={() => { if(confirm('Hapus pengecualian kalender ini?')) deleteMutation.mutate(h.id) }} 
-                        disabled={deleteMutation.isPending} 
-                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all border border-slate-100 hover:border-rose-100 disabled:opacity-50"
-                        title="Hapus Pengecualian"
-                      >
-                        {deleteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                      </button>
+                      {permissions.canUpdate && (
+                        <button 
+                          type="button"
+                          onClick={() => handleEdit(h)} 
+                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-slate-100 hover:border-blue-100 cursor-pointer"
+                          title="Edit Pengecualian"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                      )}
+                      {permissions.canDelete && (
+                        <button 
+                          type="button"
+                          onClick={() => { if(confirm('Hapus pengecualian kalender ini?')) deleteMutation.mutate(h.id) }} 
+                          disabled={deleteMutation.isPending} 
+                          className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all border border-slate-100 hover:border-rose-100 disabled:opacity-50 cursor-pointer"
+                          title="Hapus Pengecualian"
+                        >
+                          {deleteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}

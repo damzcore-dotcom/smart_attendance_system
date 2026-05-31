@@ -31,7 +31,16 @@ const AdminPermissions = () => {
         'dashboard', 'announcements', 'employees', 'shift-roster', 'leave-requests', 
         'attendance', 'overtime-spl', 'daily-workers', 'manual-correction', 'corrections', 
         'payroll', 'payroll-settings', 'face-check', 'devices', 'fingerprint', 
-        'users', 'backup', 'settings'
+        'users', 'backup', 'settings',
+        'settings-company-profile',
+        'settings-geofencing',
+        'settings-shift-rules',
+        'settings-calendar',
+        'settings-biometrics',
+        'settings-cctv',
+        'settings-slip',
+        'settings-report',
+        'settings-id-card'
       ];
       
       // Initialize with false
@@ -150,12 +159,22 @@ const AdminPermissions = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {Object.keys(permissions).map((menuKey) => (
-                      <tr key={menuKey} className="hover:bg-slate-50/50 transition-colors group">
-                        <td className="px-6 py-4 font-bold text-slate-700 capitalize tracking-tight group-hover:text-blue-600 transition-colors text-sm">
-                          {menuKey.replace('-', ' ')}
-                        </td>
-                        {['canRead', 'canCreate', 'canUpdate', 'canDelete'].map(action => (
+                    {Object.keys(permissions).map((menuKey) => {
+                      const isSubSettings = menuKey.startsWith('settings-');
+                      const displayLabel = isSubSettings 
+                        ? `↳ ${menuKey.replace('settings-', '').replace('-', ' ')}`
+                        : menuKey.replace('-', ' ');
+
+                      return (
+                        <tr key={menuKey} className="hover:bg-slate-50/50 transition-colors group">
+                          <td className={`px-6 py-4 tracking-tight group-hover:text-blue-600 transition-colors ${
+                            isSubSettings 
+                              ? 'pl-12 text-slate-400 font-semibold italic text-xs' 
+                              : 'font-bold text-slate-700 capitalize text-sm'
+                          }`}>
+                            {displayLabel}
+                          </td>
+                          {['canRead', 'canCreate', 'canUpdate', 'canDelete'].map(action => (
                           <td key={action} className="px-6 py-4 text-center">
                             <button
                               onClick={() => handleToggle(menuKey, action)}
@@ -170,7 +189,8 @@ const AdminPermissions = () => {
                           </td>
                         ))}
                       </tr>
-                    ))}
+                    );
+                    })}
                   </tbody>
                 </table>
               </div>

@@ -445,9 +445,9 @@ const databaseTools = {
   getEmployeeSalaryAndPayroll: async ({ employeeName, period }, userContext) => {
     try {
       // STRICT RBAC Verification
-      const allowedRoles = ['SUPER_ADMIN', 'DIREKTUR', 'MANAGER'];
+      const allowedRoles = ['SUPER_ADMIN', 'DIREKTUR', 'MANAGER', 'ACCOUNTING'];
       if (!userContext || !allowedRoles.includes(userContext.role)) {
-        return { error: 'Akses ditolak. Informasi gaji dan payroll bersifat sangat rahasia. Hanya untuk level SUPER_ADMIN, DIREKTUR, dan MANAGER.' };
+        return { error: 'Akses ditolak. Informasi gaji dan payroll bersifat sangat rahasia. Hanya untuk level SUPER_ADMIN, DIREKTUR, MANAGER, dan ACCOUNTING.' };
       }
 
       // 1. If period is requested (Bulk Payroll Summary)
@@ -632,9 +632,9 @@ const databaseTools = {
   getSystemAuditLogs: async ({ username, action }, userContext) => {
     try {
       // STRICT RBAC Verification
-      const allowedRoles = ['SUPER_ADMIN', 'ADMIN'];
+      const allowedRoles = ['SUPER_ADMIN', 'ADMIN', 'DIREKTUR', 'MANAGER', 'ACCOUNTING'];
       if (!userContext || !allowedRoles.includes(userContext.role)) {
-        return { error: 'Akses ditolak. Hanya untuk level SUPER_ADMIN dan ADMIN.' };
+        return { error: 'Akses ditolak. Hanya untuk level SUPER_ADMIN, ADMIN, DIREKTUR, MANAGER, dan ACCOUNTING.' };
       }
 
       const filters = {};
@@ -752,10 +752,9 @@ const runAiChat = async (message, chatHistory, userContext) => {
       User yang berbicara dengan Anda adalah personil berwenang dengan detail berikut:
       - Nama: ${userContext.username}
       - Role: ${userContext.role}
-      
       Wewenang & Aturan Keamanan Data (RBAC):
       - Anda memiliki akses ke data absensi, data cuti/izin, shift roster, dan status mesin fingerprint.
-      - **PENTING (KEBIJAKAN KELAS GAJI / PAYROLL)**: Data gaji pokok, payroll bulanan, dan slip gaji HANYA boleh diakses oleh level role: SUPER_ADMIN, DIREKTUR, dan MANAGER. Jika user dengan role lain (seperti ADMIN) menanyakan tentang nominal gaji/payroll, jelaskan secara sopan bahwa mereka tidak memiliki wewenang akses untuk data sensitif tersebut.
+      - **PENTING (KEBIJAKAN KELAS GAJI / PAYROLL)**: Data gaji pokok, payroll bulanan, dan slip gaji HANYA boleh diakses oleh level role: SUPER_ADMIN, DIREKTUR, MANAGER, dan ACCOUNTING. Jika user dengan role ADMIN (Admin HRD) menanyakan tentang nominal gaji/payroll atau keuangan, jelaskan secara sopan bahwa wewenang mereka dibatasi hanya untuk mengelola data karyawan saja (profil, kehadiran, shift, izin, perangkat) dan tidak termasuk gaji.
       
       Aturan Perusahaan (PENTING untuk analisis keterlambatan):
       - Batas toleransi keterlambatan (keringan) adalah maksimal **8 menit** dari jadwal jam masuk shift.
@@ -768,9 +767,16 @@ const runAiChat = async (message, chatHistory, userContext) => {
         * Terlambat 65 menit $\rightarrow$ Denda dihitung **90 menit** (tiga blok).
       
       Panduan Jawaban Anda:
+      ${(userContext.role === 'DIREKTUR' || userContext.role === 'MANAGER') ? `
+      - LANGUAGE REQUIREMENT: Since the user is a Manager or Director, you MUST write your entire response in professional, natural English.
+      - Answer in a friendly, polite, professional, and concise manner.
+      - Present all attendance, stats, and payroll data in clean markdown tables or bullet points.
+      - Refer to today's date (${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}) as a reference if the user asks relative questions like "today", "yesterday", or "last week".
+      ` : `
       - Berikan jawaban yang ramah, sopan, profesional, dan ringkas dalam Bahasa Indonesia yang alami.
       - Jika ditanya rekap absensi atau payroll, presentasikan dalam bentuk tabel markdown atau poin-poin yang mudah dibaca.
-      - Sebutkan tanggal saat ini (${new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}) sebagai acuan jika user menanyakan informasi waktu relatif seperti "hari ini", "kemarin", atau "minggu lalu".`
+      - Sebutkan tanggal saat ini (${new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}) sebagai acuan jika user menanyakan informasi waktu relatif seperti "hari ini", "kemarin", atau "minggu lalu".
+      `}`
     });
 
     // Format chat history for Gemini API

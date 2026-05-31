@@ -1,9 +1,22 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MessageSquare, Send, X, Bot, Sparkles, Loader2, RefreshCw } from 'lucide-react';
-import api from '../../services/api';
+import { useQuery } from '@tanstack/react-query';
+import api, { authAPI } from '../../services/api';
 
 const AiAssistantChat = () => {
+  const enableAI = import.meta.env.VITE_ENABLE_AI !== 'false';
+  if (!enableAI) return null;
+
   const [isOpen, setIsOpen] = useState(false);
+  
+  const { data: userData } = useQuery({
+    queryKey: ['me'],
+    queryFn: () => authAPI.getMe().catch(() => null),
+  });
+
+  const user = userData?.data || authAPI.getStoredUser() || { role: 'EMPLOYEE' };
+  const isEnglish = user.role === 'DIREKTUR' || user.role === 'MANAGER';
+
   const [messages, setMessages] = useState([
     {
       role: 'model',
@@ -17,6 +30,19 @@ const AiAssistantChat = () => {
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
+
+  useEffect(() => {
+    if (messages.length === 1 && messages[0].role === 'model') {
+      setMessages([
+        {
+          role: 'model',
+          text: isEnglish 
+            ? 'Hello! I am the Smart Attendance Pro AI Assistant. How can I help you with employee data, attendance logs, daily workers (BHL), leaves, or other statistical analysis?'
+            : 'Halo! Saya adalah Asisten AI Smart Attendance Pro. Ada yang bisa saya bantu terkait data karyawan, absensi, BHL (Buruh Harian Lepas), cuti, atau info statistik lainnya?'
+        }
+      ]);
+    }
+  }, [isEnglish]);
 
   useEffect(() => {
     if (isOpen) {
@@ -49,7 +75,7 @@ const AiAssistantChat = () => {
       if (res.data && res.data.reply) {
         setMessages(prev => [...prev, { role: 'model', text: res.data.reply }]);
       } else {
-        throw new Error('Format respon tidak sesuai');
+        throw new Error(isEnglish ? 'Response format is invalid' : 'Format respon tidak sesuai');
       }
     } catch (err) {
       console.error('Chat error:', err);
@@ -57,7 +83,9 @@ const AiAssistantChat = () => {
         ...prev,
         { 
           role: 'model', 
-          text: `Maaf, saya gagal memproses pesan Anda. ${err.message || 'Koneksi API bermasalah.'}` 
+          text: isEnglish 
+            ? `Sorry, I failed to process your message. ${err.message || 'API connection issue.'}`
+            : `Maaf, saya gagal memproses pesan Anda. ${err.message || 'Koneksi API bermasalah.'}` 
         }
       ]);
     } finally {
@@ -69,7 +97,9 @@ const AiAssistantChat = () => {
     setMessages([
       {
         role: 'model',
-        text: 'Halo! Sesi obrolan telah di-reset. Ada yang bisa saya bantu terkait data karyawan, absensi, atau BHL hari ini?'
+        text: isEnglish
+          ? 'Hello! The chat session has been reset. How can I help you with employee data, attendance logs, or daily workers today?'
+          : 'Halo! Sesi obrolan telah di-reset. Ada yang bisa saya bantu terkait data karyawan, absensi, atau BHL hari ini?'
       }
     ]);
   };
@@ -174,7 +204,7 @@ const AiAssistantChat = () => {
             <div className="flex items-center gap-2">
               <button 
                 onClick={handleClearChat}
-                title="Reset Obrolan"
+                title={isEnglish ? "Reset Chat" : "Reset Obrolan"}
                 className="rounded-lg p-1.5 text-indigo-200 transition-colors hover:bg-white/10 hover:text-white cursor-pointer"
               >
                 <RefreshCw className="h-4 w-4" />
@@ -226,7 +256,9 @@ const AiAssistantChat = () => {
                 <div className="rounded-2xl rounded-tl-none bg-gray-100 px-4 py-3 dark:bg-gray-800">
                   <div className="flex items-center gap-1">
                     <Loader2 className="h-4 w-4 animate-spin text-indigo-600 dark:text-indigo-400" />
-                    <span className="text-xs text-gray-500">Membaca database...</span>
+                    <span className="text-xs text-gray-500">
+                      {isEnglish ? 'Querying database...' : 'Membaca database...'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -244,7 +276,7 @@ const AiAssistantChat = () => {
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Tanyakan absensi hari ini, data BHL..."
+              placeholder={isEnglish ? "Ask about today's attendance, daily worker logs..." : "Tanyakan absensi hari ini, data BHL..."}
               disabled={isLoading}
               className="flex-1 rounded-xl border border-gray-300 bg-white px-3.5 py-2 text-sm outline-none transition-shadow focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 dark:border-gray-700 dark:bg-gray-800"
             />

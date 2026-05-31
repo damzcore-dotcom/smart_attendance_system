@@ -23,7 +23,9 @@ import {
   Clock,
   Video,
   AlertTriangle,
-  Camera
+  Camera,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -38,6 +40,18 @@ const AdminLayout = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Collapsible menus state
+  const [expandedMenus, setExpandedMenus] = useState({
+    settings: true // default expanded
+  });
+
+  const toggleMenu = (menuKey) => {
+    setExpandedMenus(prev => ({
+      ...prev,
+      [menuKey]: !prev[menuKey]
+    }));
+  };
 
   const menuGroups = [
     {
@@ -93,7 +107,17 @@ const AdminLayout = () => {
       items: [
         { name: 'Hak Akses User', path: '/admin/users', icon: UserCircle, key: 'users' },
         { name: 'Backup Data', path: '/admin/backup', icon: Database, key: 'backup' },
-        { name: 'Pengaturan', path: '/admin/settings', icon: Settings, key: 'settings' }
+        { 
+          name: 'Pengaturan', 
+          path: '/admin/settings', 
+          icon: Settings, 
+          key: 'settings',
+          subItems: [
+            { name: 'Pengaturan Umum', path: '/admin/settings', tab: 'General' },
+            { name: 'Hak Akses Admin', path: '/admin/settings', tab: 'Permissions', superAdminOnly: true },
+            { name: 'Lisensi Sistem', path: '/admin/settings', tab: 'License', superAdminOnly: true }
+          ]
+        }
       ]
     }
   ];
@@ -128,6 +152,14 @@ const AdminLayout = () => {
       items: group.items.filter(item => {
         if (user.role === 'SUPER_ADMIN' || user.permissions === 'ALL') return true;
         if (!user.permissions || !Array.isArray(user.permissions)) return false;
+        
+        // Settings menu visibility check
+        if (item.key === 'settings') {
+          const hasMaster = user.permissions.some(p => p.menuKey === 'settings' && p.canRead);
+          const hasSub = user.permissions.some(p => p.menuKey.startsWith('settings-') && p.canRead);
+          return hasMaster || hasSub;
+        }
+
         const perm = user.permissions.find(p => p.menuKey === item.key);
         return perm?.canRead;
       })
@@ -179,6 +211,71 @@ const AdminLayout = () => {
               )}
               {group.items.map((item) => {
                 const Icon = item.icon;
+                const hasSubItems = item.subItems && item.subItems.length > 0;
+                
+                // Filter subItems based on role
+                const visibleSubItems = hasSubItems 
+                  ? item.subItems.filter(sub => !sub.superAdminOnly || user.role === 'SUPER_ADMIN')
+                  : [];
+                
+                const isExpanded = expandedMenus[item.key];
+                
+                if (isSidebarOpen && visibleSubItems.length > 0) {
+                  const isAnySubActive = visibleSubItems.some(sub => 
+                    location.pathname === sub.path && 
+                    (location.state?.tab === sub.tab || (!location.state?.tab && sub.tab === 'General'))
+                  );
+                  
+                  return (
+                    <div key={item.name} className="space-y-1">
+                      {/* Parent Menu Header */}
+                      <button
+                        onClick={() => toggleMenu(item.key)}
+                        className={`w-[calc(100%-12px)] flex items-center gap-3 ml-3 px-3 py-2 rounded-xl transition-all duration-200 group relative text-left cursor-pointer ${
+                          isAnySubActive 
+                            ? 'bg-blue-50/40 text-blue-700 font-semibold' 
+                            : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                        }`}
+                      >
+                        <Icon className={`w-[16px] h-[16px] shrink-0 transition-all duration-200 ${isAnySubActive ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                        <span className="text-[12px] tracking-wide flex-1">{item.name}</span>
+                        {isExpanded ? (
+                          <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                        ) : (
+                          <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                        )}
+                      </button>
+                      
+                      {/* Expanded Sub-items */}
+                      {isExpanded && (
+                        <div className="space-y-1 pl-7 animate-in slide-in-from-top-1 duration-200">
+                          {visibleSubItems.map(sub => {
+                            const isActive = location.pathname === sub.path && 
+                              (location.state?.tab === sub.tab || (!location.state?.tab && sub.tab === 'General'));
+                            
+                            return (
+                              <Link
+                                key={sub.name}
+                                to={sub.path}
+                                state={{ tab: sub.tab }}
+                                className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all duration-200 border border-transparent ${
+                                  isActive
+                                    ? 'bg-blue-50/70 text-blue-700 border-blue-100/30 font-bold'
+                                    : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50/50'
+                                }`}
+                              >
+                                <span className={`w-1.5 h-1.5 rounded-full transition-all ${isActive ? 'bg-blue-500 scale-110 shadow-[0_0_4px_rgba(59,130,246,0.5)]' : 'bg-slate-300'}`} />
+                                {sub.name}
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                // Normal Flat Link
                 const isActive = location.pathname === item.path;
                 return (
                   <Link
@@ -194,7 +291,7 @@ const AdminLayout = () => {
                     {isActive && (
                        <div className="absolute -left-3 top-2 bottom-2 w-1 bg-blue-600 rounded-r-full shadow-sm" />
                     )}
-                    <Icon className={`w-[16px] h-[16px] shrink-0 transition-all duration-200 ${isActive ? 'text-blue-600' : 'group-hover:text-slate-700'}`} />
+                    <Icon className={`w-[16px] h-[16px] shrink-0 transition-all duration-200 ${isActive ? 'text-blue-600' : 'text-slate-400 group-hover:text-blue-600'}`} />
                     {isSidebarOpen && <span className="text-[12px] tracking-wide">{item.name}</span>}
                   </Link>
                 );

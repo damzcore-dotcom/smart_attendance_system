@@ -11,7 +11,7 @@ import * as XLSX from 'xlsx';
 const STATUS_MAP = {
   'PRESENT': 'Present',
   'LATE': 'Late',
-  'MANGKIR': 'Mangkir',
+  'MANGKIR': 'Unexcused',
   'HOLIDAY': 'Holiday',
   'CUTI': 'Leave',
   'SAKIT': 'Medical',
@@ -23,7 +23,7 @@ const STATUS_CONFIG = {
   'PRESENT': { label: 'Present', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500', icon: CheckCircle2 },
   'LATE': { label: 'Late', color: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500', icon: Clock },
   'ABSENT': { label: 'Absent', color: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-500', icon: XCircle },
-  'MANGKIR': { label: 'Mangkir', color: 'bg-orange-50 text-orange-700 border-orange-200', dot: 'bg-orange-500', icon: AlertCircle },
+  'MANGKIR': { label: 'Unexcused', color: 'bg-orange-50 text-orange-700 border-orange-200', dot: 'bg-orange-500', icon: AlertCircle },
   'SAKIT': { label: 'Medical', color: 'bg-blue-50 text-blue-700 border-blue-200', dot: 'bg-blue-500', icon: AlertCircle },
   'IZIN': { label: 'Permit', color: 'bg-sky-50 text-sky-700 border-sky-200', dot: 'bg-sky-500', icon: AlertCircle },
   'CUTI': { label: 'Leave', color: 'bg-purple-50 text-purple-700 border-purple-200', dot: 'bg-purple-500', icon: AlertCircle },
@@ -113,7 +113,7 @@ const DirectorAttendance = () => {
     });
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Rekap Absensi');
+    XLSX.utils.book_append_sheet(wb, ws, 'Attendance Summary');
     XLSX.writeFile(wb, `Rekap_Absensi_Director_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
@@ -156,7 +156,7 @@ const DirectorAttendance = () => {
               { label: 'TOTAL DATA', sub: 'ALL RECORDS', value: total, icon: Filter, color: 'text-blue-600', bg: 'bg-blue-50', filter: '' },
               { label: 'PRESENT', sub: 'ON TIME', value: summary.hadir, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50', filter: 'PRESENT' },
               { label: 'LATE', sub: 'TIME VIOLATION', value: summary.telat, icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50', filter: 'LATE' },
-              { label: 'MANGKIR', sub: 'NO EXPLANATION', value: summary.mangkir, icon: AlertCircle, color: 'text-rose-600', bg: 'bg-rose-50', filter: 'MANGKIR' },
+              { label: 'UNEXCUSED', sub: 'NO EXPLANATION', value: summary.mangkir, icon: AlertCircle, color: 'text-rose-600', bg: 'bg-rose-50', filter: 'MANGKIR' },
               { label: 'HOLIDAY', sub: 'SUNDAY / HOLIDAY', value: summary.holiday || 0, icon: Calendar, color: 'text-indigo-600', bg: 'bg-indigo-50', filter: 'HOLIDAY' },
               { label: 'TOTAL LATE', sub: 'TIME ACCUMULATION', value: formatLateAccumulation(summary.totalLate), icon: Clock, color: 'text-rose-500', bg: 'bg-rose-50/50', filter: '' },
               { label: 'OTHERS', sub: 'LEAVE/MED/PERMIT', value: (summary.cuti || 0) + (summary.sakit || 0) + (summary.izin || 0), icon: XCircle, color: 'text-slate-600', bg: 'bg-slate-100', filter: 'OTHER' },
@@ -203,7 +203,7 @@ const DirectorAttendance = () => {
                     </div>
                     <div className="flex items-center gap-2 text-rose-600 font-bold text-xs mt-3 bg-rose-50 px-3 py-1.5 rounded-full w-fit">
                       <AlertCircle className="w-3.5 h-3.5" />
-                      INCLUDES MANGKIR PENALTY (+30 MIN/DAY)
+                      INCLUDES UNEXCUSED PENALTY (+30 MIN/DAY)
                     </div>
                   </div>
                 </div>

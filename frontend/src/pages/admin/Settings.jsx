@@ -35,7 +35,7 @@ import { Camera as CameraIcon } from 'lucide-react';
 const Settings = () => {
   const queryClient = useQueryClient();
   const location = useLocation();
-  const [activeTab, setActiveTab] = useState(location.state?.tab || 'Location');
+  const [activeTab, setActiveTab] = useState(location.state?.tab || 'General');
   const [formData, setFormData] = useState({});
   const [isLocationModalOpen, setLocationModalOpen] = useState(false);
   const [isShiftModalOpen, setShiftModalOpen] = useState(false);
@@ -194,6 +194,41 @@ const Settings = () => {
   };
 
   const user = authAPI.getStoredUser();
+
+  const hasTabPermission = (tabId) => {
+    if (user?.role === 'SUPER_ADMIN' || user?.permissions === 'ALL') {
+      return { canRead: true, canCreate: true, canUpdate: true, canDelete: true };
+    }
+    if (!user?.permissions || !Array.isArray(user.permissions)) {
+      return { canRead: false, canCreate: false, canUpdate: false, canDelete: false };
+    }
+
+    const mapping = {
+      'General': 'settings-company-profile',
+      'Location': 'settings-geofencing',
+      'Shifts': 'settings-shift-rules',
+      'Calendar': 'settings-calendar',
+      'Security': 'settings-biometrics',
+      'Cameras': 'settings-cctv',
+      'SlipBuilder': 'settings-slip',
+      'AttendanceBuilder': 'settings-report',
+      'IDCardBuilder': 'settings-id-card',
+      'Permissions': 'settings-permissions',
+      'License': 'settings-license'
+    };
+
+    const key = mapping[tabId];
+    if (!key) return { canRead: false, canCreate: false, canUpdate: false, canDelete: false };
+
+    const perm = user.permissions.find(p => p.menuKey === key);
+    return {
+      canRead: perm?.canRead || false,
+      canCreate: perm?.canCreate || false,
+      canUpdate: perm?.canUpdate || false,
+      canDelete: perm?.canDelete || false
+    };
+  };
+
   const tabs = [
     { id: 'General', icon: Building2, label: 'Company Profile' },
     { id: 'Location', icon: MapPin, label: 'Geofencing' },
@@ -210,6 +245,31 @@ const Settings = () => {
     tabs.push({ id: 'Permissions', icon: Shield, label: 'Hak Akses Admin' });
     tabs.push({ id: 'License', icon: ShieldCheck, label: 'System License' });
   }
+
+  // Filter tabs by canRead permission
+  const visibleTabs = tabs.filter(t => {
+    if (t.id === 'Permissions' || t.id === 'License') {
+      return user?.role === 'SUPER_ADMIN';
+    }
+    return hasTabPermission(t.id).canRead;
+  });
+
+  // Watch for state changes to change the tab
+  useEffect(() => {
+    if (location.state?.tab) {
+      setActiveTab(location.state.tab);
+    }
+  }, [location.state]);
+
+  // Enforce read permission on activeTab, fallback to first allowed tab
+  useEffect(() => {
+    if (visibleTabs.length > 0) {
+      const isAllowed = visibleTabs.some(t => t.id === activeTab);
+      if (!isAllowed) {
+        setActiveTab(visibleTabs[0].id);
+      }
+    }
+  }, [visibleTabs, activeTab]);
 
   if (settingsLoading) {
     return (
@@ -246,7 +306,7 @@ const Settings = () => {
 
         <button 
           onClick={handleSave}
-          disabled={saveMutation.isPending}
+          disabled={saveMutation.isPending || !hasTabPermission(activeTab).canUpdate}
           className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl text-sm font-bold uppercase tracking-wider flex items-center justify-center gap-3 disabled:opacity-50 transition-all shadow-sm active:scale-95 min-w-[200px]"
         >
           {saveMutation.isPending ? (
@@ -262,7 +322,7 @@ const Settings = () => {
         {/* Sidebar Navigation */}
         <aside className="w-full lg:w-72 shrink-0 lg:sticky lg:top-8">
           <div className="bg-white p-3 border border-slate-200 rounded-2xl shadow-sm space-y-1">
-            {tabs.map((tab) => {
+            {visibleTabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
               return (
@@ -312,7 +372,7 @@ const Settings = () => {
           )}
 
           {activeTab === 'Cameras' && (
-            <SettingsCameras />
+            <SettingsCameras permissions={hasTabPermission('Cameras')} />
           )}
 
           {activeTab === 'General' && (
@@ -434,12 +494,14 @@ const Settings = () => {
                       <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">Authorized Operational Boundaries</p>
                     </div>
                   </div>
-                  <button 
-                    onClick={handleOpenAddModal}
-                    className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-sm"
-                  >
-                    <Plus className="w-4 h-4" /> NEW LOCATION
-                  </button>
+                  {hasTabPermission('Location').canCreate && (
+                    <button 
+                      onClick={handleOpenAddModal}
+                      className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" /> NEW LOCATION
+                    </button>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 gap-5">
@@ -479,18 +541,24 @@ const Settings = () => {
                             >
                               <Globe className="w-3.5 h-3.5" /> TEST MAP
                             </button>
-                            <button 
-                              onClick={() => handleOpenEditModal(loc)}
-                              className="w-10 h-10 flex items-center justify-center bg-white hover:bg-slate-50 text-slate-400 hover:text-blue-600 rounded-lg transition-all border border-slate-200 hover:border-blue-200"
-                            >
-                              <Save className="w-4 h-4" />
-                            </button>
-                            <button 
-                              onClick={() => { if(confirm('Permanently terminate location node?')) deleteLocationMutation.mutate(loc.id) }}
-                              className="w-10 h-10 flex items-center justify-center bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-all border border-slate-200 hover:border-rose-200"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {hasTabPermission('Location').canUpdate && (
+                              <button 
+                                onClick={() => handleOpenEditModal(loc)}
+                                className="w-10 h-10 flex items-center justify-center bg-white hover:bg-slate-50 text-slate-400 hover:text-blue-600 rounded-lg transition-all border border-slate-200 hover:border-blue-200 cursor-pointer"
+                                title="Edit Location"
+                              >
+                                <Save className="w-4 h-4" />
+                              </button>
+                            )}
+                            {hasTabPermission('Location').canDelete && (
+                              <button 
+                                onClick={() => { if(confirm('Permanently terminate location node?')) deleteLocationMutation.mutate(loc.id) }}
+                                className="w-10 h-10 flex items-center justify-center bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-all border border-slate-200 hover:border-rose-200 cursor-pointer"
+                                title="Delete Location"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -531,7 +599,7 @@ const Settings = () => {
           {activeTab === 'Calendar' && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="bg-white p-8 md:p-10 border border-slate-200 shadow-sm rounded-3xl">
-                <CompanyCalendarSettings />
+                <CompanyCalendarSettings permissions={hasTabPermission('Calendar')} />
               </div>
             </div>
           )}
@@ -549,12 +617,14 @@ const Settings = () => {
                       <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">Operational Shift Configurations</p>
                     </div>
                   </div>
-                  <button 
-                    onClick={() => { setShiftForm({ name: '', startTime: '08:00', endTime: '17:00', breakStart: '12:00', breakEnd: '13:00', gracePeriod: 15, saturdayType: 'HALF_DAY', saturdayEndTime: '13:00' }); setShiftModalOpen(true); }}
-                    className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-sm"
-                  >
-                    <Plus className="w-4 h-4" /> NEW SHIFT
-                  </button>
+                  {hasTabPermission('Shifts').canCreate && (
+                    <button 
+                      onClick={() => { setShiftForm({ name: '', startTime: '08:00', endTime: '17:00', breakStart: '12:00', breakEnd: '13:00', gracePeriod: 15, saturdayType: 'HALF_DAY', saturdayEndTime: '13:00' }); setShiftModalOpen(true); }}
+                      className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" /> NEW SHIFT
+                    </button>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -571,19 +641,24 @@ const Settings = () => {
                             <Clock className="w-6 h-6" />
                           </div>
                           <div className="flex gap-2">
-                            <button 
-                              onClick={() => handleOpenEditShift(shift)}
-                              title="Edit Shift"
-                              className="w-9 h-9 flex items-center justify-center bg-white hover:bg-slate-50 text-slate-400 hover:text-blue-600 rounded-lg transition-all border border-slate-200 hover:border-blue-200"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button 
-                              onClick={() => { if(confirm('Permanently delete shift protocol?')) deleteShiftMutation.mutate(shift.id) }}
-                              className="w-9 h-9 flex items-center justify-center bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-all border border-slate-200 hover:border-rose-200"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {hasTabPermission('Shifts').canUpdate && (
+                              <button 
+                                onClick={() => handleOpenEditShift(shift)}
+                                title="Edit Shift"
+                                className="w-9 h-9 flex items-center justify-center bg-white hover:bg-slate-50 text-slate-400 hover:text-blue-600 rounded-lg transition-all border border-slate-200 hover:border-blue-200 cursor-pointer"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                            )}
+                            {hasTabPermission('Shifts').canDelete && (
+                              <button 
+                                onClick={() => { if(confirm('Permanently delete shift protocol?')) deleteShiftMutation.mutate(shift.id) }}
+                                className="w-9 h-9 flex items-center justify-center bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-all border border-slate-200 hover:border-rose-200 cursor-pointer"
+                                title="Delete Shift"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
                           </div>
                         </div>
                         <h4 className="text-base font-bold text-slate-800 tracking-tight group-hover:text-blue-600 transition-colors uppercase mb-4">{shift.name}</h4>

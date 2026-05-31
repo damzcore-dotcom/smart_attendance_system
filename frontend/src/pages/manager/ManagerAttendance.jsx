@@ -43,12 +43,23 @@ const formatTime = (timeStr) => {
   } catch (e) { return timeStr; }
 };
 
+const STATUS_MAP = {
+  'PRESENT': 'Present',
+  'LATE': 'Late',
+  'MANGKIR': 'Unexcused',
+  'HOLIDAY': 'Holiday',
+  'CUTI': 'Leave',
+  'SAKIT': 'Medical',
+  'IZIN': 'Permit',
+  'ABSENT': 'Absent'
+};
+
 const formatLateAccumulation = (minutes) => {
-  if (!minutes || minutes <= 0) return '0 menit';
+  if (!minutes || minutes <= 0) return '0 minutes';
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
-  if (hours > 0) return `${hours} jam ${mins > 0 ? `${mins} menit` : ''}`;
-  return `${mins} menit`;
+  if (hours > 0) return `${hours} hr ${mins > 0 ? `${mins} min` : ''}`;
+  return `${mins} minutes`;
 };
 
 const ManagerAttendance = () => {
@@ -97,21 +108,21 @@ const ManagerAttendance = () => {
     const rows = sortedRecords.map(r => {
       const penalty = ((r.status === 'MANGKIR' || r.status === 'MISSING') && (r.lateMinutes || 0) === 0) ? (summary.mangkirPenalty || 30) : 0;
       return {
-        'NIK': r.employeeCode,
-        'Nama': r.name,
-        'Departemen': r.dept,
-        'Bagian': r.section || '-',
-        'Jabatan': r.position || '-',
-        'Tanggal': new Date(r.date).toLocaleDateString('id-ID'),
+        'Employee ID': r.employeeCode,
+        'Name': r.name,
+        'Department': r.dept,
+        'Section': r.section || '-',
+        'Position': r.position || '-',
+        'Date': new Date(r.date).toLocaleDateString('id-ID'),
         'Check In': formatTime(r.checkIn),
         'Check Out': formatTime(r.checkOut),
-        'Status': getStatusLabel(r.status),
-        'Terlambat (menit)': (r.lateMinutes || 0) + penalty,
+        'Status': STATUS_MAP[r.status] || r.status,
+        'Lateness (minutes)': (r.lateMinutes || 0) + penalty,
       };
     });
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Rekap Absensi');
+    XLSX.utils.book_append_sheet(wb, ws, 'Attendance Summary');
     XLSX.writeFile(wb, `Rekap_Absensi_Manager_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
@@ -151,13 +162,13 @@ const ManagerAttendance = () => {
         <div className="space-y-6">
           <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
             {[
-              { label: 'TOTAL DATA', sub: 'SEMUA ABSEN', value: total, icon: Filter, color: 'text-blue-600', bg: 'bg-blue-50', filter: '' },
-              { label: 'HADIR', sub: 'TEPAT WAKTU', value: summary.hadir, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50', filter: 'PRESENT' },
-              { label: 'TERLAMBAT', sub: 'PELANGGARAN WAKTU', value: summary.telat, icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50', filter: 'LATE' },
-              { label: 'MANGKIR', sub: 'TIDAK ADA KETERANGAN', value: summary.mangkir, icon: AlertCircle, color: 'text-rose-600', bg: 'bg-rose-50', filter: 'MANGKIR' },
-              { label: 'LIBUR', sub: 'HARI MINGGU / LIBUR', value: summary.holiday || 0, icon: Calendar, color: 'text-indigo-600', bg: 'bg-indigo-50', filter: 'HOLIDAY' },
-              { label: 'TOTAL TERLAMBAT', sub: 'AKUMULASI WAKTU', value: formatLateAccumulation(summary.totalLate), icon: Clock, color: 'text-rose-500', bg: 'bg-rose-50/50', filter: '' },
-              { label: 'LAINNYA', sub: 'CUTI/SAKIT/IZIN', value: (summary.cuti || 0) + (summary.sakit || 0) + (summary.izin || 0), icon: XCircle, color: 'text-slate-600', bg: 'bg-slate-100', filter: 'OTHER' },
+              { label: 'TOTAL DATA', sub: 'ALL RECORDS', value: total, icon: Filter, color: 'text-blue-600', bg: 'bg-blue-50', filter: '' },
+              { label: 'PRESENT', sub: 'ON TIME', value: summary.hadir, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50', filter: 'PRESENT' },
+              { label: 'LATE', sub: 'TIME VIOLATION', value: summary.telat, icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50', filter: 'LATE' },
+              { label: 'UNEXCUSED', sub: 'NO EXPLANATION', value: summary.mangkir, icon: AlertCircle, color: 'text-rose-600', bg: 'bg-rose-50', filter: 'MANGKIR' },
+              { label: 'HOLIDAY', sub: 'SUNDAY / HOLIDAY', value: summary.holiday || 0, icon: Calendar, color: 'text-indigo-600', bg: 'bg-indigo-50', filter: 'HOLIDAY' },
+              { label: 'TOTAL LATE', sub: 'TIME ACCUMULATION', value: formatLateAccumulation(summary.totalLate), icon: Clock, color: 'text-rose-500', bg: 'bg-rose-50/50', filter: '' },
+              { label: 'OTHERS', sub: 'LEAVE/MED/PERMIT', value: (summary.cuti || 0) + (summary.sakit || 0) + (summary.izin || 0), icon: XCircle, color: 'text-slate-600', bg: 'bg-slate-100', filter: 'OTHER' },
             ].map((card, idx) => {
               const isActive = appliedFilters.status === card.filter && card.filter !== '';
               return (
@@ -173,7 +184,7 @@ const ManagerAttendance = () => {
                   </div>
                   <div>
                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1.5">{card.label}</p>
-                    <p className={`font-black text-slate-800 leading-none ${card.label === 'TOTAL TERLAMBAT' ? 'text-lg' : 'text-xl'}`}>{card.value}</p>
+                    <p className={`font-black text-slate-800 leading-none ${card.label === 'TOTAL LATE' ? 'text-lg' : 'text-xl'}`}>{card.value}</p>
                     <div className="mt-3 pt-3 border-t border-slate-50">
                       <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter truncate">{card.sub}</p>
                     </div>
@@ -193,7 +204,7 @@ const ManagerAttendance = () => {
                     <Clock className="w-10 h-10 text-rose-500 group-hover:scale-110 transition-transform" />
                   </div>
                   <div className="space-y-1">
-                    <p className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-1">AKUMULASI TERLAMBAT PERSONAL</p>
+                    <p className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-1">PERSONAL LATE ACCUMULATION</p>
                     <div className="flex items-baseline gap-2">
                       <h2 className="text-5xl font-black text-slate-800 tracking-tighter">
                         {formatLateAccumulation(summary.totalLate)}
@@ -201,7 +212,7 @@ const ManagerAttendance = () => {
                     </div>
                     <div className="flex items-center gap-2 text-rose-600 font-bold text-xs mt-3 bg-rose-50 px-3 py-1.5 rounded-full w-fit">
                       <AlertCircle className="w-3.5 h-3.5" />
-                      TERMASUK SANKSI MANGKIR (+{summary.mangkirPenalty || 30} MENIT/HARI)
+                      INCLUDES UNEXCUSED PENALTY (+{summary.mangkirPenalty || 30} MIN/DAY)
                     </div>
                   </div>
                 </div>
@@ -306,7 +317,7 @@ const ManagerAttendance = () => {
                 const avatarColor = AVATAR_COLORS[r.name.charCodeAt(0) % AVATAR_COLORS.length];
                 const Icon = STATUS_ICONS[r.status] || AlertCircle;
                 const statusColor = getStatusColor(r.status);
-                const statusLabel = getStatusLabel(r.status);
+                const statusLabel = STATUS_MAP[r.status] || r.status;
 
                 return (
                   <tr key={`${r.id}-${idx}`} className="group hover:bg-blue-50/40 transition-colors duration-200">
@@ -467,7 +478,7 @@ const FilterBar = ({ onApply, isLoading, currentSearch }) => {
             { label: 'DEPARTMENT', val: filterDept, setter: setFilterDept, opts: masterOptions.departments.map(d => ({ v: d.name, l: d.name })), onChg: () => { setFilterSection(''); setFilterPosition(''); } },
             { label: 'SECTION', val: filterSection, setter: setFilterSection, opts: (masterOptions.sections || []).map(s => ({ v: s, l: s })) },
             { label: 'RANK', val: filterPosition, setter: setFilterPosition, opts: (masterOptions.positions || []).map(p => ({ v: p, l: p })) },
-            { label: 'STATUS PROTOCOL', val: filterStatus, setter: setFilterStatus, opts: (masterOptions.statuses || []).map(s => ({ v: s, l: getStatusLabel(s) })) }
+            { label: 'STATUS PROTOCOL', val: filterStatus, setter: setFilterStatus, opts: (masterOptions.statuses || []).map(s => ({ v: s, l: STATUS_MAP[s] || s })) }
           ].map((field, idx) => (
             <div key={idx} className="space-y-2">
               <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">{field.label}</label>

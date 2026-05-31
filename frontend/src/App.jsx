@@ -114,9 +114,9 @@ function App() {
             <Route path="employees" element={<PermissionRoute menuKey="employees"><Employees /></PermissionRoute>} />
             <Route path="users" element={<PermissionRoute menuKey="users"><Users /></PermissionRoute>} />
             <Route path="attendance" element={<PermissionRoute menuKey="attendance"><Attendance /></PermissionRoute>} />
-            <Route path="overtime-spl" element={<PermissionRoute menuKey="attendance"><OvertimeSPL /></PermissionRoute>} />
-            <Route path="daily-workers" element={<PermissionRoute menuKey="attendance"><DailyWorkerAttendance /></PermissionRoute>} />
-            <Route path="manual-correction" element={<PermissionRoute menuKey="attendance"><ManualCorrectionHRD /></PermissionRoute>} />
+            <Route path="overtime-spl" element={<PermissionRoute menuKey="overtime-spl"><OvertimeSPL /></PermissionRoute>} />
+            <Route path="daily-workers" element={<PermissionRoute menuKey="daily-workers"><DailyWorkerAttendance /></PermissionRoute>} />
+            <Route path="manual-correction" element={<PermissionRoute menuKey="manual-correction"><ManualCorrectionHRD /></PermissionRoute>} />
             <Route path="payroll" element={<PermissionRoute menuKey="payroll"><Payroll /></PermissionRoute>} />
             <Route path="payroll-settings" element={<PermissionRoute menuKey="payroll-settings"><PayrollSettings /></PermissionRoute>} />
             <Route path="leave-requests" element={<PermissionRoute menuKey="leave-requests"><AdminLeaveRequests /></PermissionRoute>} />
@@ -124,9 +124,9 @@ function App() {
             <Route path="announcements" element={<PermissionRoute menuKey="announcements"><Announcements /></PermissionRoute>} />
             <Route path="face-check" element={<PermissionRoute menuKey="face-check"><AdminFaceCheck /></PermissionRoute>} />
             <Route path="settings" element={<PermissionRoute menuKey="settings"><Settings /></PermissionRoute>} />
-            <Route path="shift-roster" element={<PermissionRoute menuKey="settings"><ShiftRoster /></PermissionRoute>} />
-            <Route path="devices" element={<PermissionRoute menuKey="settings"><DeviceSettings /></PermissionRoute>} />
-            <Route path="fingerprint" element={<PermissionRoute menuKey="settings"><FingerprintManagement /></PermissionRoute>} />
+            <Route path="shift-roster" element={<PermissionRoute menuKey="shift-roster"><ShiftRoster /></PermissionRoute>} />
+            <Route path="devices" element={<PermissionRoute menuKey="devices"><DeviceSettings /></PermissionRoute>} />
+            <Route path="fingerprint" element={<PermissionRoute menuKey="fingerprint"><FingerprintManagement /></PermissionRoute>} />
             <Route path="corrections" element={<PermissionRoute menuKey="corrections"><AdminCorrections /></PermissionRoute>} />
             <Route path="audit-log" element={<PermissionRoute menuKey="audit-log"><AuditLog /></PermissionRoute>} />
             <Route path="face-enrollment" element={<PermissionRoute menuKey="face-check"><FaceEnrollment /></PermissionRoute>} />

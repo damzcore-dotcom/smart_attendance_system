@@ -14,6 +14,15 @@ const STATUS_CONFIG = {
   REJECTED: { label: 'Rejected', color: 'bg-rose-50 text-rose-700 border-rose-200',       icon: XCircle },
 };
 
+const LEAVE_TYPE_MAP = {
+  'Cuti': 'Leave',
+  'Sakit': 'Sick Leave',
+  'Izin': 'Permit',
+  'CUTI': 'Leave',
+  'SAKIT': 'Sick Leave',
+  'IZIN': 'Permit',
+};
+
 const DirectorLeave = () => {
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
@@ -49,14 +58,14 @@ const DirectorLeave = () => {
 
   const handleExport = () => {
     const rows = records.map(r => ({
-      'NIK': r.employeeCode,
-      'Nama': r.name,
-      'Departemen': r.department,
-      'Jenis Cuti': r.type,
-      'Mulai': new Date(r.startDate).toLocaleDateString('id-ID'),
-      'Selesai': new Date(r.endDate).toLocaleDateString('id-ID'),
-      'Durasi': r.duration + ' hari',
-      'Alasan': r.reason,
+      'Employee ID': r.employeeCode,
+      'Name': r.name,
+      'Department': r.department,
+      'Leave Type': LEAVE_TYPE_MAP[r.type] || r.type,
+      'Start Date': new Date(r.startDate).toLocaleDateString('id-ID'),
+      'End Date': new Date(r.endDate).toLocaleDateString('id-ID'),
+      'Duration': r.duration + ' days',
+      'Reason': r.reason,
       'Status': STATUS_CONFIG[r.status]?.label || r.status
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -212,7 +221,7 @@ const DirectorLeave = () => {
                     </td>
                     <td className="px-4 py-4">
                        <span className="px-3 py-1 rounded-lg bg-slate-50 text-slate-600 text-xs font-semibold border border-slate-200">
-                        {r.type}
+                        {LEAVE_TYPE_MAP[r.type] || r.type}
                       </span>
                     </td>
                     <td className="px-4 py-4">

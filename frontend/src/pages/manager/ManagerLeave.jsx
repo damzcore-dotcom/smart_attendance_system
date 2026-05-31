@@ -17,6 +17,15 @@ import {
 } from 'lucide-react';
 import { managerAPI } from '../../services/api';
 
+const LEAVE_TYPE_MAP = {
+  'Cuti': 'Leave',
+  'Sakit': 'Sick Leave',
+  'Izin': 'Permit',
+  'CUTI': 'Leave',
+  'SAKIT': 'Sick Leave',
+  'IZIN': 'Permit',
+};
+
 const ManagerLeave = () => {
   const queryClient = useQueryClient();
   const [selectedRequest, setSelectedRequest] = useState(null);
@@ -130,7 +139,7 @@ const ManagerLeave = () => {
                       <div className="flex items-center gap-3 mb-3">
                          <div className="px-3 py-1 rounded-lg bg-blue-50 border border-blue-100 text-blue-600 text-[10px] font-semibold flex items-center gap-1.5">
                            <FileText className="w-3 h-3" />
-                           {request.type}
+                           {LEAVE_TYPE_MAP[request.type] || request.type}
                          </div>
                       </div>
                       <p className="text-sm text-slate-500 italic leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-100 group-hover:text-slate-600 transition-colors">
@@ -220,7 +229,7 @@ const ManagerLeave = () => {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-slate-700 truncate group-hover:text-blue-600 transition-colors">{history.name}</p>
                     <p className="text-[10px] text-slate-400 font-medium mt-0.5">
-                      {history.type} • {new Date(history.startDate).toLocaleDateString('id-ID')}
+                      {LEAVE_TYPE_MAP[history.type] || history.type} • {new Date(history.startDate).toLocaleDateString('id-ID')}
                     </p>
                   </div>
                   <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-lg border ${history.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>

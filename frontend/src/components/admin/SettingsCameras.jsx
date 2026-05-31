@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Camera, Plus, Trash2, Edit, Wifi, WifiOff, Loader2, XCircle } from 'lucide-react';
 import api from '../../services/api';
 
-const SettingsCameras = () => {
+const SettingsCameras = ({ permissions = { canCreate: true, canUpdate: true, canDelete: true } }) => {
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -77,12 +77,14 @@ const SettingsCameras = () => {
               <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">CCTV Face Recognition Config</p>
             </div>
           </div>
-          <button 
-            onClick={() => openModal()}
-            className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-sm"
-          >
-            <Plus className="w-4 h-4" /> NEW CAMERA
-          </button>
+          {permissions.canCreate && (
+            <button 
+              onClick={() => openModal()}
+              className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
+            >
+              <Plus className="w-4 h-4" /> NEW CAMERA
+            </button>
+          )}
         </div>
 
         {isLoading ? (
@@ -116,18 +118,24 @@ const SettingsCameras = () => {
                   </div>
                   
                   <div className="flex items-center gap-2">
-                    <button 
-                      onClick={() => openModal(cam)}
-                      className="w-10 h-10 flex items-center justify-center bg-white hover:bg-slate-50 text-slate-400 hover:text-blue-600 rounded-lg transition-all border border-slate-200 hover:border-blue-200"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={() => handleDelete(cam.id)}
-                      className="w-10 h-10 flex items-center justify-center bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-all border border-slate-200 hover:border-rose-200"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {permissions.canUpdate && (
+                      <button 
+                        onClick={() => openModal(cam)}
+                        className="w-10 h-10 flex items-center justify-center bg-white hover:bg-slate-50 text-slate-400 hover:text-blue-600 rounded-lg transition-all border border-slate-200 hover:border-blue-200 cursor-pointer"
+                        title="Edit Camera"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                    )}
+                    {permissions.canDelete && (
+                      <button 
+                        onClick={() => handleDelete(cam.id)}
+                        className="w-10 h-10 flex items-center justify-center bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-all border border-slate-200 hover:border-rose-200 cursor-pointer"
+                        title="Delete Camera"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
