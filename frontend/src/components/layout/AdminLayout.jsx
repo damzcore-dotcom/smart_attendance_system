@@ -237,7 +237,7 @@ const AdminLayout = () => {
                             : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
                         }`}
                       >
-                        <Icon className={`w-[16px] h-[16px] shrink-0 transition-all duration-200 ${isAnySubActive ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                        <Icon className={`w-5 h-5 shrink-0 transition-all duration-200 ${isAnySubActive ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-600'}`} />
                         <span className="text-[12px] tracking-wide flex-1">{item.name}</span>
                         {isExpanded ? (
                           <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
@@ -291,7 +291,7 @@ const AdminLayout = () => {
                     {isActive && (
                        <div className="absolute -left-3 top-2 bottom-2 w-1 bg-blue-600 rounded-r-full shadow-sm" />
                     )}
-                    <Icon className={`w-[16px] h-[16px] shrink-0 transition-all duration-200 ${isActive ? 'text-blue-600' : 'text-slate-400 group-hover:text-blue-600'}`} />
+                    <Icon className={`w-5 h-5 shrink-0 transition-all duration-200 ${isActive ? 'text-blue-600' : 'text-slate-400 group-hover:text-blue-600'}`} />
                     {isSidebarOpen && <span className="text-[12px] tracking-wide">{item.name}</span>}
                   </Link>
                 );
