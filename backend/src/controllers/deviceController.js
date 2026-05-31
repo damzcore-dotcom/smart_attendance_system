@@ -13,7 +13,9 @@ const CACHE_TIMEOUT = 15 * 60 * 1000; // 15 minutes
  */
 const getDevices = async (req, res) => {
   try {
-    const devices = await prisma.device.findMany();
+    const devices = await prisma.device.findMany({
+      orderBy: { id: 'asc' }
+    });
     const locations = await prisma.location.findMany();
     
     // Manually merge locations to avoid schema relation errors
