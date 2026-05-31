@@ -231,14 +231,14 @@ const AdminLayout = () => {
                       {/* Parent Menu Header */}
                       <button
                         onClick={() => toggleMenu(item.key)}
-                        className={`w-[calc(100%-12px)] flex items-center gap-3 ml-3 px-3 py-2 rounded-xl transition-all duration-200 group relative text-left cursor-pointer ${
+                        className={`w-[calc(100%-12px)] flex items-center gap-3 ml-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative text-left cursor-pointer ${
                           isAnySubActive 
                             ? 'bg-blue-50/40 text-blue-700 font-semibold' 
                             : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
                         }`}
                       >
                         <Icon className={`w-5 h-5 shrink-0 transition-all duration-200 ${isAnySubActive ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-600'}`} />
-                        <span className="text-[12px] tracking-wide flex-1">{item.name}</span>
+                        <span className="text-sm tracking-wide flex-1">{item.name}</span>
                         {isExpanded ? (
                           <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
                         ) : (
@@ -281,7 +281,7 @@ const AdminLayout = () => {
                   <Link
                     key={item.name}
                     to={item.path}
-                    className={`flex items-center gap-3 ml-3 px-3 py-2 rounded-xl transition-all duration-200 group relative ${
+                    className={`flex items-center gap-3 ml-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative ${
                       isActive 
                         ? 'bg-blue-50 text-blue-700 font-semibold shadow-sm border border-blue-100/50' 
                         : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
@@ -292,7 +292,7 @@ const AdminLayout = () => {
                        <div className="absolute -left-3 top-2 bottom-2 w-1 bg-blue-600 rounded-r-full shadow-sm" />
                     )}
                     <Icon className={`w-5 h-5 shrink-0 transition-all duration-200 ${isActive ? 'text-blue-600' : 'text-slate-400 group-hover:text-blue-600'}`} />
-                    {isSidebarOpen && <span className="text-[12px] tracking-wide">{item.name}</span>}
+                    {isSidebarOpen && <span className="text-sm tracking-wide">{item.name}</span>}
                   </Link>
                 );
               })}
