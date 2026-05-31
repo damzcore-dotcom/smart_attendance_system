@@ -91,8 +91,8 @@ const AdminLayout = () => {
       items: [
         { name: 'Log Deteksi Wajah', path: '/admin/face-check', icon: ScanFace, key: 'face-check' },
         { name: 'Pendaftaran CCTV', path: '/admin/face-enrollment', icon: Camera, key: 'face-check' },
-        { name: 'Kamera Langsung', path: '/admin/cameras', icon: Video, key: 'settings' },
-        { name: 'Alert Wajah Asing', path: '/admin/unknown-alerts', icon: AlertTriangle, key: 'settings' }
+        { name: 'Kamera Langsung', path: '/admin/cameras', icon: Video, key: 'face-check' },
+        { name: 'Alert Wajah Asing', path: '/admin/unknown-alerts', icon: AlertTriangle, key: 'face-check' }
       ]
     },
     {

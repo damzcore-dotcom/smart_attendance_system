@@ -130,8 +130,8 @@ function App() {
             <Route path="corrections" element={<PermissionRoute menuKey="corrections"><AdminCorrections /></PermissionRoute>} />
             <Route path="audit-log" element={<PermissionRoute menuKey="audit-log"><AuditLog /></PermissionRoute>} />
             <Route path="face-enrollment" element={<PermissionRoute menuKey="face-check"><FaceEnrollment /></PermissionRoute>} />
-            <Route path="cameras" element={<PermissionRoute menuKey="settings"><LiveCameraMonitor /></PermissionRoute>} />
-            <Route path="unknown-alerts" element={<PermissionRoute menuKey="settings"><UnknownAlerts /></PermissionRoute>} />
+            <Route path="cameras" element={<PermissionRoute menuKey="face-check"><LiveCameraMonitor /></PermissionRoute>} />
+            <Route path="unknown-alerts" element={<PermissionRoute menuKey="face-check"><UnknownAlerts /></PermissionRoute>} />
           </Route>
 
           {/* Director Routes */}
