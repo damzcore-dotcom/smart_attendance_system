@@ -7,7 +7,7 @@ import * as faceapi from '@vladmandic/face-api';
 import * as XLSX from 'xlsx';
 import { 
   Search, Filter, CheckCircle2, Clock, UserPlus, FileSpreadsheet, Upload, X, Download, Save, Camera,
-  ScanFace, Loader2, AlertCircle, RefreshCw, ShieldCheck, ChevronRight, ChevronUp, ChevronDown, FileText, Banknote, Printer, Fingerprint, Trash2
+  ScanFace, Loader2, AlertCircle, RefreshCw, ShieldCheck, ChevronRight, ChevronUp, ChevronDown, FileText, Banknote, Printer, Fingerprint, Trash2, Users
 } from 'lucide-react';
 import PrintableIDCard from '../../components/admin/PrintableIDCard';
 import CCTVEnrollmentTab from '../../components/admin/CCTVEnrollmentTab';
@@ -429,6 +429,8 @@ const Employees = () => {
   });
   const allEmployees = allEmployeesData?.data || [];
   const pendingBiometricsCount = allEmployees.filter(e => e.faceIdDisplay !== 'Enrolled').length;
+  const totalActiveEmployees = allEmployees.filter(e => e.status === 'Active' || e.status === 'On Leave').length;
+  const withoutFingerCount = allEmployees.filter(e => !e.fingerPrintId).length;
 
   return (
     <div className="space-y-8 pb-12 animate-in fade-in duration-500">
@@ -455,38 +457,120 @@ const Employees = () => {
 
         <div className="flex flex-wrap items-center gap-3">
           <button 
-            onClick={() => setPkwtModalOpen(true)} 
-            className="flex items-center gap-2 bg-white hover:bg-slate-50 px-5 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:text-slate-800 transition-all border border-slate-200 shadow-sm active:scale-95 group relative"
+            onClick={() => {
+              setNewEmployee(emptyEmployee);
+              setActiveTab('basic');
+              setNikError('');
+              setAddModalOpen(true);
+            }} 
+            className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.98]"
           >
-            <FileText className="w-4 h-4 text-orange-500 group-hover:scale-110 transition-transform" />
-            Peringatan PKWT
-            {criticalAlertsCount > 0 && (
-              <span className="absolute -top-2 -right-2 bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full animate-bounce shadow-sm">
-                {criticalAlertsCount}
-              </span>
-            )}
+            <UserPlus className="w-4 h-4" /> Tambah Karyawan
           </button>
+          
           <button 
             onClick={() => setImportModalOpen(true)} 
-            className="flex items-center gap-2 bg-white hover:bg-slate-50 px-5 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:text-slate-800 transition-all border border-slate-200 shadow-sm active:scale-95 group"
+            className="flex items-center gap-2 bg-white hover:bg-slate-50 px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-slate-600 hover:text-slate-800 transition-all border border-slate-200 shadow-sm active:scale-95 group"
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
-            Impor Data Karyawan
+            Impor Excel
           </button>
+
+          <button 
+            onClick={handleDownloadTemplate} 
+            className="flex items-center gap-2 bg-white hover:bg-slate-50 px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-slate-600 hover:text-slate-800 transition-all border border-slate-200 shadow-sm active:scale-95 group"
+          >
+            <Download className="w-4 h-4 text-slate-500 group-hover:scale-110 transition-transform" />
+            Template Excel
+          </button>
+        </div>
+      </div>
+
+      {/* 2. Dashboard Information Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 px-1">
+        {/* Card 1: Total Karyawan */}
+        <div className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm flex items-center justify-between hover:border-blue-300 transition-all group">
+          <div className="space-y-1.5">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Karyawan</span>
+            <div className="text-2xl font-bold text-slate-800 tracking-tight">
+              {totalEmployees} <span className="text-xs text-slate-500 font-medium">orang</span>
+            </div>
+            <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
+              {totalActiveEmployees} Aktif / Cuti
+            </p>
+          </div>
+          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-sm">
+            <Users className="w-5 h-5" />
+          </div>
+        </div>
+
+        {/* Card 2: Belum Terhubung Finger */}
+        <div className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm flex items-center justify-between hover:border-rose-300 transition-all group">
+          <div className="space-y-1.5">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Belum Link Sidik Jari</span>
+            <div className="text-2xl font-bold text-rose-600 tracking-tight">
+              {withoutFingerCount} <span className="text-xs text-slate-500 font-medium">orang</span>
+            </div>
+            <p className="text-[10px] text-rose-500 font-semibold uppercase tracking-wider">
+              Registrasi Fingerprint
+            </p>
+          </div>
+          <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-100 group-hover:bg-rose-600 group-hover:text-white transition-all shadow-sm">
+            <Fingerprint className="w-5 h-5" />
+          </div>
+        </div>
+
+        {/* Card 3: Pendaftaran Wajah Tertunda */}
+        <div className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm flex items-center justify-between hover:border-amber-300 transition-all group">
+          <div className="space-y-1.5">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Wajah Belum Terdaftar</span>
+            <div className="text-2xl font-bold text-amber-600 tracking-tight">
+              {pendingBiometricsCount} <span className="text-xs text-slate-500 font-medium">orang</span>
+            </div>
+            <p className="text-[10px] text-amber-500 font-semibold uppercase tracking-wider">
+              Belum Registrasi CCTV
+            </p>
+          </div>
+          <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100 group-hover:bg-amber-600 group-hover:text-white transition-all shadow-sm">
+            <ScanFace className="w-5 h-5" />
+          </div>
+        </div>
+
+        {/* Card 4: Jatuh Tempo PKWT */}
+        <div className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm flex items-center justify-between hover:border-orange-300 transition-all group">
+          <div className="space-y-1.5">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Kontrak Segera Berakhir</span>
+            <div className="text-2xl font-bold text-orange-600 tracking-tight">
+              {criticalAlertsCount} <span className="text-xs text-slate-500 font-medium">orang</span>
+            </div>
+            <p className="text-[10px] text-orange-500 font-semibold uppercase tracking-wider">
+              Habis &lt; 30 Hari (PKWT)
+            </p>
+          </div>
+          <div className="w-12 h-12 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center border border-orange-100 group-hover:bg-orange-600 group-hover:text-white transition-all shadow-sm">
+            <FileText className="w-5 h-5" />
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Aksi Massal & Integrasi Toolbar */}
+      <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 px-5">
+        <div className="flex items-center gap-3">
+          <div className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse" />
+          <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+            Alat & Aksi Massal Karyawan
+          </span>
+        </div>
+        
+        <div className="flex flex-wrap gap-2">
           <button 
             onClick={() => setQuickShiftModalOpen(true)} 
-            className="flex items-center gap-2 bg-white hover:bg-slate-50 px-5 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:text-slate-800 transition-all border border-slate-200 shadow-sm active:scale-95 group"
+            className="bg-white border border-slate-200 text-slate-700 hover:border-slate-300 font-bold py-2.5 px-4 rounded-xl flex items-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all active:scale-95 cursor-pointer"
           >
-            <RefreshCw className="w-4 h-4 text-blue-600 group-hover:rotate-180 transition-all duration-500" />
+            <RefreshCw className="w-3.5 h-3.5 text-blue-600" />
             Ubah Shift Massal
           </button>
-          <button 
-            onClick={() => setSyncGajiModalOpen(true)} 
-            className="flex items-center gap-2 bg-emerald-50 hover:bg-emerald-100 px-5 py-2.5 rounded-xl text-sm font-semibold text-emerald-700 hover:text-emerald-800 transition-all border border-emerald-200 shadow-sm active:scale-95 group"
-          >
-            <Banknote className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
-            Sinkronisasi Gaji Normal
-          </button>
+          
           <button 
             onClick={() => {
               if (filteredEmployees.length === 0) return alert('Tidak ada karyawan untuk dicetak.');
@@ -499,56 +583,34 @@ const Employees = () => {
                 setTimeout(() => { setPrintBulkIDCards(null); }, 1000);
               }, 1000);
             }} 
-            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 shadow-sm transition-all border border-indigo-200 active:scale-[0.98]"
+            className="bg-white border border-slate-200 text-slate-700 hover:border-indigo-300 hover:text-indigo-600 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all border border-slate-200 active:scale-95 cursor-pointer"
           >
-            <Printer className="w-4 h-4" /> Cetak ID Card (Masal)
+            <Printer className="w-3.5 h-3.5 text-indigo-500" /> 
+            Cetak ID Card (Massal)
           </button>
+
           <button 
-            onClick={() => {
-              setNewEmployee(emptyEmployee);
-              setActiveTab('basic');
-              setNikError('');
-              setAddModalOpen(true);
-            }} 
-            className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.98]"
+            onClick={() => setSyncGajiModalOpen(true)} 
+            className="bg-white border border-slate-200 text-slate-700 hover:border-emerald-300 hover:text-emerald-600 font-bold py-2.5 px-4 rounded-xl flex items-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all active:scale-95 cursor-pointer"
           >
-            <UserPlus className="w-4 h-4" /> Tambah Karyawan
+            <Banknote className="w-3.5 h-3.5 text-emerald-600" />
+            Sinkronisasi Gaji Normal
+          </button>
+
+          <button 
+            onClick={() => setPkwtModalOpen(true)} 
+            className="bg-white border border-slate-200 text-slate-700 hover:border-orange-300 hover:text-orange-600 font-bold py-2.5 px-4 rounded-xl flex items-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all active:scale-95 cursor-pointer relative"
+          >
+            <FileText className="w-3.5 h-3.5 text-orange-500" />
+            Peringatan PKWT
+            {criticalAlertsCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
+                {criticalAlertsCount}
+              </span>
+            )}
           </button>
         </div>
       </div>
-
-      {/* Banners & Notices */}
-      {(pendingBiometricsCount > 0 || criticalAlertsCount > 0) && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6 px-1">
-          {pendingBiometricsCount > 0 && (
-            <div className="flex items-center gap-4 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 rounded-2xl p-5 shadow-sm animate-in slide-in-from-top-4 fade-in duration-300">
-              <div className="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center border border-amber-200/50 shrink-0 shadow-inner">
-                <ScanFace className="w-6 h-6 animate-pulse" />
-              </div>
-              <div>
-                <h4 className="text-sm font-bold text-amber-800">Pendaftaran Biometrik Wajah Tertunda</h4>
-                <p className="text-xs text-amber-600/90 mt-1 leading-relaxed">
-                  Terdapat <span className="font-extrabold">{pendingBiometricsCount} karyawan</span> yang belum mendaftarkan data wajah mereka untuk absen CCTV.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {criticalAlertsCount > 0 && (
-            <div className="flex items-center gap-4 bg-gradient-to-r from-rose-50 to-orange-50/50 border border-rose-200/80 rounded-2xl p-5 shadow-sm animate-in slide-in-from-top-4 fade-in duration-300" style={{ animationDelay: '100ms' }}>
-              <div className="w-12 h-12 rounded-xl bg-rose-500/10 text-rose-600 flex items-center justify-center border border-rose-200/50 shrink-0 shadow-inner">
-                <AlertCircle className="w-6 h-6 animate-bounce" />
-              </div>
-              <div>
-                <h4 className="text-sm font-bold text-rose-800">Peringatan Kontrak Kerja (PKWT)</h4>
-                <p className="text-xs text-rose-600/90 mt-1 leading-relaxed">
-                  Ada <span className="font-extrabold">{criticalAlertsCount} kontrak karyawan</span> yang akan habis dalam waktu kurang dari 30 hari. Harap tinjau di menu PKWT.
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* 2. Global Filter Matrix */}
       <div className="bg-white p-6 border border-slate-200 rounded-2xl shadow-sm mb-6">
