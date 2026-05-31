@@ -4,6 +4,7 @@ const deviceController = require('../controllers/deviceController');
 const { verifyToken, requireAdmin } = require('../middleware/auth');
 
 router.get('/', verifyToken, requireAdmin, deviceController.getDevices);
+router.get('/sync-logs', verifyToken, requireAdmin, deviceController.getDeviceSyncLogs);
 router.post('/', verifyToken, requireAdmin, deviceController.addDevice);
 router.put('/:id', verifyToken, requireAdmin, deviceController.updateDevice);
 router.delete('/:id', verifyToken, requireAdmin, deviceController.deleteDevice);

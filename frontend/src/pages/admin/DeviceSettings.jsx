@@ -19,6 +19,21 @@ const DeviceSettings = () => {
   const [syncDiagnostics, setSyncDiagnostics] = useState(null);
   const [selectedPersonnel, setSelectedPersonnel] = useState({}); // Toggles for the personnel checkbox
   const [viewMode, setViewMode] = useState('card');
+  const [syncLogs, setSyncLogs] = useState([]);
+  const [loadingLogs, setLoadingLogs] = useState(true);
+
+  const fetchSyncLogs = async () => {
+    try {
+      const { data } = await api.get('/devices/sync-logs');
+      if (data.success) {
+        setSyncLogs(data.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch sync logs:', err);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
   
   const now = new Date();
   const today = now.toISOString().split('T')[0];
@@ -62,6 +77,7 @@ const DeviceSettings = () => {
 
   useEffect(() => {
     fetchDevices();
+    fetchSyncLogs();
   }, []);
 
   const handleAdd = async (e) => {
@@ -70,6 +86,7 @@ const DeviceSettings = () => {
       await api.post('/devices', newDevice);
       setNewDevice({ name: '', ipAddress: '', port: 4370 });
       fetchDevices();
+      fetchSyncLogs();
       alert('Device added successfully!');
     } catch (err) {
       alert(err.message || 'Failed to add device');
@@ -81,6 +98,7 @@ const DeviceSettings = () => {
     try {
       await api.delete(`/devices/${id}`);
       fetchDevices();
+      fetchSyncLogs();
     } catch (err) {
       alert('Failed to delete');
     }
@@ -94,8 +112,10 @@ const DeviceSettings = () => {
       });
       alert(data.message || 'Connection Successful!');
       fetchDevices(); 
+      fetchSyncLogs();
     } catch (err) {
       alert(err.response?.data?.message || 'Connection Failed');
+      fetchSyncLogs();
     } finally {
       setSyncing(null);
     }
@@ -278,6 +298,7 @@ const DeviceSettings = () => {
 
     // Refresh devices list
     fetchDevices();
+    fetchSyncLogs();
   };
 
   const syncUsers = async (id) => {
@@ -363,9 +384,11 @@ const DeviceSettings = () => {
       setPreviewData(null);
       setSyncToken(null);
       setActiveDeviceId(null);
-      fetchDevices(); 
+      fetchDevices();
+      fetchSyncLogs();
     } catch (err) {
       alert(err.response?.data?.message || 'Gagal menyimpan data absensi');
+      fetchSyncLogs();
     } finally {
       setSyncing(null);
     }
@@ -415,7 +438,7 @@ const DeviceSettings = () => {
 
       <div className="flex flex-col lg:flex-row gap-8">
         {/* Form Tambah / Edit */}
-        <div className="w-full lg:w-1/3 shrink-0">
+        <div className="w-full lg:w-1/3 shrink-0 space-y-6">
           <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
             {editingDevice ? (
               <>
@@ -517,6 +540,74 @@ const DeviceSettings = () => {
                   </button>
                 </form>
               </>
+            )}
+          </div>
+
+          {/* Log Aktivitas Mesin Card */}
+          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
+            <h3 className="font-bold text-slate-800 mb-6 uppercase tracking-tight flex items-center justify-between">
+              <span>Log Aktivitas Perangkat</span>
+              <button 
+                type="button"
+                onClick={fetchSyncLogs}
+                className="text-xs text-blue-600 hover:text-blue-700 font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loadingLogs && 'animate-spin'}`} />
+                Refresh
+              </button>
+            </h3>
+            
+            {loadingLogs ? (
+              <div className="py-12 text-center text-slate-400 font-semibold text-xs uppercase tracking-wider animate-pulse">
+                Memuat Log Aktivitas...
+              </div>
+            ) : syncLogs.length === 0 ? (
+              <div className="py-12 text-center text-slate-400 font-semibold text-xs uppercase tracking-wider border-2 border-dashed border-slate-100 rounded-2xl">
+                Belum ada aktivitas terekam
+              </div>
+            ) : (
+              <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1">
+                {syncLogs.map(log => {
+                  const isSync = log.action === 'SYNC';
+                  const isSuccess = log.details.status === 'SUCCESS' || log.action === 'SYNC';
+                  
+                  const logDate = new Date(log.createdAt);
+                  const timeStr = logDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                  const dateStr = logDate.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit' });
+
+                  return (
+                    <div key={log.id} className="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-all flex items-start justify-between gap-3 text-xs">
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider ${
+                            isSync 
+                              ? 'bg-blue-50 text-blue-600 border border-blue-100' 
+                              : isSuccess 
+                                ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' 
+                                : 'bg-rose-50 text-rose-600 border border-rose-100'
+                          }`}>
+                            {isSync ? 'Tarik Absen' : 'Koneksi'}
+                          </span>
+                          <span className="font-bold text-slate-700 truncate">
+                            {log.details.device || log.details.name || 'Mesin'}
+                          </span>
+                        </div>
+                        <p className="text-slate-500 font-medium">
+                          {isSync 
+                            ? `Berhasil memperbarui ${log.details.recordsSaved || 0} record.`
+                            : log.details.message || (isSuccess ? 'Koneksi Sukses' : 'Koneksi Gagal')
+                          }
+                        </p>
+                        <div className="text-[10px] text-slate-400 font-medium flex items-center gap-2">
+                          <span>Oleh: <strong className="text-slate-500">{log.username}</strong></span>
+                          <span>•</span>
+                          <span>{dateStr} {timeStr}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         </div>

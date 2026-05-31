@@ -150,23 +150,50 @@ const testConnection = async (req, res) => {
     const info = await zkInstance.getInfo();
     await zkInstance.disconnect();
     
+    let deviceName = 'Mesin Baru';
     if (id) {
-      await prisma.device.update({
+      const dev = await prisma.device.update({
         where: { id: parseInt(id) },
         data: { status: 'ONLINE' }
       });
+      deviceName = dev.name;
     }
+    
+    await recordAuditLog({
+      userId: req.user.id,
+      username: req.user.username,
+      role: req.user.role,
+      action: 'TEST_CONNECTION',
+      entity: 'Device',
+      entityId: id ? parseInt(id) : null,
+      details: JSON.stringify({ name: deviceName, ipAddress, port, status: 'SUCCESS', message: 'Koneksi berhasil!' }),
+      ipAddress: req.ip
+    });
     
     res.json({ success: true, message: 'Koneksi berhasil!', info });
   } catch (err) {
+    let deviceName = 'Mesin Baru';
     if (id) {
       try {
-        await prisma.device.update({
+        const dev = await prisma.device.update({
           where: { id: parseInt(id) },
           data: { status: 'OFFLINE' }
         });
+        deviceName = dev.name;
       } catch (e) {}
     }
+    
+    await recordAuditLog({
+      userId: req.user.id,
+      username: req.user.username,
+      role: req.user.role,
+      action: 'TEST_CONNECTION',
+      entity: 'Device',
+      entityId: id ? parseInt(id) : null,
+      details: JSON.stringify({ name: deviceName, ipAddress, port, status: 'FAILED', message: err.message || 'Gagal menghubungi mesin.' }),
+      ipAddress: req.ip
+    });
+    
     res.status(500).json({ success: false, message: 'Gagal menghubungi mesin. Pastikan IP dan Port benar dan mesin menyala.' });
   }
 };
@@ -1417,6 +1444,43 @@ const clearDeviceLogs = async (req, res) => {
   }
 };
 
+const getDeviceSyncLogs = async (req, res) => {
+  try {
+    const logs = await prisma.auditLog.findMany({
+      where: {
+        entity: 'Device',
+        action: {
+          in: ['SYNC', 'TEST_CONNECTION']
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      take: 10
+    });
+    
+    const parsedLogs = logs.map(log => {
+      let detailsParsed = {};
+      try {
+        detailsParsed = JSON.parse(log.details || '{}');
+      } catch (e) {
+        detailsParsed = { message: log.details };
+      }
+      return {
+        id: log.id,
+        username: log.username,
+        action: log.action,
+        details: detailsParsed,
+        createdAt: log.createdAt
+      };
+    });
+    
+    res.json({ success: true, data: parsedLogs });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 module.exports = {
   getDevices,
   addDevice,
@@ -1427,5 +1491,6 @@ module.exports = {
   syncAttendance,
   commitAttendance,
   getDeviceStats,
-  clearDeviceLogs
+  clearDeviceLogs,
+  getDeviceSyncLogs
 };
