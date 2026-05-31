@@ -10,15 +10,73 @@ const getApiKey = () => {
   return key;
 };
 
+// Calculate lateness rounded to 30-minute blocks with 8-minute grace period
+const calculateLatenessPenaltyDetails = (lateMinutes) => {
+  if (lateMinutes <= 8) {
+    return {
+      isLate: false,
+      lateMinutes,
+      penaltyMinutes: 0,
+      penaltyDescription: 'Masuk dalam toleransi keterlambatan (keringan 8 menit).'
+    };
+  }
+  
+  // Round up to nearest 30 minutes block
+  const penaltyMinutes = Math.ceil(lateMinutes / 30) * 30;
+  return {
+    isLate: true,
+    lateMinutes,
+    penaltyMinutes,
+    penaltyDescription: `Terlambat ${lateMinutes} menit, dibulatkan menjadi denda ${penaltyMinutes} menit (dibulatkan per 30 menit).`
+  };
+};
+
+// Fuzzy String Similarity (Levenshtein Distance)
+const getSimilarity = (s1, s2) => {
+  const longer = s1.toLowerCase();
+  const shorter = s2.toLowerCase();
+  if (longer.length < shorter.length) {
+    return getSimilarity(shorter, longer);
+  }
+  if (longer.length === 0) {
+    return 1.0;
+  }
+  
+  const editDistance = (str1, str2) => {
+    const costs = [];
+    for (let i = 0; i <= str1.length; i++) {
+      let lastValue = i;
+      for (let j = 0; j <= str2.length; j++) {
+        if (i === 0) {
+          costs[j] = j;
+        } else {
+          if (j > 0) {
+            let newValue = costs[j - 1];
+            if (str1.charAt(i - 1) !== str2.charAt(j - 1)) {
+              newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+            }
+            costs[j - 1] = lastValue;
+            lastValue = newValue;
+          }
+        }
+      }
+      if (i > 0) costs[str2.length] = lastValue;
+    }
+    return costs[str2.length];
+  };
+  
+  return (longer.length - editDistance(longer, shorter)) / parseFloat(longer.length);
+};
+
 // Define tool schemas for Google Gemini
 const toolDeclarations = [
   {
     name: 'getEmployeesList',
-    description: 'Mengambil daftar karyawan aktif maupun non-aktif berdasarkan filter nama, departemen, atau jenis karyawan (Bulanan vs Harian/BHL).',
+    description: 'Mengambil daftar karyawan aktif maupun non-aktif berdasarkan filter nama, departemen, atau jenis karyawan (Bulanan vs Harian/BHL). Mendukung pencarian toleran salah eja.',
     parameters: {
       type: 'OBJECT',
       properties: {
-        name: { type: 'STRING', description: 'Cari berdasarkan nama karyawan (pencarian sebagian).' },
+        name: { type: 'STRING', description: 'Cari berdasarkan nama karyawan (pencarian sebagian atau toleran salah ketik).' },
         department: { type: 'STRING', description: 'Nama departemen karyawan (contoh: IT, HR, Security, Produksi).' },
         status: { type: 'STRING', description: 'Status karyawan (ACTIVE, ON_LEAVE, TERMINATED).' },
         employmentType: { type: 'STRING', description: 'Jenis hubungan kerja: TETAP, KONTRAK, atau HARIAN (untuk Buruh Harian Lepas/BHL).' }
@@ -27,7 +85,7 @@ const toolDeclarations = [
   },
   {
     name: 'getAttendanceLogs',
-    description: 'Mengambil log absensi masuk dan keluar untuk seluruh karyawan atau karyawan tertentu pada tanggal atau rentang tanggal tertentu.',
+    description: 'Mengambil log absensi masuk dan keluar untuk seluruh karyawan atau karyawan tertentu pada tanggal atau rentang tanggal tertentu. Menyertakan detail kalkulasi menit denda keterlambatan.',
     parameters: {
       type: 'OBJECT',
       properties: {
@@ -57,6 +115,47 @@ const toolDeclarations = [
       type: 'OBJECT',
       properties: {}
     }
+  },
+  {
+    name: 'getEmployeeSalaryAndPayroll',
+    description: 'AKSES TERBATAS. Mengambil informasi gaji pokok karyawan, rincian komponen tunjangan/potongan, serta slip gaji bulanan/rekap payroll periode tertentu. Hanya boleh dipanggil oleh SUPER_ADMIN, DIREKTUR, dan MANAGER.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        employeeName: { type: 'STRING', description: 'Nama karyawan untuk dicari gajinya.' },
+        period: { type: 'STRING', description: 'Periode rekap payroll bulanan (format: YYYY-MM, contoh: 2026-05).' }
+      }
+    }
+  },
+  {
+    name: 'getShiftSchedules',
+    description: 'Mengambil daftar jadwal kerja shift utama karyawan dan riwayat rotasi/override shift pada rentang waktu tertentu.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        employeeName: { type: 'STRING', description: 'Nama karyawan untuk dicari jadwal kerjanya.' },
+        department: { type: 'STRING', description: 'Filter berdasarkan nama departemen.' }
+      }
+    }
+  },
+  {
+    name: 'getFingerprintDevicesStatus',
+    description: 'Mengambil status koneksi perangkat mesin absensi sidik jari (Fingerprint) yang terdaftar beserta informasi log sinkronisasi terakhir.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {}
+    }
+  },
+  {
+    name: 'getSystemAuditLogs',
+    description: 'AKSES TERBATAS. Mengambil log audit aktivitas sistem untuk melacak tindakan modifikasi (tambah, ubah, hapus) oleh user admin. Hanya boleh dipanggil oleh SUPER_ADMIN dan ADMIN.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        username: { type: 'STRING', description: 'Filter berdasarkan nama user yang melakukan aksi.' },
+        action: { type: 'STRING', description: 'Jenis tindakan (contoh: CREATE, UPDATE, DELETE, LOGIN, SYNC).' }
+      }
+    }
   }
 ];
 
@@ -66,24 +165,83 @@ const databaseTools = {
     try {
       const filters = {};
       
-      if (name) {
-        filters.name = { contains: name, mode: 'insensitive' };
-      }
       if (status) {
         filters.status = status;
       }
       if (department) {
         filters.department = { name: { contains: department, mode: 'insensitive' } };
       }
-
-      // Check employmentType inside EmployeeSalary table (joined relation)
       if (employmentType) {
         filters.salary = { employmentType: employmentType };
       }
 
+      // Check if we need to do fuzzy matching on name
+      if (name) {
+        // First try standard partial match
+        filters.name = { contains: name, mode: 'insensitive' };
+        let employees = await prisma.employee.findMany({
+          where: filters,
+          take: 30,
+          select: {
+            id: true,
+            employeeCode: true,
+            name: true,
+            email: true,
+            position: true,
+            division: true,
+            status: true,
+            gender: true,
+            salaryCategory: true,
+            department: { select: { name: true } },
+            salary: { select: { employmentType: true } }
+          }
+        });
+
+        // If no match found, fetch all and try fuzzy matching
+        if (employees.length === 0) {
+          delete filters.name;
+          const allEmployees = await prisma.employee.findMany({
+            where: filters,
+            select: {
+              id: true,
+              employeeCode: true,
+              name: true,
+              email: true,
+              position: true,
+              division: true,
+              status: true,
+              gender: true,
+              salaryCategory: true,
+              department: { select: { name: true } },
+              salary: { select: { employmentType: true } }
+            }
+          });
+
+          // Filter by string similarity index > 0.45
+          employees = allEmployees
+            .map(emp => ({ ...emp, similarity: getSimilarity(emp.name, name) }))
+            .filter(emp => emp.similarity > 0.45)
+            .sort((a, b) => b.similarity - a.similarity)
+            .slice(0, 15);
+        }
+
+        return employees.map(emp => ({
+          id: emp.id,
+          nik: emp.employeeCode,
+          nama: emp.name,
+          email: emp.email,
+          jabatan: emp.position,
+          divisi: emp.division,
+          departemen: emp.department?.name || 'N/A',
+          status: emp.status,
+          tipeKaryawan: emp.salary?.employmentType || (emp.salaryCategory === 'BHL' ? 'HARIAN' : 'TETAP'),
+          gender: emp.gender === 'L' ? 'Laki-laki' : emp.gender === 'P' ? 'Perempuan' : emp.gender
+        }));
+      }
+
       const employees = await prisma.employee.findMany({
         where: filters,
-        take: 30, // Limit to prevent token bloat
+        take: 30,
         select: {
           id: true,
           employeeCode: true,
@@ -95,7 +253,7 @@ const databaseTools = {
           gender: true,
           salaryCategory: true,
           department: { select: { name: true } },
-          salary: { select: { employmentType: true, salaryType: true } }
+          salary: { select: { employmentType: true } }
         }
       });
 
@@ -122,8 +280,7 @@ const databaseTools = {
       const filters = {};
       
       if (date) {
-        const parsedDate = new Date(date);
-        filters.date = parsedDate;
+        filters.date = new Date(date);
       } else if (startDate || endDate) {
         filters.date = {};
         if (startDate) filters.date.gte = new Date(startDate);
@@ -165,20 +322,25 @@ const databaseTools = {
         }
       });
 
-      return logs.map(log => ({
-        id: log.id,
-        tanggal: log.date.toISOString().split('T')[0],
-        nik: log.employee.employeeCode,
-        nama: log.employee.name,
-        departemen: log.employee.department?.name || 'N/A',
-        jamMasuk: log.checkIn ? new Date(log.checkIn).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-',
-        jamKeluar: log.checkOut ? new Date(log.checkOut).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-',
-        statusKehadiran: log.status,
-        keterlambatanMenit: log.lateMinutes,
-        lemburJam: log.overtimeHours,
-        metode: log.source,
-        catatan: log.notes || '-'
-      }));
+      return logs.map(log => {
+        const penaltyInfo = calculateLatenessPenaltyDetails(log.lateMinutes);
+        return {
+          id: log.id,
+          tanggal: log.date.toISOString().split('T')[0],
+          nik: log.employee.employeeCode,
+          nama: log.employee.name,
+          departemen: log.employee.department?.name || 'N/A',
+          jamMasuk: log.checkIn ? new Date(log.checkIn).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-',
+          jamKeluar: log.checkOut ? new Date(log.checkOut).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-',
+          statusKehadiran: log.status,
+          keterlambatanMenit: log.lateMinutes,
+          dendaKeterlambatanMenit: penaltyInfo.penaltyMinutes,
+          dendaKeterlambatanDetail: penaltyInfo.penaltyDescription,
+          lemburJam: log.overtimeHours,
+          metode: log.source,
+          catatan: log.notes || '-'
+        };
+      });
     } catch (error) {
       console.error('Error in getAttendanceLogs tool:', error);
       return { error: error.message };
@@ -278,14 +440,249 @@ const databaseTools = {
       console.error('Error in getDashboardSummaryStats tool:', error);
       return { error: error.message };
     }
+  },
+
+  getEmployeeSalaryAndPayroll: async ({ employeeName, period }, userContext) => {
+    try {
+      // STRICT RBAC Verification
+      const allowedRoles = ['SUPER_ADMIN', 'DIREKTUR', 'MANAGER'];
+      if (!userContext || !allowedRoles.includes(userContext.role)) {
+        return { error: 'Akses ditolak. Informasi gaji dan payroll bersifat sangat rahasia. Hanya untuk level SUPER_ADMIN, DIREKTUR, dan MANAGER.' };
+      }
+
+      // 1. If period is requested (Bulk Payroll Summary)
+      if (period && !employeeName) {
+        const payroll = await prisma.payroll.findUnique({
+          where: { period },
+          include: {
+            details: {
+              select: {
+                employeeName: true,
+                employeeCode: true,
+                department: true,
+                netPay: true,
+                grossPay: true,
+                attendancePenalty: true
+              }
+            }
+          }
+        });
+
+        if (!payroll) return { message: `Data payroll untuk periode ${period} belum digenerate.` };
+
+        return {
+          periode: payroll.periodName,
+          status: payroll.status,
+          totalKaryawanTerbayar: payroll.totalEmployees,
+          totalPengeluaranGajiGross: payroll.totalGross,
+          totalPengeluaranGajiNet: payroll.totalNet,
+          totalPotonganKehadiran: payroll.details.reduce((sum, d) => sum + d.attendancePenalty, 0),
+          daftarRincianKaryawan: payroll.details.slice(0, 15).map(d => ({
+            nama: d.employeeName,
+            nik: d.employeeCode,
+            departemen: d.department,
+            gajiKotor: d.grossPay,
+            dendaKehadiran: d.attendancePenalty,
+            gajiBersih: d.netPay
+          }))
+        };
+      }
+
+      // 2. If employeeName is requested
+      if (employeeName) {
+        // Find employee with fuzzy support
+        const employees = await prisma.employee.findMany({
+          where: { name: { contains: employeeName, mode: 'insensitive' } },
+          select: {
+            id: true,
+            name: true,
+            employeeCode: true,
+            position: true,
+            department: { select: { name: true } },
+            salary: true,
+            payrollDetails: {
+              take: 3,
+              orderBy: { createdAt: 'desc' },
+              select: {
+                netPay: true,
+                grossPay: true,
+                createdAt: true
+              }
+            }
+          }
+        });
+
+        if (employees.length === 0) return { message: `Karyawan dengan nama "${employeeName}" tidak ditemukan.` };
+        const emp = employees[0];
+
+        return {
+          nama: emp.name,
+          nik: emp.employeeCode,
+          jabatan: emp.position,
+          departemen: emp.department?.name || 'N/A',
+          tipeGaji: emp.salary?.salaryType || 'MONTHLY',
+          gajiPokokBase: emp.salary?.baseSalary || 0,
+          tarifHarian: emp.salary?.dailyRate || 0,
+          komponenGajiLainnya: emp.salary?.components || [],
+          riwayatPayrollTerakhir: emp.payrollDetails.map(pd => ({
+            gajiKotor: pd.grossPay,
+            gajiBersih: pd.netPay,
+            tanggalPencairan: pd.createdAt.toISOString().split('T')[0]
+          }))
+        };
+      }
+
+      return { error: 'Mohon cantumkan parameter nama karyawan atau periode payroll.' };
+    } catch (error) {
+      console.error('Error in getEmployeeSalaryAndPayroll tool:', error);
+      return { error: error.message };
+    }
+  },
+
+  getShiftSchedules: async ({ employeeName, department }) => {
+    try {
+      const filters = {};
+      if (department) {
+        filters.department = { name: { contains: department, mode: 'insensitive' } };
+      }
+      if (employeeName) {
+        filters.name = { contains: employeeName, mode: 'insensitive' };
+      }
+
+      const schedules = await prisma.employee.findMany({
+        where: filters,
+        take: 30,
+        select: {
+          name: true,
+          employeeCode: true,
+          department: { select: { name: true } },
+          shift: {
+            select: {
+              name: true,
+              startTime: true,
+              endTime: true,
+              gracePeriod: true
+            }
+          },
+          shiftOverrides: {
+            take: 3,
+            orderBy: { startDate: 'desc' },
+            select: {
+              startDate: true,
+              endDate: true,
+              shift: {
+                select: {
+                  name: true,
+                  startTime: true,
+                  endTime: true
+                }
+              }
+            }
+          }
+        }
+      });
+
+      return schedules.map(s => ({
+        nama: s.name,
+        nik: s.employeeCode,
+        departemen: s.department?.name || 'N/A',
+        shiftUtama: s.shift ? `${s.shift.name} (${s.shift.startTime} - ${s.shift.endTime}, toleransi ${s.shift.gracePeriod} menit)` : 'Belum diset',
+        overrideShiftTerakhir: s.shiftOverrides.map(o => ({
+          shift: `${o.shift.name} (${o.shift.startTime} - ${o.shift.endTime})`,
+          dariTanggal: o.startDate.toISOString().split('T')[0],
+          sampaiTanggal: o.endDate.toISOString().split('T')[0]
+        }))
+      }));
+    } catch (error) {
+      console.error('Error in getShiftSchedules tool:', error);
+      return { error: error.message };
+    }
+  },
+
+  getFingerprintDevicesStatus: async () => {
+    try {
+      const devices = await prisma.device.findMany({
+        select: {
+          id: true,
+          name: true,
+          ipAddress: true,
+          port: true,
+          status: true,
+          lastSync: true,
+          autoSyncEnabled: true,
+          autoSyncTime: true
+        }
+      });
+
+      return devices.map(d => ({
+        id: d.id,
+        namaMesin: d.name,
+        ipAddress: d.ipAddress,
+        port: d.port,
+        statusKoneksi: d.status,
+        terakhirSinkronisasi: d.lastSync ? d.lastSync.toLocaleString('id-ID') : 'Belum pernah',
+        sinkronisasiOtomatis: d.autoSyncEnabled ? `Aktif (Jam ${d.autoSyncTime})` : 'Mati'
+      }));
+    } catch (error) {
+      console.error('Error in getFingerprintDevicesStatus tool:', error);
+      return { error: error.message };
+    }
+  },
+
+  getSystemAuditLogs: async ({ username, action }, userContext) => {
+    try {
+      // STRICT RBAC Verification
+      const allowedRoles = ['SUPER_ADMIN', 'ADMIN'];
+      if (!userContext || !allowedRoles.includes(userContext.role)) {
+        return { error: 'Akses ditolak. Hanya untuk level SUPER_ADMIN dan ADMIN.' };
+      }
+
+      const filters = {};
+      if (username) {
+        filters.username = { contains: username, mode: 'insensitive' };
+      }
+      if (action) {
+        filters.action = action;
+      }
+
+      const logs = await prisma.auditLog.findMany({
+        where: filters,
+        take: 30,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          username: true,
+          role: true,
+          action: true,
+          entity: true,
+          details: true,
+          ipAddress: true,
+          createdAt: true
+        }
+      });
+
+      return logs.map(l => ({
+        id: l.id,
+        waktu: l.createdAt.toLocaleString('id-ID'),
+        user: l.username,
+        role: l.role,
+        tindakan: l.action,
+        tabelTerdampak: l.entity,
+        rincian: l.details || '-',
+        ipClient: l.ipAddress || 'N/A'
+      }));
+    } catch (error) {
+      console.error('Error in getSystemAuditLogs tool:', error);
+      return { error: error.message };
+    }
   }
 };
 
 // Execute tool callback
-const executeTool = async (name, args) => {
+const executeTool = async (name, args, userContext) => {
   console.log(`🤖 AI Tool Execution requested: ${name} with args:`, args);
   if (databaseTools[name]) {
-    return await databaseTools[name](args);
+    return await databaseTools[name](args, userContext);
   }
   throw new Error(`Tool ${name} is not defined.`);
 };
@@ -293,8 +690,6 @@ const executeTool = async (name, args) => {
 // Mock agent fallback if API key is missing
 const handleMockChat = async (message, history) => {
   const userMessage = message.toLowerCase();
-  
-  // Basic DB querying for mock info to present meaningful information even without API key
   let mockReply = "";
 
   if (userMessage.includes('karyawan') || userMessage.includes('pegawai')) {
@@ -358,11 +753,24 @@ const runAiChat = async (message, chatHistory, userContext) => {
       - Nama: ${userContext.username}
       - Role: ${userContext.role}
       
-      Wewenang Anda:
-      - Anda BOLEH melakukan query tentang karyawan, BHL (Buruh Harian Lepas), absensi, cuti/izin menggunakan fungsi-fungsi database (tools) yang disediakan.
-      - Berikan jawaban yang ramah, sopan, profesional, dan ringkas dalam Bahasa Indonesia yang baik.
-      - Jika ditanya rekap absensi, presentasikan dalam bentuk poin-poin yang mudah dibaca atau tabel markdown jika diperlukan.
-      - Sebutkan tanggal saat ini (${new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}) sebagai acuan jika user menanyakan informasi hari ini.`
+      Wewenang & Aturan Keamanan Data (RBAC):
+      - Anda memiliki akses ke data absensi, data cuti/izin, shift roster, dan status mesin fingerprint.
+      - **PENTING (KEBIJAKAN KELAS GAJI / PAYROLL)**: Data gaji pokok, payroll bulanan, dan slip gaji HANYA boleh diakses oleh level role: SUPER_ADMIN, DIREKTUR, dan MANAGER. Jika user dengan role lain (seperti ADMIN) menanyakan tentang nominal gaji/payroll, jelaskan secara sopan bahwa mereka tidak memiliki wewenang akses untuk data sensitif tersebut.
+      
+      Aturan Perusahaan (PENTING untuk analisis keterlambatan):
+      - Batas toleransi keterlambatan (keringan) adalah maksimal **8 menit** dari jadwal jam masuk shift.
+      - Keterlambatan **<= 8 menit** dianggap **TIDAK TERLAMBAT** (Denda = 0).
+      - Keterlambatan **> 8 menit** akan langsung dihitung denda dengan dibulatkan ke atas **per blok 30 menit**.
+        Contoh kalkulasi denda:
+        * Terlambat 9 menit (lewat batas 8 menit) $\rightarrow$ Denda dihitung **30 menit**.
+        * Terlambat 30 menit $\rightarrow$ Denda dihitung **30 menit**.
+        * Terlambat 31 menit $\rightarrow$ Denda dihitung **60 menit** (blok berikutnya).
+        * Terlambat 65 menit $\rightarrow$ Denda dihitung **90 menit** (tiga blok).
+      
+      Panduan Jawaban Anda:
+      - Berikan jawaban yang ramah, sopan, profesional, dan ringkas dalam Bahasa Indonesia yang alami.
+      - Jika ditanya rekap absensi atau payroll, presentasikan dalam bentuk tabel markdown atau poin-poin yang mudah dibaca.
+      - Sebutkan tanggal saat ini (${new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}) sebagai acuan jika user menanyakan informasi waktu relatif seperti "hari ini", "kemarin", atau "minggu lalu".`
     });
 
     // Format chat history for Gemini API
@@ -389,7 +797,7 @@ const runAiChat = async (message, chatHistory, userContext) => {
 
       let toolResult;
       try {
-        toolResult = await executeTool(name, args);
+        toolResult = await executeTool(name, args, userContext);
       } catch (err) {
         console.error(`Error executing tool ${name}:`, err);
         toolResult = { error: err.message };
