@@ -541,3 +541,38 @@ model UnknownFaceAlert {
   notes       String?
   createdAt   DateTime  @default(now())
 }
+
+// ─── Chatbot Feedback Loop & NLP Configuration ──────────────────────────
+
+model ChatLog {
+  id              Int       @id @default(autoincrement())
+  username        String
+  userRole        String
+  query           String    @db.Text
+  detectedIntent  String?
+  confidenceScore Float?
+  response        String?   @db.Text
+  feedback        String?   // 'positive', 'negative', null
+  feedbackNote    String?
+  responseTimeMs  Int?
+  mode            String    @default("local")
+  createdAt       DateTime  @default(now())
+
+  @@index([username])
+  @@index([detectedIntent])
+  @@index([createdAt])
+}
+
+model NlpKeywordConfig {
+  id        Int      @id @default(autoincrement())
+  intent    String
+  keyword   String
+  weight    Float    @default(1.0)
+  isActive  Boolean  @default(true)
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([intent, keyword])
+  @@index([intent])
+}

@@ -1,5 +1,6 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const prisma = require('../prismaClient');
+const localNlpService = require('./localNlpService');
 
 // Helper to check if API Key is set and valid
 const getApiKey = () => {
@@ -736,10 +737,11 @@ const handleMockChat = async (message, history) => {
 
 // Primary chatbot function
 const runAiChat = async (message, chatHistory, userContext) => {
+  const mode = process.env.CHATBOT_MODE || 'local';
   const apiKey = getApiKey();
   
-  if (!apiKey) {
-    return await handleMockChat(message, chatHistory);
+  if (mode === 'local' || !apiKey) {
+    return await localNlpService.processLocalChat(message, chatHistory, userContext);
   }
 
   try {
@@ -830,5 +832,6 @@ const runAiChat = async (message, chatHistory, userContext) => {
 };
 
 module.exports = {
-  runAiChat
+  runAiChat,
+  databaseTools
 };

@@ -1,5 +1,12 @@
+/**
+ * Chat Routes
+ * 
+ * Routes for AI chatbot interaction and feedback.
+ * Restricted to management roles (Admin, Manager, Accounting, Director).
+ */
+
 const router = require('express').Router();
-const { handleChat } = require('../controllers/chatController');
+const { handleChat, handleFeedback } = require('../controllers/chatController');
 const { verifyToken } = require('../middleware/auth');
 
 // Middleware to restrict access to Admins, Managers, Accounting, and Directors only (No standard employees)
@@ -16,5 +23,6 @@ router.use(verifyToken);
 router.use(requireChatbotAccess);
 
 router.post('/', handleChat);
+router.post('/feedback', handleFeedback);
 
 module.exports = router;
