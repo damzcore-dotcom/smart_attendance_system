@@ -146,7 +146,10 @@ const AdminDashboard = () => {
     queryKey: ['ai-engine-status-dashboard'],
     queryFn: async () => {
       try {
-        const aiUrl = import.meta.env.VITE_AI_ENGINE_URL || 'http://localhost:8001';
+        const envUrl = import.meta.env.VITE_AI_ENGINE_URL;
+        const aiUrl = (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1'))
+          ? envUrl
+          : `${window.location.protocol}//${window.location.hostname}:8001`;
         const r = await fetch(`${aiUrl}/health`);
         return await r.json();
       } catch {

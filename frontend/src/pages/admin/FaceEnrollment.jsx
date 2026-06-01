@@ -30,7 +30,10 @@ const FaceEnrollment = () => {
     { title: "Tengok Bawah", desc: "Tundukkan wajah sedikit ke bawah", icon: "🔽" },
   ];
 
-  const aiUrl = import.meta.env.VITE_AI_ENGINE_URL || `${window.location.protocol}//${window.location.hostname}:8001`;
+  const envUrl = import.meta.env.VITE_AI_ENGINE_URL;
+  const aiUrl = (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1'))
+    ? envUrl
+    : `${window.location.protocol}//${window.location.hostname}:8001`;
 
   // Data Options
   const { data: optionsData } = useQuery({
