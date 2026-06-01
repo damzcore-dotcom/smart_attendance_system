@@ -34,7 +34,7 @@ const Employees = () => {
   const [positionFilter, setPositionFilter] = useState('');
   const [empStatusFilter, setEmpStatusFilter] = useState('');
   const [isImportModalOpen, setImportModalOpen] = useState(false);
-  const [isPkwtModalOpen, setPkwtModalOpen] = useState(false);
+
   const [importResult, setImportResult] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -42,7 +42,7 @@ const Employees = () => {
   const [newEmployee, setNewEmployee] = useState(emptyEmployee);
   const [activeTab, setActiveTab] = useState('basic');
   const [isQuickShiftModalOpen, setQuickShiftModalOpen] = useState(false);
-  const [isSyncGajiModalOpen, setSyncGajiModalOpen] = useState(false);
+
   const [quickShiftForm, setQuickShiftForm] = useState({ departmentId: '', shiftId: '' });
   const [page, setPage] = useState(1);
   const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
@@ -599,9 +599,9 @@ const Employees = () => {
         <div className="flex flex-wrap gap-2">
           <button 
             onClick={() => setQuickShiftModalOpen(true)} 
-            className="bg-white border border-slate-200 text-slate-700 hover:border-slate-300 font-bold py-2.5 px-4 rounded-xl flex items-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all active:scale-95 cursor-pointer"
+            className="bg-white border border-slate-200 text-slate-700 hover:border-blue-300 hover:text-blue-600 font-bold py-2.5 px-4 rounded-xl flex items-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all active:scale-95 cursor-pointer group"
           >
-            <RefreshCw className="w-3.5 h-3.5 text-blue-600" />
+            <RefreshCw className="w-3.5 h-3.5 text-blue-600 group-hover:scale-110 transition-transform" />
             Ubah Shift Massal
           </button>
           
@@ -617,25 +617,17 @@ const Employees = () => {
                 setTimeout(() => { setPrintBulkIDCards(null); }, 1000);
               }, 1000);
             }} 
-            className="bg-white border border-slate-200 text-slate-700 hover:border-indigo-300 hover:text-indigo-600 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all border border-slate-200 active:scale-95 cursor-pointer"
+            className="bg-white border border-slate-200 text-slate-700 hover:border-indigo-300 hover:text-indigo-600 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all active:scale-95 cursor-pointer group"
           >
-            <Printer className="w-3.5 h-3.5 text-indigo-500" /> 
+            <Printer className="w-3.5 h-3.5 text-indigo-500 group-hover:scale-110 transition-transform" /> 
             Cetak ID Card (Massal)
           </button>
 
           <button 
-            onClick={() => setSyncGajiModalOpen(true)} 
-            className="bg-white border border-slate-200 text-slate-700 hover:border-emerald-300 hover:text-emerald-600 font-bold py-2.5 px-4 rounded-xl flex items-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all active:scale-95 cursor-pointer"
-          >
-            <Banknote className="w-3.5 h-3.5 text-emerald-600" />
-            Sinkronisasi Gaji Normal
-          </button>
-
-          <button 
             onClick={() => navigate('/admin/contracts')} 
-            className="bg-white border border-slate-200 text-slate-700 hover:border-orange-300 hover:text-orange-600 font-bold py-2.5 px-4 rounded-xl flex items-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all active:scale-95 cursor-pointer relative"
+            className="bg-white border border-slate-200 text-slate-700 hover:border-orange-300 hover:text-orange-600 font-bold py-2.5 px-4 rounded-xl flex items-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all active:scale-95 cursor-pointer relative group"
           >
-            <FileText className="w-3.5 h-3.5 text-orange-500" />
+            <FileText className="w-3.5 h-3.5 text-orange-500 group-hover:scale-110 transition-transform" />
             Kontrak Kerja (PKWT)
             {criticalAlertsCount > 0 && (
               <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
@@ -1838,7 +1830,7 @@ const Employees = () => {
                 <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center border border-blue-100">
                   <RefreshCw className="w-5 h-5 text-blue-600" />
                 </div>
-                <h3 className="font-bold text-slate-800 text-lg">Batch Shift Update</h3>
+                <h3 className="font-bold text-slate-800 text-lg">Ubah Shift Massal</h3>
               </div>
               <button onClick={() => setQuickShiftModalOpen(false)} className="w-8 h-8 flex items-center justify-center hover:bg-slate-200 rounded-lg transition-all">
                 <X className="w-4 h-4 text-slate-500" />
@@ -1850,39 +1842,49 @@ const Employees = () => {
                 <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex gap-3">
                   <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
                   <p className="text-xs text-amber-800 font-medium leading-relaxed">
-                    Warning: This action will permanently update the default shift for <b className="font-bold">all employees</b> in the selected group.
+                    Peringatan: Tindakan ini akan mengubah shift default secara permanen untuk <b className="font-bold">semua karyawan</b> di grup yang dipilih.
                   </p>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Target Department</label>
-                  <select 
-                    required
-                    value={quickShiftForm.departmentId}
-                    onChange={(e) => setQuickShiftForm({...quickShiftForm, departmentId: e.target.value})}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 appearance-none cursor-pointer"
-                  >
-                    <option value="">Select Target...</option>
-                    <option value="0" className="font-bold text-blue-600">-- ALL DEPARTMENTS --</option>
-                    {masterOptions.departments.map(d => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
-                    ))}
-                  </select>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Target Departemen</label>
+                  <div className="relative">
+                    <select 
+                      required
+                      value={quickShiftForm.departmentId}
+                      onChange={(e) => setQuickShiftForm({...quickShiftForm, departmentId: e.target.value})}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 appearance-none cursor-pointer pr-10"
+                    >
+                      <option value="">Pilih Target...</option>
+                      <option value="0" className="font-bold text-blue-600">-- SEMUA DEPARTEMEN --</option>
+                      {masterOptions.departments.map(d => (
+                        <option key={d.id} value={d.id}>{d.name}</option>
+                      ))}
+                    </select>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                      <ChevronDown className="w-4 h-4 text-slate-400" />
+                    </div>
+                  </div>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">New Shift Protocol</label>
-                  <select 
-                    required
-                    value={quickShiftForm.shiftId}
-                    onChange={(e) => setQuickShiftForm({...quickShiftForm, shiftId: e.target.value})}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 appearance-none cursor-pointer"
-                  >
-                    <option value="">Select Shift...</option>
-                    {shifts.map(s => (
-                      <option key={s.id} value={s.id}>{s.name} [{s.startTime} - {s.endTime}]</option>
-                    ))}
-                  </select>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Shift Baru</label>
+                  <div className="relative">
+                    <select 
+                      required
+                      value={quickShiftForm.shiftId}
+                      onChange={(e) => setQuickShiftForm({...quickShiftForm, shiftId: e.target.value})}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 appearance-none cursor-pointer pr-10"
+                    >
+                      <option value="">Pilih Shift...</option>
+                      {shifts.map(s => (
+                        <option key={s.id} value={s.id}>{s.name} [{s.startTime} - {s.endTime}]</option>
+                      ))}
+                    </select>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                      <ChevronDown className="w-4 h-4 text-slate-400" />
+                    </div>
+                  </div>
                 </div>
               </div>
               
@@ -1892,7 +1894,7 @@ const Employees = () => {
                   onClick={() => setQuickShiftModalOpen(false)}
                   className="px-5 py-2.5 text-sm font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-xl transition-all"
                 >
-                  Cancel
+                  Batal
                 </button>
                 <button 
                   type="submit"
@@ -1900,7 +1902,7 @@ const Employees = () => {
                   className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl transition-all disabled:opacity-50 shadow-sm flex items-center gap-2"
                 >
                   {batchShiftMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {batchShiftMutation.isPending ? 'Updating...' : 'Confirm Update'}
+                  {batchShiftMutation.isPending ? 'Memperbarui...' : 'Konfirmasi Perubahan'}
                 </button>
               </div>
             </form>
@@ -1908,81 +1910,7 @@ const Employees = () => {
         </div>
       )}
 
-      {/* PKWT Alerts Modal */}
-      {isPkwtModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 print:hidden">
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setPkwtModalOpen(false)}></div>
-          <div className="bg-white w-full max-w-2xl relative z-10 overflow-hidden border border-slate-200 shadow-2xl animate-in zoom-in-95 duration-300 rounded-3xl">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-orange-50 rounded-xl flex items-center justify-center border border-orange-100">
-                  <FileText className="w-6 h-6 text-orange-500" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-800 text-xl tracking-tight">PKWT Contract Alerts</h3>
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">Expiring employment contracts</p>
-                </div>
-              </div>
-              <button onClick={() => setPkwtModalOpen(false)}>
-                <X className="w-5 h-5 text-slate-400 hover:text-slate-600 transition-colors" />
-              </button>
-            </div>
-            <div className="p-6 max-h-[60vh] overflow-y-auto bg-slate-50">
-              <div className="space-y-4">
-                {pkwtAlerts.length === 0 ? (
-                  <div className="text-center py-12 text-slate-500 bg-white rounded-2xl border border-slate-200 shadow-sm">
-                    <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto mb-3" />
-                    <p className="font-bold text-slate-700">No Pending Contracts</p>
-                    <p className="text-xs mt-1">All employee contracts are up to date.</p>
-                  </div>
-                ) : pkwtAlerts.map(alert => (
-                  <div key={alert.id} className={`p-4 rounded-2xl border flex items-center justify-between shadow-sm transition-all hover:scale-[1.01] ${
-                    alert.alertLevel === 'expired' ? 'bg-rose-50 border-rose-200' : 
-                    alert.alertLevel === 'critical' ? 'bg-orange-50 border-orange-200' :
-                    'bg-amber-50 border-amber-200'
-                  }`}>
-                    <div className="flex items-center">
-                      <AlertCircle className={`mr-4 ${
-                        alert.alertLevel === 'expired' ? 'text-rose-500' : 
-                        alert.alertLevel === 'critical' ? 'text-orange-500' : 'text-amber-500'
-                      }`} size={24} />
-                      <div>
-                        <h4 className="font-bold text-slate-800">{alert.employeeName} <span className="text-xs font-semibold text-slate-500 bg-white/50 px-2 py-0.5 rounded-md ml-2 border border-slate-200/50">{alert.employeeCode}</span></h4>
-                        <p className="text-xs text-slate-600 mt-1 font-medium">Ends: {new Date(alert.contractEnd).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric'})}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <span className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider shadow-sm border ${
-                        alert.alertLevel === 'expired' ? 'bg-white border-rose-200 text-rose-700' : 
-                        alert.alertLevel === 'critical' ? 'bg-white border-orange-200 text-orange-700' : 'bg-white border-amber-200 text-amber-700'
-                      }`}>
-                        {alert.daysLeft <= 0 ? 'Expired' : `${alert.daysLeft} Days Left`}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="p-6 bg-white border-t border-slate-100 flex justify-end">
-              <button 
-                onClick={() => setPkwtModalOpen(false)}
-                className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-sm transition-all"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* Sync Gaji Normal Modal */}
-      {isSyncGajiModalOpen && (
-        <SyncGajiNormalModal 
-          departments={masterOptions.departments}
-          onClose={() => setSyncGajiModalOpen(false)}
-          onDone={() => { setSyncGajiModalOpen(false); queryClient.invalidateQueries(['employees']); }}
-        />
-      )}
       </div>
 
       {/* Hidden Print Container for ID Card */}
@@ -2038,179 +1966,7 @@ const Employees = () => {
   );
 };
 
-const SyncGajiNormalModal = ({ departments, onClose, onDone }) => {
-  const [selectedDept, setSelectedDept] = useState('');
-  const [employees, setEmployees] = useState([]);
-  const [selectedIds, setSelectedIds] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [syncing, setSyncing] = useState(false);
 
-  useEffect(() => {
-    if (selectedDept) {
-      fetchDeptEmployees(selectedDept);
-    } else {
-      setEmployees([]);
-      setSelectedIds([]);
-    }
-  }, [selectedDept]);
-
-  const fetchDeptEmployees = async (dept) => {
-    setLoading(true);
-    try {
-      const res = await employeeAPI.getAll({ dept, limit: 1000, excludeBhl: true });
-      setEmployees(res.data || []);
-      // Auto-select all by default
-      setSelectedIds((res.data || []).map(e => e.id));
-    } catch (err) {
-      alert('Gagal mengambil data karyawan');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleToggleSelectAll = (e) => {
-    if (e.target.checked) {
-      setSelectedIds(employees.map(emp => emp.id));
-    } else {
-      setSelectedIds([]);
-    }
-  };
-
-  const handleToggleEmployee = (id) => {
-    setSelectedIds(prev => 
-      prev.includes(id) ? prev.filter(e => e !== id) : [...prev, id]
-    );
-  };
-
-  const handleSync = async () => {
-    if (selectedIds.length === 0) return alert('Pilih minimal 1 karyawan');
-    if (!window.confirm(`Yakin ingin menyamakan tipe gaji ${selectedIds.length} karyawan menjadi UMK/UMR? Gaji Pokok & Tunjangan mereka akan otomatis terisi sesuai setting Matriks/Global.`)) return;
-    
-    setSyncing(true);
-    try {
-      await employeeAPI.batchUpdateSalaryCategory({ 
-        employeeIds: selectedIds, 
-        salaryCategory: 'UMK/UMR' 
-      });
-      alert('Sinkronisasi gaji normal berhasil!');
-      onDone();
-    } catch (err) {
-      alert('Terjadi kesalahan saat sinkronisasi');
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose}></div>
-      <div className="bg-white rounded-2xl w-full max-w-2xl relative z-10 flex flex-col max-h-[90vh] shadow-2xl overflow-hidden">
-        
-        {/* Header */}
-        <div className="p-6 border-b border-slate-100 bg-emerald-50/30 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center border border-emerald-200">
-              <Banknote className="w-6 h-6 text-emerald-600" />
-            </div>
-            <div>
-              <h3 className="font-bold text-slate-800 text-xl">Sync Gaji Normal (UMK/UMR)</h3>
-              <p className="text-xs text-slate-500 mt-1">Ubah kategori gaji secara massal berdasarkan departemen</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="w-10 h-10 flex items-center justify-center hover:bg-slate-100 rounded-xl transition-all">
-            <X className="w-5 h-5 text-slate-500" />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="p-6 flex-1 overflow-y-auto">
-          <div className="mb-6">
-            <label className="block text-sm font-semibold text-slate-700 mb-2">1. Pilih Departemen</label>
-            <select
-              value={selectedDept}
-              onChange={e => setSelectedDept(e.target.value)}
-              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
-            >
-              <option value="">-- Pilih Departemen --</option>
-              {departments.map(d => (
-                <option key={d.id} value={d.name}>{d.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {selectedDept && (
-            <div>
-              <div className="flex justify-between items-center mb-3">
-                <label className="block text-sm font-semibold text-slate-700">2. Pilih Karyawan ({selectedIds.length} / {employees.length} terpilih)</label>
-              </div>
-              
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
-                {loading ? (
-                  <div className="p-8 flex flex-col items-center text-slate-400">
-                    <Loader2 className="w-8 h-8 animate-spin text-emerald-500 mb-2" />
-                    <span className="text-sm">Memuat data karyawan...</span>
-                  </div>
-                ) : employees.length === 0 ? (
-                  <div className="p-8 text-center text-slate-500 text-sm">
-                    Tidak ada karyawan di departemen ini.
-                  </div>
-                ) : (
-                  <>
-                    <div className="bg-slate-50 p-3 border-b border-slate-200 flex items-center gap-3">
-                      <input 
-                        type="checkbox" 
-                        id="selectAll"
-                        checked={selectedIds.length === employees.length && employees.length > 0}
-                        onChange={handleToggleSelectAll}
-                        className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                      />
-                      <label htmlFor="selectAll" className="text-sm font-bold text-slate-700 cursor-pointer">Pilih Semua Karyawan</label>
-                    </div>
-                    <div className="max-h-64 overflow-y-auto divide-y divide-slate-100">
-                      {employees.map(emp => (
-                        <label key={emp.id} className="flex items-center gap-4 p-3 hover:bg-slate-50 cursor-pointer transition-colors">
-                          <input 
-                            type="checkbox" 
-                            checked={selectedIds.includes(emp.id)}
-                            onChange={() => handleToggleEmployee(emp.id)}
-                            className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                          />
-                          <div>
-                            <p className="text-sm font-semibold text-slate-800">{emp.name}</p>
-                            <p className="text-xs text-slate-500">{emp.employeeCode} • {emp.position || 'No Position'}</p>
-                          </div>
-                          <div className="ml-auto">
-                            <span className="px-2 py-1 bg-slate-100 text-slate-600 text-[10px] font-bold rounded-md uppercase">
-                              {emp.salaryCategory || 'BLM DISET'}
-                            </span>
-                          </div>
-                        </label>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
-          <button onClick={onClose} className="px-5 py-2.5 rounded-xl font-semibold text-slate-600 hover:bg-slate-200 transition-all text-sm">
-            Batal
-          </button>
-          <button 
-            onClick={handleSync} 
-            disabled={syncing || selectedIds.length === 0}
-            className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold text-sm shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {syncing ? <><Loader2 className="w-4 h-4 animate-spin" /> Menyinkronkan...</> : <><Save className="w-4 h-4" /> Terapkan Gaji Normal</>}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 // Custom styles for CreatableSelect
 const customSelectStyles = {

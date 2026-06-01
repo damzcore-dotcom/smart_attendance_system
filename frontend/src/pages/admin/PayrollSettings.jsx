@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Banknote, FileText, Clock, Users, Plus, Edit, Trash2, Save, X, AlertCircle, Settings2, LayoutGrid
+  Banknote, FileText, Clock, Users, Plus, Edit, Trash2, Save, X, AlertCircle, Settings2, LayoutGrid, Loader2, ChevronDown
 } from 'lucide-react';
-import { payrollAPI, settingsAPI } from '../../services/api';
+import { payrollAPI, settingsAPI, employeeAPI } from '../../services/api';
 
 const PayrollSettings = () => {
   const [activeTab, setActiveTab] = useState('components');
@@ -484,6 +484,7 @@ const OvertimeTab = ({ data, onRefresh, config, globalSettings }) => {
 const AssignSalaryTab = ({ data, components, onRefresh, config }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedEmp, setSelectedEmp] = useState(null);
+  const [isSyncGajiOpen, setIsSyncGajiOpen] = useState(false);
   
   // Filtering states
   const [searchTerm, setSearchTerm] = useState('');
@@ -587,7 +588,16 @@ const AssignSalaryTab = ({ data, components, onRefresh, config }) => {
   return (
     <div>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
-        <h3 className="text-lg font-semibold text-gray-800">Assign Gaji: ALL IN & HARIAN</h3>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <h3 className="text-lg font-semibold text-gray-800">Assign Gaji: ALL IN & HARIAN</h3>
+          <button 
+            onClick={() => setIsSyncGajiOpen(true)} 
+            className="flex items-center gap-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold py-1.5 px-3.5 rounded-xl text-xs uppercase tracking-wider border border-emerald-200 hover:border-emerald-300 shadow-sm transition-all active:scale-95 group cursor-pointer"
+          >
+            <Banknote className="w-3.5 h-3.5 text-emerald-600 group-hover:scale-110 transition-transform" />
+            Sinkronisasi Gaji Normal
+          </button>
+        </div>
         
         <div className="flex gap-2 w-full sm:w-auto">
           <input 
@@ -741,6 +751,209 @@ const AssignSalaryTab = ({ data, components, onRefresh, config }) => {
           </div>
         </div>
       )}
+      
+      {isSyncGajiOpen && (
+        <SyncGajiNormalModal 
+          onClose={() => setIsSyncGajiOpen(false)}
+          onDone={() => { setIsSyncGajiOpen(false); onRefresh(); }}
+        />
+      )}
+    </div>
+  );
+};
+
+const SyncGajiNormalModal = ({ onClose, onDone }) => {
+  const [selectedDept, setSelectedDept] = useState('');
+  const [departments, setDepartments] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [deptLoading, setDeptLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchDepts = async () => {
+      try {
+        const res = await employeeAPI.getMasterOptions({});
+        setDepartments(res.data?.departments || []);
+      } catch (err) {
+        console.error('Failed to load departments', err);
+      } finally {
+        setDeptLoading(false);
+      }
+    };
+    fetchDepts();
+  }, []);
+
+  useEffect(() => {
+    if (selectedDept) {
+      fetchDeptEmployees(selectedDept);
+    } else {
+      setEmployees([]);
+      setSelectedIds([]);
+    }
+  }, [selectedDept]);
+
+  const fetchDeptEmployees = async (dept) => {
+    setLoading(true);
+    try {
+      const res = await employeeAPI.getAll({ dept, limit: 1000, excludeBhl: true });
+      setEmployees(res.data || []);
+      // Auto-select all by default - USE dbId (database integer ID) NOT id (string employee code)
+      setSelectedIds((res.data || []).map(e => e.dbId));
+    } catch (err) {
+      alert('Gagal mengambil data karyawan');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleToggleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedIds(employees.map(emp => emp.dbId));
+    } else {
+      setSelectedIds([]);
+    }
+  };
+
+  const handleToggleEmployee = (dbId) => {
+    setSelectedIds(prev => 
+      prev.includes(dbId) ? prev.filter(e => e !== dbId) : [...prev, dbId]
+    );
+  };
+
+  const handleSync = async () => {
+    if (selectedIds.length === 0) return alert('Pilih minimal 1 karyawan');
+    if (!window.confirm(`Yakin ingin menyamakan tipe gaji ${selectedIds.length} karyawan menjadi UMK/UMR? Gaji Pokok & Tunjangan mereka akan otomatis terisi sesuai setting Matriks/Global.`)) return;
+    
+    setSyncing(true);
+    try {
+      await employeeAPI.batchUpdateSalaryCategory({ 
+        employeeIds: selectedIds, 
+        salaryCategory: 'UMK/UMR' 
+      });
+      alert('Sinkronisasi gaji normal berhasil!');
+      onDone();
+    } catch (err) {
+      alert('Terjadi kesalahan saat sinkronisasi');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose}></div>
+      <div className="bg-white rounded-2xl w-full max-w-2xl relative z-10 flex flex-col max-h-[90vh] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+        
+        {/* Header */}
+        <div className="p-6 border-b border-slate-100 bg-emerald-50/30 flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center border border-emerald-200">
+              <Banknote className="w-6 h-6 text-emerald-600" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-800 text-xl">Sync Gaji Normal (UMK/UMR)</h3>
+              <p className="text-xs text-slate-500 mt-1">Ubah kategori gaji secara massal berdasarkan departemen</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-10 h-10 flex items-center justify-center hover:bg-slate-100 rounded-xl transition-all">
+            <X className="w-5 h-5 text-slate-500" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 flex-1 overflow-y-auto">
+          <div className="mb-6">
+            <label className="block text-sm font-semibold text-slate-700 mb-2">1. Pilih Departemen</label>
+            <div className="relative">
+              <select
+                value={selectedDept}
+                onChange={e => setSelectedDept(e.target.value)}
+                disabled={deptLoading}
+                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all appearance-none cursor-pointer pr-10"
+              >
+                <option value="">{deptLoading ? 'Memuat departemen...' : '-- Pilih Departemen --'}</option>
+                {departments.map(d => (
+                  <option key={d.id} value={d.name}>{d.name}</option>
+                ))}
+              </select>
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                <ChevronDown className="w-4 h-4 text-slate-400" />
+              </div>
+            </div>
+          </div>
+
+          {selectedDept && (
+            <div>
+              <div className="flex justify-between items-center mb-3">
+                <label className="block text-sm font-semibold text-slate-700">2. Pilih Karyawan ({selectedIds.length} / {employees.length} terpilih)</label>
+              </div>
+              
+              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                {loading ? (
+                  <div className="p-8 flex flex-col items-center text-slate-400">
+                    <Loader2 className="w-8 h-8 animate-spin text-emerald-500 mb-2" />
+                    <span className="text-sm">Memuat data karyawan...</span>
+                  </div>
+                ) : employees.length === 0 ? (
+                  <div className="p-8 text-center text-slate-500 text-sm">
+                    Tidak ada karyawan di departemen ini.
+                  </div>
+                ) : (
+                  <>
+                    <div className="bg-slate-50 p-3 border-b border-slate-200 flex items-center gap-3">
+                      <input 
+                        type="checkbox" 
+                        id="syncSelectAll"
+                        checked={selectedIds.length === employees.length && employees.length > 0}
+                        onChange={handleToggleSelectAll}
+                        className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                      />
+                      <label htmlFor="syncSelectAll" className="text-sm font-bold text-slate-700 cursor-pointer select-none">Pilih Semua Karyawan</label>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto divide-y divide-slate-100">
+                      {employees.map(emp => (
+                        <label key={emp.dbId} className="flex items-center gap-4 p-3 hover:bg-slate-50 cursor-pointer transition-colors select-none">
+                          <input 
+                            type="checkbox" 
+                            checked={selectedIds.includes(emp.dbId)}
+                            onChange={() => handleToggleEmployee(emp.dbId)}
+                            className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                          />
+                          <div>
+                            <p className="text-sm font-semibold text-slate-800">{emp.name}</p>
+                            <p className="text-xs text-slate-500">{(emp.employeeCode || emp.id)} • {emp.position || 'No Position'}</p>
+                          </div>
+                          <div className="ml-auto">
+                            <span className="px-2 py-1 bg-slate-100 text-slate-600 text-[10px] font-bold rounded-md uppercase">
+                              {emp.salaryCategory || 'BLM DISET'}
+                            </span>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+          <button onClick={onClose} className="px-5 py-2.5 rounded-xl font-semibold text-slate-600 hover:bg-slate-200 transition-all text-sm cursor-pointer">
+            Batal
+          </button>
+          <button 
+            onClick={handleSync} 
+            disabled={syncing || selectedIds.length === 0}
+            className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold text-sm shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+          >
+            {syncing ? <><Loader2 className="w-4 h-4 animate-spin" /> Menyinkronkan...</> : <><Save className="w-4 h-4" /> Terapkan Gaji Normal</>}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
