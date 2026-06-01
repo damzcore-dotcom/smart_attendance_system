@@ -166,6 +166,7 @@ const Users = () => {
         { key: 'dashboard', label: 'Dashboard' },
         { key: 'announcements', label: 'Announcements' },
         { key: 'employees', label: 'Employee Master' },
+        { key: 'contracts', label: 'Employee Contracts (PKWT)' },
         { key: 'shift-roster', label: 'Shift Roster' },
         { key: 'leave-requests', label: 'Leave Requests' },
         { key: 'attendance', label: 'Attendance Management' },
