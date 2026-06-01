@@ -5,10 +5,13 @@ import { AppLogo } from '../components/AppLogo';
 import Webcam from 'react-webcam';
 import { authAPI } from '../services/api';
 import { loadFaceModels, faceapi, areModelsLoaded } from '../utils/faceModelLoader';
+import { useTranslation } from 'react-i18next';
+import { LanguageSelector } from '../components/common/LanguageSelector';
 
 
 
 const Login = () => {
+  const { t } = useTranslation();
   const [loginMode, setLoginMode] = useState('credentials');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -322,6 +325,11 @@ const Login = () => {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 md:p-8 relative overflow-hidden font-sans bg-gradient-to-br from-blue-50 via-white to-slate-50">
       
+      {/* Language Selector at the top right */}
+      <div className="absolute top-6 right-6 z-50">
+        <LanguageSelector />
+      </div>
+
       {/* Decorative background elements */}
       <div className="absolute top-0 right-0 w-96 h-96 bg-blue-100/50 rounded-full blur-[120px] -translate-y-1/2 translate-x-1/3 pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-80 h-80 bg-blue-50 rounded-full blur-[100px] translate-y-1/3 -translate-x-1/4 pointer-events-none" />
@@ -337,7 +345,7 @@ const Login = () => {
             </div>
             <div className="flex flex-col items-center gap-1">
               <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-br from-slate-800 to-slate-600 tracking-tight leading-tight">{publicSettings.companyName}</h1>
-              <p className="text-blue-600 text-[10px] font-black uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full border border-blue-100 shadow-sm inline-block relative z-10">Management Portal</p>
+              <p className="text-blue-600 text-[10px] font-black uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full border border-blue-100 shadow-sm inline-block relative z-10">{t('login.subtitle')}</p>
             </div>
           </div>
 
@@ -345,14 +353,14 @@ const Login = () => {
           <div className="flex p-1 bg-slate-100 rounded-xl mb-8">
             <button
               onClick={() => setLoginMode('credentials')}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-xs font-semibold transition-all duration-300 ${
+              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-xs font-semibold transition-all duration-300 cursor-pointer ${
                 loginMode === 'credentials' 
                   ? 'bg-white text-blue-600 shadow-sm' 
                   : 'text-slate-500 hover:text-slate-700'
               }`}
             >
               <LogIn className="w-4 h-4" />
-              Credentials
+              {t('login.credentials')}
             </button>
             <button
               onClick={() => {
@@ -360,14 +368,14 @@ const Login = () => {
                 setIsScanning(false);
                 setError(null);
               }}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-xs font-semibold transition-all duration-300 ${
+              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-xs font-semibold transition-all duration-300 cursor-pointer ${
                 loginMode === 'face' 
                   ? 'bg-white text-blue-600 shadow-sm' 
                   : 'text-slate-500 hover:text-slate-700'
               }`}
             >
               <ScanFace className="w-4 h-4" />
-              Face ID
+              {t('login.faceId')}
             </button>
           </div>
 
@@ -376,14 +384,14 @@ const Login = () => {
             <form onSubmit={handleCredentialLogin} className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
               <div className="space-y-5">
                 <div className="group">
-                  <label className="block text-xs font-semibold text-slate-500 mb-2 ml-1">Username</label>
+                  <label className="block text-xs font-semibold text-slate-500 mb-2 ml-1">{t('login.username')}</label>
                   <div className="relative">
                     <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors">
                       <User className="w-5 h-5" />
                     </div>
                     <input
                       type="text"
-                      placeholder="Enter username"
+                      placeholder={t('login.username')}
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
                       required
@@ -393,7 +401,7 @@ const Login = () => {
                 </div>
 
                 <div className="group">
-                  <label className="block text-xs font-semibold text-slate-500 mb-2 ml-1">Password</label>
+                  <label className="block text-xs font-semibold text-slate-500 mb-2 ml-1">{t('login.password')}</label>
                   <div className="relative">
                     <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors">
                       <ShieldCheck className="w-5 h-5" />
@@ -421,21 +429,21 @@ const Login = () => {
                 <button
                   type="submit"
                   disabled={isLoggingIn}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-600/20 active:scale-[0.98] disabled:opacity-70"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-600/20 active:scale-[0.98] disabled:opacity-70 cursor-pointer"
                 >
                   {isLoggingIn ? (
-                    <><Loader2 className="w-4 h-4 animate-spin" /> Authenticating...</>
+                    <><Loader2 className="w-4 h-4 animate-spin" /> {t('login.loggingIn')}</>
                   ) : (
-                    <>Login to System <LogIn className="w-4 h-4" /></>
+                    <>{t('login.loginBtn')} <LogIn className="w-4 h-4" /></>
                   )}
                 </button>
                 <div className="mt-6 flex justify-center">
                   <button 
                     type="button" 
                     onClick={handleForgotPassword}
-                    className="text-slate-400 hover:text-blue-600 text-xs font-medium transition-colors"
+                    className="text-slate-400 hover:text-blue-600 text-xs font-medium transition-colors cursor-pointer"
                   >
-                    Forgot password?
+                    {t('login.forgotPassword')}
                   </button>
                 </div>
               </div>
@@ -445,16 +453,17 @@ const Login = () => {
                 <div className="w-20 h-20 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-105 transition-transform duration-500">
                   <ScanFace className="w-10 h-10" />
                 </div>
-                <h3 className="text-xl font-bold text-slate-800 mb-2">Biometric Verification</h3>
-                <p className="text-sm text-slate-500 mb-8 leading-relaxed">Secure access using recognized facial geometry.</p>
+                <h3 className="text-xl font-bold text-slate-800 mb-2">{t('login.biometricTitle')}</h3>
+                <p className="text-sm text-slate-500 mb-8 leading-relaxed">{t('login.biometricDesc')}</p>
                 <button
                   onClick={() => setIsScanning(true)}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-semibold text-sm shadow-lg shadow-blue-600/20 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-semibold text-sm shadow-lg shadow-blue-600/20 transition-all flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer"
                 >
-                  <Camera className="w-4 h-4" /> Initialize Scanner
+                  <Camera className="w-4 h-4" /> {t('login.initScanner')}
                 </button>
               </div>
           )}
+
         </div>
       </div>
 

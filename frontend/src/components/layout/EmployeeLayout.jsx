@@ -1,4 +1,6 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { LanguageSelector } from '../common/LanguageSelector';
 import { 
   Home, 
   History, 
@@ -14,6 +16,7 @@ import { AppLogo } from '../AppLogo';
 import LicenseFooter from '../LicenseFooter';
 
 const EmployeeLayout = () => {
+  const { t } = useTranslation();
   const location = useLocation();
 
   const { data: userData, isLoading: userLoading } = useQuery({
@@ -34,12 +37,13 @@ const EmployeeLayout = () => {
   const unreadCount = notificationsData?.data?.filter(n => n.unread).length || 0;
 
   const navItems = [
-    { name: 'Beranda', path: '/employee', icon: Home },
-    { name: 'Riwayat', path: '/employee/history', icon: History },
-    { name: 'Absen', path: '/employee/scan', icon: Scan, primary: true },
-    { name: 'Cuti', path: '/employee/leave', icon: ShieldCheck },
-    { name: 'Profil', path: '/employee/profile', icon: User },
+    { name: t('navigation.employee.home'), path: '/employee', icon: Home },
+    { name: t('navigation.employee.history'), path: '/employee/history', icon: History },
+    { name: t('navigation.employee.scan'), path: '/employee/scan', icon: Scan, primary: true },
+    { name: t('navigation.employee.leave'), path: '/employee/leave', icon: ShieldCheck },
+    { name: t('navigation.employee.profile'), path: '/employee/profile', icon: User },
   ];
+
 
   // Check if we are on the scan page to hide the layout chrome
   const isScanPage = location.pathname === '/employee/scan';
@@ -63,17 +67,21 @@ const EmployeeLayout = () => {
               <AppLogo className="w-full h-auto max-h-full object-contain object-left" />
             </div>
             <div className="flex flex-col">
-              <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Selamat Datang</span>
+              <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">{t('common.welcome')}</span>
               <span className="font-semibold text-slate-800 tracking-tight text-sm">{employee.name || 'Karyawan'}</span>
             </div>
           </div>
-          <Link to="/employee/notifications" className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-slate-50 text-slate-400 relative transition-all">
-            <Bell className="w-5 h-5" />
-            {unreadCount > 0 && (
-              <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white shadow-sm animate-pulse"></span>
-            )}
-          </Link>
+          <div className="flex items-center gap-3">
+            <LanguageSelector />
+            <Link to="/employee/notifications" className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-slate-50 text-slate-400 relative transition-all">
+              <Bell className="w-5 h-5" />
+              {unreadCount > 0 && (
+                <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white shadow-sm animate-pulse"></span>
+              )}
+            </Link>
+          </div>
         </header>
+
       )}
 
       {/* Content */}

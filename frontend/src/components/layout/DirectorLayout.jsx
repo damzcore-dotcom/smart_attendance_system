@@ -1,4 +1,6 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { LanguageSelector } from '../common/LanguageSelector';
 import { 
   LayoutDashboard, 
   CalendarCheck, 
@@ -20,6 +22,7 @@ import LicenseFooter from '../LicenseFooter';
 import AiAssistantChat from '../chat/AiAssistantChat';
 
 const DirectorLayout = () => {
+  const { t } = useTranslation();
   const [isSidebarOpen, setSidebarOpen] = useState(window.innerWidth > 1024);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 1024);
   const location = useLocation();
@@ -41,13 +44,14 @@ const DirectorLayout = () => {
   }, [location.pathname, isMobile]);
 
   const menuItems = [
-    { name: 'Dashboard', path: '/director', icon: LayoutDashboard },
-    { name: 'Leave Approval', path: '/director/leave', icon: Users },
-    { name: 'Attendance', path: '/director/attendance', icon: CalendarCheck },
-    { name: 'Payroll Approval', path: '/director/payroll', icon: Building2 },
-    { name: 'Kontrak Kerja (PKWT)', path: '/director/contracts', icon: FileText },
-    { name: 'Log Audit', path: '/director/audit-log', icon: Shield },
+    { name: t('navigation.dashboard'), path: '/director', icon: LayoutDashboard },
+    { name: t('navigation.employee.leave'), path: '/director/leave', icon: Users },
+    { name: t('navigation.attendanceData'), path: '/director/attendance', icon: CalendarCheck },
+    { name: t('navigation.payrollProcess'), path: '/director/payroll', icon: Building2 },
+    { name: t('navigation.contracts'), path: '/director/contracts', icon: FileText },
+    { name: t('navigation.auditLog'), path: '/director/audit-log', icon: Shield },
   ];
+
 
   const { data: userData } = useQuery({
     queryKey: ['me'],
@@ -140,13 +144,14 @@ const DirectorLayout = () => {
             )}
             <button
               onClick={handleLogout}
-              className={`w-full flex items-center gap-3 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all duration-200 text-sm font-medium ${isSidebarOpen ? 'px-3 py-2.5' : 'px-0 py-2 justify-center'}`}
+              className={`w-full flex items-center gap-3 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all duration-200 text-sm font-medium cursor-pointer ${isSidebarOpen ? 'px-3 py-2.5' : 'px-0 py-2 justify-center'}`}
             >
               <LogOut className="w-5 h-5 shrink-0" />
-              {isSidebarOpen && <span>Secure Exit</span>}
+              {isSidebarOpen && <span>{t('common.logout')}</span>}
             </button>
           </div>
         </div>
+
       </aside>
 
       {/* Main Content Area */}
@@ -170,11 +175,16 @@ const DirectorLayout = () => {
                <div className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
                <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">Director Mode</span>
             </div>
+            
+            {/* Language Selector */}
+            <LanguageSelector />
+
             <div className="h-8 w-px bg-slate-200"></div>
             <div className="w-10 h-10 rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user.name}`} alt="avatar" className="w-full h-full object-cover" />
             </div>
           </div>
+
         </header>
 
         {/* Page Container */}

@@ -1,4 +1,6 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { LanguageSelector } from '../common/LanguageSelector';
 import { 
   LayoutDashboard, 
   CalendarCheck, 
@@ -20,6 +22,7 @@ import LicenseFooter from '../LicenseFooter';
 import AiAssistantChat from '../chat/AiAssistantChat';
 
 const ManagerLayout = () => {
+  const { t } = useTranslation();
   const [isSidebarOpen, setSidebarOpen] = useState(window.innerWidth > 1024);
   const [isNotificationsOpen, setNotificationsOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 1024);
@@ -42,12 +45,13 @@ const ManagerLayout = () => {
   }, [location.pathname, isMobile]);
 
   const menuItems = [
-    { name: 'Dashboard', path: '/manager', icon: LayoutDashboard },
-    { name: 'Leave Approval', path: '/manager/leave', icon: Users },
-    { name: 'Attendance', path: '/manager/attendance', icon: CalendarCheck },
-    { name: 'Kontrak Kerja (PKWT)', path: '/manager/contracts', icon: FileText },
-    { name: 'Log Audit', path: '/manager/audit-log', icon: Shield },
+    { name: t('navigation.dashboard'), path: '/manager', icon: LayoutDashboard },
+    { name: t('navigation.employee.leave'), path: '/manager/leave', icon: Users },
+    { name: t('navigation.attendanceData'), path: '/manager/attendance', icon: CalendarCheck },
+    { name: t('navigation.contracts'), path: '/manager/contracts', icon: FileText },
+    { name: t('navigation.auditLog'), path: '/manager/audit-log', icon: Shield },
   ];
+
 
   const { data: userData } = useQuery({
     queryKey: ['me'],
@@ -149,13 +153,14 @@ const ManagerLayout = () => {
             )}
             <button
               onClick={handleLogout}
-              className={`w-full flex items-center gap-3 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all duration-200 text-sm font-medium ${isSidebarOpen ? 'px-3 py-2.5' : 'px-0 py-2 justify-center'}`}
+              className={`w-full flex items-center gap-3 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all duration-200 text-sm font-medium cursor-pointer ${isSidebarOpen ? 'px-3 py-2.5' : 'px-0 py-2 justify-center'}`}
             >
               <LogOut className="w-5 h-5 shrink-0" />
-              {isSidebarOpen && <span>Logout</span>}
+              {isSidebarOpen && <span>{t('common.logout')}</span>}
             </button>
           </div>
         </div>
+
       </aside>
 
       {/* Main Content Area */}
@@ -186,7 +191,12 @@ const ManagerLayout = () => {
                 )}
               </button>
             </div>
+            
+            {/* Language Selector */}
+            <LanguageSelector />
+
             <div className="h-8 w-px bg-slate-200"></div>
+
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-lg">
                <div className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
                <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">{user.role}</span>

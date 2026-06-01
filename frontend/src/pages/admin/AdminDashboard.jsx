@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { 
   Users, 
   Clock, 
@@ -64,6 +65,7 @@ const StatCard = ({ title, value, change, icon: Icon, color, delay }) => (
 );
 
 const AdminDashboard = () => {
+  const { t } = useTranslation();
   const [time, setTime] = useState(new Date());
   const [activeAlertTab, setActiveAlertTab] = useState('late'); // 'late' | 'live'
   const [liveEvents, setLiveEvents] = useState([]);
@@ -315,15 +317,15 @@ const AdminDashboard = () => {
             <div className="flex flex-wrap items-center gap-3">
               <div className="px-3 py-1 rounded-full bg-white/10 border border-white/20 backdrop-blur-md text-[10px] font-bold text-blue-200 uppercase tracking-widest flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full ${aiStatus?.status === 'ok' ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-rose-500'}`} />
-                AI Engine: {aiStatus?.status === 'ok' ? 'Online' : 'Offline'}
+                AI Engine: {aiStatus?.status === 'ok' ? t('common.online') : t('common.offline')}
               </div>
               <div className="px-3 py-1 rounded-full bg-white/10 border border-white/20 backdrop-blur-md text-[10px] font-bold text-blue-200 uppercase tracking-widest flex items-center gap-2">
                 <Video className="w-3.5 h-3.5 text-blue-300" />
-                CCTV: {cameras.filter(c => c.active).length}/{cameras.length} Online
+                CCTV: {cameras.filter(c => c.active).length}/{cameras.length} {t('common.online')}
               </div>
               <div className="px-3 py-1 rounded-full bg-white/10 border border-white/20 backdrop-blur-md text-[10px] font-bold text-blue-200 uppercase tracking-widest flex items-center gap-2">
                 <Clock className="w-3.5 h-3.5 text-blue-300" />
-                Fingerprint: {devices.length} Devices
+                Fingerprint: {devices.length} {t('navigation.devices')}
               </div>
               <div className="px-3 py-1 rounded-full bg-white/5 border border-white/10 backdrop-blur-md text-[10px] font-bold text-slate-300 uppercase tracking-widest">
                 {time.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}
@@ -339,26 +341,27 @@ const AdminDashboard = () => {
               </span>
             </div>
             <p className="text-blue-100/60 font-medium max-w-xl">
-              Artificial Intelligence augmented dashboard. Monitoring biometric attendance and operational punctuality in real-time.
+              {t('common.dashboardDesc')}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
             <button 
               onClick={() => navigate('/admin/cameras')}
-              className="flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 text-white px-5 py-3 rounded-2xl text-sm font-semibold transition-all shadow-lg active:scale-95 group"
+              className="flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 text-white px-5 py-3 rounded-2xl text-sm font-semibold transition-all shadow-lg active:scale-95 group cursor-pointer"
             >
-              <Video className="w-5 h-5 group-hover:text-blue-300 transition-colors" /> Live CCTV
+              <Video className="w-5 h-5 group-hover:text-blue-300 transition-colors" /> {t('common.liveCctv')}
             </button>
             <button 
               onClick={handleDownloadReport}
-              className="flex items-center justify-center gap-2 bg-white text-slate-900 hover:bg-blue-50 px-5 py-3 rounded-2xl text-sm font-bold transition-all shadow-xl shadow-white/10 active:scale-95 group"
+              className="flex items-center justify-center gap-2 bg-white text-slate-900 hover:bg-blue-50 px-5 py-3 rounded-2xl text-sm font-bold transition-all shadow-xl shadow-white/10 active:scale-95 group cursor-pointer"
             >
               <FileText className="w-5 h-5 text-blue-600 group-hover:scale-110 transition-transform" />
-              Generate Report
+              {t('common.generateReport')}
             </button>
           </div>
         </div>
+
       </div>
 
       {/* Stats Grid */}
