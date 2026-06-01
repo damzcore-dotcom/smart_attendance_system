@@ -33,7 +33,7 @@ const FaceEnrollment = () => {
   const envUrl = import.meta.env.VITE_AI_ENGINE_URL;
   const aiUrl = (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1'))
     ? envUrl
-    : `${window.location.protocol}//${window.location.hostname}:8001`;
+    : `${window.location.protocol}//${window.location.hostname}:8002`;
 
   // Data Options
   const { data: optionsData } = useQuery({

@@ -56,7 +56,7 @@ services:
     build: ./ai_bridge
     container_name: sa_ai_engine
     ports:
-      - "8001:8001"
+      - "8002:8001"
     environment:
       - REDIS_URL=redis://redis:6379
       - SMART_ATTENDANCE_URL=http://host.docker.internal:5000
