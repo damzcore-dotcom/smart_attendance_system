@@ -5,6 +5,7 @@ via HTTP Bridge API.
 """
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from contextlib import asynccontextmanager
 import asyncio
 import os
@@ -123,6 +124,38 @@ async def cameras_status():
     if not stream_manager:
         return {"cameras": {}}
     return stream_manager.get_status()
+
+
+# ── Camera Stream (MJPEG) ────────────────────────────────────────────────
+async def frame_generator(cam_id: str):
+    """Generator asinkron untuk mengalirkan frame JPEG sebagai MJPEG"""
+    while True:
+        if not stream_manager:
+            await asyncio.sleep(0.1)
+            continue
+        
+        jpeg_bytes = stream_manager.get_latest_jpeg(cam_id)
+        if jpeg_bytes is None:
+            await asyncio.sleep(0.1)
+            continue
+            
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + jpeg_bytes + b'\r\n')
+        
+        # Batasi rate streaming ~15 FPS agar ramah bandwidth internet publik
+        await asyncio.sleep(0.06)
+
+
+@app.get("/cameras/{cam_id}/stream")
+async def stream_camera(cam_id: str):
+    """Endpoint untuk live stream MJPEG kamera CCTV"""
+    if not stream_manager or cam_id not in stream_manager.get_active_cameras():
+        raise HTTPException(status_code=404, detail="Kamera tidak ditemukan atau non-aktif")
+        
+    return StreamingResponse(
+        frame_generator(cam_id),
+        media_type="multipart/x-mixed-replace; boundary=frame"
+    )
 
 
 # ── Enrollment: Extract embedding from uploaded image ────────────────────

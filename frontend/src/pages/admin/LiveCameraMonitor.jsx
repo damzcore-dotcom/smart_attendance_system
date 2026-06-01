@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Camera, Wifi, WifiOff, RefreshCw, Clock, Loader2, Activity, XCircle } from 'lucide-react';
+import { Camera, Wifi, WifiOff, RefreshCw, Clock, Loader2, Activity, XCircle, Video, VideoOff } from 'lucide-react';
 import api from '../../services/api';
 
 const LiveCameraMonitor = () => {
@@ -232,60 +232,153 @@ const LiveCameraMonitor = () => {
           )}
         </div>
 
-        {/* Event Feed */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-slate-700 text-sm flex items-center gap-2">
-              <Activity className="w-4 h-4" /> Face Events Feed
-              {selectedCamera && <span className="text-xs text-blue-600">({selectedCamera})</span>}
-            </h3>
-            <span className="text-xs text-slate-400">{events.length} events</span>
-          </div>
+        {/* CCTV Live Preview & Event Feed Container */}
+        <div className="lg:col-span-2 space-y-6">
+          
+          {/* CCTV Live Preview Monitor */}
+          {selectedCamera ? (() => {
+            const cam = cameras.find(c => c.id === selectedCamera);
+            const envUrl = import.meta.env.VITE_AI_ENGINE_URL;
+            const aiUrl = (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1'))
+              ? envUrl
+              : `${window.location.protocol}//${window.location.hostname}:8002`;
+            const streamUrl = `${aiUrl}/cameras/${selectedCamera}/stream`;
+            const isOnline = cam?.active && aiStatus?.status === 'ok';
 
-          <div className="max-h-[600px] overflow-y-auto space-y-1.5">
-            {events.length === 0 ? (
-              <div className="text-center py-12 text-slate-400">
-                <Clock className="w-10 h-10 mx-auto mb-2 text-slate-300" />
-                <p className="text-sm">Belum ada event tercatat</p>
-              </div>
-            ) : (
-              events.map((event, i) => (
-                <div
-                  key={event.id || i}
-                  className={`flex items-center gap-3 p-3 rounded-lg border text-sm transition-all ${
-                    event.isSpoof ? 'bg-red-50 border-red-100' :
-                    event.isUnknown ? 'bg-amber-50 border-amber-100' :
-                    'bg-white border-slate-100 hover:bg-slate-50'
-                  }`}
-                >
-                  {/* Status icon */}
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                    event.isSpoof ? 'bg-red-100 text-red-600' :
-                    event.isUnknown ? 'bg-amber-100 text-amber-600' :
-                    'bg-green-100 text-green-600'
-                  }`}>
-                    {event.isSpoof ? '🚫' : event.isUnknown ? '⚠️' : '✅'}
+            return (
+              <div className="bg-slate-950 rounded-xl border border-slate-800 shadow-xl overflow-hidden relative group">
+                {/* Header Overlay */}
+                <div className="absolute top-0 inset-x-0 bg-gradient-to-b from-black/80 to-transparent p-4 flex items-center justify-between z-10">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-2 w-2 relative">
+                      <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isOnline ? 'bg-red-400' : 'bg-slate-400'}`}></span>
+                      <span className={`relative inline-flex rounded-full h-2 w-2 ${isOnline ? 'bg-red-500' : 'bg-slate-500'}`}></span>
+                    </span>
+                    <span className="text-xs font-bold text-white uppercase tracking-wider">
+                      {isOnline ? 'LIVE CCTV FEED' : 'NO SIGNAL'}
+                    </span>
+                    <span className="text-xs text-slate-400 font-mono">
+                      | {cam?.name || selectedCamera}
+                    </span>
                   </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-slate-800 truncate">
-                      {event.isSpoof ? 'Spoof Detected' :
-                       event.isUnknown ? 'Unknown Face' :
-                       event.employeeName ? `${event.employeeName} (${event.employeeCode || ''})` :
-                       `Employee #${event.employeeId}`}
-                    </div>
-                    <div className="text-xs text-slate-400 flex gap-3">
-                      <span>{event.camera?.name || event.cameraId}</span>
-                      {event.similarity && <span>Sim: {(event.similarity * 100).toFixed(1)}%</span>}
-                    </div>
-                  </div>
-
-                  <div className="text-xs text-slate-400 shrink-0">
-                    {new Date(event.eventTime).toLocaleTimeString('id-ID')}
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] bg-white/10 text-white/80 px-2 py-0.5 rounded font-mono">
+                      {cam?.direction || 'BOTH'}
+                    </span>
+                    <button 
+                      onClick={() => setSelectedCamera(null)}
+                      className="text-slate-400 hover:text-white transition-colors"
+                      title="Tutup Stream"
+                    >
+                      <XCircle className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
-              ))
-            )}
+
+                {/* Video Area */}
+                <div className="aspect-video w-full flex items-center justify-center bg-slate-950 relative overflow-hidden">
+                  {isOnline ? (
+                    <img 
+                      src={streamUrl} 
+                      alt={`Live Stream ${cam?.name}`} 
+                      className="w-full h-full object-contain"
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        const fallback = document.getElementById('cctv-fallback');
+                        if (fallback) fallback.style.display = 'flex';
+                      }}
+                    />
+                  ) : null}
+
+                  {/* Fallback / Offline / Connecting Screen */}
+                  <div 
+                    id="cctv-fallback" 
+                    className={`absolute inset-0 flex flex-col items-center justify-center bg-slate-950 text-slate-400 ${isOnline ? 'hidden' : 'flex'}`}
+                  >
+                    {/* Simulated Analog TV Scanlines/Noise Effect */}
+                    <div className="absolute inset-0 pointer-events-none opacity-5 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[size:100%_4px,6px_100%]"></div>
+                    <VideoOff className="w-12 h-12 text-slate-700 animate-pulse mb-3" />
+                    <p className="text-sm font-semibold text-slate-500 uppercase tracking-wide">
+                      {!cam?.active ? 'Kamera Dinonaktifkan' : 'Koneksi AI Engine Terputus'}
+                    </p>
+                    <p className="text-xs text-slate-600 mt-1">
+                      {cam?.ipAddress ? `IP: ${cam.ipAddress}` : 'Periksa status service AI Engine'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Footer Status Overlay */}
+                <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent p-3 flex justify-between items-center text-[10px] text-slate-400 font-mono z-10">
+                  <div className="truncate max-w-[70%]">RTSP: {cam?.rtspUrl ? cam.rtspUrl.replace(/:[^:@]+@/, ':***@') : '-'}</div>
+                  <div>LOC: {cam?.location || 'LOBBY'}</div>
+                </div>
+              </div>
+            );
+          })() : (
+            <div className="bg-slate-50 border border-dashed border-slate-200 rounded-xl p-8 text-center text-slate-400 flex flex-col items-center justify-center aspect-[21/9]">
+              <Video className="w-10 h-10 text-slate-300 mb-2 animate-pulse" />
+              <h4 className="font-semibold text-slate-700 text-sm">Pilih Kamera dari Daftar</h4>
+              <p className="text-xs text-slate-400 max-w-xs mt-1">
+                Pilih salah satu kamera di sebelah kiri untuk melihat tayangan langsung (live CCTV feed) dan memonitor secara real-time.
+              </p>
+            </div>
+          )}
+
+          {/* Event Feed */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-slate-700 text-sm flex items-center gap-2">
+                <Activity className="w-4 h-4" /> Face Events Feed
+                {selectedCamera && <span className="text-xs text-blue-600">({selectedCamera})</span>}
+              </h3>
+              <span className="text-xs text-slate-400">{events.length} events</span>
+            </div>
+
+            <div className="max-h-[400px] overflow-y-auto space-y-1.5">
+              {events.length === 0 ? (
+                <div className="text-center py-12 text-slate-400">
+                  <Clock className="w-10 h-10 mx-auto mb-2 text-slate-300" />
+                  <p className="text-sm">Belum ada event tercatat</p>
+                </div>
+              ) : (
+                events.map((event, i) => (
+                  <div
+                    key={event.id || i}
+                    className={`flex items-center gap-3 p-3 rounded-lg border text-sm transition-all ${
+                      event.isSpoof ? 'bg-red-50 border-red-100' :
+                      event.isUnknown ? 'bg-amber-50 border-amber-100' :
+                      'bg-white border-slate-100 hover:bg-slate-50'
+                    }`}
+                  >
+                    {/* Status icon */}
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                      event.isSpoof ? 'bg-red-100 text-red-600' :
+                      event.isUnknown ? 'bg-amber-100 text-amber-600' :
+                      'bg-green-100 text-green-600'
+                    }`}>
+                      {event.isSpoof ? '🚫' : event.isUnknown ? '⚠️' : '✅'}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-slate-800 truncate">
+                        {event.isSpoof ? 'Spoof Detected' :
+                         event.isUnknown ? 'Unknown Face' :
+                         event.employeeName ? `${event.employeeName} (${event.employeeCode || ''})` :
+                         `Employee #${event.employeeId}`}
+                      </div>
+                      <div className="text-xs text-slate-400 flex gap-3">
+                        <span>{event.camera?.name || event.cameraId}</span>
+                        {event.similarity && <span>Sim: {(event.similarity * 100).toFixed(1)}%</span>}
+                      </div>
+                    </div>
+
+                    <div className="text-xs text-slate-400 shrink-0">
+                      {new Date(event.eventTime).toLocaleTimeString('id-ID')}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       </div>

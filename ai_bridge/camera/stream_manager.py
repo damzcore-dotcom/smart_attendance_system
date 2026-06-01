@@ -57,12 +57,20 @@ class HikvisionStreamManager:
                     if frame_count % 3 == 0:
                         if not self.frame_queues[cam_id].full():
                             self.frame_queues[cam_id].put(frame)
+                    
+                    # Cache frame and encode to JPEG once to save CPU for streaming
+                    ret_jpeg, jpeg = cv2.imencode('.jpg', frame)
+                    if ret_jpeg:
+                        self.cameras[cam_id]["latest_jpeg"] = jpeg.tobytes()
+                    
                     self.cameras[cam_id]["connected"] = True
                 else:
                     self.cameras[cam_id]["connected"] = False
+                    self.cameras[cam_id]["latest_jpeg"] = None
                     self._reconnect(cam_id)
             except Exception as e:
                 print(f"[Camera {cam_id}] Capture error: {e}")
+                self.cameras[cam_id]["latest_jpeg"] = None
                 self._reconnect(cam_id)
 
     def _reconnect(self, cam_id: str):
@@ -87,6 +95,13 @@ class HikvisionStreamManager:
             )
         except Empty:
             return None
+
+    def get_latest_jpeg(self, cam_id: str):
+        """Mengambil byte JPEG terbaru secara thread-safe"""
+        if cam_id in self.cameras:
+            return self.cameras[cam_id].get("latest_jpeg")
+        return None
+
 
     def get_status(self):
         return {
