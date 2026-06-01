@@ -50,6 +50,7 @@ const Employees = () => {
   const [printBulkIDCards, setPrintBulkIDCards] = useState(null);
   const [companySettings, setCompanySettings] = useState({});
   const [idCardConfig, setIdCardConfig] = useState(null);
+  const [cameFromPkwt, setCameFromPkwt] = useState(false);
   const PAGE_SIZE = 25;
   
   const nikErrorRef = useRef(null);
@@ -109,6 +110,7 @@ const Employees = () => {
   useEffect(() => {
     if (location.state && location.state.editEmployeeCode) {
       const code = location.state.editEmployeeCode;
+      setCameFromPkwt(true); // Record that we came from the PKWT page
       // Clear navigation state to prevent re-opening modal on refresh
       navigate(location.pathname, { replace: true, state: null });
       
@@ -117,6 +119,7 @@ const Employees = () => {
           const res = await employeeAPI.getAll({ search: code });
           if (res.success && res.data && res.data.length > 0) {
             handleEditEmployee(res.data[0]);
+            setActiveTab('hr'); // Directly open "Informasi Kerja" tab for PKWT updates
           }
         } catch (err) {
           console.error(err);
@@ -192,6 +195,10 @@ const Employees = () => {
       setNewEmployee(emptyEmployee);
       setActiveTab('basic');
       alert('Data karyawan berhasil diperbarui!');
+      if (cameFromPkwt) {
+        setCameFromPkwt(false);
+        navigate('/admin/contracts');
+      }
     },
     onError: (err) => alert(`Pembaruan gagal: ${err.message}`)
   });
@@ -304,6 +311,7 @@ const Employees = () => {
     setNewEmployee(emptyEmployee);
     setActiveTab('basic');
     setNikError('');
+    setCameFromPkwt(false);
   };
   
   const handleNikBlur = async () => {
