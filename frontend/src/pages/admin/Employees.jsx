@@ -1551,7 +1551,9 @@ const Employees = () => {
                     <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Tanggal Mulai Kerja</label><input type="date" value={newEmployee.joinDate} onChange={e => {
                       const newJoinDate = e.target.value;
                       let newEnd = newEmployee.contractEnd;
-                      if (newJoinDate && newEmployee.contractDuration && (newEmployee.employmentStatus?.toUpperCase() === 'PKWT' || newEmployee.employmentStatus?.toUpperCase() === 'KONTRAK')) {
+                      const statusUpper = (newEmployee.employmentStatus || '').toUpperCase();
+                      const isPkwtStatus = statusUpper.includes('PKWT') || statusUpper.includes('KONTRAK');
+                      if (newJoinDate && newEmployee.contractDuration && isPkwtStatus) {
                         const start = new Date(newJoinDate);
                         if (!isNaN(start.getTime())) {
                           const match = newEmployee.contractDuration.match(/(\d+)\s*(Bulan|Month|Tahun|Year)/i);
@@ -1567,7 +1569,7 @@ const Employees = () => {
                       }
                       setNewEmployee({...newEmployee, joinDate: newJoinDate, contractEnd: newEnd});
                     }} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
-                    {(newEmployee.employmentStatus?.toUpperCase() === 'PKWT' || newEmployee.employmentStatus?.toUpperCase() === 'KONTRAK') && (
+                    {((newEmployee.employmentStatus || '').toUpperCase().includes('PKWT') || (newEmployee.employmentStatus || '').toUpperCase().includes('KONTRAK')) && (
                       <>
                         <div>
                           <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Durasi Kontrak</label>

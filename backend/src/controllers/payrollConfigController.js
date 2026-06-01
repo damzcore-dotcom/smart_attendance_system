@@ -349,7 +349,10 @@ const getPkwtAlerts = async (req, res) => {
   try {
     const employees = await prisma.employee.findMany({
       where: {
-        employmentStatus: { in: ['KONTRAK', 'PKWT'] },
+        OR: [
+          { employmentStatus: { contains: 'KONTRAK', mode: 'insensitive' } },
+          { employmentStatus: { contains: 'PKWT', mode: 'insensitive' } },
+        ],
         contractEnd: { not: null },
         status: 'ACTIVE',
       },

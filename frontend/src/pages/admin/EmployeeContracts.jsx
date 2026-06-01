@@ -30,8 +30,8 @@ const EmployeeContracts = ({ isReadOnly = false }) => {
 
   // Filter only contract employees (KONTRAK or PKWT)
   const contractEmployees = allEmployees.filter(e => {
-    const status = e.employmentStatus?.toUpperCase();
-    return status === 'KONTRAK' || status === 'PKWT' || status === 'KARYAWAN KONTRAK';
+    const status = (e.employmentStatus || '').toUpperCase();
+    return status.includes('KONTRAK') || status.includes('PKWT');
   });
 
   const now = new Date();
