@@ -154,7 +154,12 @@ async def stream_camera(cam_id: str):
         
     return StreamingResponse(
         frame_generator(cam_id),
-        media_type="multipart/x-mixed-replace; boundary=frame"
+        media_type="multipart/x-mixed-replace; boundary=frame",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
     )
 
 
