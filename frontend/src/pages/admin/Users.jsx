@@ -86,7 +86,7 @@ const Users = () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       setAddModalOpen(false);
       setNewUser({ username: '', password: '', role: 'EMPLOYEE', employeeId: '' });
-      alert('User created successfully!');
+      alert('Pengguna berhasil dibuat!');
     },
     onError: (err) => alert(`Error: ${err.message}`),
   });
@@ -97,7 +97,7 @@ const Users = () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       setEditModalOpen(false);
       setNewPassword('');
-      alert('User updated successfully!');
+      alert('Pengguna berhasil diperbarui!');
     },
     onError: (err) => alert(`Error: ${err.message}`),
   });
@@ -123,7 +123,7 @@ const Users = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       setPermissionModalOpen(false);
-      alert('Permissions updated successfully!');
+      alert('Hak akses berhasil diperbarui!');
     },
     onError: (err) => alert(`Error: ${err.message}`),
   });
@@ -132,7 +132,7 @@ const Users = () => {
     mutationFn: userAPI.remove,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
-      alert('User deleted successfully!');
+      alert('Pengguna berhasil dihapus!');
     },
     onError: (err) => alert(`Error: ${err.message}`),
   });
@@ -164,33 +164,33 @@ const Users = () => {
       
       const menus = [
         { key: 'dashboard', label: 'Dashboard' },
-        { key: 'announcements', label: 'Announcements' },
-        { key: 'employees', label: 'Employee Master' },
-        { key: 'contracts', label: 'Employee Contracts (PKWT)' },
-        { key: 'shift-roster', label: 'Shift Roster' },
-        { key: 'leave-requests', label: 'Leave Requests' },
-        { key: 'attendance', label: 'Attendance Management' },
-        { key: 'overtime-spl', label: 'Overtime (SPL)' },
-        { key: 'daily-workers', label: 'Daily Workers (BHL)' },
-        { key: 'manual-correction', label: 'Manual Correction' },
-        { key: 'corrections', label: 'Corrections' },
-        { key: 'payroll', label: 'Payroll Processing' },
-        { key: 'payroll-settings', label: 'Payroll Settings' },
+        { key: 'announcements', label: 'Pengumuman' },
+        { key: 'employees', label: 'Master Karyawan' },
+        { key: 'contracts', label: 'Kontrak Kerja (PKWT)' },
+        { key: 'shift-roster', label: 'Jadwal Shift' },
+        { key: 'leave-requests', label: 'Pengajuan Cuti' },
+        { key: 'attendance', label: 'Manajemen Kehadiran' },
+        { key: 'overtime-spl', label: 'Lembur (SPL)' },
+        { key: 'daily-workers', label: 'Pekerja Harian (BHL)' },
+        { key: 'manual-correction', label: 'Koreksi Manual' },
+        { key: 'corrections', label: 'Koreksi' },
+        { key: 'payroll', label: 'Proses Penggajian' },
+        { key: 'payroll-settings', label: 'Pengaturan Penggajian' },
         { key: 'face-check', label: 'Face Recognition CCTV' },
-        { key: 'devices', label: 'Fingerprint Devices' },
-        { key: 'fingerprint', label: 'Fingerprint Data' },
-        { key: 'users', label: 'User Management' },
-        { key: 'backup', label: 'Database Backup' },
-        { key: 'settings', label: 'System Settings' },
-        { key: 'settings-company-profile', label: '↳ Company Profile' },
+        { key: 'devices', label: 'Perangkat Fingerprint' },
+        { key: 'fingerprint', label: 'Data Fingerprint' },
+        { key: 'users', label: 'Manajemen Pengguna' },
+        { key: 'backup', label: 'Backup Database' },
+        { key: 'settings', label: 'Pengaturan Sistem' },
+        { key: 'settings-company-profile', label: '↳ Profil Perusahaan' },
         { key: 'settings-geofencing', label: '↳ Geofencing' },
-        { key: 'settings-shift-rules', label: '↳ Shift Rules' },
-        { key: 'settings-calendar', label: '↳ Calendar & Holidays' },
-        { key: 'settings-biometrics', label: '↳ Biometrics' },
-        { key: 'settings-cctv', label: '↳ CCTV AI Cameras' },
-        { key: 'settings-slip', label: '↳ Slip Configuration' },
-        { key: 'settings-report', label: '↳ Attendance Report' },
-        { key: 'settings-id-card', label: '↳ ID Card Template' }
+        { key: 'settings-shift-rules', label: '↳ Aturan Shift' },
+        { key: 'settings-calendar', label: '↳ Kalender & Hari Libur' },
+        { key: 'settings-biometrics', label: '↳ Biometrik' },
+        { key: 'settings-cctv', label: '↳ Kamera CCTV AI' },
+        { key: 'settings-slip', label: '↳ Konfigurasi Slip' },
+        { key: 'settings-report', label: '↳ Laporan Kehadiran' },
+        { key: 'settings-id-card', label: '↳ Template Kartu ID' }
       ];
 
       const merged = menus.map(m => {
@@ -208,7 +208,7 @@ const Users = () => {
       setUserPermissions(merged.map(p => ({ ...p, label: menus.find(m => m.key === p.menuKey)?.label })));
       setPermissionModalOpen(true);
     } catch (err) {
-      alert('Failed to load permissions');
+      alert('Gagal memuat hak akses');
     }
   };
 
@@ -338,7 +338,7 @@ const Users = () => {
   };
 
   const handleDeleteClick = (id) => {
-    if (window.confirm('Are you sure you want to delete this user account?')) {
+    if (window.confirm('Apakah Anda yakin ingin menghapus akun pengguna ini?')) {
       deleteMutation.mutate(id);
     }
   };
@@ -366,14 +366,14 @@ const Users = () => {
             <div className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center">
               <Shield className="w-3 h-3 text-slate-400" />
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider">Access Control</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider">Kontrol Akses</span>
             <div className="w-1 h-1 rounded-full bg-slate-300" />
-            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">User Directory</span>
+            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Direktori Pengguna</span>
           </div>
           <h1 className="text-3xl font-bold text-slate-800 tracking-tight">
-            User Management
+            Manajemen Pengguna
           </h1>
-          <p className="text-xs font-semibold text-slate-500">Monitor and manage application access accounts</p>
+          <p className="text-xs font-semibold text-slate-500">Monitor dan kelola akun akses aplikasi</p>
         </div>
 
         <button 
@@ -381,19 +381,19 @@ const Users = () => {
           className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.98]"
         >
           <UserPlus className="w-4 h-4" />
-          Add User
+          Tambah Pengguna
         </button>
       </div>
 
       <div className="bg-white p-6 border border-slate-200 rounded-2xl shadow-sm">
         <div className="flex flex-col xl:flex-row items-center justify-between gap-6 mb-8">
           <div className="w-full xl:w-96 space-y-2">
-            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">Search User</label>
+            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">Cari Pengguna</label>
             <div className="relative group">
               <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
               <input 
                 type="text" 
-                placeholder="Name or Username..." 
+                placeholder="Nama atau Username..." 
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 transition-all placeholder:text-slate-400"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -402,13 +402,13 @@ const Users = () => {
           </div>
 
           <div className="w-full xl:w-auto space-y-2 min-w-[200px]">
-            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">Account Role</label>
+            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">Peran Akun</label>
             <select 
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 transition-all appearance-none cursor-pointer"
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
             >
-              <option value="ALL">All Roles</option>
+              <option value="ALL">Semua Peran</option>
               <option value="SUPER_ADMIN">Super Admin</option>
               <option value="ADMIN">Admin</option>
               <option value="ACCOUNTING">Admin Accounting</option>
@@ -423,11 +423,11 @@ const Users = () => {
           <table className="w-full text-left whitespace-nowrap">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">User</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Role</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Department</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Last Active</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Pengguna</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Peran</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Departemen</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Terakhir Aktif</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -436,7 +436,7 @@ const Users = () => {
                   <td colSpan="5" className="text-center py-16">
                     <div className="flex flex-col items-center gap-4">
                       <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Loading Accounts...</p>
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Memuat Akun...</p>
                     </div>
                   </td>
                 </tr>
@@ -445,8 +445,8 @@ const Users = () => {
                   <td colSpan="5" className="text-center py-16">
                     <div className="flex flex-col items-center gap-3 text-rose-500">
                       <AlertCircle className="w-8 h-8" />
-                      <p className="font-bold">Failed to load accounts</p>
-                      <p className="text-xs">{error?.message || 'Please check backend server connection'}</p>
+                      <p className="font-bold">Gagal memuat akun</p>
+                      <p className="text-xs">{error?.message || 'Periksa koneksi server backend'}</p>
                     </div>
                   </td>
                 </tr>
@@ -454,7 +454,7 @@ const Users = () => {
                 <tr>
                   <td colSpan="5" className="text-center py-16 text-slate-500">
                     <UserCircle className="w-12 h-12 mx-auto text-slate-300 mb-3" />
-                    <p className="text-sm font-semibold">No user accounts found.</p>
+                    <p className="text-sm font-semibold">Tidak ada akun pengguna ditemukan.</p>
                   </td>
                 </tr>
               ) : paginatedUsers.map((user) => (
@@ -531,7 +531,7 @@ const Users = () => {
         {!isLoading && filteredUsers.length > 0 && (
           <div className="px-6 py-4 border border-slate-100 bg-slate-50 flex items-center justify-between rounded-xl mt-4">
             <p className="text-xs text-slate-500 font-medium">
-              Showing <span className="font-bold text-slate-800">{filteredUsers.length}</span> records | Page <span className="font-bold text-slate-800">{page}</span> of <span className="font-bold text-slate-800">{totalPages}</span>
+              Menampilkan <span className="font-bold text-slate-800">{filteredUsers.length}</span> data | Halaman <span className="font-bold text-slate-800">{page}</span> dari <span className="font-bold text-slate-800">{totalPages}</span>
             </p>
             <div className="flex gap-2">
               <button
@@ -539,14 +539,14 @@ const Users = () => {
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 className="px-4 py-2 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-blue-600 hover:border-blue-200 font-bold text-[10px] uppercase tracking-wider disabled:opacity-30 transition-all shadow-sm"
               >
-                Previous
+                Sebelumnya
               </button>
               <button
                 disabled={page >= totalPages}
                 onClick={() => setPage(p => p + 1)}
                 className="px-4 py-2 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-blue-600 hover:border-blue-200 font-bold text-[10px] uppercase tracking-wider disabled:opacity-30 transition-all shadow-sm"
               >
-                Next
+                Selanjutnya
               </button>
             </div>
           </div>
@@ -581,8 +581,8 @@ const Users = () => {
                   <ScanFace className="w-5 h-5 text-emerald-600" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-800 tracking-tight">Face ID Link</h3>
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">User: {selectedUser?.username}</p>
+                  <h3 className="font-bold text-slate-800 tracking-tight">Tautkan Face ID</h3>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">Pengguna: {selectedUser?.username}</p>
                 </div>
               </div>
               <button onClick={() => {
@@ -619,7 +619,7 @@ const Users = () => {
                   <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center text-slate-800 p-6 z-10">
                     <Loader2 className="w-8 h-8 animate-spin mb-4 text-emerald-600" />
                     <p className="text-[10px] font-bold uppercase tracking-widest text-center text-slate-600">
-                      {isLoadingModels ? 'Loading Neural Networks (~13MB)...' : 'Initializing AI...'}
+                      {isLoadingModels ? 'Memuat Neural Networks (~13MB)...' : 'Menginisialisasi AI...'}
                     </p>
                   </div>
                 )}
@@ -665,7 +665,7 @@ const Users = () => {
                   onClick={() => setFaceData({ photo: '', descriptor: null })}
                   className="w-full py-3.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 font-bold hover:bg-slate-100 hover:text-slate-800 transition-all text-sm flex items-center justify-center gap-2"
                 >
-                  <RefreshCw className="w-4 h-4" /> Retake Photo
+                  <RefreshCw className="w-4 h-4" /> Ambil Ulang Foto
                 </button>
               ) : (
                 <button 
@@ -674,11 +674,11 @@ const Users = () => {
                   className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-all"
                 >
                   {isLoadingModels ? (
-                    <><Loader2 className="w-4 h-4 animate-spin" /> Loading AI...</>
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Memuat AI...</>
                   ) : isCapturing ? (
-                    <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</>
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Memproses...</>
                   ) : (
-                    <><Camera className="w-4 h-4" /> Capture Biometrics</>
+                    <><Camera className="w-4 h-4" /> Tangkap Biometrik</>
                   )}
                 </button>
               )}
@@ -697,7 +697,7 @@ const Users = () => {
                   }}
                   className="flex-1 py-3 text-sm font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-all"
                 >
-                  Cancel
+                  Batal
                 </button>
                 <button 
                   onClick={handleFaceSubmit}
@@ -705,7 +705,7 @@ const Users = () => {
                   className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl shadow-sm disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                 >
                   {biometricMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {biometricMutation.isPending ? 'Saving...' : 'Save Face ID'}
+                  {biometricMutation.isPending ? 'Menyimpan...' : 'Simpan Face ID'}
                 </button>
               </div>
             </div>
@@ -746,7 +746,7 @@ const AddUserModal = ({ isOpen, onClose, employees, departments, onSave, isPendi
             <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center border border-blue-100">
               <UserPlus className="w-5 h-5 text-blue-600" />
             </div>
-            <h3 className="font-bold text-slate-800 tracking-tight text-lg">Create Account</h3>
+            <h3 className="font-bold text-slate-800 tracking-tight text-lg">Buat Akun</h3>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center hover:bg-slate-200 rounded-lg transition-all">
             <X className="w-4 h-4 text-slate-500" />
@@ -758,7 +758,7 @@ const AddUserModal = ({ isOpen, onClose, employees, departments, onSave, isPendi
               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Username</label>
               <input 
                 type="text" 
-                placeholder="Enter username..."
+                placeholder="Masukkan username..."
                 required
                 className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
                 value={formData.username}
@@ -766,10 +766,10 @@ const AddUserModal = ({ isOpen, onClose, employees, departments, onSave, isPendi
               />
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Password</label>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Kata Sandi</label>
               <input 
                 type="password" 
-                placeholder="Enter password..."
+                placeholder="Masukkan kata sandi..."
                 required
                 className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
                 value={formData.password}
@@ -777,13 +777,13 @@ const AddUserModal = ({ isOpen, onClose, employees, departments, onSave, isPendi
               />
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Role</label>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Peran</label>
               <select 
                 className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all appearance-none cursor-pointer"
                 value={formData.role}
                 onChange={(e) => setFormData({...formData, role: e.target.value})}
               >
-                <option value="EMPLOYEE">Employee</option>
+                <option value="EMPLOYEE">Karyawan</option>
                 <option value="MANAGER">Manager</option>
                 <option value="DIREKTUR">Direktur</option>
                 <option value="ACCOUNTING">Admin Accounting</option>
@@ -793,31 +793,31 @@ const AddUserModal = ({ isOpen, onClose, employees, departments, onSave, isPendi
             </div>
             {formData.role === 'MANAGER' || formData.role === 'ADMIN' || formData.role === 'SUPER_ADMIN' || formData.role === 'ACCOUNTING' ? (
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Managed Department</label>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Departemen Dikelola</label>
                 <select 
                   className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all appearance-none cursor-pointer"
                   value={formData.managedDeptId || ''}
                   onChange={(e) => setFormData({...formData, managedDeptId: e.target.value})}
                   required
                 >
-                  <option value="">Select Department...</option>
-                  <option value="0" className="font-bold text-blue-600">-- ALL DEPARTMENTS --</option>
+                  <option value="">Pilih Departemen...</option>
+                  <option value="0" className="font-bold text-blue-600">-- SEMUA DEPARTEMEN --</option>
                   {departments.map(dept => (
                     <option key={dept.id} value={dept.id}>{dept.name}</option>
                   ))}
                 </select>
-                <p className="text-[10px] text-slate-500 mt-2 ml-1 font-medium">Determine which department this user can monitor.</p>
+                <p className="text-[10px] text-slate-500 mt-2 ml-1 font-medium">Tentukan departemen mana yang dapat dipantau pengguna ini.</p>
               </div>
             ) : null}
             {formData.role !== 'MANAGER' && (
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Link to Employee (Optional)</label>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Hubungkan ke Karyawan (Opsional)</label>
                 <select 
                   className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all appearance-none cursor-pointer"
                   value={formData.employeeId}
                   onChange={(e) => setFormData({...formData, employeeId: e.target.value})}
                 >
-                  <option value="">None (Admin Account)</option>
+                  <option value="">Tidak ada (Akun Admin)</option>
                   {employees.map(emp => (
                     <option key={emp.id} value={emp.id}>{emp.name} ({emp.employeeCode})</option>
                   ))}
@@ -827,11 +827,11 @@ const AddUserModal = ({ isOpen, onClose, employees, departments, onSave, isPendi
           </div>
           <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
             <button type="button" onClick={onClose} className="px-5 py-2.5 rounded-xl font-bold text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-all">
-              Cancel
+              Batal
             </button>
             <button type="submit" disabled={isPending} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm px-6 py-2.5 rounded-xl shadow-sm transition-all disabled:opacity-50 flex items-center gap-2">
               {isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-              {isPending ? 'Creating...' : 'Create Account'}
+              {isPending ? 'Membuat...' : 'Buat Akun'}
             </button>
           </div>
         </form>
@@ -872,7 +872,7 @@ const EditUserModal = ({ isOpen, onClose, user, departments, onSave, isPending }
             <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center border border-amber-100">
               <Key className="w-5 h-5 text-amber-600" />
             </div>
-            <h3 className="font-bold text-slate-800 tracking-tight text-lg">Account Access</h3>
+            <h3 className="font-bold text-slate-800 tracking-tight text-lg">Akses Akun</h3>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center hover:bg-slate-200 rounded-lg transition-all">
             <X className="w-4 h-4 text-slate-500" />
@@ -882,17 +882,17 @@ const EditUserModal = ({ isOpen, onClose, user, departments, onSave, isPending }
           <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 flex gap-3">
             <AlertCircle className="w-5 h-5 text-blue-600 shrink-0" />
             <div className="text-xs text-blue-800 leading-relaxed font-medium">
-              You are modifying access for <strong>{user?.username}</strong> ({user?.employeeName}).
+              Anda sedang mengubah akses untuk <strong>{user?.username}</strong> ({user?.employeeName}).
             </div>
           </div>
           <div className="space-y-4">
             <div>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">New Password</label>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Kata Sandi Baru</label>
               <div className="relative group">
                 <Key className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
                 <input 
                   type="password" 
-                  placeholder="Leave blank to keep current..."
+                  placeholder="Kosongkan jika tidak ingin mengubah..."
                   className="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -900,13 +900,13 @@ const EditUserModal = ({ isOpen, onClose, user, departments, onSave, isPending }
               </div>
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Role</label>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Peran</label>
               <select 
                 className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all appearance-none cursor-pointer"
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
               >
-                <option value="EMPLOYEE">Employee</option>
+                <option value="EMPLOYEE">Karyawan</option>
                 <option value="MANAGER">Manager</option>
                 <option value="DIREKTUR">Direktur</option>
                 <option value="ACCOUNTING">Admin Accounting</option>
@@ -916,15 +916,15 @@ const EditUserModal = ({ isOpen, onClose, user, departments, onSave, isPending }
             </div>
             {(role === 'MANAGER' || role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'ACCOUNTING') && (
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Managed Department</label>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Departemen Dikelola</label>
                 <select 
                   className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all appearance-none cursor-pointer"
                   value={managedDeptId || ''}
                   onChange={(e) => setManagedDeptId(e.target.value)}
                   required
                 >
-                  <option value="">Select Department...</option>
-                  <option value="0" className="font-bold text-blue-600">-- ALL DEPARTMENTS --</option>
+                  <option value="">Pilih Departemen...</option>
+                  <option value="0" className="font-bold text-blue-600">-- SEMUA DEPARTEMEN --</option>
                   {departments.map(dept => (
                     <option key={dept.id} value={dept.id}>{dept.name}</option>
                   ))}
@@ -934,11 +934,11 @@ const EditUserModal = ({ isOpen, onClose, user, departments, onSave, isPending }
           </div>
           <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
             <button type="button" onClick={onClose} className="px-5 py-2.5 rounded-xl font-bold text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-all">
-              Cancel
+              Batal
             </button>
             <button type="submit" disabled={isPending} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm px-6 py-2.5 rounded-xl shadow-sm transition-all disabled:opacity-50 flex items-center gap-2">
               {isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-              {isPending ? 'Saving...' : 'Save Changes'}
+              {isPending ? 'Menyimpan...' : 'Simpan Perubahan'}
             </button>
           </div>
         </form>
@@ -977,7 +977,7 @@ const PermissionModal = ({ isOpen, onClose, user, initialPermissions, onSave, is
               <Shield className="w-6 h-6 text-indigo-600" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-800 text-lg tracking-tight">Granular Permissions</h3>
+              <h3 className="font-bold text-slate-800 text-lg tracking-tight">Hak Akses Granular</h3>
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mt-1">Target: {user?.username}</p>
             </div>
           </div>
@@ -990,11 +990,11 @@ const PermissionModal = ({ isOpen, onClose, user, initialPermissions, onSave, is
             <table className="w-full text-left border-separate border-spacing-y-2">
               <thead className="sticky top-0 bg-white z-10">
                 <tr className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  <th className="pb-3 pl-4 border-b border-slate-100">Module Access</th>
-                  <th className="pb-3 text-center border-b border-slate-100">View</th>
-                  <th className="pb-3 text-center border-b border-slate-100">Create</th>
-                  <th className="pb-3 text-center border-b border-slate-100">Update</th>
-                  <th className="pb-3 text-center border-b border-slate-100">Delete</th>
+                  <th className="pb-3 pl-4 border-b border-slate-100">Akses Modul</th>
+                  <th className="pb-3 text-center border-b border-slate-100">Lihat</th>
+                  <th className="pb-3 text-center border-b border-slate-100">Buat</th>
+                  <th className="pb-3 text-center border-b border-slate-100">Ubah</th>
+                  <th className="pb-3 text-center border-b border-slate-100">Hapus</th>
                 </tr>
               </thead>
               <tbody>
@@ -1027,11 +1027,11 @@ const PermissionModal = ({ isOpen, onClose, user, initialPermissions, onSave, is
           </div>
           <div className="mt-6 pt-4 border-t border-slate-100 flex justify-end gap-3">
             <button onClick={onClose} className="px-6 py-2.5 rounded-xl font-bold text-sm text-slate-500 hover:bg-slate-100 transition-all">
-              Cancel
+              Batal
             </button>
             <button onClick={handleSubmit} disabled={isPending} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm px-6 py-2.5 rounded-xl shadow-sm transition-all disabled:opacity-50 flex items-center gap-2">
               {isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-              {isPending ? 'Saving...' : 'Apply Permissions'}
+              {isPending ? 'Menyimpan...' : 'Terapkan Hak Akses'}
             </button>
           </div>
         </div>
