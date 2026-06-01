@@ -95,14 +95,12 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS configuration restricted to authorized origins for security
-cors_origins_env = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5000,http://localhost:5173,http://localhost:5174,http://localhost:5175")
-allowed_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
-
+# CORS configuration: Allow all origins because AI Engine is accessed via dynamic LAN and public IPs.
+# Since it does not use cookies/sessions, allow_credentials is set to False.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
