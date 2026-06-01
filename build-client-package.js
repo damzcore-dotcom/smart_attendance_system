@@ -214,6 +214,27 @@ pause
     fs.writeFileSync(path.join(releaseDir, 'START_AI_ENGINE.bat'), aiBat);
     console.log('   ✅ START_AI_ENGINE.bat dibuat');
 
+    // Create STOP_AI_ENGINE.bat
+    const aiStopBat = `@echo off
+title Smart Attendance Pro - AI Engine Stopper
+color 0C
+echo ===================================================
+echo    Smart Attendance Pro - AI Engine Stopper
+echo ===================================================
+echo.
+echo Menghentikan semua kontainer AI Face Recognition...
+echo.
+docker-compose down
+echo.
+echo ===================================================
+echo   AI Face Recognition Engine berhasil dimatikan.
+echo ===================================================
+echo.
+pause
+`;
+    fs.writeFileSync(path.join(releaseDir, 'STOP_AI_ENGINE.bat'), aiStopBat);
+    console.log('   ✅ STOP_AI_ENGINE.bat dibuat');
+
     // Create PANDUAN_AKTIVASI_AI_CCTV.txt
     const aiGuide = `══════════════════════════════════════════════════════════════════════
   🏢 SMART ATTENDANCE PRO — PANDUAN AKTIVASI AI CCTV FACE RECOGNITION
