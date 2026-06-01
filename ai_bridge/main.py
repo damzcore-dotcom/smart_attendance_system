@@ -94,9 +94,14 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# CORS configuration restricted to authorized origins for security
+cors_origins_env = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5000,http://localhost:5173,http://localhost:5174,http://localhost:5175")
+allowed_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )

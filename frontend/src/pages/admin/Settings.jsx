@@ -824,6 +824,16 @@ const Settings = () => {
                       />
                     </div>
                     <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Timezone Offset to UTC (Minutes)</label>
+                      <input 
+                        type="number" 
+                        value={formData.timezoneOffset || 420} 
+                        onChange={(e) => handleInputChange('timezoneOffset', e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                      />
+                      <p className="text-[10px] text-slate-400 ml-1">e.g. 420 for WIB (UTC+7), 480 for WITA (UTC+8), 540 for WIT (UTC+9).</p>
+                    </div>
+                    <div className="space-y-2">
                       <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">System Auto-Termination (Check-out)</label>
                       <input 
                         type="time" 

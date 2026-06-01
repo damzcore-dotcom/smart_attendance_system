@@ -169,7 +169,7 @@ const startCronJobs = () => {
             
             const calc = checkIn 
               ? calculateLateness(checkIn, shiftStart, gracePeriod, shiftEnd)
-              : { lateMinutes: 0, status: 'Mangkir' };
+              : { lateMinutes: 0, status: 'MANGKIR' };
             
             const status = resolveStatus(checkIn, checkOut, calc.status);
 
@@ -187,17 +187,37 @@ const startCronJobs = () => {
           let saved = 0;
           for (const record of recordsToCreate) {
             try {
-              await prisma.attendance.upsert({
-                where: { employeeId_date: { employeeId: record.employeeId, date: record.date } },
-                update: {
-                  checkIn: record.checkIn,
-                  checkOut: record.checkOut,
-                  status: record.status,
-                  lateMinutes: record.lateMinutes,
-                  mode: 'Fingerprint'
-                },
-                create: record
+              // C7 FIX: Fetch existing record to check if it was manually corrected
+              const existing = await prisma.attendance.findUnique({
+                where: { employeeId_date: { employeeId: record.employeeId, date: record.date } }
               });
+
+              if (existing) {
+                // If it is a manual correction by HRD, protect it and skip sync
+                const isManual = existing.mode === 'Manual' || 
+                                 existing.mode === 'Manual (SPL)' || 
+                                 existing.mode === 'Manual (BHL)' || 
+                                 (existing.notes && existing.notes.includes('HRD'));
+                if (isManual) {
+                  console.log(`[Cron] Skipping sync for employee ${record.employeeId} on ${record.date.toISOString().split('T')[0]} to protect manual HRD correction.`);
+                  continue;
+                }
+
+                await prisma.attendance.update({
+                  where: { id: existing.id },
+                  data: {
+                    checkIn: record.checkIn,
+                    checkOut: record.checkOut,
+                    status: record.status,
+                    lateMinutes: record.lateMinutes,
+                    mode: 'Fingerprint'
+                  }
+                });
+              } else {
+                await prisma.attendance.create({
+                  data: record
+                });
+              }
               saved++;
             } catch (e) {
               console.error(`[Cron] Failed to save record for emp ${record.employeeId}:`, e.message);
@@ -211,12 +231,52 @@ const startCronJobs = () => {
           
           console.log(`[Cron] Auto-sync completed for device ID: ${device.id}. Saved ${saved} records.`);
 
+          // Record auto-sync success in AuditLog
+          await prisma.auditLog.create({
+            data: {
+              userId: 0,
+              username: 'System (Auto-Sync)',
+              role: 'SYSTEM',
+              action: 'SYNC',
+              entity: 'Device',
+              entityId: device.id,
+              details: JSON.stringify({
+                message: `Auto-sync completed successfully`,
+                recordsSaved: saved,
+                device: device.name
+              }),
+              ipAddress: device.ipAddress || '127.0.0.1'
+            }
+          });
+
         } catch (err) {
           console.error(`[Cron] Error auto-syncing device ID: ${device.id}`, err);
           await prisma.device.update({
             where: { id: device.id },
             data: { status: 'OFFLINE' }
           });
+
+          // Record auto-sync connection failure in AuditLog
+          try {
+            await prisma.auditLog.create({
+              data: {
+                userId: 0,
+                username: 'System (Auto-Sync)',
+                role: 'SYSTEM',
+                action: 'TEST_CONNECTION',
+                entity: 'Device',
+                entityId: device.id,
+                details: JSON.stringify({
+                  status: 'FAILED',
+                  message: `Auto-sync failed: ${err.message}`,
+                  device: device.name
+                }),
+                ipAddress: device.ipAddress || '127.0.0.1'
+              }
+            });
+          } catch (logErr) {
+            console.error('[Cron] Failed to record auto-sync failure audit log:', logErr.message);
+          }
         }
       }
     } catch (err) {

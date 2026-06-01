@@ -28,6 +28,7 @@ import {
 import { verifyRealLocation } from '../../utils/geoUtils';
 import Webcam from 'react-webcam';
 import { loadFaceModels, faceapi, areModelsLoaded } from '../../utils/faceModelLoader';
+import { encryptData, decryptData } from '../../utils/cryptoUtils';
 
 const Scan = () => {
   const navigate = useNavigate();
@@ -53,8 +54,98 @@ const Scan = () => {
   const boxHistoryRef = useRef([]);
   const lastImageSrcRef = useRef(null);
 
+  // Blink Detection Refs and State
+  const [blinkStatus, setBlinkStatus] = useState('waiting'); // waiting, detected
+  const blinkDetectedRef = useRef(false);
+  const wasEyesOpenRef = useRef(false);
+  const consecutiveClosedRef = useRef(0);
+  const loopCountRef = useRef(0);
+
   const user = authAPI.getStoredUser();
   const empId = user?.employee?.id;
+
+  const getGuideMessage = () => {
+    if (faceGuideStatus !== 'detected') return 'Arahkan wajah ke lingkaran';
+    if (!blinkDetectedRef.current) return 'Silakan kedipkan mata Anda...';
+    return 'Liveness terverifikasi! Tahan posisi...';
+  };
+
+  const syncOfflineData = async () => {
+    const rawPending = localStorage.getItem('pending_sync');
+    if (!rawPending) return;
+
+    try {
+      let pending = [];
+      const secret = localStorage.getItem('accessToken') || 'fallback-secret';
+      try {
+        const decryptedStr = await decryptData(rawPending, secret);
+        pending = JSON.parse(decryptedStr);
+      } catch (err) {
+        console.error('Failed to decrypt pending sync data:', err);
+        try {
+          pending = JSON.parse(rawPending);
+        } catch {
+          localStorage.removeItem('pending_sync');
+          return;
+        }
+      }
+
+      if (pending.length === 0) return;
+
+      console.log(`Syncing ${pending.length} offline attendance records...`);
+      const remaining = [];
+
+      for (const record of pending) {
+        try {
+          if (record.type === 'IN') {
+            await attendanceAPI.checkIn(
+              record.employeeId,
+              record.mode,
+              record.lat,
+              record.lng,
+              record.accuracy,
+              record.timestamp,
+              record.photoData
+            );
+          } else {
+            await attendanceAPI.checkOut(
+              record.employeeId,
+              record.photoData,
+              record.lat,
+              record.lng
+            );
+          }
+        } catch (err) {
+          console.error('Failed to sync record:', err);
+          remaining.push(record);
+        }
+      }
+
+      if (remaining.length > 0) {
+        const encrypted = await encryptData(JSON.stringify(remaining), secret);
+        localStorage.setItem('pending_sync', encrypted);
+      } else {
+        localStorage.removeItem('pending_sync');
+        console.log('All offline attendance records synced successfully!');
+      }
+    } catch (err) {
+      console.error('Sync offline data error:', err);
+    }
+  };
+
+  // Auto-sync when online
+  useEffect(() => {
+    if (navigator.onLine) {
+      syncOfflineData();
+    }
+
+    const handleOnline = () => {
+      syncOfflineData();
+    };
+
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, []);
 
   // 1. Load face models on mount
   useEffect(() => {
@@ -151,7 +242,23 @@ const Scan = () => {
       
       // Offline Mode Fallback
       if (!navigator.onLine) {
-        const pending = JSON.parse(localStorage.getItem('pending_sync') || '[]');
+        const rawPending = localStorage.getItem('pending_sync');
+        let pending = [];
+        const secret = localStorage.getItem('accessToken') || 'fallback-secret';
+
+        if (rawPending) {
+          try {
+            const decryptedStr = await decryptData(rawPending, secret);
+            pending = JSON.parse(decryptedStr);
+          } catch (err) {
+            try {
+              pending = JSON.parse(rawPending);
+            } catch {
+              pending = [];
+            }
+          }
+        }
+
         const c = coordsRef.current;
         pending.push({
           type: isCheckOut ? 'OUT' : 'IN',
@@ -163,12 +270,15 @@ const Scan = () => {
           timestamp: c?.timestamp || Date.now(),
           photoData: snap
         });
-        localStorage.setItem('pending_sync', JSON.stringify(pending));
+
+        const encrypted = await encryptData(JSON.stringify(pending), secret);
+        localStorage.setItem('pending_sync', encrypted);
         return { message: 'Offline! Absen disimpan di HP. Segera dapatkan sinyal agar data terkirim otomatis.', offline: true };
       }
 
       if (isCheckOut) {
-        return attendanceAPI.checkOut(empId, snap);
+        const c = coordsRef.current;
+        return attendanceAPI.checkOut(empId, snap, c?.lat, c?.lng);
       } else {
         const c = coordsRef.current;
         return attendanceAPI.checkIn(empId, 'Face ID', c?.lat, c?.lng, c?.accuracy, c?.timestamp, snap);
@@ -249,7 +359,7 @@ const Scan = () => {
     }
   }, [empId]);
 
-  // Real-time face guide: auto-capture after stable ~2.5s
+  // Real-time face guide: active blink liveness check + auto-capture
   useEffect(() => {
     if (scanStatus !== 'ready' || !modelsReady) {
       if (faceGuideRef.current) clearInterval(faceGuideRef.current);
@@ -259,6 +369,11 @@ const Scan = () => {
 
     autoCaptureTriggeredRef.current = false;
     stableCountRef.current = 0;
+    blinkDetectedRef.current = false;
+    wasEyesOpenRef.current = false;
+    consecutiveClosedRef.current = 0;
+    loopCountRef.current = 0;
+    setBlinkStatus('waiting');
     let isProcessing = false;
 
     faceGuideRef.current = setInterval(async () => {
@@ -272,12 +387,25 @@ const Scan = () => {
         img.src = screenshot;
         await new Promise(resolve => img.onload = resolve);
 
-        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.2 }));
+        // Fetch face with landmarks to calculate Eye Aspect Ratio (EAR)
+        const detection = await faceapi
+          .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.2 }))
+          .withFaceLandmarks();
         
         if (detection) {
           setFaceGuideStatus('detected');
+          loopCountRef.current++;
+
+          // Timeout if user takes too long to blink (8 seconds)
+          if (loopCountRef.current > 40 && !blinkDetectedRef.current) {
+            console.warn('[Liveness] Verification timeout');
+            setScanStatus('error');
+            setError('Verifikasi Liveness Gagal: Waktu habis. Silakan kedipkan mata Anda dengan jelas saat diminta.');
+            clearInterval(faceGuideRef.current);
+            faceGuideRef.current = null;
+            return;
+          }
           
-          // Safely get box depending on whether landmarks were fetched
           const box = detection.box || (detection.detection && detection.detection.box) || detection.relativeBox;
           if (box) {
             boxHistoryRef.current.push({ x: box.x, y: box.y, w: box.width, h: box.height });
@@ -285,38 +413,74 @@ const Scan = () => {
           }
 
           stableCountRef.current++;
-          if (stableCountRef.current >= 6 && !autoCaptureTriggeredRef.current) {
-            // Anti-Spoofing Check (Passive Liveness)
-            // A real human face breathes and inherently has micro-jitters.
-            // A printed photo or screen held at a fixed distance produces IDENTICAL bounding boxes.
-            // Threshold is 2px — loose enough for a still person breathing, too tight for a static photo.
-            let isCompletelyStatic = true;
-            if (boxHistoryRef.current.length >= 5) {
-              const hist = boxHistoryRef.current;
-              for (let i = 1; i < hist.length; i++) {
-                const diffX = Math.abs(hist[i].x - hist[i-1].x);
-                const diffY = Math.abs(hist[i].y - hist[i-1].y);
-                const diffW = Math.abs(hist[i].w - hist[i-1].w);
-                // 2px threshold is sufficient to distinguish a live face from a static photo/screen
-                if (diffX >= 2 || diffY >= 2 || diffW >= 2) {
-                  isCompletelyStatic = false;
-                  break;
-                }
+
+          // 1. Check if face is stable (micro-jitters check for passive anti-spoofing)
+          let isCompletelyStatic = true;
+          if (boxHistoryRef.current.length >= 5) {
+            const hist = boxHistoryRef.current;
+            for (let i = 1; i < hist.length; i++) {
+              const diffX = Math.abs(hist[i].x - hist[i-1].x);
+              const diffY = Math.abs(hist[i].y - hist[i-1].y);
+              const diffW = Math.abs(hist[i].w - hist[i-1].w);
+              if (diffX >= 2 || diffY >= 2 || diffW >= 2) {
+                isCompletelyStatic = false;
+                break;
               }
-            } else {
-              // Not enough history yet — don't block capture
-              isCompletelyStatic = false;
             }
+          } else {
+            isCompletelyStatic = false;
+          }
 
-            if (isCompletelyStatic) {
-              console.warn('[Liveness] Static face detected. Box history:', boxHistoryRef.current);
-              setScanStatus('error');
-              setError('Anti-Spoofing: Wajah terdeteksi statis. Coba gerakkan kepala sedikit, pastikan wajah Anda asli.');
-              clearInterval(faceGuideRef.current);
-              faceGuideRef.current = null;
-              return;
+          if (isCompletelyStatic && stableCountRef.current >= 6) {
+            console.warn('[Liveness] Static face detected. Box history:', boxHistoryRef.current);
+            setScanStatus('error');
+            setError('Anti-Spoofing: Wajah terdeteksi statis. Coba gerakkan kepala sedikit, pastikan wajah Anda asli.');
+            clearInterval(faceGuideRef.current);
+            faceGuideRef.current = null;
+            return;
+          }
+
+          // 2. Calculate EAR for blink detection when face is stable
+          if (stableCountRef.current >= 3 && !blinkDetectedRef.current) {
+            const landmarks = detection.landmarks;
+            const leftEye = landmarks.getLeftEye();
+            const rightEye = landmarks.getRightEye();
+
+            const calculateEAR = (eye) => {
+              const p1 = eye[0];
+              const p2 = eye[1];
+              const p3 = eye[2];
+              const p4 = eye[3];
+              const p5 = eye[4];
+              const p6 = eye[5];
+
+              const dist = (a, b) => Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+              const vertical1 = dist(p2, p6);
+              const vertical2 = dist(p3, p5);
+              const horizontal = dist(p1, p4);
+
+              return (vertical1 + vertical2) / (2.0 * horizontal);
+            };
+
+            const leftEAR = calculateEAR(leftEye);
+            const rightEAR = calculateEAR(rightEye);
+            const avgEAR = (leftEAR + rightEAR) / 2;
+
+            if (avgEAR > 0.24) {
+              wasEyesOpenRef.current = true;
+              if (consecutiveClosedRef.current >= 1) {
+                blinkDetectedRef.current = true;
+                setBlinkStatus('detected');
+                console.log('[Liveness] Blink detected! EAR went up to', avgEAR);
+              }
+            } else if (avgEAR <= 0.18 && wasEyesOpenRef.current) {
+              consecutiveClosedRef.current += 1;
+              console.log('[Liveness] Eyes closing... EAR:', avgEAR);
             }
+          }
 
+          // 3. Trigger capture when both stable and blinked
+          if (blinkDetectedRef.current && stableCountRef.current >= 8 && !autoCaptureTriggeredRef.current) {
             autoCaptureTriggeredRef.current = true;
             clearInterval(faceGuideRef.current);
             faceGuideRef.current = null;
@@ -326,9 +490,11 @@ const Scan = () => {
           setFaceGuideStatus('not-detected');
           stableCountRef.current = 0;
           boxHistoryRef.current = [];
+          consecutiveClosedRef.current = 0;
+          wasEyesOpenRef.current = false;
         }
-      } catch {
-        // silently ignore
+      } catch (err) {
+        console.error('Guide check error:', err);
       } finally {
         isProcessing = false;
       }
@@ -346,6 +512,11 @@ const Scan = () => {
     setFaceGuideStatus('none');
     stableCountRef.current = 0;
     autoCaptureTriggeredRef.current = false;
+    blinkDetectedRef.current = false;
+    wasEyesOpenRef.current = false;
+    consecutiveClosedRef.current = 0;
+    loopCountRef.current = 0;
+    setBlinkStatus('waiting');
   };
 
   // Determine border color for the face frame
@@ -466,9 +637,13 @@ const Scan = () => {
         {/* Face guide indicator */}
         {scanStatus === 'ready' && (
           <div className="flex items-center justify-center gap-2 mb-3">
-            <span className={`w-2 h-2 rounded-full ${faceGuideStatus === 'detected' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
+            <span className={`w-2 h-2 rounded-full ${
+              faceGuideStatus === 'detected' 
+                ? (blinkDetectedRef.current ? 'bg-emerald-400' : 'bg-blue-400 animate-pulse') 
+                : 'bg-amber-400'
+            }`}></span>
             <span className="text-white/80 text-xs font-medium">
-              {faceGuideStatus === 'detected' ? 'Wajah terdeteksi — tahan posisi...' : 'Arahkan wajah ke lingkaran'}
+              {getGuideMessage()}
             </span>
           </div>
         )}

@@ -3,6 +3,8 @@ const { calculateLateness, resolveStatus } = require('../utils/lateCalculator');
 const { toUTCMidnight, parseUTCDate, getUTCToday, getUTCYesterday, getUTCStartOfWeek, getUTCStartOfMonth, getUTCEndOfDay, VALID_STATUSES, MANGKIR_PENALTY_MINUTES } = require('../utils/dateHelper');
 const { getDistance } = require('../utils/geo');
 const XLSX = require('xlsx');
+const fs = require('fs');
+const path = require('path');
 const { recordAuditLog } = require('./auditLogController');
 
 /**
@@ -132,7 +134,11 @@ const getAll = async (req, res) => {
           employeeId: true,
           employee: {
             select: {
-              shift: true
+              shift: {
+                select: {
+                  saturdayType: true
+                }
+              }
             }
           }
         }
@@ -145,7 +151,21 @@ const getAll = async (req, res) => {
           startDate: { lte: where.date.lt || where.date.lte || now },
           endDate: { gte: where.date.gte || now }
         } : {},
-        include: { shift: true }
+        select: {
+          employeeId: true,
+          startDate: true,
+          endDate: true,
+          shift: {
+            select: {
+              id: true,
+              startTime: true,
+              endTime: true,
+              saturdayType: true,
+              saturdayEndTime: true,
+              gracePeriod: true
+            }
+          }
+        }
       }),
       prisma.attendance.count({
         where: { ...where, status: 'MANGKIR', lateMinutes: 0 }
@@ -314,7 +334,17 @@ const getAll = async (req, res) => {
  */
 const checkIn = async (req, res) => {
   try {
-    const { employeeId, mode, lat, lng, photoData } = req.body;
+    const { mode, lat, lng, photoData } = req.body;
+    let employeeId = req.body.employeeId;
+
+    // Security: Validate employeeId from JWT token for non-admin users to prevent IDOR
+    if (req.user.role !== 'ADMIN' && req.user.role !== 'SUPER_ADMIN') {
+      employeeId = req.user.employeeId;
+    }
+
+    if (!employeeId) {
+      return res.status(403).json({ success: false, message: 'No employee linked to this account' });
+    }
 
     if (mode !== 'Face ID') {
       return res.status(403).json({ 
@@ -464,7 +494,25 @@ const checkIn = async (req, res) => {
  */
 const checkOut = async (req, res) => {
   try {
-    const { employeeId, photoData } = req.body;
+    const { photoData, lat, lng } = req.body;
+    let employeeId = req.body.employeeId;
+
+    // Security: Validate employeeId from JWT token for non-admin users to prevent IDOR
+    if (req.user.role !== 'ADMIN' && req.user.role !== 'SUPER_ADMIN') {
+      employeeId = req.user.employeeId;
+    }
+
+    if (!employeeId) {
+      return res.status(403).json({ success: false, message: 'No employee linked to this account' });
+    }
+
+    // H5 Fix: Log warning if GPS is not available during check-out
+    if (!lat || !lng) {
+      console.warn(`⚠️ [Security Warning] Employee ID ${employeeId} checked out WITHOUT GPS coordinates.`);
+    } else {
+      console.log(`[Checkout Log] Employee ID ${employeeId} checked out with GPS: lat=${lat}, lng=${lng}`);
+    }
+
     const now = new Date();
     const today = getUTCToday();
 
@@ -497,6 +545,7 @@ const checkOut = async (req, res) => {
     const settingsList = await prisma.settings.findMany();
     const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
     const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
+    const timezoneOffset = parseInt(settingsList.find(s => s.key === 'timezoneOffset')?.value || '420', 10);
 
     // Fetch shift overrides for the attendance date
     const attendanceDate = new Date(attendance.date);
@@ -520,7 +569,7 @@ const checkOut = async (req, res) => {
     const gracePeriod = effectiveShift ? effectiveShift.gracePeriod : (parseInt(settingsList.find(s => s.key === 'gracePeriod')?.value || '15', 10));
     
     // If today is Saturday (6) override shiftEnd according to Saturday Shift Protocol
-    const dayOfWeek = attendanceDate.getDay();
+    const dayOfWeek = attendanceDate.getUTCDay();
     if (dayOfWeek === 6) {
       const satType = effectiveShift?.saturdayType || (isSaturdayHalfDay ? 'HALF_DAY' : 'FULL_DAY');
       if (satType === 'HALF_DAY') {
@@ -539,12 +588,23 @@ const checkOut = async (req, res) => {
 
     const finalStatus = resolveStatus(attendance.checkIn, now, lateStatus);
 
-    // Calculate Overtime
+    // Calculate Overtime with timezone-independent calculation
     let overtimeHours = 0;
     const autoCalcOt = settingsList.find(s => s.key === 'autoCalculateOvertime')?.value !== 'false';
     const [endHour, endMinute] = shiftEnd.split(':').map(Number);
-    const expectedEnd = new Date(now);
-    expectedEnd.setHours(endHour, endMinute, 0, 0);
+    
+    const [startHour, startMinute] = shiftStart.split(':').map(Number);
+    const startMins = startHour * 60 + startMinute;
+    const endMins = endHour * 60 + endMinute;
+
+    let targetEndMinutes = endMins;
+    if (endMins < startMins) {
+      // Shift crosses midnight (night shift)
+      targetEndMinutes += 24 * 60;
+    }
+
+    // Dynamic timezone offset. Compute expectedEnd as exact UTC date/time.
+    const expectedEnd = new Date(new Date(attendance.date).getTime() + (targetEndMinutes - timezoneOffset) * 60000);
 
     if (autoCalcOt && now > expectedEnd) {
       const diffMs = now.getTime() - expectedEnd.getTime();
@@ -612,6 +672,13 @@ const getHistory = async (req, res) => {
     const empId = parseInt(req.params.empId);
     const { month, year } = req.query;
 
+    // Security: Prevent IDOR on history endpoint for non-admin/manager users
+    if (req.user.role !== 'ADMIN' && req.user.role !== 'SUPER_ADMIN' && req.user.role !== 'MANAGER' && req.user.role !== 'DIREKTUR') {
+      if (empId !== req.user.employeeId) {
+        return res.status(403).json({ success: false, message: 'You are not authorized to view this employee\'s history.' });
+      }
+    }
+
     const where = { employeeId: empId };
 
     if (month && year) {
@@ -632,10 +699,10 @@ const getHistory = async (req, res) => {
     res.json({
       success: true,
       data: records.map(r => ({
-        day: r.date.getDate().toString().padStart(2, '0'),
-        weekday: r.date.toLocaleDateString('en-US', { weekday: 'short' }),
-        in: r.checkIn ? r.checkIn.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-- : --',
-        out: r.checkOut ? r.checkOut.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-- : --',
+        day: r.date.getUTCDate().toString().padStart(2, '0'),
+        weekday: r.date.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }),
+        in: r.checkIn ? r.checkIn.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }) : '-- : --',
+        out: r.checkOut ? r.checkOut.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }) : '-- : --',
         status: r.status,
         lateMinutes: (r.status === 'MANGKIR' || r.status === 'MISSING')
           ? ((r.lateMinutes || 0) > 0 ? r.lateMinutes : dynamicMangkirPenalty)
@@ -648,7 +715,32 @@ const getHistory = async (req, res) => {
 };
 
 // Global progress store for attendance import
-global.attendanceImportProgress = global.attendanceImportProgress || {};
+// Database-backed progress tracking helpers (C3 Fix)
+const updateImportProgress = async (jobId, progress, phase, detail) => {
+  const key = `job_progress_${jobId}`;
+  const value = JSON.stringify({ progress, phase, detail, updatedAt: new Date() });
+  await prisma.settings.upsert({
+    where: { key },
+    update: { value },
+    create: { key, value }
+  });
+};
+
+const getImportProgressFromDb = async (jobId) => {
+  const key = `job_progress_${jobId}`;
+  const record = await prisma.settings.findUnique({ where: { key } });
+  if (!record) return null;
+  try {
+    return JSON.parse(record.value);
+  } catch (e) {
+    return null;
+  }
+};
+
+const deleteImportProgress = async (jobId) => {
+  const key = `job_progress_${jobId}`;
+  await prisma.settings.deleteMany({ where: { key } });
+};
 
 /**
  * GET /api/attendance/import-progress
@@ -656,10 +748,13 @@ global.attendanceImportProgress = global.attendanceImportProgress || {};
  */
 const getImportProgress = async (req, res) => {
   const { jobId } = req.query;
-  if (!jobId || !global.attendanceImportProgress[jobId]) {
+  if (!jobId) {
     return res.json({ success: true, progress: 0, phase: 'idle', detail: '' });
   }
-  const p = global.attendanceImportProgress[jobId];
+  const p = await getImportProgressFromDb(jobId);
+  if (!p) {
+    return res.json({ success: true, progress: 0, phase: 'idle', detail: '' });
+  }
   res.json({ success: true, ...p });
 };
 
@@ -675,10 +770,10 @@ const importFromExcel = async (req, res) => {
     }
 
     const jobId = req.query.jobId || `att_${Date.now()}`;
-    const updateProgress = (progress, phase, detail) => {
-      global.attendanceImportProgress[jobId] = { progress, phase, detail };
+    const updateProgress = async (progress, phase, detail) => {
+      await updateImportProgress(jobId, progress, phase, detail);
     };
-    updateProgress(5, 'reading', 'Membaca file Excel...');
+    await updateProgress(5, 'reading', 'Membaca file Excel...');
 
     const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
     const ws = wb.Sheets[wb.SheetNames[0]];
@@ -711,7 +806,7 @@ const importFromExcel = async (req, res) => {
 
     console.log('[Import Debug] Column Mapping:', colMap);
     console.log('[Import Debug] Total Rows found:', rows.length - 1);
-    updateProgress(10, 'parsing', `Membaca ${rows.length - 1} baris data...`);
+    await updateProgress(10, 'parsing', `Membaca ${rows.length - 1} baris data...`);
     // Parse all data rows
     const dataRows = rows.slice(1).filter(r => r && r.length > 0);
     
@@ -753,7 +848,7 @@ const importFromExcel = async (req, res) => {
       }
     }
 
-    updateProgress(15, 'matching', `Mencocokkan baris dengan data karyawan...`);
+    await updateProgress(15, 'matching', `Mencocokkan baris dengan data karyawan...`);
 
     let minDateMs = Infinity;
     let maxDateMs = -Infinity;
@@ -864,46 +959,68 @@ const importFromExcel = async (req, res) => {
         if (!grouped[groupKey].checkOut || eventTime > grouped[groupKey].checkOut) grouped[groupKey].checkOut = eventTime;
       }
     }
-
-    // 3. GENERATE FULL SEQUENCE (Dynamic Range from Min to Max)
-    if (minDateMs !== Infinity && maxDateMs !== -Infinity) {
-       const minDate = new Date(minDateMs);
-       const maxDate = new Date(maxDateMs);
-       minDate.setHours(12, 0, 0, 0); // prevent DST jumps
-       maxDate.setHours(12, 0, 0, 0);
-
-       const employeesInvolved = [...new Set(Object.values(grouped).map(g => g.employeeId))];
-
-       for (const empId of employeesInvolved) {
-         const emp = allEmployees.find(e => e.id === empId);
-         
-         let current = new Date(minDate);
-         while (current <= maxDate) {
-           const y = current.getFullYear();
-           const m = current.getMonth() + 1;
-           const day = current.getDate();
-           
-           const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-           const key = `${empId}|${dateStr}`;
-           
-           if (!grouped[key]) {
-             grouped[key] = { employeeId: empId, employee: emp, date: dateStr, checkIn: null, checkOut: null };
-           }
-           current.setDate(current.getDate() + 1);
-         }
-       }
+    // 3. GENERATE FULL SEQUENCE (Dynamic Range from Min to Max) (C5 Optimization)
+    if (minDateMs === Infinity || maxDateMs === -Infinity) {
+      return res.status(400).json({ success: false, message: 'No valid attendance records found in the Excel file.' });
     }
 
-    // 4. UPSERT ALL RECORDS (1-30)
+    const minDate = new Date(minDateMs);
+    const maxDate = new Date(maxDateMs);
+    minDate.setHours(0, 0, 0, 0);
+    maxDate.setHours(23, 59, 59, 999);
+
+    const employeesInvolved = [...new Set(Object.values(grouped).map(g => g.employeeId))];
+
+    for (const empId of employeesInvolved) {
+      const emp = allEmployees.find(e => e.id === empId);
+      
+      let current = new Date(minDate);
+      current.setHours(12, 0, 0, 0); // prevent DST jumps
+      const targetMax = new Date(maxDate);
+      targetMax.setHours(12, 0, 0, 0);
+
+      while (current <= targetMax) {
+        const y = current.getFullYear();
+        const m = current.getMonth() + 1;
+        const day = current.getDate();
+        
+        const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const key = `${empId}|${dateStr}`;
+        
+        if (!grouped[key]) {
+          grouped[key] = { employeeId: empId, employee: emp, date: dateStr, checkIn: null, checkOut: null };
+        }
+        current.setDate(current.getDate() + 1);
+      }
+    }
+
+    // Pre-fetch all existing attendance records in the target date range to avoid N+1 queries
+    const existingRecords = await prisma.attendance.findMany({
+      where: {
+        employeeId: { in: employeesInvolved },
+        date: { gte: minDate, lte: maxDate }
+      }
+    });
+
+    const existingMap = new Map();
+    for (const rec of existingRecords) {
+      const dateStr = rec.date.toISOString().split('T')[0];
+      existingMap.set(`${rec.employeeId}_${dateStr}`, rec);
+    }
+
+    // 4. PREPARE ALL ENTRIES TO SAVE
     const totalEntries = Object.keys(grouped).length;
     let processedEntries = 0;
-    updateProgress(30, 'saving', `Menyimpan 0/${totalEntries} data ke database...`);
+    await updateProgress(30, 'saving', `Menyimpan 0/${totalEntries} data ke database...`);
+
+    const entriesToSave = [];
 
     for (const [key, entry] of Object.entries(grouped)) {
       try {
         const [y, m, d] = entry.date.split('-').map(Number);
         const dateObj = new Date(Date.UTC(y, m - 1, d, 0, 0, 0)); 
-        
+        const dateStr = dateObj.toISOString().split('T')[0];
+
         const emp = entry.employee;
         const rosterShift = overrideMap.get(`${emp.id}_${entry.date}`);
         const effectiveShift = rosterShift || emp.shift || null;
@@ -931,53 +1048,91 @@ const importFromExcel = async (req, res) => {
 
         const status = resolveStatus(entry.checkIn, entry.checkOut, lateStatus);
 
-        // H1 FIX: Skip records that were manually corrected by HRD
-        const existingRecord = await prisma.attendance.findUnique({
-          where: { employeeId_date: { employeeId: entry.employeeId, date: dateObj } }
-        });
-        if (existingRecord && (existingRecord.mode === 'Manual' || existingRecord.mode === 'Manual (SPL)' || existingRecord.mode === 'Manual (BHL)' || existingRecord.notes?.includes('HRD'))) {
-          processedEntries++;
-          continue; // Don't overwrite HRD corrections
+        // H1 FIX / HRD protection: Skip records that were manually corrected by HRD
+        const existingRecord = existingMap.get(`${entry.employeeId}_${dateStr}`);
+        if (existingRecord) {
+          const isManual = existingRecord.mode === 'Manual' || 
+                           existingRecord.mode === 'Manual (SPL)' || 
+                           existingRecord.mode === 'Manual (BHL)' || 
+                           existingRecord.notes?.includes('HRD');
+          if (isManual) {
+            processedEntries++;
+            continue; // Protect manual HRD corrections
+          }
         }
 
-        await prisma.attendance.upsert({
-          where: { employeeId_date: { employeeId: entry.employeeId, date: dateObj } },
-          update: {
-            checkIn: entry.checkIn || null,
-            checkOut: entry.checkOut || null,
-            status,
-            lateMinutes,
-            mode: 'Fingerprint'
-          },
-          create: {
-            employeeId: entry.employeeId,
-            date: dateObj,
-            checkIn: entry.checkIn || null,
-            checkOut: entry.checkOut || null,
-            status,
-            lateMinutes,
-            mode: 'Fingerprint'
-          }
+        entriesToSave.push({
+          employeeId: entry.employeeId,
+          dateObj,
+          checkIn: entry.checkIn || null,
+          checkOut: entry.checkOut || null,
+          status,
+          lateMinutes,
+          mode: 'Fingerprint',
+          hasExisting: !!existingRecord,
+          existingId: existingRecord?.id,
+          key
         });
-        imported++;
-        processedEntries++;
-        // Update progress every 10 records to avoid overhead
-        if (processedEntries % 10 === 0 || processedEntries === totalEntries) {
-          const pct = Math.round(30 + (processedEntries / totalEntries) * 65);
-          updateProgress(pct, 'saving', `Menyimpan ${processedEntries}/${totalEntries} data ke database...`);
-        }
       } catch (err) {
         errors.push(`${key}: ${err.message}`);
         processedEntries++;
       }
     }
 
-    updateProgress(98, 'finalizing', 'Menyelesaikan import...');
+    // 5. UPSERT ALL RECORDS IN CHUNKS
+    const chunkSize = 200;
+    for (let i = 0; i < entriesToSave.length; i += chunkSize) {
+      const chunk = entriesToSave.slice(i, i + chunkSize);
+      
+      try {
+        await prisma.$transaction(async (tx) => {
+          for (const item of chunk) {
+            if (item.hasExisting) {
+              await tx.attendance.update({
+                where: { id: item.existingId },
+                data: {
+                  checkIn: item.checkIn,
+                  checkOut: item.checkOut,
+                  status: item.status,
+                  lateMinutes: item.lateMinutes,
+                  mode: item.mode
+                }
+              });
+            } else {
+              await tx.attendance.create({
+                data: {
+                  employeeId: item.employeeId,
+                  date: item.dateObj,
+                  checkIn: item.checkIn,
+                  checkOut: item.checkOut,
+                  status: item.status,
+                  lateMinutes: item.lateMinutes,
+                  mode: item.mode
+                }
+              });
+            }
+            imported++;
+            processedEntries++;
+          }
+        });
+
+        const pct = Math.round(30 + (processedEntries / totalEntries) * 65);
+        await updateProgress(pct, 'saving', `Menyimpan ${processedEntries}/${totalEntries} data ke database...`);
+      } catch (err) {
+        // Log transaction error and track them
+        chunk.forEach(item => {
+          errors.push(`${item.key}: Transaction chunk failed: ${err.message}`);
+          processedEntries++;
+        });
+      }
+    }
+
+    await updateProgress(98, 'finalizing', 'Menyelesaikan import...');
 
     const unmatchedList = Array.from(unmatchedNames);
     const unmatchedCount = unmatchedList.length;
 
-    updateProgress(100, 'done', 'Import selesai!');
+    await updateProgress(100, 'done', 'Import selesai!');
 
     res.json({
       success: true,
@@ -993,8 +1148,14 @@ const importFromExcel = async (req, res) => {
       },
     });
 
-    // Clean up progress after 30s
-    setTimeout(() => { delete global.attendanceImportProgress[jobId]; }, 30000);
+    // Clean up progress after 30s from DB (C3 Fix)
+    setTimeout(async () => { 
+      try {
+        await deleteImportProgress(jobId); 
+      } catch (e) {
+        console.error(`[Import] Failed to cleanup job progress: ${e.message}`);
+      }
+    }, 30000);
   } catch (err) {
     console.error('Import attendance error:', err);
     res.status(500).json({ success: false, message: err.message });
@@ -1435,6 +1596,7 @@ const update = async (req, res) => {
     const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
     const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
     const globalGracePeriod = parseInt(settingsList.find(s => s.key === 'gracePeriod')?.value || '15', 10);
+    const timezoneOffset = parseInt(settingsList.find(s => s.key === 'timezoneOffset')?.value || '420', 10);
 
     const dateStart = new Date(oldRecord.date);
     dateStart.setHours(0,0,0,0);
@@ -1468,13 +1630,13 @@ const update = async (req, res) => {
 
     const baseDate = new Date(oldRecord.date);
 
-    // Manual Time Update Parsing (Timezone-agnostic conversion from WIB to UTC)
+    // Manual Time Update Parsing (Timezone-agnostic conversion from local time to UTC)
     if (checkInTime !== undefined) {
       if (!checkInTime) {
         updateData.checkIn = null;
       } else {
         const [h, m] = checkInTime.split(':').map(Number);
-        updateData.checkIn = new Date(baseDate.getTime() + (h * 60 + m - 420) * 60000);
+        updateData.checkIn = new Date(baseDate.getTime() + (h * 60 + m - timezoneOffset) * 60000);
       }
     }
     
@@ -1483,7 +1645,7 @@ const update = async (req, res) => {
         updateData.checkOut = null;
       } else {
         const [h, m] = checkOutTime.split(':').map(Number);
-        updateData.checkOut = new Date(baseDate.getTime() + (h * 60 + m - 420) * 60000);
+        updateData.checkOut = new Date(baseDate.getTime() + (h * 60 + m - timezoneOffset) * 60000);
       }
     }
 
@@ -1543,7 +1705,6 @@ const update = async (req, res) => {
 
     // Record detailed audit
     if (req.user) {
-      const { recordAuditLog } = require('./auditLogController');
       try {
          await recordAuditLog({
            userId: req.user.id,
@@ -1587,48 +1748,49 @@ const bulkUpdateOvertime = async (req, res) => {
 
     let updatedCount = 0;
     
-    // Process sequentially to record distinct audit logs and upsert attendance limits
-    for (const rec of records) {
-      if (!rec.employeeId || isNaN(rec.employeeId)) continue;
-      if (rec.overtimeHours === undefined || rec.overtimeHours === null || rec.overtimeHours === '') continue;
-      
-      const attendance = await prisma.attendance.upsert({
-        where: { employeeId_date: { employeeId: parseInt(rec.employeeId), date: dateObj } },
-        update: { 
-          overtimeHours: parseFloat(rec.overtimeHours),
-          ...(rec.reason ? { notes: rec.reason } : {})
-        },
-        create: {
-          employeeId: parseInt(rec.employeeId),
-          date: dateObj,
-          status: 'ABSENT', // they might not have clocked in, but admin gave them overtime?
-          overtimeHours: parseFloat(rec.overtimeHours),
-          mode: 'Manual (SPL)',
-          notes: rec.reason || null
-        },
-        include: { employee: true }
-      });
-      updatedCount++;
+    // Process within a database transaction for atomicity and integrity
+    await prisma.$transaction(async (tx) => {
+      for (const rec of records) {
+        if (!rec.employeeId || isNaN(rec.employeeId)) continue;
+        if (rec.overtimeHours === undefined || rec.overtimeHours === null || rec.overtimeHours === '') continue;
+        
+        const attendance = await tx.attendance.upsert({
+          where: { employeeId_date: { employeeId: parseInt(rec.employeeId), date: dateObj } },
+          update: { 
+            overtimeHours: parseFloat(rec.overtimeHours),
+            ...(rec.reason ? { notes: rec.reason } : {})
+          },
+          create: {
+            employeeId: parseInt(rec.employeeId),
+            date: dateObj,
+            status: 'ABSENT', // they might not have clocked in, but admin gave them overtime?
+            overtimeHours: parseFloat(rec.overtimeHours),
+            mode: 'Manual (SPL)',
+            notes: rec.reason || null
+          },
+          include: { employee: true }
+        });
+        updatedCount++;
 
-      // Record detailed audit
-      if (req.user) {
-        const { recordAuditLog } = require('./auditLogController');
-        try {
-           await recordAuditLog({
-             userId: req.user.id,
-             username: req.user.username,
-             role: req.user.role,
-             action: 'UPDATE_SPL',
-             entity: 'Attendance',
-             entityId: attendance.id,
-             details: JSON.stringify({ 
-               logMsg: `${attendance.employee.name} (NIK: ${attendance.employee.employeeCode}): Lembur (SPL) diupdate menjadi ${rec.overtimeHours} Jam (Tgl: ${date})`
-             }),
-             ipAddress: req.ip,
-           });
-        } catch(e) { }
+        // Record detailed audit
+        if (req.user) {
+          try {
+             await recordAuditLog({
+               userId: req.user.id,
+               username: req.user.username,
+               role: req.user.role,
+               action: 'UPDATE_SPL',
+               entity: 'Attendance',
+               entityId: attendance.id,
+               details: JSON.stringify({ 
+                 logMsg: `${attendance.employee.name} (NIK: ${attendance.employee.employeeCode}): Lembur (SPL) diupdate menjadi ${rec.overtimeHours} Jam (Tgl: ${date})`
+               }),
+               ipAddress: req.ip,
+             });
+          } catch(e) { }
+        }
       }
-    }
+    });
 
     res.json({ success: true, message: `Berhasil meng-update jam lembur manual untuk ${updatedCount} karyawan.`, updatedCount });
   } catch (err) {
@@ -1651,67 +1813,68 @@ const bulkUpdateDailyWorkers = async (req, res) => {
 
     let updatedCount = 0;
     
-    for (const rec of records) {
-      if (rec.status === 'DELETE') {
-        await prisma.attendance.deleteMany({
-          where: { employeeId: rec.employeeId, date: dateObj }
+    // Process within a database transaction for atomicity and integrity
+    await prisma.$transaction(async (tx) => {
+      for (const rec of records) {
+        if (rec.status === 'DELETE') {
+          await tx.attendance.deleteMany({
+            where: { employeeId: rec.employeeId, date: dateObj }
+          });
+          updatedCount++;
+          
+          // Record detailed audit
+          if (req.user) {
+            try {
+               await recordAuditLog({
+                 userId: req.user.id,
+                 username: req.user.username,
+                 role: req.user.role,
+                 action: 'DELETE_BHL',
+                 entity: 'Attendance',
+                 details: JSON.stringify({ 
+                   logMsg: `Absen Harian (BHL) dihapus untuk Employee ID: ${rec.employeeId} (Tgl: ${date})`
+                 }),
+                 ipAddress: req.ip,
+               });
+            } catch(e) { }
+          }
+          continue;
+        }
+
+        if (!rec.status || !VALID_STATUSES.includes(rec.status)) continue;
+        
+        const attendance = await tx.attendance.upsert({
+          where: { employeeId_date: { employeeId: rec.employeeId, date: dateObj } },
+          update: { status: rec.status, mode: 'Manual (BHL)' },
+          create: {
+            employeeId: rec.employeeId,
+            date: dateObj,
+            status: rec.status,
+            mode: 'Manual (BHL)'
+          },
+          include: { employee: true }
         });
         updatedCount++;
-        
+
         // Record detailed audit
         if (req.user) {
-          const { recordAuditLog } = require('./auditLogController');
           try {
              await recordAuditLog({
                userId: req.user.id,
                username: req.user.username,
                role: req.user.role,
-               action: 'DELETE_BHL',
+               action: 'UPDATE_BHL',
                entity: 'Attendance',
+               entityId: attendance.id,
                details: JSON.stringify({ 
-                 logMsg: `Absen Harian (BHL) dihapus untuk Employee ID: ${rec.employeeId} (Tgl: ${date})`
+                 logMsg: `${attendance.employee.name} (NIK: ${attendance.employee.employeeCode}): Absen Manual (BHL) diinput - ${rec.status} (Tgl: ${date})`
                }),
                ipAddress: req.ip,
              });
           } catch(e) { }
         }
-        continue;
       }
-
-      if (!rec.status || !VALID_STATUSES.includes(rec.status)) continue;
-      
-      const attendance = await prisma.attendance.upsert({
-        where: { employeeId_date: { employeeId: rec.employeeId, date: dateObj } },
-        update: { status: rec.status, mode: 'Manual (BHL)' },
-        create: {
-          employeeId: rec.employeeId,
-          date: dateObj,
-          status: rec.status,
-          mode: 'Manual (BHL)'
-        },
-        include: { employee: true }
-      });
-      updatedCount++;
-
-      // Record detailed audit
-      if (req.user) {
-        const { recordAuditLog } = require('./auditLogController');
-        try {
-           await recordAuditLog({
-             userId: req.user.id,
-             username: req.user.username,
-             role: req.user.role,
-             action: 'UPDATE_BHL',
-             entity: 'Attendance',
-             entityId: attendance.id,
-             details: JSON.stringify({ 
-               logMsg: `${attendance.employee.name} (NIK: ${attendance.employee.employeeCode}): Absen Manual (BHL) diinput - ${rec.status} (Tgl: ${date})`
-             }),
-             ipAddress: req.ip,
-           });
-        } catch(e) { }
-      }
-    }
+    });
 
     res.json({ success: true, message: `Berhasil memproses absen Harian/BHL untuk ${updatedCount} karyawan.`, updatedCount });
   } catch (err) {
@@ -1729,157 +1892,170 @@ const manualCorrectionHRD = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid payload' });
     }
 
-    const fs = require('fs');
-    const path = require('path');
-    
     const targetDate = toUTCMidnight(new Date(date));
+    
+    // Fetch timezoneOffset setting
+    const timezoneOffsetSetting = await prisma.settings.findUnique({
+      where: { key: 'timezoneOffset' }
+    });
+    const timezoneOffset = parseInt(timezoneOffsetSetting?.value || '420', 10);
     
     let updatedCount = 0;
 
-    for (const record of records) {
-      const { employeeId, status, checkIn, checkOut, photo } = record;
-      
-      const emp = await prisma.employee.findUnique({ 
-        where: { id: employeeId },
-        include: { shift: true }
-      });
-      if (!emp) continue;
-
-      let photoUrl = undefined;
-      
-      if (photo && photo.startsWith('data:image')) {
-        const base64Data = photo.replace(/^data:image\/\w+;base64,/, "");
-        const extMatch = photo.split(';')[0].match(/jpeg|png|gif|webp/);
-        const ext = extMatch ? extMatch[0] : 'jpg';
-        const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'corrections');
-        if (!fs.existsSync(uploadDir)) {
-          fs.mkdirSync(uploadDir, { recursive: true });
-        }
-        const filename = `correction_${emp.employeeCode}_${Date.now()}.${ext}`;
-        const filepath = path.join(uploadDir, filename);
-        fs.writeFileSync(filepath, base64Data, 'base64');
-        photoUrl = `/uploads/corrections/${filename}`;
-      }
-
-      const existing = await prisma.attendance.findUnique({
-        where: { employeeId_date: { employeeId, date: targetDate } }
-      });
-
-      if (type === 'KEHADIRAN') {
-        const payload = {
-          status: status,
-          checkIn: null,
-          checkOut: null,
-          notes: 'Diupdate manual oleh HRD'
-        };
+    // Use $transaction for atomicity and data consistency
+    await prisma.$transaction(async (tx) => {
+      for (const record of records) {
+        const { employeeId, status, checkIn, checkOut, photo } = record;
         
-        if (existing) {
-          await prisma.attendance.update({ where: { id: existing.id }, data: payload });
-        } else {
-          await prisma.attendance.create({ data: { employeeId, date: targetDate, ...payload } });
-        }
-        updatedCount++;
+        const emp = await tx.employee.findUnique({ 
+          where: { id: employeeId },
+          include: { shift: true }
+        });
+        if (!emp) continue;
+
+        let photoUrl = undefined;
         
-        try {
-           const { recordAuditLog } = require('./auditLogController');
-           await recordAuditLog({
-             userId: req.user.id,
-             username: req.user.username,
-             role: req.user.role,
-             action: 'MANUAL_CORRECTION_STATUS',
-             entity: 'Attendance',
-             entityId: existing?.id || null,
-             details: JSON.stringify({ 
-               emp: emp.name, 
-               employeeCode: emp.employeeCode, 
-               date, 
-               status, 
-               previousStatus: existing?.status || 'BELUM ABSEN' 
-             }),
-             ipAddress: req.ip
-           });
-        } catch(e) {}
-      } else if (type === 'LUPA_FINGER') {
-        let finalIn = existing?.checkIn;
-        let finalOut = existing?.checkOut;
-        
-        if (checkIn) {
-          const [h, m] = checkIn.split(':').map(Number);
-          finalIn = new Date(targetDate.getTime() + (h * 60 + m - 420) * 60000);
-        }
-        if (checkOut) {
-          const [h, m] = checkOut.split(':').map(Number);
-          finalOut = new Date(targetDate.getTime() + (h * 60 + m - 420) * 60000);
+        if (photo && photo.startsWith('data:image')) {
+          const base64Data = photo.replace(/^data:image\/\w+;base64,/, "");
+          const extMatch = photo.split(';')[0].match(/jpeg|png|gif|webp/);
+          const ext = extMatch ? extMatch[0] : 'jpg';
+          const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'corrections');
+          if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+          }
+          const filename = `correction_${emp.employeeCode}_${Date.now()}.${ext}`;
+          const filepath = path.join(uploadDir, filename);
+          fs.writeFileSync(filepath, base64Data, 'base64');
+          photoUrl = `/uploads/corrections/${filename}`;
         }
 
-        const shiftOverride = await prisma.employeeShiftOverride.findFirst({
-          where: { employeeId, date: targetDate }
+        const existing = await tx.attendance.findUnique({
+          where: { employeeId_date: { employeeId, date: targetDate } }
         });
 
-        const cInStr = shiftOverride?.startTime || emp.shift?.startTime || "08:00"; 
-        const gracePeriod = shiftOverride?.gracePeriod || emp.shift?.gracePeriod || 15;
-        
-        const [sh, sm] = cInStr.split(':').map(Number);
-        const expectedIn = new Date(targetDate.getTime() + (sh * 60 + sm - 420) * 60000);
+        if (type === 'KEHADIRAN') {
+          const payload = {
+            status: status,
+            checkIn: null,
+            checkOut: null,
+            notes: 'Diupdate manual oleh HRD'
+          };
+          
+          let attendanceRecord;
+          if (existing) {
+            attendanceRecord = await tx.attendance.update({ where: { id: existing.id }, data: payload });
+          } else {
+            attendanceRecord = await tx.attendance.create({ data: { employeeId, date: targetDate, ...payload } });
+          }
+          updatedCount++;
+          
+          try {
+             await recordAuditLog({
+               userId: req.user.id,
+               username: req.user.username,
+               role: req.user.role,
+               action: 'MANUAL_CORRECTION_STATUS',
+               entity: 'Attendance',
+               entityId: attendanceRecord.id || existing?.id || null,
+               details: JSON.stringify({ 
+                 emp: emp.name, 
+                 employeeCode: emp.employeeCode, 
+                 date, 
+                 status, 
+                 previousStatus: existing?.status || 'BELUM ABSEN' 
+               }),
+               ipAddress: req.ip
+             });
+          } catch(e) {}
+        } else if (type === 'LUPA_FINGER') {
+          let finalIn = existing?.checkIn;
+          let finalOut = existing?.checkOut;
+          
+          if (checkIn) {
+            const [h, m] = checkIn.split(':').map(Number);
+            finalIn = new Date(targetDate.getTime() + (h * 60 + m - timezoneOffset) * 60000);
+          }
+          if (checkOut) {
+            const [h, m] = checkOut.split(':').map(Number);
+            finalOut = new Date(targetDate.getTime() + (h * 60 + m - timezoneOffset) * 60000);
+          }
 
-        let lateMins = 0;
-        let pStatus = 'ABSENT';
-        if (finalIn) {
-           const diff = Math.floor((finalIn - expectedIn) / 60000);
-           if (diff > 0) lateMins = diff;
-           pStatus = lateMins > 0 ? 'LATE' : 'PRESENT';
+          // Security & Logic Fix: Query shift override using correct schema fields (startDate and endDate)
+          const shiftOverride = await tx.employeeShiftOverride.findFirst({
+            where: {
+              employeeId,
+              startDate: { lte: targetDate },
+              endDate: { gte: targetDate }
+            },
+            include: { shift: true }
+          });
+
+          const effectiveShift = shiftOverride?.shift || emp.shift;
+          const cInStr = effectiveShift?.startTime || "08:00"; 
+          const gracePeriod = effectiveShift?.gracePeriod || 15;
+          
+          const [sh, sm] = cInStr.split(':').map(Number);
+          const expectedIn = new Date(targetDate.getTime() + (sh * 60 + sm - timezoneOffset) * 60000);
+
+          let lateMins = 0;
+          let pStatus = 'ABSENT';
+          if (finalIn) {
+             const diff = Math.floor((finalIn - expectedIn) / 60000);
+             if (diff > 0) lateMins = diff;
+             pStatus = lateMins > 0 ? 'LATE' : 'PRESENT';
+          }
+
+          const finalStatus = resolveStatus(finalIn, finalOut, pStatus);
+
+          const payload = {
+            checkIn: finalIn,
+            checkOut: finalOut,
+            status: finalStatus,
+            lateMinutes: lateMins,
+            notes: 'Lupa Finger dikoreksi HRD',
+          };
+          
+          if (photoUrl) {
+            payload.photoUrl = photoUrl;
+          }
+
+          let attendanceRecord;
+          if (existing) {
+            attendanceRecord = await tx.attendance.update({ where: { id: existing.id }, data: payload });
+          } else {
+            attendanceRecord = await tx.attendance.create({ data: { employeeId, date: targetDate, ...payload } });
+          }
+          updatedCount++;
+
+          try {
+             const formatTime24 = (dateObj) => {
+               if (!dateObj) return '--:--';
+               const d = new Date(dateObj);
+               return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Jakarta' });
+             };
+             await recordAuditLog({
+               userId: req.user.id,
+               username: req.user.username,
+               role: req.user.role,
+               action: 'MANUAL_CORRECTION_TIME',
+               entity: 'Attendance',
+               entityId: attendanceRecord.id || existing?.id || null,
+               details: JSON.stringify({ 
+                 emp: emp.name, 
+                 employeeCode: emp.employeeCode, 
+                 date, 
+                 checkIn, 
+                 checkOut,
+                 previousCheckIn: existing?.checkIn ? formatTime24(existing.checkIn) : '--:--',
+                 previousCheckOut: existing?.checkOut ? formatTime24(existing.checkOut) : '--:--',
+                 photoUrl: photoUrl || existing?.photoUrl || null
+               }),
+               ipAddress: req.ip
+             });
+          } catch(e) {}
         }
-
-        const finalStatus = resolveStatus(finalIn, finalOut, pStatus);
-
-        const payload = {
-          checkIn: finalIn,
-          checkOut: finalOut,
-          status: finalStatus,
-          lateMinutes: lateMins,
-          notes: 'Lupa Finger dikoreksi HRD',
-        };
-        
-        if (photoUrl) {
-          payload.photoUrl = photoUrl;
-        }
-
-        if (existing) {
-          await prisma.attendance.update({ where: { id: existing.id }, data: payload });
-        } else {
-          await prisma.attendance.create({ data: { employeeId, date: targetDate, ...payload } });
-        }
-        updatedCount++;
-
-        try {
-           const formatTime24 = (dateObj) => {
-             if (!dateObj) return '--:--';
-             const d = new Date(dateObj);
-             return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Jakarta' });
-           };
-           const { recordAuditLog } = require('./auditLogController');
-           await recordAuditLog({
-             userId: req.user.id,
-             username: req.user.username,
-             role: req.user.role,
-             action: 'MANUAL_CORRECTION_TIME',
-             entity: 'Attendance',
-             entityId: existing?.id || null,
-             details: JSON.stringify({ 
-               emp: emp.name, 
-               employeeCode: emp.employeeCode, 
-               date, 
-               checkIn, 
-               checkOut,
-               previousCheckIn: existing?.checkIn ? formatTime24(existing.checkIn) : '--:--',
-               previousCheckOut: existing?.checkOut ? formatTime24(existing.checkOut) : '--:--',
-               photoUrl: photoUrl || existing?.photoUrl || null
-             }),
-             ipAddress: req.ip
-           });
-        } catch(e) {}
       }
-    }
+    });
 
     res.json({ success: true, message: `Berhasil memproses koreksi untuk ${updatedCount} karyawan.`, updatedCount });
   } catch (err) {

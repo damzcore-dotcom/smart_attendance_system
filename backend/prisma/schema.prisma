@@ -38,6 +38,7 @@ enum AttStatus {
   IZIN
   CUTI
   HOLIDAY
+  HALF_DAY
 }
 
 enum ReqStatus {

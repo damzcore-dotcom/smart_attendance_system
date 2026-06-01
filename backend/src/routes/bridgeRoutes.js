@@ -6,7 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prismaClient');
-const { verifyToken } = require('../middleware/auth');
+const { verifyToken, requireAdmin } = require('../middleware/auth');
 
 // ── Bridge Key Middleware ────────────────────────────────────────────────
 const verifyBridgeKey = (req, res, next) => {
@@ -363,7 +363,7 @@ router.get('/cameras', verifyToken, async (req, res) => {
 });
 
 // Create camera
-router.post('/cameras', verifyToken, async (req, res) => {
+router.post('/cameras', verifyToken, requireAdmin, async (req, res) => {
   try {
     const { id, name, location, ipAddress, rtspUrl, direction, captureInStart, captureInEnd, captureOutStart, captureOutEnd } = req.body;
     const camera = await prisma.camera.create({
@@ -381,7 +381,7 @@ router.post('/cameras', verifyToken, async (req, res) => {
 });
 
 // Update camera
-router.put('/cameras/:id', verifyToken, async (req, res) => {
+router.put('/cameras/:id', verifyToken, requireAdmin, async (req, res) => {
   try {
     const { name, location, ipAddress, rtspUrl, direction, active, captureInStart, captureInEnd, captureOutStart, captureOutEnd } = req.body;
     const camera = await prisma.camera.update({
@@ -397,7 +397,7 @@ router.put('/cameras/:id', verifyToken, async (req, res) => {
 });
 
 // Delete camera
-router.delete('/cameras/:id', verifyToken, async (req, res) => {
+router.delete('/cameras/:id', verifyToken, requireAdmin, async (req, res) => {
   try {
     await prisma.camera.delete({ where: { id: req.params.id } });
     res.json({ success: true });

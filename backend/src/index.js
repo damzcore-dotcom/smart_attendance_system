@@ -28,6 +28,10 @@ startCronJobs();
 const fixSequences = require('./utils/fixSequences');
 fixSequences();
 
+// Verify timezone configuration alignment (Asia/Jakarta)
+const checkTimezone = require('./utils/timezoneCheck');
+checkTimezone();
+
 // Global safety shield to prevent crashes from external libraries
 process.on('unhandledRejection', (reason, promise) => {
   console.error('⚠️ Unhandled Rejection at:', promise, 'reason:', reason);
@@ -57,7 +61,19 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', message: 'Smart Attendance Pro API is running', timestamp: new Date() });
+  const checkTimezone = require('./utils/timezoneCheck');
+  const tz = checkTimezone();
+  res.json({
+    status: 'OK',
+    message: 'Smart Attendance Pro API is running',
+    timestamp: new Date(),
+    timezone: {
+      current: tz.current,
+      expected: tz.expected,
+      isMatch: tz.isMatch,
+      instructions: tz.isMatch ? null : tz.instructions
+    }
+  });
 });
 
 // Rate limiting for auth endpoints (brute-force protection)
