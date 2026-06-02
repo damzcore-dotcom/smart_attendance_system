@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Trash2, Plus, RefreshCw, Wifi, Download, Users, MonitorSmartphone, Clock, CheckCircle, AlertTriangle, Info, Pencil, Eraser, FileText } from 'lucide-react';
 import api from '../../services/api';
 import { getStatusLabel, getStatusColor } from '../../utils/statusUtils';
 
 const DeviceSettings = () => {
+  const { t } = useTranslation();
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newDevice, setNewDevice] = useState({ name: '', ipAddress: '', port: 4370 });
@@ -149,7 +151,7 @@ const DeviceSettings = () => {
 
   const runBulkAction = async (actionType) => {
     if (selectedDeviceIds.length === 0) {
-      alert('Silakan pilih minimal satu mesin terlebih dahulu.');
+      alert(t('deviceSettings.alerts.selectAtLeastOne'));
       return;
     }
 
@@ -190,9 +192,9 @@ const DeviceSettings = () => {
         newStatuses[device.id] = {
           ...newStatuses[device.id],
           status: 'running',
-          message: actionType === 'test' ? 'Menghubungkan ke mesin...' 
-                 : actionType === 'sync-users' ? 'Memindai data karyawan di mesin...' 
-                 : 'Menarik log absensi dari mesin...'
+          message: actionType === 'test' ? t('deviceSettings.connecting') 
+                 : actionType === 'sync-users' ? t('deviceSettings.scanningUsers') 
+                 : t('deviceSettings.pullingLogs')
         };
         return { ...prev, deviceStatuses: newStatuses };
       });
@@ -208,7 +210,7 @@ const DeviceSettings = () => {
             newStatuses[device.id] = {
               ...newStatuses[device.id],
               status: 'success',
-              message: data.message || 'Koneksi Berhasil!'
+              message: data.message || t('deviceSettings.connectionSuccess')
             };
             return { ...prev, deviceStatuses: newStatuses };
           });
@@ -241,7 +243,7 @@ const DeviceSettings = () => {
               newStatuses[device.id] = {
                 ...newStatuses[device.id],
                 status: 'success',
-                message: commitData.message || 'Sinkronisasi Karyawan Berhasil!'
+                message: commitData.message || t('deviceSettings.syncPersonnelSuccess')
               };
               return { ...prev, deviceStatuses: newStatuses };
             });
@@ -267,7 +269,7 @@ const DeviceSettings = () => {
             newStatuses[device.id] = {
               ...newStatuses[device.id],
               status: 'success',
-              message: data.message || 'Tarik Absensi Berhasil!',
+              message: data.message || t('deviceSettings.fetchAttendanceSuccess'),
               savedCount: data.savedCount || 0,
               employeeCount: data.employeeCount || 0
             };
@@ -357,7 +359,7 @@ const DeviceSettings = () => {
             ...diag
           });
         } else {
-          alert(data.message || 'Tidak ada data log baru di mesin.');
+          alert(data.message || t('deviceSettings.alerts.noNewLogs'));
         }
         return;
       }
@@ -366,7 +368,7 @@ const DeviceSettings = () => {
       setSyncToken(data.syncToken); // <-- Store sync token
       setActiveDeviceId(id);
     } catch (err) {
-      alert(err.response?.data?.message || 'Gagal mengambil preview absensi');
+      alert(err.response?.data?.message || t('deviceSettings.alerts.fetchPreviewFail'));
     } finally {
       setSyncing(null);
     }
@@ -387,7 +389,7 @@ const DeviceSettings = () => {
       fetchDevices();
       fetchSyncLogs();
     } catch (err) {
-      alert(err.response?.data?.message || 'Gagal menyimpan data absensi');
+      alert(err.response?.data?.message || t('deviceSettings.alerts.saveFail'));
       fetchSyncLogs();
     } finally {
       setSyncing(null);
@@ -405,10 +407,10 @@ const DeviceSettings = () => {
     try {
       setSyncing('clear-' + device.id);
       const { data } = await api.post(`/devices/${device.id}/clear-logs`);
-      alert(data.message || 'Log absensi di mesin berhasil dihapus.');
+      alert(data.message || t('deviceSettings.alerts.clearLogSuccess'));
       fetchDevices();
     } catch (err) {
-      alert(err.response?.data?.message || err.message || 'Gagal menghapus log mesin');
+      alert(err.response?.data?.message || err.message || t('deviceSettings.alerts.clearLogFail'));
     } finally {
       setSyncing(null);
     }
@@ -422,15 +424,15 @@ const DeviceSettings = () => {
             <div className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center">
               <MonitorSmartphone className="w-3 h-3 text-slate-400" />
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider">Integrasi Perangkat Keras</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider">{t('deviceSettings.hardwareIntegration')}</span>
             <div className="w-1 h-1 rounded-full bg-slate-300" />
-            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Pengaturan Mesin</span>
+            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">{t('deviceSettings.machineSettings')}</span>
           </div>
           <h1 className="text-3xl font-bold text-slate-800 tracking-tight flex items-center gap-4">
-            Manajemen Mesin Absensi
+            {t('deviceSettings.attendanceMachineManagement')}
             <div className="px-3 py-1 rounded-lg bg-blue-50 border border-blue-100 text-blue-600 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-              SINKRONISASI MESIN
+              {t('deviceSettings.syncMachine')}
             </div>
           </h1>
         </div>
@@ -443,17 +445,17 @@ const DeviceSettings = () => {
             {editingDevice ? (
               <>
                 <h3 className="font-bold text-slate-800 mb-6 uppercase tracking-tight flex items-center justify-between">
-                  <span>Ubah Mesin</span>
+                  <span>{t('deviceSettings.editMachine')}</span>
                   <button 
                     onClick={() => setEditingDevice(null)}
                     className="text-xs text-slate-400 hover:text-slate-600 font-semibold"
                   >
-                    Batal
+                    {t('common.cancel')}
                   </button>
                 </h3>
                 <form onSubmit={handleEditSubmit} className="space-y-5">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Nama Mesin</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('deviceSettings.machineName')}</label>
                     <input 
                       required 
                       value={editingDevice.name} 
@@ -463,7 +465,7 @@ const DeviceSettings = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Alamat IP</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('deviceSettings.ipAddress')}</label>
                     <input 
                       required 
                       value={editingDevice.ipAddress} 
@@ -473,7 +475,7 @@ const DeviceSettings = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Port (Bawaan 4370)</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('deviceSettings.portDefault')}</label>
                     <input 
                       type="number" 
                       required 
@@ -488,24 +490,24 @@ const DeviceSettings = () => {
                       onClick={() => setEditingDevice(null)}
                       className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-4 rounded-xl flex items-center justify-center text-xs uppercase tracking-wider transition-all"
                     >
-                      Batal
+                      {t('common.cancel')}
                     </button>
                     <button 
                       type="submit" 
                       className="flex-[2] bg-blue-600 text-white font-bold py-4 rounded-xl shadow-sm flex items-center justify-center gap-2 hover:bg-blue-700 transition-all active:scale-95 text-xs uppercase tracking-wider"
                     >
                       <CheckCircle className="w-4 h-4" />
-                      Simpan
+                      {t('common.save')}
                     </button>
                   </div>
                 </form>
               </>
             ) : (
               <>
-                <h3 className="font-bold text-slate-800 mb-6 uppercase tracking-tight">Daftarkan Mesin Baru</h3>
+                <h3 className="font-bold text-slate-800 mb-6 uppercase tracking-tight">{t('deviceSettings.registerNewMachine')}</h3>
                 <form onSubmit={handleAdd} className="space-y-5">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Nama Mesin</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('deviceSettings.machineName')}</label>
                     <input 
                       required 
                       value={newDevice.name} 
@@ -515,7 +517,7 @@ const DeviceSettings = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Alamat IP</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('deviceSettings.ipAddress')}</label>
                     <input 
                       required 
                       value={newDevice.ipAddress} 
@@ -525,7 +527,7 @@ const DeviceSettings = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Port (Bawaan 4370)</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('deviceSettings.portDefault')}</label>
                     <input 
                       type="number" 
                       required 
@@ -546,24 +548,24 @@ const DeviceSettings = () => {
           {/* Log Aktivitas Mesin Card */}
           <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
             <h3 className="font-bold text-slate-800 mb-6 uppercase tracking-tight flex items-center justify-between">
-              <span>Log Aktivitas Perangkat</span>
+              <span>{t('deviceSettings.activityLog')}</span>
               <button 
                 type="button"
                 onClick={fetchSyncLogs}
                 className="text-xs text-blue-600 hover:text-blue-700 font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${loadingLogs && 'animate-spin'}`} />
-                Refresh
+                {t('deviceSettings.refresh')}
               </button>
             </h3>
             
             {loadingLogs ? (
               <div className="py-12 text-center text-slate-400 font-semibold text-xs uppercase tracking-wider animate-pulse">
-                Memuat Log Aktivitas...
+                {t('deviceSettings.loadingLogs')}
               </div>
             ) : syncLogs.length === 0 ? (
               <div className="py-12 text-center text-slate-400 font-semibold text-xs uppercase tracking-wider border-2 border-dashed border-slate-100 rounded-2xl">
-                Belum ada aktivitas terekam
+                {t('deviceSettings.noActivity')}
               </div>
             ) : (
               <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1">
@@ -616,7 +618,7 @@ const DeviceSettings = () => {
         <div className="flex-1">
           <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6 pb-4 border-b border-slate-100">
-              <h3 className="font-bold text-slate-800 uppercase tracking-tight">Daftar Mesin Absensi</h3>
+              <h3 className="font-bold text-slate-800 uppercase tracking-tight">{t('deviceSettings.machineList')}</h3>
               <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
                 <button
                   type="button"
@@ -627,7 +629,7 @@ const DeviceSettings = () => {
                       : 'text-slate-500 hover:text-slate-800'
                   }`}
                 >
-                  Tampilan Kartu
+                  {t('deviceSettings.cardView')}
                 </button>
                 <button
                   type="button"
@@ -638,14 +640,14 @@ const DeviceSettings = () => {
                       : 'text-slate-500 hover:text-slate-800'
                   }`}
                 >
-                  Tampilan Tabel
+                  {t('deviceSettings.tableView')}
                 </button>
               </div>
             </div>
 
             {viewMode === 'list' && devices.length > 0 && (
               <div className="flex flex-col sm:flex-row gap-3 items-center bg-slate-50 p-4 rounded-2xl border border-slate-200 mb-6 text-xs font-bold">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Range Tarik Data (Global):</span>
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">{t('deviceSettings.pullRangeGlobal')}</span>
                 <div className="flex items-center gap-2 w-full sm:w-auto">
                   <input 
                     type="date"
@@ -669,7 +671,7 @@ const DeviceSettings = () => {
                 <div className="flex items-center gap-3">
                   <div className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse" />
                   <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    Aksi Massal ({selectedDeviceIds.length} dari {devices.length} mesin terpilih)
+                    {t('deviceSettings.bulkAction')} ({selectedDeviceIds.length} {t('deviceSettings.of')} {devices.length} {t('deviceSettings.machinesSelected')})
                   </span>
                 </div>
                 
@@ -680,7 +682,7 @@ const DeviceSettings = () => {
                     className="bg-white border border-slate-200 text-blue-600 hover:border-blue-300 font-bold py-2.5 px-4 rounded-xl flex items-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
                     <Wifi className="w-3.5 h-3.5" />
-                    Test Koneksi
+                    {t('deviceSettings.testConnection')}
                   </button>
                   
                   <button 
@@ -689,7 +691,7 @@ const DeviceSettings = () => {
                     className="bg-white border border-slate-200 text-slate-700 hover:border-slate-300 font-bold py-2.5 px-4 rounded-xl flex items-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
                     <Users className="w-3.5 h-3.5" />
-                    Sync Karyawan
+                    {t('deviceSettings.syncUsers')}
                   </button>
                   
                   <button 
@@ -698,7 +700,7 @@ const DeviceSettings = () => {
                     className="bg-blue-600 text-white hover:bg-blue-700 font-bold py-2.5 px-4 rounded-xl flex items-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    Tarik Absensi
+                    {t('deviceSettings.fetchAttendance')}
                   </button>
                 </div>
               </div>
@@ -713,7 +715,7 @@ const DeviceSettings = () => {
                 <div className="w-16 h-16 bg-white rounded-2xl border border-slate-200 flex items-center justify-center">
                   <MonitorSmartphone className="w-8 h-8 text-slate-300" />
                 </div>
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Belum ada mesin absensi yang terdaftar.</p>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t('deviceSettings.noRegisteredDevices')}</p>
               </div>
             ) : viewMode === 'card' ? (
               <div className="space-y-5">
@@ -744,7 +746,7 @@ const DeviceSettings = () => {
                             {device.ipAddress}:{device.port}
                           </p>
                           <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">
-                            Terakhir Sync: {device.lastSync ? new Date(device.lastSync).toLocaleString('id-ID', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : 'Belum pernah sync'}
+                            {t('deviceSettings.lastSync')} {device.lastSync ? new Date(device.lastSync).toLocaleString('id-ID', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : t('deviceSettings.neverSynced')}
                           </p>
                           <div className="flex items-center gap-3 mt-3 p-2 bg-slate-50 border border-slate-200 rounded-xl">
                             <label className="flex items-center gap-2 cursor-pointer">
@@ -754,7 +756,7 @@ const DeviceSettings = () => {
                                 onChange={(e) => handleUpdate(device.id, { ...device, autoSyncEnabled: e.target.checked })}
                                 className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
                               />
-                              <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Sync Otomatis</span>
+                              <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">{t('deviceSettings.autoSync')}</span>
                             </label>
                             {device.autoSyncEnabled && (
                               <div className="flex items-center gap-2 border-l border-slate-200 pl-3">
@@ -776,21 +778,21 @@ const DeviceSettings = () => {
                           onClick={() => testConnection(device)}
                           disabled={syncing === 'test-' + device.id}
                           className="p-3 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl flex items-center justify-center transition-colors border border-blue-200 animate-pulse-slow"
-                          title="Test Koneksi"
+                          title={t('deviceSettings.testConnection')}
                         >
                           <Wifi className={`w-4 h-4 ${syncing === 'test-' + device.id ? 'animate-pulse' : ''}`} />
                         </button>
                         <button 
                           onClick={() => setEditingDevice({ ...device })}
                           className="p-3 text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-xl flex items-center justify-center transition-colors border border-slate-200"
-                          title="Ubah Mesin"
+                          title={t('deviceSettings.editMachine')}
                         >
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button 
                           onClick={() => handleDelete(device.id)}
                           className="p-3 text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl flex items-center justify-center transition-colors border border-rose-200"
-                          title="Hapus Mesin"
+                          title={t('deviceSettings.deleteDevice')}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -801,7 +803,7 @@ const DeviceSettings = () => {
                     <div className="pt-5 border-t border-slate-100 space-y-4">
                       {/* Date Filter */}
                       <div className="flex flex-col sm:flex-row gap-3 items-center bg-slate-50 p-3 rounded-xl border border-slate-200">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Tarik Data:</span>
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">{t('deviceSettings.pullData')}</span>
                         <input 
                           type="date"
                           value={syncDates.startDate}
@@ -828,7 +830,7 @@ const DeviceSettings = () => {
                         ) : (
                           <Users className="w-4 h-4" />
                         )}
-                        Sync Karyawan
+                        {t('deviceSettings.syncUsers')}
                       </button>
                       
                       <button 
@@ -841,7 +843,7 @@ const DeviceSettings = () => {
                         ) : (
                           <Download className="w-4 h-4" />
                         )}
-                        Tarik Absensi
+                        {t('deviceSettings.fetchAttendance')}
                       </button>
 
                       <button 
@@ -854,7 +856,7 @@ const DeviceSettings = () => {
                         ) : (
                           <Eraser className="w-4 h-4" />
                         )}
-                        Hapus Log Mesin
+                        {t('deviceSettings.clearMachineLog')}
                       </button>
                       </div>
                     </div>
@@ -874,7 +876,7 @@ const DeviceSettings = () => {
                           className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
                         />
                       </th>
-                      <th className="px-5 py-4">Nama Mesin</th>
+                      <th className="px-5 py-4">{t('deviceSettings.machineName')}</th>
                       <th className="px-5 py-4">IP & Port</th>
                       <th className="px-5 py-4">Auto Sync</th>
                       <th className="px-5 py-4">Terakhir Sync</th>
@@ -924,7 +926,7 @@ const DeviceSettings = () => {
                           </div>
                         </td>
                         <td className="px-5 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                          {device.lastSync ? new Date(device.lastSync).toLocaleString('id-ID', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : 'Belum pernah sync'}
+                          {device.lastSync ? new Date(device.lastSync).toLocaleString('id-ID', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : t('deviceSettings.neverSynced')}
                         </td>
                         <td className="px-5 py-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
@@ -932,7 +934,7 @@ const DeviceSettings = () => {
                               onClick={() => testConnection(device)}
                               disabled={syncing === 'test-' + device.id}
                               className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg flex items-center justify-center transition-colors border border-blue-100 cursor-pointer"
-                              title="Test Koneksi"
+                              title={t('deviceSettings.testConnection')}
                             >
                               <Wifi className={`w-3.5 h-3.5 ${syncing === 'test-' + device.id ? 'animate-pulse' : ''}`} />
                             </button>
@@ -940,7 +942,7 @@ const DeviceSettings = () => {
                               onClick={() => syncUsers(device.id)}
                               disabled={syncing !== null}
                               className="p-2 text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg flex items-center justify-center transition-colors border border-slate-200 cursor-pointer"
-                              title="Sync Karyawan"
+                              title={t('deviceSettings.syncUsers')}
                             >
                               {syncing === 'users-' + device.id ? (
                                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -952,7 +954,7 @@ const DeviceSettings = () => {
                               onClick={() => syncAttendance(device.id)}
                               disabled={syncing !== null}
                               className="p-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center justify-center transition-colors shadow-sm cursor-pointer"
-                              title="Tarik Absensi"
+                              title={t('deviceSettings.fetchAttendance')}
                             >
                               {syncing === 'attend-' + device.id ? (
                                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -964,7 +966,7 @@ const DeviceSettings = () => {
                               onClick={() => clearLogs(device)}
                               disabled={syncing !== null}
                               className="p-2 text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg flex items-center justify-center transition-colors border border-rose-100 cursor-pointer"
-                              title="Hapus Log Mesin"
+                              title={t('deviceSettings.clearMachineLog')}
                             >
                               {syncing === 'clear-' + device.id ? (
                                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -975,14 +977,14 @@ const DeviceSettings = () => {
                             <button
                               onClick={() => setEditingDevice({ ...device })}
                               className="p-2 text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg flex items-center justify-center transition-colors border border-slate-200 cursor-pointer"
-                              title="Ubah Mesin"
+                              title={t('deviceSettings.editMachine')}
                             >
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
                             <button
                               onClick={() => handleDelete(device.id)}
                               className="p-2 text-rose-700 hover:bg-slate-100 rounded-lg flex items-center justify-center transition-colors ml-1.5 cursor-pointer"
-                              title="Hapus Mesin"
+                              title={t('deviceSettings.deleteDevice')}
                             >
                               <Trash2 className="w-3.5 h-3.5 text-slate-400 hover:text-rose-600" />
                             </button>
@@ -1082,7 +1084,7 @@ const DeviceSettings = () => {
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white">
               <div>
-                <h3 className="text-xl font-bold text-slate-800">📋 Detail Sinkronisasi Karyawan — Data Mesin Fingerprint</h3>
+                <h3 className="text-xl font-bold text-slate-800">📋 Detail {t('deviceSettings.syncPersonnel')} — Data Mesin Fingerprint</h3>
                 <p className="text-sm text-slate-500 mt-1">
                   Preview Data: Silakan centang karyawan yang ingin disinkronkan ke database.
                 </p>
@@ -1101,7 +1103,7 @@ const DeviceSettings = () => {
                 onClick={() => setSyncPersonnelFilter('ALL')}
                 className={`bg-white rounded-xl p-3 border text-center cursor-pointer transition-all ${syncPersonnelFilter === 'ALL' ? 'border-slate-800 shadow-md ring-2 ring-slate-800/20' : 'border-slate-200 hover:border-slate-400 opacity-60 hover:opacity-100'}`}>
                 <div className="text-2xl font-black text-slate-800">{syncPersonnelResult.data?.totalMachine || 0}</div>
-                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">Total di Mesin</div>
+                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">{t('deviceSettings.totalOnMachine')}</div>
               </div>
               <div 
                 onClick={() => setSyncPersonnelFilter('linked')}
@@ -1150,8 +1152,8 @@ const DeviceSettings = () => {
                           }}
                         />
                       </th>
-                      <th className="px-4 py-3">AC No. (Mesin)</th>
-                      <th className="px-4 py-3">Nama di Mesin</th>
+                      <th className="px-4 py-3">{t('deviceSettings.acNoMachine')}</th>
+                      <th className="px-4 py-3">{t('deviceSettings.nameOnMachine')}</th>
                       <th className="px-4 py-3">Nama di Database</th>
                       <th className="px-4 py-3">Status</th>
                     </tr>
@@ -1222,7 +1224,7 @@ const DeviceSettings = () => {
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-slate-800">Sync Gagal — Data Tidak Cocok</h3>
-                  <p className="text-xs text-amber-700 font-semibold mt-0.5">Karyawan di mesin belum terhubung dengan database</p>
+                  <p className="text-xs text-amber-700 font-semibold mt-0.5">{t('deviceSettings.unlinkedEmployeeWarning')}</p>
                 </div>
               </div>
               <button 
@@ -1237,7 +1239,7 @@ const DeviceSettings = () => {
             <div className="p-4 bg-slate-50 border-b border-slate-100 grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="bg-white rounded-xl p-3 border border-slate-200 text-center">
                 <div className="text-2xl font-black text-slate-800">{syncDiagnostics.totalLogsFromDevice || 0}</div>
-                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">Log di Mesin</div>
+                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">{t('deviceSettings.logOnMachine')}</div>
               </div>
               <div className="bg-blue-50 rounded-xl p-3 border border-blue-200 text-center">
                 <div className="text-2xl font-black text-blue-600">{syncDiagnostics.logsInRange || 0}</div>
@@ -1290,7 +1292,7 @@ const DeviceSettings = () => {
 
                     {/* Scenario 3: No logs at all */}
                     {syncDiagnostics.totalLogsFromDevice === 0 && (
-                      <p className="text-amber-800">Mesin tidak memiliki data log absensi sama sekali. Pastikan mesin berfungsi dan karyawan sudah melakukan scan fingerprint.</p>
+                      <p className="text-amber-800">{t('deviceSettings.noLogsWarning')}</p>
                     )}
                   </div>
                 </div>
@@ -1299,14 +1301,14 @@ const DeviceSettings = () => {
               {/* Unmatched PINs Table */}
               {syncDiagnostics.unmatchedPins && syncDiagnostics.unmatchedPins.length > 0 && (
                 <div>
-                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">PIN Mesin yang Tidak Cocok (maks. 20)</h4>
+                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">{t('deviceSettings.unmatchedPinTitle')}</h4>
                   <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                           <th className="px-4 py-3">No</th>
                           <th className="px-4 py-3">PIN (AC No.)</th>
-                          <th className="px-4 py-3">Nama di Mesin</th>
+                          <th className="px-4 py-3">{t('deviceSettings.nameOnMachine')}</th>
                         </tr>
                       </thead>
                       <tbody className="text-sm divide-y divide-slate-100">
@@ -1351,7 +1353,7 @@ const DeviceSettings = () => {
               <div>
                 <h3 className="text-xl font-bold text-slate-800">{bulkProgress.title}</h3>
                 <p className="text-sm text-slate-500 mt-1">
-                  {bulkProgress.isRunning ? 'Sedang memproses mesin absensi secara berurutan...' : 'Proses selesai! Silakan periksa hasil di bawah.'}
+                  {bulkProgress.isRunning ? t('deviceSettings.bulkProcessing') : t('deviceSettings.bulkFinished')}
                 </p>
               </div>
               {!bulkProgress.isRunning && (
@@ -1462,7 +1464,7 @@ const DeviceSettings = () => {
                 disabled={bulkProgress.isRunning}
                 className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed px-8 py-3 rounded-xl font-bold text-sm shadow-sm transition-all text-center cursor-pointer"
               >
-                {bulkProgress.isRunning ? 'Memproses...' : 'Tutup'}
+                {bulkProgress.isRunning ? t('deviceSettings.processing') : t('deviceSettings.close')}
               </button>
             </div>
           </div>
