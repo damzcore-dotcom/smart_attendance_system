@@ -214,9 +214,9 @@ const getAll = async (req, res) => {
         let d = new Date(ov.startDate);
         const endD = new Date(ov.endDate);
         while (d <= endD) {
-          const dStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+          const dStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
           rosterMap.set(`${ov.employeeId}_${dStr}`, ov.shift);
-          d.setDate(d.getDate() + 1);
+          d.setUTCDate(d.getUTCDate() + 1);
         }
       }
     }
@@ -855,9 +855,9 @@ const importFromExcel = async (req, res) => {
       let d = new Date(ov.startDate);
       const endD = new Date(ov.endDate);
       while (d <= endD) {
-        const dStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        const dStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
         overrideMap.set(`${ov.employeeId}_${dStr}`, ov.shift);
-        d.setDate(d.getDate() + 1);
+        d.setUTCDate(d.getUTCDate() + 1);
       }
     }
 
@@ -1205,9 +1205,9 @@ const recalculate = async (req, res) => {
       let d = new Date(ov.startDate);
       const endD = new Date(ov.endDate);
       while (d <= endD) {
-        const dStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        const dStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
         overrideMap.set(`${ov.employeeId}_${dStr}`, ov.shift);
-        d.setDate(d.getDate() + 1);
+        d.setUTCDate(d.getUTCDate() + 1);
       }
     }
 

@@ -207,13 +207,39 @@ const startCronJobs = () => {
                   continue;
                 }
 
+                // Merge check-in/check-out: keep earliest checkIn, latest checkOut
+                let mergedCheckIn = record.checkIn;
+                let mergedCheckOut = record.checkOut;
+
+                if (record.checkIn) {
+                  mergedCheckIn = existing.checkIn
+                    ? (record.checkIn < existing.checkIn ? record.checkIn : existing.checkIn)
+                    : record.checkIn;
+                } else {
+                  mergedCheckIn = existing.checkIn;
+                }
+
+                if (record.checkOut) {
+                  mergedCheckOut = existing.checkOut
+                    ? (record.checkOut > existing.checkOut ? record.checkOut : existing.checkOut)
+                    : record.checkOut;
+                } else {
+                  mergedCheckOut = existing.checkOut;
+                }
+
+                // Recalculate status based on merged times
+                const calcMerged = mergedCheckIn
+                  ? calculateLateness(mergedCheckIn, record.shiftStart, record.gracePeriod, record.shiftEnd, roundingConfig)
+                  : { lateMinutes: 0, status: 'MANGKIR' };
+                const mergedStatus = resolveStatus(mergedCheckIn, mergedCheckOut, calcMerged.status, record.date, penaltyRules, record.shiftEnd, record.shiftStart);
+
                 await prisma.attendance.update({
                   where: { id: existing.id },
                   data: {
-                    checkIn: record.checkIn,
-                    checkOut: record.checkOut,
-                    status: record.status,
-                    lateMinutes: record.lateMinutes,
+                    checkIn: mergedCheckIn,
+                    checkOut: mergedCheckOut,
+                    status: mergedStatus,
+                    lateMinutes: calcMerged.lateMinutes,
                     mode: 'Fingerprint',
                     shiftStart: record.shiftStart,
                     shiftEnd: record.shiftEnd,
