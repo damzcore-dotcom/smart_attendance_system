@@ -1,5 +1,5 @@
 const prisma = require('../prismaClient');
-const { calculateLateness, resolveStatus } = require('../utils/lateCalculator');
+const { calculateLateness, resolveStatus, parsePenaltySettings } = require('../utils/lateCalculator');
 
 /**
  * POST /api/corrections
@@ -99,6 +99,7 @@ const review = async (req, res) => {
 
       // Fetch global settings
       const settingsList = await prisma.settings.findMany();
+      const { penaltyRules, roundingConfig } = parsePenaltySettings(settingsList);
       const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
       const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
       const globalGracePeriod = parseInt(settingsList.find(s => s.key === 'gracePeriod')?.value || '15', 10);
@@ -153,12 +154,12 @@ const review = async (req, res) => {
           }
         }
 
-        const calc = calculateLateness(finalCheckIn, shiftStart, gracePeriod, shiftEnd);
+        const calc = calculateLateness(finalCheckIn, shiftStart, gracePeriod, shiftEnd, roundingConfig);
         attStatus = calc.status;
         lateMinutes = calc.lateMinutes;
       }
 
-      const finalStatus = resolveStatus(finalCheckIn, finalCheckOut, attStatus);
+      const finalStatus = resolveStatus(finalCheckIn, finalCheckOut, attStatus, today, penaltyRules, shiftEnd, shiftStart);
 
       await prisma.attendance.upsert({
         where: { employeeId_date: { employeeId, date: today } },

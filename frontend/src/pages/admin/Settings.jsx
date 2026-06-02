@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { 
   MapPin, 
   Clock, 
@@ -31,8 +32,10 @@ import IDCardTemplateBuilder from '../../components/admin/IDCardTemplateBuilder'
 import CompanyCalendarSettings from '../../components/admin/CompanyCalendarSettings';
 import SettingsCameras from '../../components/admin/SettingsCameras';
 import { Camera as CameraIcon } from 'lucide-react';
+import PenaltySettings from '../../components/admin/PenaltySettings';
 
 const Settings = () => {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState(location.state?.tab || 'General');
@@ -210,6 +213,7 @@ const Settings = () => {
       'Calendar': 'settings-calendar',
       'Security': 'settings-biometrics',
       'Cameras': 'settings-cctv',
+      'PenaltySettings': 'settings-shift-rules',
       'SlipBuilder': 'settings-slip',
       'AttendanceBuilder': 'settings-report',
       'IDCardBuilder': 'settings-id-card',
@@ -233,6 +237,7 @@ const Settings = () => {
     { id: 'General', icon: Building2, label: 'Company Profile' },
     { id: 'Location', icon: MapPin, label: 'Geofencing' },
     { id: 'Shifts', icon: Clock, label: 'Shift Rules' },
+    { id: 'PenaltySettings', icon: AlertCircle, label: 'Penalty Rules' },
     { id: 'Calendar', icon: CalendarCheck, label: 'Calendar & Holidays' },
     { id: 'Security', icon: ShieldCheck, label: 'Biometrics' },
     { id: 'Cameras', icon: CameraIcon, label: 'CCTV AI Cameras' },
@@ -291,15 +296,15 @@ const Settings = () => {
             <div className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center">
               <ShieldCheck className="w-3 h-3 text-slate-400" />
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider">Administrative Authority</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider">{t('settingsPage.categoryAdmin')}</span>
             <div className="w-1 h-1 rounded-full bg-slate-300" />
-            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Global Configurations</span>
+            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">{t('settingsPage.categoryTitle')}</span>
           </div>
           <h1 className="text-3xl font-bold text-slate-800 tracking-tight flex items-center gap-4">
-            System Settings
+            {t('settingsPage.title')}
             <div className="px-3 py-1 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-600 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              SYSTEM SECURE
+              {t('settingsPage.tagSecure')}
             </div>
           </h1>
         </div>
@@ -314,7 +319,7 @@ const Settings = () => {
           ) : (
             <Save className="w-4 h-4" />
           )}
-          {saveMutation.isPending ? 'SYNCHRONIZING...' : 'COMMIT CHANGES'}
+          {saveMutation.isPending ? t('settingsPage.saving') : t('settingsPage.btnSave')}
         </button>
       </div>
 
@@ -336,7 +341,7 @@ const Settings = () => {
                   }`}
                 >
                   <Icon className={`w-4 h-4 transition-transform duration-300 ${isActive ? 'text-blue-600 scale-110' : 'text-slate-400 group-hover:scale-110 group-hover:rotate-6 group-hover:text-blue-500'}`} />
-                  <span className="relative z-10">{tab.label}</span>
+                  <span className="relative z-10">{t('settingsPage.tabs.' + tab.id)}</span>
                   {isActive && (
                     <div className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.6)]" />
                   )}
@@ -349,10 +354,10 @@ const Settings = () => {
             <div className="relative z-10 space-y-2">
               <div className="flex items-center gap-2">
                 <Shield className="w-4 h-4 text-blue-600" />
-                <span className="text-[10px] font-bold text-blue-700 uppercase tracking-widest">Protocol Check</span>
+                <span className="text-[10px] font-bold text-blue-700 uppercase tracking-widest">{t('settingsPage.sidebar.checkTitle')}</span>
               </div>
               <p className="text-[10px] text-slate-500 font-medium leading-relaxed tracking-wider">
-                All changes are logged and audited in real-time by the central node.
+                {t('settingsPage.sidebar.checkDesc')}
               </p>
             </div>
           </div>
@@ -600,6 +605,14 @@ const Settings = () => {
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="bg-white p-8 md:p-10 border border-slate-200 shadow-sm rounded-3xl">
                 <CompanyCalendarSettings permissions={hasTabPermission('Calendar')} />
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'PenaltySettings' && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="bg-white p-8 md:p-10 border border-slate-200 shadow-sm rounded-3xl">
+                <PenaltySettings formData={formData} handleInputChange={handleInputChange} permissions={hasTabPermission('Shifts')} />
               </div>
             </div>
           )}

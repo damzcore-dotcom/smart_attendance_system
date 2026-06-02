@@ -1,6 +1,8 @@
 const prisma = require('../prismaClient');
 const XLSX = require('xlsx');
 const { recordAuditLog } = require('./auditLogController');
+const { parsePenaltySettings } = require('../utils/lateCalculator');
+
 
 // ─── Helper: Calculate Overtime Hours ────────────
 
@@ -91,6 +93,7 @@ const generate = async (req, res) => {
 
     // Get global settings
     const settingsList = await prisma.settings.findMany();
+    const { penaltyRules } = parsePenaltySettings(settingsList);
     const workingDaysSetting = settingsList.find(s => s.key === 'workingDays')?.value || '[1,2,3,4,5]';
     const workingDaysOfWeek = JSON.parse(workingDaysSetting);
     
@@ -208,8 +211,9 @@ const generate = async (req, res) => {
             totalLateMinutes += a.lateMinutes || 0;
           }
         } else if (a.status === 'MANGKIR') {
-          // Mangkir adds 30 min penalty
-          totalLateMinutes += 30;
+          // Mangkir adds configured penalty minutes (Rule 1 vs Rule 3)
+          const penaltyMinutes = !a.checkIn ? penaltyRules.rule1Minutes : penaltyRules.rule3Minutes;
+          totalLateMinutes += penaltyMinutes;
           daysLate++;
         } else if (['ABSENT'].includes(a.status) && isWorkingDay) {
           daysAbsent++;

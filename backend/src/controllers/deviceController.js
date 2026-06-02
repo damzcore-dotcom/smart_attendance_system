@@ -739,7 +739,7 @@ const syncAttendance = async (req, res) => {
       if (e.idNumber) empByCode[e.idNumber.trim()] = e;
     });
 
-    const { calculateLateness, resolveStatus } = require('../utils/lateCalculator');
+    const { calculateLateness, resolveStatus, parsePenaltySettings } = require('../utils/lateCalculator');
     
     // Parse query params for date filtering
     const startDateQuery = req.query.start;
@@ -816,6 +816,7 @@ const syncAttendance = async (req, res) => {
     
     // Fetch Saturday Half-Day settings
     const settingsList = await prisma.settings.findMany();
+    const { penaltyRules, roundingConfig } = parsePenaltySettings(settingsList);
     const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
     const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
     const globalGracePeriod = parseInt(settingsList.find(s => s.key === 'gracePeriod')?.value || '15', 10);
@@ -916,11 +917,11 @@ const syncAttendance = async (req, res) => {
       
       // Calculate Lateness (only if checkIn exists)
       const calc = checkIn 
-        ? calculateLateness(checkIn, shiftStart, gracePeriod, shiftEnd)
+        ? calculateLateness(checkIn, shiftStart, gracePeriod, shiftEnd, roundingConfig)
         : { lateMinutes: 0, status: 'Mangkir' };
       
       // Resolve status using updated logic
-      const status = resolveStatus(checkIn, checkOut, calc.status);
+      const status = resolveStatus(checkIn, checkOut, calc.status, entry.date, penaltyRules, shiftEnd, shiftStart);
 
       recordsToCreate.push({
         employeeId: entry.employeeId,
@@ -1045,11 +1046,11 @@ const syncAttendance = async (req, res) => {
 
           // Recalculate status and lateness based on merged times
           const calc = mergedCheckIn 
-            ? calculateLateness(mergedCheckIn, record.shiftStart, record.gracePeriod, record.shiftEnd)
+            ? calculateLateness(mergedCheckIn, record.shiftStart, record.gracePeriod, record.shiftEnd, roundingConfig)
             : { lateMinutes: 0, status: 'Mangkir' };
           
           lateMins = calc.lateMinutes;
-          finalStatus = resolveStatus(mergedCheckIn, mergedCheckOut, calc.status);
+          finalStatus = resolveStatus(mergedCheckIn, mergedCheckOut, calc.status, record.date, penaltyRules, record.shiftEnd, record.shiftStart);
         }
 
         // C5 FIX: Concurrency-safe Upsert
@@ -1225,7 +1226,7 @@ const commitAttendance = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Device not found' });
     }
 
-    const { calculateLateness, resolveStatus } = require('../utils/lateCalculator');
+    const { calculateLateness, resolveStatus, parsePenaltySettings } = require('../utils/lateCalculator');
     
     // Fetch non-BHL employees
     const employees = await prisma.employee.findMany({
@@ -1252,6 +1253,7 @@ const commitAttendance = async (req, res) => {
 
     // Fetch Saturday Half-Day settings
     const settingsList = await prisma.settings.findMany();
+    const { penaltyRules, roundingConfig } = parsePenaltySettings(settingsList);
     const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
     const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
     const globalGracePeriod = parseInt(settingsList.find(s => s.key === 'gracePeriod')?.value || '15', 10);
@@ -1291,9 +1293,9 @@ const commitAttendance = async (req, res) => {
         }
 
         const calc = checkIn
-          ? calculateLateness(checkIn, shiftStart, gracePeriod, shiftEnd)
+          ? calculateLateness(checkIn, shiftStart, gracePeriod, shiftEnd, roundingConfig)
           : { lateMinutes: 0, status: 'Mangkir' };
-        const status = resolveStatus(checkIn, checkOut, calc.status);
+        const status = resolveStatus(checkIn, checkOut, calc.status, date, penaltyRules, shiftEnd, shiftStart);
 
         // Fetch existing record first to merge check-in and check-out times
         const existingRecord = await prisma.attendance.findUnique({
@@ -1329,10 +1331,10 @@ const commitAttendance = async (req, res) => {
 
           // Recalculate based on merged
           const calcMerged = mergedCheckIn
-            ? calculateLateness(mergedCheckIn, shiftStart, gracePeriod, shiftEnd)
+            ? calculateLateness(mergedCheckIn, shiftStart, gracePeriod, shiftEnd, roundingConfig)
             : { lateMinutes: 0, status: 'Mangkir' };
           lateMins = calcMerged.lateMinutes;
-          finalStatus = resolveStatus(mergedCheckIn, mergedCheckOut, calcMerged.status);
+          finalStatus = resolveStatus(mergedCheckIn, mergedCheckOut, calcMerged.status, date, penaltyRules, shiftEnd, shiftStart);
         }
 
         // Concurrency-safe Upsert

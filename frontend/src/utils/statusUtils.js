@@ -16,6 +16,7 @@ export const STATUS_LABELS = {
   IZIN: 'Izin',
   CUTI: 'Cuti',
   HOLIDAY: 'Libur',
+  EARLY_DEPARTURE: 'Pulang Cepat',
 };
 
 /** Map enum status → Tailwind color classes for badge/pill display */
@@ -28,6 +29,7 @@ export const STATUS_COLORS = {
   IZIN: 'bg-blue-50 text-blue-600 border-blue-200',
   CUTI: 'bg-cyan-50 text-cyan-600 border-cyan-200',
   HOLIDAY: 'bg-indigo-50 text-indigo-600 border-indigo-200',
+  EARLY_DEPARTURE: 'bg-blue-50 text-blue-600 border-blue-200 animate-blink font-bold shadow-sm',
 };
 
 /**
@@ -86,7 +88,7 @@ export function normalizeStatus(status) {
  */
 export function isPresent(status) {
   const norm = normalizeStatus(status);
-  return norm === 'PRESENT' || norm === 'LATE';
+  return norm === 'PRESENT' || norm === 'LATE' || norm === 'EARLY_DEPARTURE';
 }
 
 /**

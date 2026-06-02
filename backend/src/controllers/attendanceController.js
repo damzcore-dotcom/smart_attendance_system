@@ -1,11 +1,12 @@
 const prisma = require('../prismaClient');
-const { calculateLateness, resolveStatus } = require('../utils/lateCalculator');
+const { calculateLateness, resolveStatus, parsePenaltySettings } = require('../utils/lateCalculator');
 const { toUTCMidnight, parseUTCDate, getUTCToday, getUTCYesterday, getUTCStartOfWeek, getUTCStartOfMonth, getUTCEndOfDay, VALID_STATUSES, MANGKIR_PENALTY_MINUTES } = require('../utils/dateHelper');
 const { getDistance } = require('../utils/geo');
 const XLSX = require('xlsx');
 const fs = require('fs');
 const path = require('path');
 const { recordAuditLog } = require('./auditLogController');
+
 
 /**
  * GET /api/attendance
@@ -14,11 +15,12 @@ const getAll = async (req, res) => {
   try {
     const { search, dept, section, position, status, date, period, startDate, endDate, sortBy, order } = req.query;
 
-    // Fetch Global Settings (Working Days)
+    // Fetch Global Settings (Working Days & Penalties)
     const settingsList = await prisma.settings.findMany();
     const workingDaysSetting = settingsList.find(s => s.key === 'workingDays')?.value || '[1,2,3,4,5]';
     const workingDays = JSON.parse(workingDaysSetting);
-    const mangkirPenalty = parseInt(settingsList.find(s => s.key === 'mangkirPenaltyMinutes')?.value) || MANGKIR_PENALTY_MINUTES;
+    const { penaltyRules, roundingConfig } = parsePenaltySettings(settingsList);
+    const mangkirPenalty = penaltyRules.rule1Minutes; // Fallback / default
 
     const where = {};
 
@@ -107,7 +109,7 @@ const getAll = async (req, res) => {
     const skip = (page - 1) * limit;
 
     // 3. Optimized Summary Calculation (O(1) Memory footprint via DB Aggregation)
-    const [total, records, groupStats, uniqueEmpRecords, absentRecords, calendarOverrides, rosterOverrides, mangkirZeroLateCount] = await Promise.all([
+    const [total, records, groupStats, uniqueEmpRecords, absentRecords, calendarOverrides, rosterOverrides, mangkirNoInCount, mangkirNoOutCount] = await Promise.all([
       prisma.attendance.count({ where }),
       prisma.attendance.findMany({
         where,
@@ -168,11 +170,14 @@ const getAll = async (req, res) => {
         }
       }),
       prisma.attendance.count({
-        where: { ...where, status: 'MANGKIR', lateMinutes: 0 }
+        where: { ...where, status: 'MANGKIR', lateMinutes: 0, checkIn: null }
+      }),
+      prisma.attendance.count({
+        where: { ...where, status: 'MANGKIR', lateMinutes: 0, checkIn: { not: null } }
       })
     ]);
 
-    let hadirCount = 0, telatCount = 0, mangkirCount = 0, absenCount = 0, holidayCount = 0, cutiCount = 0, sakitCount = 0, izinCount = 0, totalLate = 0;
+    let hadirCount = 0, telatCount = 0, mangkirCount = 0, absenCount = 0, holidayCount = 0, cutiCount = 0, sakitCount = 0, izinCount = 0, earlyDepartureCount = 0, totalLate = 0;
 
     groupStats.forEach(stat => {
       const s = stat.status;
@@ -186,10 +191,11 @@ const getAll = async (req, res) => {
       else if (s === 'CUTI') cutiCount += count;
       else if (s === 'SAKIT') sakitCount += count;
       else if (s === 'IZIN') izinCount += count;
+      else if (s === 'EARLY_DEPARTURE') earlyDepartureCount += count;
       else absenCount += count;
 
       if (s === 'MANGKIR') {
-        totalLate += late + (mangkirZeroLateCount * mangkirPenalty);
+        totalLate += late + (mangkirNoInCount * penaltyRules.rule1Minutes) + (mangkirNoOutCount * penaltyRules.rule3Minutes);
       } else {
         totalLate += late;
       }
@@ -252,11 +258,14 @@ const getAll = async (req, res) => {
       cuti: cutiCount,
       sakit: sakitCount,
       izin: izinCount,
+      earlyDeparture: earlyDepartureCount,
       totalLate: totalLate,
       uniqueEmployeeCount: uniqueEmpRecords.length,
       calendarOverrides: calendarOverrides, // Send to frontend
       workingDays: workingDays, // Send to frontend for accurate padding
       mangkirPenalty: mangkirPenalty, // Send penalty value to frontend
+      penaltyRules: penaltyRules, // Send all penalty rules
+      roundingConfig: roundingConfig, // Send rounding config
     };
 
     res.json({
@@ -455,12 +464,13 @@ const checkIn = async (req, res) => {
       }
     }
 
-    const { lateMinutes, status: lateStatus } = calculateLateness(now, shiftStart, gracePeriod, shiftEnd);
+    const { penaltyRules, roundingConfig } = parsePenaltySettings(settings);
+    const { lateMinutes, status: lateStatus } = calculateLateness(now, shiftStart, gracePeriod, shiftEnd, roundingConfig);
 
     // Initial status for check-in is either PRESENT, LATE, or MANGKIR (if day ends)
     // But since this is a real-time check-in, if we don't have check-out yet, 
     // we show current status. resolveStatus will handle MANGKIR if we re-check later.
-    const status = resolveStatus(now, existing?.checkOut, lateStatus);
+    const status = resolveStatus(now, existing?.checkOut, lateStatus, today, penaltyRules, shiftEnd, shiftStart);
 
     const attendance = await prisma.attendance.upsert({
       where: { employeeId_date: { employeeId, date: today } },
@@ -580,13 +590,15 @@ const checkOut = async (req, res) => {
     let lateStatus = 'PRESENT';
     let lateMinutes = 0;
     
+    const { penaltyRules, roundingConfig } = parsePenaltySettings(settingsList);
+
     if (attendance.checkIn) {
-      const calc = calculateLateness(attendance.checkIn, shiftStart, gracePeriod, shiftEnd);
+      const calc = calculateLateness(attendance.checkIn, shiftStart, gracePeriod, shiftEnd, roundingConfig);
       lateStatus = calc.status;
       lateMinutes = calc.lateMinutes;
     }
 
-    const finalStatus = resolveStatus(attendance.checkIn, now, lateStatus);
+    const finalStatus = resolveStatus(attendance.checkIn, now, lateStatus, attendance.date, penaltyRules, shiftEnd, shiftStart);
 
     // Calculate Overtime with timezone-independent calculation
     let overtimeHours = 0;
@@ -694,7 +706,7 @@ const getHistory = async (req, res) => {
     });
 
     const settings = await prisma.settings.findMany();
-    const dynamicMangkirPenalty = parseInt(settings.find(s => s.key === 'mangkirPenaltyMinutes')?.value) || MANGKIR_PENALTY_MINUTES;
+    const { penaltyRules: histPenaltyRules } = parsePenaltySettings(settings);
 
     res.json({
       success: true,
@@ -705,7 +717,7 @@ const getHistory = async (req, res) => {
         out: r.checkOut ? r.checkOut.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }) : '-- : --',
         status: r.status,
         lateMinutes: (r.status === 'MANGKIR' || r.status === 'MISSING')
-          ? ((r.lateMinutes || 0) > 0 ? r.lateMinutes : dynamicMangkirPenalty)
+          ? ((r.lateMinutes || 0) > 0 ? r.lateMinutes : (!r.checkIn ? histPenaltyRules.rule1Minutes : histPenaltyRules.rule3Minutes))
           : r.lateMinutes,
       })),
     });
@@ -830,6 +842,7 @@ const importFromExcel = async (req, res) => {
 
     // Fetch global settings and overrides for Excel import
     const settingsList = await prisma.settings.findMany();
+    const { penaltyRules, roundingConfig } = parsePenaltySettings(settingsList);
     const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
     const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
     const globalGracePeriod = parseInt(settingsList.find(s => s.key === 'gracePeriod')?.value || '15', 10);
@@ -1041,12 +1054,12 @@ const importFromExcel = async (req, res) => {
         let lateStatus = 'PRESENT';
         let lateMinutes = 0;
         if (entry.checkIn) {
-          const calc = calculateLateness(entry.checkIn, shiftStart, gracePeriod, shiftEnd);
+          const calc = calculateLateness(entry.checkIn, shiftStart, gracePeriod, shiftEnd, roundingConfig);
           lateStatus = calc.status;
           lateMinutes = calc.lateMinutes;
         }
 
-        const status = resolveStatus(entry.checkIn, entry.checkOut, lateStatus);
+        const status = resolveStatus(entry.checkIn, entry.checkOut, lateStatus, dateObj, penaltyRules, shiftEnd, shiftStart);
 
         // H1 FIX / HRD protection: Skip records that were manually corrected by HRD
         const existingRecord = existingMap.get(`${entry.employeeId}_${dateStr}`);
@@ -1174,6 +1187,7 @@ const recalculate = async (req, res) => {
     end.setHours(23, 59, 59, 999);
 
     const settingsList = await prisma.settings.findMany();
+    const { penaltyRules, roundingConfig } = parsePenaltySettings(settingsList);
     const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
     const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
     const globalGracePeriod = parseInt(settingsList.find(s => s.key === 'gracePeriod')?.value || '15', 10);
@@ -1224,12 +1238,12 @@ const recalculate = async (req, res) => {
       let lateStatus = 'PRESENT';
       let lateMinutes = 0;
       if (record.checkIn) {
-        const calc = calculateLateness(record.checkIn, shiftStart, gracePeriod, shiftEnd);
+        const calc = calculateLateness(record.checkIn, shiftStart, gracePeriod, shiftEnd, roundingConfig);
         lateStatus = calc.status;
         lateMinutes = calc.lateMinutes;
       }
       
-      const finalStatus = resolveStatus(record.checkIn, record.checkOut, lateStatus);
+      const finalStatus = resolveStatus(record.checkIn, record.checkOut, lateStatus, record.date, penaltyRules, shiftEnd, shiftStart);
       
       // Update if status or lateMinutes changed
       if (record.status !== finalStatus || record.lateMinutes !== lateMinutes) {
@@ -1286,6 +1300,7 @@ const swapDays = async (req, res) => {
     let movedCount = 0;
 
     const settingsList = await prisma.settings.findMany();
+    const { penaltyRules, roundingConfig } = parsePenaltySettings(settingsList);
     const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
     const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
     const globalGracePeriod = parseInt(settingsList.find(s => s.key === 'gracePeriod')?.value || '15', 10);
@@ -1342,12 +1357,12 @@ const swapDays = async (req, res) => {
         let lateStatus = 'PRESENT';
         let lateMinutes = 0;
         if (newCheckIn) {
-          const calc = calculateLateness(newCheckIn, shiftStart, gracePeriod, shiftEnd);
+          const calc = calculateLateness(newCheckIn, shiftStart, gracePeriod, shiftEnd, roundingConfig);
           lateStatus = calc.status;
           lateMinutes = calc.lateMinutes;
         }
 
-        const newStatus = resolveStatus(newCheckIn, newCheckOut, lateStatus);
+        const newStatus = resolveStatus(newCheckIn, newCheckOut, lateStatus, tStart, penaltyRules, shiftEnd, shiftStart);
 
         // Remove any conflicting records on target date
         await tx.attendance.deleteMany({
@@ -1593,6 +1608,7 @@ const update = async (req, res) => {
 
     // Fetch global settings and overrides for recalculation
     const settingsList = await prisma.settings.findMany();
+    const { penaltyRules: updatePenaltyRules, roundingConfig: updateRoundingConfig } = parsePenaltySettings(settingsList);
     const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
     const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
     const globalGracePeriod = parseInt(settingsList.find(s => s.key === 'gracePeriod')?.value || '15', 10);
@@ -1671,13 +1687,13 @@ const update = async (req, res) => {
       let lateStatus = 'PRESENT';
       let lateMins = 0;
       if (finalIn) {
-        const calc = calculateLateness(finalIn, shiftStart, gracePeriod, shiftEnd);
+        const calc = calculateLateness(finalIn, shiftStart, gracePeriod, shiftEnd, updateRoundingConfig);
         lateStatus = calc.status;
         lateMins = calc.lateMinutes;
       }
       
       updateData.lateMinutes = lateMins;
-      updateData.status = resolveStatus(finalIn, finalOut, lateStatus);
+      updateData.status = resolveStatus(finalIn, finalOut, lateStatus, oldRecord.date, updatePenaltyRules, shiftEnd, shiftStart);
     }
 
     let record;
@@ -2005,7 +2021,7 @@ const manualCorrectionHRD = async (req, res) => {
              pStatus = lateMins > 0 ? 'LATE' : 'PRESENT';
           }
 
-          const finalStatus = resolveStatus(finalIn, finalOut, pStatus);
+          const finalStatus = resolveStatus(finalIn, finalOut, pStatus, targetDate);
 
           const payload = {
             checkIn: finalIn,

@@ -39,6 +39,7 @@ enum AttStatus {
   CUTI
   HOLIDAY
   HALF_DAY
+  EARLY_DEPARTURE
 }
 
 enum ReqStatus {

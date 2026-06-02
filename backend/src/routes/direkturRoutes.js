@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { verifyToken, requireDirektur } = require('../middleware/auth');
 const prisma = require('../prismaClient');
-const { resolveStatus } = require('../utils/lateCalculator');
+const { resolveStatus, parsePenaltySettings } = require('../utils/lateCalculator');
 
 // All routes require valid token + DIREKTUR/ADMIN/SUPER_ADMIN
 router.use(verifyToken, requireDirektur);
@@ -164,11 +164,13 @@ router.get('/attendance', async (req, res) => {
     // Standardized summary calculation to match Admin portal
     const allRecordsForSummary = await prisma.attendance.findMany({
       where,
-      select: { checkIn: true, checkOut: true, status: true, date: true, lateMinutes: true, employeeId: true }
+      select: { checkIn: true, checkOut: true, status: true, date: true, lateMinutes: true, employeeId: true, shiftStart: true, shiftEnd: true }
     });
 
-    // Fetch working days for holiday check
-    const workingDaysSetting = await prisma.settings.findUnique({ where: { key: 'workingDays' } });
+    // Fetch working days and penalty settings
+    const settings = await prisma.settings.findMany();
+    const { penaltyRules } = parsePenaltySettings(settings);
+    const workingDaysSetting = settings.find(s => s.key === 'workingDays');
     const workingDays = workingDaysSetting ? JSON.parse(workingDaysSetting.value) : [1, 2, 3, 4, 5];
 
     const summary = {
@@ -178,10 +180,14 @@ router.get('/attendance', async (req, res) => {
     const uniqueEmps = new Set();
 
     allRecordsForSummary.forEach(r => {
-      const resolved = resolveStatus(r.checkIn, r.checkOut, r.status, r.date, workingDays);
+      const resolved = resolveStatus(r.checkIn, r.checkOut, r.status, r.date, penaltyRules, r.shiftEnd, r.shiftStart);
       if (resolved === 'PRESENT') summary.hadir++;
       else if (resolved === 'LATE') { summary.telat++; summary.totalLate += (r.lateMinutes || 0); }
-      else if (resolved === 'MANGKIR') { summary.mangkir++; summary.totalLate += 30; }
+      else if (resolved === 'MANGKIR') { 
+        summary.mangkir++; 
+        const penalty = ((r.lateMinutes || 0) > 0 ? r.lateMinutes : (!r.checkIn ? penaltyRules.rule1Minutes : penaltyRules.rule3Minutes));
+        summary.totalLate += penalty; 
+      }
       else if (resolved === 'HOLIDAY') summary.holiday++;
       else if (resolved === 'CUTI') summary.cuti++;
       else if (resolved === 'SAKIT') summary.sakit++;
@@ -195,7 +201,7 @@ router.get('/attendance', async (req, res) => {
     res.json({
       success: true,
       data: records.map(att => {
-        const resolved = resolveStatus(att.checkIn, att.checkOut, att.status, att.date, workingDays);
+        const resolved = resolveStatus(att.checkIn, att.checkOut, att.status, att.date, penaltyRules, att.shiftEnd, att.shiftStart);
         
         let displayStatus = 'Alpa';
         if (resolved === 'PRESENT') displayStatus = 'Present';
@@ -331,12 +337,18 @@ router.get('/attendance-options', async (req, res) => {
       ];
     }
 
+    const settingsList = await prisma.settings.findMany();
+    const { penaltyRules } = parsePenaltySettings(settingsList);
+
     const records = await prisma.attendance.findMany({
       where: { ...where, employee: employeeWhere },
       select: {
         checkIn: true,
         checkOut: true,
         status: true,
+        date: true,
+        shiftStart: true,
+        shiftEnd: true,
         employee: {
           select: {
             department: { select: { id: true, name: true } },
@@ -360,7 +372,7 @@ router.get('/attendance-options', async (req, res) => {
       if (r.employee.position) positions.add(r.employee.position);
       
       // Resolve status for the list
-      const s = resolveStatus(r.checkIn, r.checkOut, r.status);
+      const s = resolveStatus(r.checkIn, r.checkOut, r.status, r.date, penaltyRules, r.shiftEnd, r.shiftStart);
       if (s === 'PRESENT') statuses.add('Present');
       else if (s === 'LATE') statuses.add('Late');
       else if (s === 'MANGKIR') statuses.add('Mangkir');

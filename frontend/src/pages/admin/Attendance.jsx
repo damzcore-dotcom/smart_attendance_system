@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { attendanceAPI, employeeAPI, payrollAPI, settingsAPI } from '../../services/api';
 import PrintableAttendanceReport from '../../components/payroll/PrintableAttendanceReport';
@@ -13,6 +14,7 @@ const STATUS_MAP = {
   'LATE': 'Terlambat',
   'ABSENT': 'Alpa',
   'MANGKIR': 'Mangkir',
+  'EARLY_DEPARTURE': 'Pulang Cepat',
   'HOLIDAY': 'Libur',
   'CUTI': 'Cuti',
   'SAKIT': 'Sakit',
@@ -484,6 +486,7 @@ const Attendance = () => {
           total: 0,
           present: 0,
           late: 0,
+          pulangCepat: 0,
           mangkir: 0,
           absent: 0,
           other: 0,
@@ -506,9 +509,17 @@ const Attendance = () => {
         g.late++;
         g.totalLateMinutes += (row.lateMinutes || 0);
         g.lateDetails.push({ date: row.date, checkIn: row.checkIn, lateMinutes: row.lateMinutes || 0 });
+      } else if (status === 'EARLY_DEPARTURE' || status === 'Pulang Cepat') {
+        g.present++;
+        g.pulangCepat++;
       } else if (status === 'MANGKIR' || status === 'Mangkir') {
         g.mangkir++;
-        const penalty = (row.lateMinutes || 0) === 0 ? (fullDataForRekap?.summary?.mangkirPenalty || 30) : 0;
+        const rule1Enabled = companySettings?.penaltyRule1Enabled !== 'false';
+        const rule3Enabled = companySettings?.penaltyRule3Enabled !== 'false';
+        const rule1Mins = parseInt(companySettings?.penaltyRule1Minutes || '30', 10);
+        const rule3Mins = parseInt(companySettings?.penaltyRule3Minutes || '30', 10);
+        const penaltyVal = !row.checkIn ? (rule1Enabled ? rule1Mins : 0) : (rule3Enabled ? rule3Mins : 0);
+        const penalty = (row.lateMinutes || 0) === 0 ? penaltyVal : 0;
         g.totalLateMinutes += (row.lateMinutes || 0) + penalty;
         g.mangkirDetails.push({ date: row.date, checkIn: row.checkIn, checkOut: row.checkOut });
       } else if (status === 'ABSENT' || status === 'Alpa' || status === 'MISSING') {
@@ -554,6 +565,7 @@ const Attendance = () => {
       total: filteredData.length,
       hadir: filteredData.filter(d => d.status === 'Hadir' || d.status === 'PRESENT').length,
       telat: filteredData.filter(d => d.status === 'Terlambat' || d.status === 'LATE').length,
+      pulangCepat: filteredData.filter(d => d.status === 'Pulang Cepat' || d.status === 'EARLY_DEPARTURE').length,
       mangkir: filteredData.filter(d => d.status === 'Mangkir' || d.status === 'MANGKIR').length,
       absen: filteredData.filter(d => d.status === 'Alpa' || d.status === 'ABSENT').length,
       holiday: filteredData.filter(d => d.status === 'Libur' || d.status === 'HOLIDAY').length,
@@ -563,7 +575,15 @@ const Attendance = () => {
       totalLate: filteredData.reduce((sum, d) => {
         const hasLate = (d.lateMinutes || 0) > 0;
         const isMangkir = d.status === 'Mangkir' || d.status === 'MANGKIR' || d.status === 'MISSING';
-        const penalty = (isMangkir && !hasLate) ? (data?.summary?.mangkirPenalty || 30) : 0;
+        let penaltyVal = 30;
+        if (isMangkir) {
+          const rule1Enabled = companySettings?.penaltyRule1Enabled !== 'false';
+          const rule3Enabled = companySettings?.penaltyRule3Enabled !== 'false';
+          const rule1Mins = parseInt(companySettings?.penaltyRule1Minutes || '30', 10);
+          const rule3Mins = parseInt(companySettings?.penaltyRule3Minutes || '30', 10);
+          penaltyVal = !d.checkIn ? (rule1Enabled ? rule1Mins : 0) : (rule3Enabled ? rule3Mins : 0);
+        }
+        const penalty = (isMangkir && !hasLate) ? penaltyVal : 0;
         return sum + (d.lateMinutes || 0) + penalty;
       }, 0),
       uniqueEmployeeCount: 1
@@ -751,6 +771,7 @@ const Attendance = () => {
             'Total Jadwal (Hari-Karyawan)': g.total,
             'Kehadiran (Hadir/Telat)': g.present,
             'Terlambat (Hari)': g.late,
+            'Pulang Cepat (Hari)': g.pulangCepat || 0,
             'Mangkir (Hari)': g.mangkir,
             'Alpa (Hari)': g.absent,
             'Lainnya (Libur/Cuti/Sakit)': g.other,
@@ -896,6 +917,7 @@ const Attendance = () => {
             g.total,
             g.present,
             g.late,
+            g.pulangCepat || 0,
             g.mangkir,
             g.absent,
             g.other,
@@ -906,7 +928,7 @@ const Attendance = () => {
 
         autoTable(doc, {
           startY: 56,
-          head: [['Departemen', 'Bagian / Seksi', 'Total', 'Hadir', 'Terlambat', 'Mangkir', 'Alpa', 'Lainnya', 'Rasio %', 'Durasi Telat']],
+          head: [['Departemen', 'Bagian / Seksi', 'Total', 'Hadir', 'Terlambat', 'P. Cepat', 'Mangkir', 'Alpa', 'Lainnya', 'Rasio %', 'Durasi Telat']],
           body: tableData,
           theme: 'grid',
           headStyles: { fillColor: [248, 250, 252], textColor: [15, 23, 42], fontSize: 8, halign: 'center' },
@@ -1181,12 +1203,13 @@ const Attendance = () => {
             </div>
           </div>
 
-          <div className={`grid grid-cols-2 md:grid-cols-4 lg:grid-cols-${displaySummary.uniqueEmployeeCount === 1 ? '7' : '6'} gap-4`}>
+          <div className={`grid grid-cols-2 md:grid-cols-4 lg:grid-cols-${displaySummary.uniqueEmployeeCount === 1 ? '8' : '7'} gap-4`}>
             {[
               { label: 'Total Data', value: displaySummary.total, color: 'blue', icon: Filter, desc: 'Semua Absen' },
               { label: 'Hadir', value: displaySummary.hadir, color: 'emerald', icon: CheckCircle2, desc: 'Tepat Waktu' },
               { label: 'Terlambat', value: displaySummary.telat, color: 'amber', icon: Clock, desc: 'Total Hari' },
-              { label: 'Mangkir', value: displaySummary.mangkir, color: 'rose', icon: AlertCircle, desc: `Kurang Finger (+${displaySummary?.mangkirPenalty || 30}m)` },
+              { label: 'Pulang Cepat', value: displaySummary.pulangCepat || 0, color: 'purple', icon: Clock, desc: 'Indikator Blink' },
+              { label: 'Mangkir', value: displaySummary.mangkir, color: 'rose', icon: AlertCircle, desc: `Kurang Finger` },
               { label: 'Alpa', value: displaySummary.absen, color: 'red', icon: XCircle, desc: 'Tidak Ada Finger' },
               displaySummary.uniqueEmployeeCount === 1 && { label: 'Total Terlambat', value: formatDuration(displaySummary.totalLate || 0), color: 'rose', icon: Clock, desc: 'Akumulasi Waktu' },
               { label: 'Lainnya', value: (displaySummary.holiday || 0) + (displaySummary.cuti || 0) + (displaySummary.sakit || 0) + (displaySummary.izin || 0), color: 'slate', icon: Calendar, desc: 'Libur/Cuti/Sakit' },
@@ -1477,7 +1500,11 @@ const Attendance = () => {
                             <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">+{row.lateMinutes}m</span>
                           ) : (row.status === 'Mangkir' || row.status === 'MANGKIR') ? (
                             <span className="text-[10px] font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-200">
-                              +{ (row.lateMinutes || 0) + ((row.lateMinutes || 0) === 0 ? (displaySummary?.mangkirPenalty || 30) : 0) }m
+                              +{ (row.lateMinutes || 0) + ((row.lateMinutes || 0) === 0 ? (
+                                !row.checkIn 
+                                  ? (companySettings?.penaltyRule1Enabled !== 'false' ? parseInt(companySettings?.penaltyRule1Minutes || '30', 10) : 0)
+                                  : (companySettings?.penaltyRule3Enabled !== 'false' ? parseInt(companySettings?.penaltyRule3Minutes || '30', 10) : 0)
+                              ) : 0) }m
                             </span>
                           ) : (
                             <span className="text-slate-400">—</span>
@@ -1579,6 +1606,7 @@ const Attendance = () => {
                   <th className="px-4 py-4 text-center">Total Jadwal</th>
                   <th className="px-4 py-4 text-center">Hadir</th>
                   <th className="px-4 py-4 text-center">Terlambat</th>
+                  <th className="px-4 py-4 text-center">Pulang Cepat</th>
                   <th className="px-4 py-4 text-center">Mangkir</th>
                   <th className="px-4 py-4 text-center">Alpa</th>
                   <th className="px-4 py-4 text-center">Cuti/Sakit/Izin</th>
@@ -1589,7 +1617,7 @@ const Attendance = () => {
               <tbody className="divide-y divide-slate-100">
                 {isRekapLoading ? (
                   <tr>
-                    <td colSpan="12" className="text-center py-24">
+                    <td colSpan="13" className="text-center py-24">
                       <div className="flex flex-col items-center gap-4">
                         <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
                         <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest animate-pulse">Menghitung Rekapitulasi...</p>
@@ -1598,7 +1626,7 @@ const Attendance = () => {
                   </tr>
                 ) : (!rekapData || rekapData.length === 0) ? (
                   <tr>
-                    <td colSpan="12" className="text-center py-24">
+                    <td colSpan="13" className="text-center py-24">
                       <div className="flex flex-col items-center gap-4 opacity-70">
                         <div className="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center border border-slate-100">
                           <Calendar className="w-8 h-8 text-slate-400" />
@@ -1645,6 +1673,11 @@ const Attendance = () => {
                               </div>
                             </div>
                           )}
+                        </td>
+                        
+                        {/* Pulang Cepat Column */}
+                        <td className="px-4 py-4 text-center text-xs font-bold text-blue-600">
+                          {row.pulangCepat || 0}
                         </td>
                         
                         {/* Mangkir Column with Tooltip */}
@@ -2377,6 +2410,7 @@ const Attendance = () => {
 // --- Sub-component to optimize performance ---
 
 const FilterBar = ({ onApply, isLoading, currentSearch }) => {
+  const { t } = useTranslation();
   const [filterDate, setFilterDate] = useState('Today');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');

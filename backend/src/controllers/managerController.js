@@ -225,10 +225,11 @@ const getAttendance = async (req, res) => {
       }
     }
 
-    const { resolveStatus } = require('../utils/lateCalculator');
+    const { resolveStatus, parsePenaltySettings } = require('../utils/lateCalculator');
 
-    // Fetch Global Settings (Working Days)
+    // Fetch Global Settings (Working Days & Penalties)
     const settingsList = await prisma.settings.findMany();
+    const { penaltyRules } = parsePenaltySettings(settingsList);
     const workingDaysSetting = settingsList.find(s => s.key === 'workingDays')?.value || '[1,2,3,4,5]';
     const workingDays = JSON.parse(workingDaysSetting);
 
@@ -243,7 +244,7 @@ const getAttendance = async (req, res) => {
       prisma.attendance.count({ where }),
       prisma.attendance.findMany({ 
         where,
-        select: { status: true, lateMinutes: true, checkIn: true, checkOut: true, date: true, employeeId: true }
+        select: { status: true, lateMinutes: true, checkIn: true, checkOut: true, date: true, employeeId: true, shiftStart: true, shiftEnd: true }
       })
     ]);
 
@@ -259,7 +260,7 @@ const getAttendance = async (req, res) => {
         finalStatus = 'HOLIDAY';
       }
 
-      const resolved = resolveStatus(r.checkIn, r.checkOut, finalStatus, r.date);
+      const resolved = resolveStatus(r.checkIn, r.checkOut, finalStatus, r.date, penaltyRules, r.shiftEnd, r.shiftStart);
       if (resolved === 'PRESENT') summary.hadir++;
       else if (resolved === 'LATE') summary.telat++;
       else if (resolved === 'MANGKIR') summary.mangkir++;
@@ -269,8 +270,10 @@ const getAttendance = async (req, res) => {
       else if (resolved === 'IZIN') summary.izin++;
       else summary.absen++;
 
-      const penalty = (resolved === 'MANGKIR') ? 30 : 0;
-      summary.totalLate += (r.lateMinutes || 0) + penalty;
+      const penalty = (resolved === 'MANGKIR') 
+        ? ((r.lateMinutes || 0) > 0 ? r.lateMinutes : (!r.checkIn ? penaltyRules.rule1Minutes : penaltyRules.rule3Minutes))
+        : 0;
+      summary.totalLate += (resolved === 'MANGKIR' ? 0 : (r.lateMinutes || 0)) + penalty;
     });
     summary.uniqueEmployeeCount = uniqueEmployees.size;
 
@@ -281,7 +284,7 @@ const getAttendance = async (req, res) => {
       totalPages: Math.ceil(total / limit),
       summary,
       data: records.map(att => {
-        const resolved = resolveStatus(att.checkIn, att.checkOut, att.status, att.date);
+        const resolved = resolveStatus(att.checkIn, att.checkOut, att.status, att.date, penaltyRules, att.shiftEnd, att.shiftStart);
         
         let displayStatus = 'Alpa';
         if (resolved === 'PRESENT') displayStatus = 'Hadir';

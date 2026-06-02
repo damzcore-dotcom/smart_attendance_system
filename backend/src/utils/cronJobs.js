@@ -1,7 +1,7 @@
 const cron = require('node-cron');
 const prisma = require('../prismaClient');
 const ZKLib = require('node-zklib');
-const { calculateLateness, resolveStatus } = require('./lateCalculator');
+const { calculateLateness, resolveStatus, parsePenaltySettings } = require('./lateCalculator');
 
 // Runs every minute to check if any device needs auto-sync
 const startCronJobs = () => {
@@ -64,6 +64,7 @@ const startCronJobs = () => {
 
           // Fetch Settings to check for Saturday Half-Day rules & global grace period
           const settingsList = await prisma.settings.findMany();
+          const { penaltyRules, roundingConfig } = parsePenaltySettings(settingsList);
           const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
           const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
           const globalGracePeriod = parseInt(settingsList.find(s => s.key === 'gracePeriod')?.value || '15', 10);
@@ -168,10 +169,10 @@ const startCronJobs = () => {
             }
             
             const calc = checkIn 
-              ? calculateLateness(checkIn, shiftStart, gracePeriod, shiftEnd)
+              ? calculateLateness(checkIn, shiftStart, gracePeriod, shiftEnd, roundingConfig)
               : { lateMinutes: 0, status: 'MANGKIR' };
             
-            const status = resolveStatus(checkIn, checkOut, calc.status);
+            const status = resolveStatus(checkIn, checkOut, calc.status, entry.date, penaltyRules, shiftEnd, shiftStart);
 
             recordsToCreate.push({
               employeeId: entry.employeeId,
@@ -180,7 +181,10 @@ const startCronJobs = () => {
               checkOut,
               status,
               lateMinutes: calc.lateMinutes,
-              mode: 'Fingerprint'
+              mode: 'Fingerprint',
+              shiftStart,
+              shiftEnd,
+              gracePeriod
             });
           }
 
@@ -210,7 +214,10 @@ const startCronJobs = () => {
                     checkOut: record.checkOut,
                     status: record.status,
                     lateMinutes: record.lateMinutes,
-                    mode: 'Fingerprint'
+                    mode: 'Fingerprint',
+                    shiftStart: record.shiftStart,
+                    shiftEnd: record.shiftEnd,
+                    gracePeriod: record.gracePeriod
                   }
                 });
               } else {
