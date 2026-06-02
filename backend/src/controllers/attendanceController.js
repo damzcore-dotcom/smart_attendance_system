@@ -2243,8 +2243,8 @@ const getCorrectionHistory = async (req, res) => {
     if (!month) return res.status(400).json({ success: false, message: 'Month parameter required (YYYY-MM)' });
     
     const [year, m] = month.split('-').map(Number);
-    const startDate = new Date(year, m - 1, 1, 0, 0, 0);
-    const endDate = new Date(year, m, 0, 23, 59, 59, 999);
+    const startDate = new Date(Date.UTC(year, m - 1, 1, 0, 0, 0));
+    const endDate = new Date(Date.UTC(year, m, 0, 23, 59, 59, 999));
 
     const logs = await prisma.auditLog.findMany({
       where: {

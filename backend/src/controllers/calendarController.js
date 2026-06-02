@@ -7,12 +7,17 @@ const getAll = async (req, res) => {
     const where = {};
     
     if (year && month) {
-      const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
-      const endDate = new Date(parseInt(year), parseInt(month), 0);
+      // Use UTC dates consistently – data is stored as UTC midnight
+      const y = parseInt(year);
+      const m = parseInt(month);
+      const startDate = new Date(Date.UTC(y, m - 1, 1));
+      const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+      const endDate = new Date(Date.UTC(y, m - 1, lastDay, 23, 59, 59, 999));
       where.date = { gte: startDate, lte: endDate };
     } else if (year) {
-      const startDate = new Date(parseInt(year), 0, 1);
-      const endDate = new Date(parseInt(year), 11, 31);
+      const y = parseInt(year);
+      const startDate = new Date(Date.UTC(y, 0, 1));
+      const endDate = new Date(Date.UTC(y, 11, 31, 23, 59, 59, 999));
       where.date = { gte: startDate, lte: endDate };
     }
 
