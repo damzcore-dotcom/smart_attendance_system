@@ -7,6 +7,7 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../prismaClient');
 const { verifyToken, requireAdmin } = require('../middleware/auth');
+const { deleteMinioObject } = require('../utils/minioHelper');
 
 // ── Bridge Key Middleware ────────────────────────────────────────────────
 const verifyBridgeKey = (req, res, next) => {
@@ -544,6 +545,71 @@ router.put('/alerts/unknown/:id/resolve', verifyToken, async (req, res) => {
       data: { resolved: true, resolvedBy, resolvedAt: new Date(), notes }
     });
     res.json({ success: true, data: alert });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Delete a single unknown face alert
+router.delete('/alerts/unknown/:id', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const alert = await prisma.unknownFaceAlert.findUnique({
+      where: { id }
+    });
+
+    if (!alert) {
+      return res.status(404).json({ success: false, message: 'Alert not found' });
+    }
+
+    // Delete photo from MinIO if it exists
+    if (alert.photoUrl) {
+      await deleteMinioObject(alert.photoUrl);
+    }
+
+    // Delete record from Prisma database
+    await prisma.unknownFaceAlert.delete({
+      where: { id }
+    });
+
+    res.json({ success: true, message: 'Alert deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Bulk delete unknown face alerts
+router.delete('/alerts/unknown', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { resolvedOnly } = req.query;
+    const where = {};
+    if (resolvedOnly === 'true') {
+      where.resolved = true;
+    }
+
+    // Find all alerts matching criteria to delete their MinIO objects first
+    const alerts = await prisma.unknownFaceAlert.findMany({
+      where,
+      select: { id: true, photoUrl: true }
+    });
+
+    // Delete photos from MinIO
+    for (const alert of alerts) {
+      if (alert.photoUrl) {
+        await deleteMinioObject(alert.photoUrl);
+      }
+    }
+
+    // Delete records from database
+    const deleteResult = await prisma.unknownFaceAlert.deleteMany({
+      where
+    });
+
+    res.json({ 
+      success: true, 
+      message: `Successfully deleted ${deleteResult.count} alerts`,
+      count: deleteResult.count
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

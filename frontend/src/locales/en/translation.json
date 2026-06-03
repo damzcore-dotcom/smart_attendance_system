@@ -585,7 +585,14 @@
     "handleAlert": "Handle Alert",
     "handleAlertTitle": "Handle Alert #{{id}}",
     "notesPlaceholder": "Handling notes (optional)...",
-    "markResolved": "Mark as Resolved"
+    "markResolved": "Mark as Resolved",
+    "deleteAlert": "Delete Alert",
+    "deleteAlertConfirm": "Are you sure you want to permanently delete this stranger alert?",
+    "deleteAllResolved": "Delete All Resolved",
+    "deleteAllResolvedConfirm": "Are you sure you want to permanently delete all stranger alerts that are ALREADY resolved?",
+    "alertDeleted": "Alert deleted successfully",
+    "alertsDeleted": "All resolved alerts deleted successfully",
+    "failDelete": "Failed to delete alert"
   },
   "corrections": {
     "title": "Correction Requests",

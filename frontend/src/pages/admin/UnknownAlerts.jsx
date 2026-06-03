@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, CheckCircle, Clock, Camera, Eye, XCircle, Loader2, Shield } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, Camera, Eye, XCircle, Loader2, Shield, Trash2 } from 'lucide-react';
 import api, { getFileUrl } from '../../services/api';
 
 const UnknownAlerts = () => {
@@ -10,6 +10,16 @@ const UnknownAlerts = () => {
   const [filter, setFilter] = useState('unresolved'); // all | unresolved | resolved
   const [selectedAlert, setSelectedAlert] = useState(null);
   const [resolveNote, setResolveNote] = useState('');
+  const [selectedDeleteAlert, setSelectedDeleteAlert] = useState(null);
+  const [confirmDeleteAllResolved, setConfirmDeleteAllResolved] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   // Fetch alerts
   const { data: alertsData, isLoading } = useQuery({
@@ -34,13 +44,40 @@ const UnknownAlerts = () => {
       queryClient.invalidateQueries(['unknown-alerts']);
       setSelectedAlert(null);
       setResolveNote('');
+      setToast({ message: t('unknownAlerts.markResolvedSuccess') || 'Alert ditandai selesai', type: 'success' });
+    }
+  });
+
+  // Delete single mutation
+  const deleteMutation = useMutation({
+    mutationFn: (id) => api.delete(`/bridge/alerts/unknown/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['unknown-alerts']);
+      setSelectedDeleteAlert(null);
+      setToast({ message: t('unknownAlerts.alertDeleted'), type: 'success' });
+    },
+    onError: (err) => {
+      setToast({ message: err.message || t('unknownAlerts.failDelete'), type: 'error' });
+    }
+  });
+
+  // Bulk delete mutation
+  const bulkDeleteMutation = useMutation({
+    mutationFn: () => api.delete('/bridge/alerts/unknown', { params: { resolvedOnly: true } }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries(['unknown-alerts']);
+      setConfirmDeleteAllResolved(false);
+      setToast({ message: t('unknownAlerts.alertsDeleted'), type: 'success' });
+    },
+    onError: (err) => {
+      setToast({ message: err.message || t('unknownAlerts.failDelete'), type: 'error' });
     }
   });
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
             <Shield className="w-7 h-7 text-amber-600" />
@@ -48,6 +85,15 @@ const UnknownAlerts = () => {
           </h1>
           <p className="text-sm text-slate-500 mt-1">{t('unknownAlerts.subtitle')}</p>
         </div>
+
+        {/* Bulk Delete Button */}
+        <button
+          onClick={() => setConfirmDeleteAllResolved(true)}
+          className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2 shadow-sm self-start sm:self-auto"
+        >
+          <Trash2 className="w-4 h-4" />
+          {t('unknownAlerts.deleteAllResolved')}
+        </button>
       </div>
 
       {/* Filter Tabs */}
@@ -91,7 +137,7 @@ const UnknownAlerts = () => {
               }`}
             >
               {/* Photo */}
-              <div className="aspect-square bg-slate-100 relative">
+              <div className="aspect-square bg-slate-100 relative group">
                 {alert.photoUrl ? (
                   <img
                     src={getFileUrl(alert.photoUrl)}
@@ -104,6 +150,15 @@ const UnknownAlerts = () => {
                     <AlertTriangle className="w-16 h-16" />
                   </div>
                 )}
+
+                {/* Delete button (Trash icon) */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); setSelectedDeleteAlert(alert); }}
+                  className="absolute top-2 left-2 p-1.5 bg-black/60 hover:bg-rose-600 text-white rounded-lg transition-all shadow-md duration-200"
+                  title={t('unknownAlerts.deleteAlert')}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
 
                 {/* Status badge */}
                 <div className={`absolute top-2 right-2 px-2 py-1 rounded-full text-[10px] font-bold ${
@@ -179,7 +234,90 @@ const UnknownAlerts = () => {
           </div>
         </div>
       )}
+      {/* Delete Confirmation Modal */}
+      {selectedDeleteAlert && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 text-rose-600">
+              <AlertTriangle className="w-6 h-6 animate-pulse" />
+              <h3 className="font-bold text-lg">{t('unknownAlerts.deleteAlert')}</h3>
+            </div>
+            
+            <p className="text-sm text-slate-600">
+              {t('unknownAlerts.deleteAlertConfirm')}
+            </p>
+
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-xs text-slate-500">
+              {t('unknownAlerts.camera')}: {selectedDeleteAlert.camera?.name || selectedDeleteAlert.cameraId}<br />
+              {t('unknownAlerts.time')}: {new Date(selectedDeleteAlert.eventTime).toLocaleString('id-ID')}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => deleteMutation.mutate(selectedDeleteAlert.id)}
+                disabled={deleteMutation.isPending}
+                className="flex-1 px-4 py-2 bg-rose-600 text-white rounded-lg text-sm font-semibold hover:bg-rose-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {deleteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                {t('common.delete') || 'Hapus'}
+              </button>
+              <button
+                onClick={() => setSelectedDeleteAlert(null)}
+                className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200"
+              >
+                {t('common.cancel')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {confirmDeleteAllResolved && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 text-rose-600">
+              <AlertTriangle className="w-6 h-6 animate-pulse" />
+              <h3 className="font-bold text-lg">{t('unknownAlerts.deleteAllResolved')}</h3>
+            </div>
+            
+            <p className="text-sm text-slate-600">
+              {t('unknownAlerts.deleteAllResolvedConfirm')}
+            </p>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => bulkDeleteMutation.mutate()}
+                disabled={bulkDeleteMutation.isPending}
+                className="flex-1 px-4 py-2 bg-rose-600 text-white rounded-lg text-sm font-semibold hover:bg-rose-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {bulkDeleteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                {t('common.delete') || 'Hapus'}
+              </button>
+              <button
+                onClick={() => setConfirmDeleteAllResolved(false)}
+                className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200"
+              >
+                {t('common.cancel')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Alert */}
+      {toast && (
+        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg border animate-in slide-in-from-bottom-5 duration-300 bg-white border-slate-200 text-slate-700">
+          {toast.type === 'error' ? (
+            <XCircle className="w-5 h-5 text-rose-500" />
+          ) : (
+            <CheckCircle className="w-5 h-5 text-emerald-500" />
+          )}
+          <span className="text-sm font-medium">{toast.message}</span>
+        </div>
+      )}
     </div>
+
   );
 };
 

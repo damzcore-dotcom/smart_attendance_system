@@ -585,7 +585,14 @@
     "handleAlert": "경보 처리",
     "handleAlertTitle": "경보 처리 #{{id}}",
     "notesPlaceholder": "처리 메모(선택 사항)...",
-    "markResolved": "해결 완료로 표시"
+    "markResolved": "해결 완료로 표시",
+    "deleteAlert": "경보 삭제",
+    "deleteAlertConfirm": "이 외부인 얼굴 경보를 영구적으로 삭제하시겠습니까?",
+    "deleteAllResolved": "해결된 경보 모두 삭제",
+    "deleteAllResolvedConfirm": "이미 해결된 모든 외부인 얼굴 경보를 영구적으로 삭제하시겠습니까?",
+    "alertDeleted": "경보가 성공적으로 삭제되었습니다",
+    "alertsDeleted": "해결된 모든 경보가 성공적으로 삭제되었습니다",
+    "failDelete": "경보 삭제 실패"
   },
   "corrections": {
     "title": "정정 요청",

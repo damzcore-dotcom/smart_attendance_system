@@ -585,7 +585,14 @@
     "handleAlert": "处理警报",
     "handleAlertTitle": "处理警报 #{{id}}",
     "notesPlaceholder": "处理说明（可选）...",
-    "markResolved": "标记为已解决"
+    "markResolved": "标记为已解决",
+    "deleteAlert": "删除警报",
+    "deleteAlertConfirm": "您确定要永久删除此陌生人脸警报吗？",
+    "deleteAllResolved": "删除所有已处理的警报",
+    "deleteAllResolvedConfirm": "您确定要永久删除所有已处理的陌生人脸警报吗？",
+    "alertDeleted": "警报已成功删除",
+    "alertsDeleted": "所有已处理的警报已成功删除",
+    "failDelete": "删除警报失败"
   },
   "corrections": {
     "title": "补卡申请",

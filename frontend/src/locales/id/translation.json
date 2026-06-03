@@ -585,7 +585,14 @@
     "handleAlert": "Tangani Alert",
     "handleAlertTitle": "Tangani Alert #{{id}}",
     "notesPlaceholder": "Catatan penanganan (opsional)...",
-    "markResolved": "Tandai Selesai"
+    "markResolved": "Tandai Selesai",
+    "deleteAlert": "Hapus Alert",
+    "deleteAlertConfirm": "Apakah Anda yakin ingin menghapus alert wajah asing ini secara permanen?",
+    "deleteAllResolved": "Hapus Semua yang Sudah Ditangani",
+    "deleteAllResolvedConfirm": "Apakah Anda yakin ingin menghapus semua alert yang SUDAH ditangani secara permanen?",
+    "alertDeleted": "Alert berhasil dihapus",
+    "alertsDeleted": "Semua alert yang ditangani berhasil dihapus",
+    "failDelete": "Gagal menghapus alert"
   },
   "corrections": {
     "title": "Pengajuan Koreksi",
