@@ -70,9 +70,9 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')
 
 // ── MinIO Proxy — Serve face snapshots from MinIO storage ───────────────
 const http = require('http');
-app.get('/minio/:bucket/*', (req, res) => {
-  const bucket = req.params.bucket;
-  const objectKey = req.params[0]; // everything after /minio/<bucket>/
+app.get(/^\/minio\/([^/]+)\/(.+)$/, (req, res) => {
+  const bucket = req.params[0];
+  const objectKey = req.params[1];
   if (!bucket || !objectKey) {
     return res.status(400).json({ success: false, message: 'Invalid path' });
   }
