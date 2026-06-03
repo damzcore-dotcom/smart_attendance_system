@@ -9,13 +9,20 @@ import numpy as np
 class FaceRecognizer:
     def __init__(self, device: str = "cpu", model_root: str = "/app/models"):
         ctx_id = 0 if device == "cuda" else -1
+        import os
+        size_str = os.getenv("DETECTION_SIZE", "640,640")
+        try:
+            w, h = map(int, size_str.split(","))
+            det_size = (w, h)
+        except:
+            det_size = (640, 640)
         self.model = insightface.app.FaceAnalysis(
             name='buffalo_l',
             allowed_modules=['detection', 'recognition'],
             root=model_root
         )
-        self.model.prepare(ctx_id=ctx_id, det_size=(640, 640))
-        print(f"[FaceRecognizer] Model loaded on {'GPU' if device == 'cuda' else 'CPU'}")
+        self.model.prepare(ctx_id=ctx_id, det_size=det_size)
+        print(f"[FaceRecognizer] Model loaded on {'GPU' if device == 'cuda' else 'CPU'} with det_size={det_size}")
 
     def get_embedding(self, frame: np.ndarray) -> np.ndarray | None:
         """Extract 512-dim face embedding from a frame/aligned face crop."""

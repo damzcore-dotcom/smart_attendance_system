@@ -361,12 +361,11 @@ const update = async (req, res) => {
     
     // Broadcast cache invalidation to AI Engine if face embedding was updated
     if (data.faceEmbeddingV2 || data.faceDescriptor || faceDescriptor) {
-      const axios = require('axios');
       const aiHost = process.env.AI_ENGINE_URL || 'http://sa_ai_engine:8001';
-      axios.post(`${aiHost}/cache/reload`).catch(err => {
+      fetch(`${aiHost}/cache/reload`, { method: 'POST' }).catch(err => {
          // Silently fallback to localhost just in case they're on simple baremetal config
          if(aiHost === 'http://sa_ai_engine:8001') {
-            axios.post(`http://127.0.0.1:8001/cache/reload`).catch(() => {});
+            fetch(`http://127.0.0.1:8001/cache/reload`, { method: 'POST' }).catch(() => {});
          }
       });
     }

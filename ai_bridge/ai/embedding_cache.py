@@ -19,9 +19,22 @@ class EmbeddingCache:
             json.dumps(embedding.tolist())
         )
 
+    async def set_name(self, employee_id: str, name: str):
+        """Store employee name in Redis."""
+        await self.redis.set(
+            f"face_name:{employee_id}",
+            name
+        )
+
+    async def get_name(self, employee_id: str) -> str | None:
+        """Get employee name from Redis cache."""
+        val = await self.redis.get(f"face_name:{employee_id}")
+        return val.decode() if val else None
+
     async def delete(self, employee_id: str):
         """Remove an embedding from cache."""
         await self.redis.delete(f"{self.KEY_PREFIX}{employee_id}")
+        await self.redis.delete(f"face_name:{employee_id}")
 
     async def get(self, employee_id: str) -> np.ndarray | None:
         """Get a single embedding from cache."""
@@ -53,6 +66,8 @@ class EmbeddingCache:
                         str(emp["id"]),
                         np.array(emp["faceEmbeddingV2"])
                     )
+                    if emp.get("name"):
+                        await self.set_name(str(emp["id"]), emp["name"])
                     loaded += 1
             print(f"[Cache] Loaded {loaded} embeddings from {len(embeddings)} employees")
         except Exception as e:

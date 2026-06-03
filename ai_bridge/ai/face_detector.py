@@ -8,7 +8,15 @@ import cv2
 
 
 class FaceDetector:
-    def __init__(self, det_size=(640, 640), model_root="/app/models"):
+    def __init__(self, det_size=None, model_root="/app/models"):
+        if det_size is None:
+            import os
+            size_str = os.getenv("DETECTION_SIZE", "640,640")
+            try:
+                w, h = map(int, size_str.split(","))
+                det_size = (w, h)
+            except:
+                det_size = (640, 640)
         self.det_size = det_size
         self.model_root = model_root
         self._model = None
@@ -22,7 +30,7 @@ class FaceDetector:
                     root=self.model_root
                 )
                 self._model.prepare(ctx_id=-1, det_size=self.det_size)
-                print("[FaceDetector] Model loaded successfully")
+                print(f"[FaceDetector] Model loaded successfully with det_size={self.det_size}")
             except Exception as e:
                 print(f"[FaceDetector] Failed to load model: {e}")
                 raise

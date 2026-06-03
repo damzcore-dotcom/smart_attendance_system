@@ -68,6 +68,12 @@ services:
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin123}
       - CAMERA_CONFIG=/app/config/cameras.yaml
+      - OPENCV_FFMPEG_CAPTURE_OPTIONS=rtsp_transport;tcp|stimeout;5000000
+      - PYTHONUNBUFFERED=1
+      - LIVENESS_ENABLED=false
+      - TZ=Asia/Jakarta
+      - DETECTION_SIZE=960,960
+      - FRAME_SKIP=10
     volumes:
       - ./ai_bridge/models:/app/models
       - ./ai_bridge/config:/app/config
