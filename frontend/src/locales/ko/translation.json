@@ -590,8 +590,13 @@
     "deleteAlertConfirm": "이 외부인 얼굴 경보를 영구적으로 삭제하시겠습니까?",
     "deleteAllResolved": "해결된 경보 모두 삭제",
     "deleteAllResolvedConfirm": "이미 해결된 모든 외부인 얼굴 경보를 영구적으로 삭제하시겠습니까?",
+    "deletePeriod": "선택한 기간 경보 삭제",
+    "deletePeriodConfirm": "선택한 기간 ({{start}} ~ {{end}}) 동안의 모든 외부인 얼굴 경보를 영구적으로 삭제하시겠습니까?",
+    "startDate": "시작일",
+    "endDate": "종료일",
     "alertDeleted": "경보가 성공적으로 삭제되었습니다",
     "alertsDeleted": "해결된 모든 경보가 성공적으로 삭제되었습니다",
+    "alertsPeriodDeleted": "선택한 기간의 모든 경보가 성공적으로 삭제되었습니다",
     "failDelete": "경보 삭제 실패"
   },
   "corrections": {

@@ -590,8 +590,13 @@
     "deleteAlertConfirm": "Are you sure you want to permanently delete this stranger alert?",
     "deleteAllResolved": "Delete All Resolved",
     "deleteAllResolvedConfirm": "Are you sure you want to permanently delete all stranger alerts that are ALREADY resolved?",
+    "deletePeriod": "Delete Selected Period",
+    "deletePeriodConfirm": "Are you sure you want to permanently delete all stranger alerts from period {{start}} to {{end}}?",
+    "startDate": "Start Date",
+    "endDate": "End Date",
     "alertDeleted": "Alert deleted successfully",
     "alertsDeleted": "All resolved alerts deleted successfully",
+    "alertsPeriodDeleted": "All alerts in the selected period deleted successfully",
     "failDelete": "Failed to delete alert"
   },
   "corrections": {

@@ -513,9 +513,19 @@ router.delete('/cameras/:id', verifyToken, requireAdmin, async (req, res) => {
 // ── Get Unknown Face Alerts ─────────────────────────────────────────────
 router.get('/alerts/unknown', verifyToken, async (req, res) => {
   try {
-    const { resolved, limit = 50 } = req.query;
+    const { resolved, limit = 50, startDate, endDate } = req.query;
     const where = {};
     if (resolved !== undefined) where.resolved = resolved === 'true';
+
+    if (startDate || endDate) {
+      where.eventTime = {};
+      if (startDate) where.eventTime.gte = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        where.eventTime.lte = end;
+      }
+    }
 
     const alerts = await prisma.unknownFaceAlert.findMany({
       where,
@@ -581,10 +591,20 @@ router.delete('/alerts/unknown/:id', verifyToken, requireAdmin, async (req, res)
 // Bulk delete unknown face alerts
 router.delete('/alerts/unknown', verifyToken, requireAdmin, async (req, res) => {
   try {
-    const { resolvedOnly } = req.query;
+    const { resolvedOnly, startDate, endDate } = req.query;
     const where = {};
     if (resolvedOnly === 'true') {
       where.resolved = true;
+    }
+
+    if (startDate || endDate) {
+      where.eventTime = {};
+      if (startDate) where.eventTime.gte = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        where.eventTime.lte = end;
+      }
     }
 
     // Find all alerts matching criteria to delete their MinIO objects first

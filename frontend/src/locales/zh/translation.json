@@ -590,8 +590,13 @@
     "deleteAlertConfirm": "您确定要永久删除此陌生人脸警报吗？",
     "deleteAllResolved": "删除所有已处理的警报",
     "deleteAllResolvedConfirm": "您确定要永久删除所有已处理的陌生人脸警报吗？",
+    "deletePeriod": "删除此期间的警报",
+    "deletePeriodConfirm": "您确定要永久删除 {{start}} 至 {{end}} 期间的所有陌生人脸警报吗？",
+    "startDate": "开始日期",
+    "endDate": "结束日期",
     "alertDeleted": "警报已成功删除",
     "alertsDeleted": "所有已处理的警报已成功删除",
+    "alertsPeriodDeleted": "所选期间的所有警报已成功删除",
     "failDelete": "删除警报失败"
   },
   "corrections": {

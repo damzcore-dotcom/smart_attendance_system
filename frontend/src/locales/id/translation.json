@@ -590,8 +590,13 @@
     "deleteAlertConfirm": "Apakah Anda yakin ingin menghapus alert wajah asing ini secara permanen?",
     "deleteAllResolved": "Hapus Semua yang Sudah Ditangani",
     "deleteAllResolvedConfirm": "Apakah Anda yakin ingin menghapus semua alert yang SUDAH ditangani secara permanen?",
+    "deletePeriod": "Hapus Periode Ini",
+    "deletePeriodConfirm": "Apakah Anda yakin ingin menghapus semua alert dari periode {{start}} s.d. {{end}} secara permanen?",
+    "startDate": "Tanggal Mulai",
+    "endDate": "Tanggal Selesai",
     "alertDeleted": "Alert berhasil dihapus",
     "alertsDeleted": "Semua alert yang ditangani berhasil dihapus",
+    "alertsPeriodDeleted": "Semua alert pada periode terpilih berhasil dihapus",
     "failDelete": "Gagal menghapus alert"
   },
   "corrections": {
