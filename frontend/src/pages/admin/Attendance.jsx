@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { attendanceAPI, employeeAPI, payrollAPI, settingsAPI, getFileUrl } from '../../services/api';
 import PrintableAttendanceReport from '../../components/payroll/PrintableAttendanceReport';
-import { Edit2, LayoutDashboard, Calendar, Clock, RefreshCw, Upload, AlertCircle, CheckCircle2, XCircle, Search, Filter, Scan, X, FileSpreadsheet, Printer, FileText, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, ArrowRight, Loader2, AlertTriangle, ShieldCheck, ShieldAlert, TrendingUp, Fingerprint, Camera, Eye } from 'lucide-react';
+import { Edit2, LayoutDashboard, Calendar, Clock, RefreshCw, Upload, AlertCircle, CheckCircle2, XCircle, Search, Filter, Scan, X, FileSpreadsheet, Printer, FileText, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, ArrowRight, Loader2, AlertTriangle, ShieldCheck, ShieldAlert, TrendingUp, Fingerprint, Camera, Eye, Smartphone } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -1510,6 +1510,11 @@ const Attendance = () => {
                             <span className="inline-flex items-center gap-1.5 bg-sky-50 text-sky-750 px-2 py-1 rounded-lg text-[10px] font-bold border border-sky-100 shadow-sm" title="Sidik Jari (Fingerprint)">
                               <Fingerprint className="w-3.5 h-3.5 text-sky-500" />
                               Finger
+                            </span>
+                          ) : row.source === 'face_web' ? (
+                            <span className="inline-flex items-center gap-1.5 bg-teal-50 text-teal-700 px-2 py-1 rounded-lg text-[10px] font-bold border border-teal-100 shadow-sm" title="Face ID (HP / Browser)">
+                              <Smartphone className="w-3.5 h-3.5 text-teal-500" />
+                              HP / Web
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1.5 bg-slate-50 text-slate-600 px-2 py-1 rounded-lg text-[10px] font-bold border border-slate-200 shadow-sm" title="Manual / Koreksi HRD">

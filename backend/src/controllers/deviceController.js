@@ -1061,7 +1061,8 @@ const syncAttendance = async (req, res) => {
             checkOut: mergedCheckOut,
             status: finalStatus,
             lateMinutes: lateMins,
-            mode: 'Fingerprint'
+            mode: 'Fingerprint',
+            source: 'fingerprint'
           },
           create: {
             employeeId: record.employeeId,
@@ -1070,7 +1071,8 @@ const syncAttendance = async (req, res) => {
             checkOut: record.checkOut,
             status: record.status,
             lateMinutes: record.lateMinutes,
-            mode: 'Fingerprint'
+            mode: 'Fingerprint',
+            source: 'fingerprint'
           }
         });
         saved++;

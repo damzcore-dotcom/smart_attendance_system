@@ -474,8 +474,8 @@ const checkIn = async (req, res) => {
 
     const attendance = await prisma.attendance.upsert({
       where: { employeeId_date: { employeeId, date: today } },
-      update: { checkIn: now, status, lateMinutes, mode, photoUrl: photoData || existing?.photoUrl },
-      create: { employeeId, date: today, checkIn: now, status, lateMinutes, mode, photoUrl: photoData || null },
+      update: { checkIn: now, status, lateMinutes, mode, photoUrl: photoData || existing?.photoUrl, source: 'face_web' },
+      create: { employeeId, date: today, checkIn: now, status, lateMinutes, mode, photoUrl: photoData || null, source: 'face_web' },
     });
 
     // Create notification if late
@@ -629,7 +629,8 @@ const checkOut = async (req, res) => {
         checkOut: now, 
         status: finalStatus, 
         overtimeHours,
-        photoUrl: photoData || attendance.photoUrl
+        photoUrl: photoData || attendance.photoUrl,
+        source: 'face_web'
       },
     });
 
