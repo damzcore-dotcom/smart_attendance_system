@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Camera, Wifi, WifiOff, RefreshCw, Clock, Loader2, Activity, XCircle, Video, VideoOff } from 'lucide-react';
 import api from '../../services/api';
 
 const LiveCameraMonitor = () => {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [selectedCamera, setSelectedCamera] = useState(null);
   const [liveEvents, setLiveEvents] = useState([]);
@@ -88,22 +90,22 @@ const LiveCameraMonitor = () => {
     },
     onSuccess: (res) => {
       if (res.ignored) {
-        alert('Simulasi diabaikan: ' + res.message);
+        alert(t('liveCamera.simulationIgnored', { message: res.message }));
       } else {
-        alert('Simulasi berhasil dicatat sebagai: ' + res.type);
+        alert(t('liveCamera.simulationSuccess', { type: res.type }));
         queryClient.invalidateQueries(['face-events']);
       }
       setIsSimulationOpen(false);
     },
     onError: (err) => {
-      alert('Error simulasi: ' + err.message);
+      alert(t('liveCamera.simulationError', { message: err.message }));
     }
   });
 
   const handleSimulate = (e) => {
     e.preventDefault();
     if (!simData.employeeId || !simData.cameraId) {
-      alert('Pilih karyawan dan kamera');
+      alert(t('liveCamera.selectEmployeeCameraAlert'));
       return;
     }
     simulateMutation.mutate(simData);
@@ -135,9 +137,9 @@ const LiveCameraMonitor = () => {
         <div>
           <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
             <Camera className="w-7 h-7 text-blue-600" />
-            Live Camera Monitor
+            {t('liveCamera.title')}
           </h1>
-          <p className="text-sm text-slate-500 mt-1">Pemantauan real-time kamera CCTV dan event pengenalan wajah</p>
+          <p className="text-sm text-slate-500 mt-1">{t('liveCamera.subtitle')}</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -156,13 +158,13 @@ const LiveCameraMonitor = () => {
             className="flex items-center gap-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95 uppercase tracking-wider"
           >
             <Activity className="w-3.5 h-3.5 text-purple-500" />
-            <span>Simulasi CCTV</span>
+            <span>{t('liveCamera.simulationBtn')}</span>
           </button>
 
           <button
             onClick={() => refetchCameras()}
             className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 transition-all"
-            title="Refresh Kamera"
+            title={t('liveCamera.refreshCameras')}
           >
             <RefreshCw className="w-4 h-4" />
           </button>
@@ -174,9 +176,9 @@ const LiveCameraMonitor = () => {
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-slate-700 text-sm flex items-center gap-2">
-              <Camera className="w-4 h-4" /> Daftar Kamera ({cameras.length})
+              <Camera className="w-4 h-4" /> {t('liveCamera.cameraList', { count: cameras.length })}
             </h3>
-            <span className="text-xs text-slate-400">Pilih untuk filter</span>
+            <span className="text-xs text-slate-400">{t('liveCamera.selectToFilter')}</span>
           </div>
 
           {isLoading ? (
@@ -184,7 +186,7 @@ const LiveCameraMonitor = () => {
           ) : cameras.length === 0 ? (
             <div className="text-center py-8 text-slate-400 text-sm">
               <Camera className="w-10 h-10 mx-auto mb-2 text-slate-300" />
-              Belum ada kamera terdaftar
+              {t('liveCamera.noCameras')}
             </div>
           ) : (
             <div className="space-y-2">
@@ -255,7 +257,7 @@ const LiveCameraMonitor = () => {
                       <span className={`relative inline-flex rounded-full h-2 w-2 ${isOnline ? 'bg-red-500' : 'bg-slate-500'}`}></span>
                     </span>
                     <span className="text-xs font-bold text-white uppercase tracking-wider">
-                      {isOnline ? 'LIVE CCTV FEED' : 'NO SIGNAL'}
+                      {isOnline ? t('liveCamera.liveCctvFeed') : t('liveCamera.noSignal')}
                     </span>
                     <span className="text-xs text-slate-400 font-mono">
                       | {cam?.name || selectedCamera}
@@ -268,7 +270,7 @@ const LiveCameraMonitor = () => {
                     <button 
                       onClick={() => setSelectedCamera(null)}
                       className="text-slate-400 hover:text-white transition-colors"
-                      title="Tutup Stream"
+                      title={t('liveCamera.closeStream')}
                     >
                       <XCircle className="w-4 h-4" />
                     </button>
@@ -299,10 +301,10 @@ const LiveCameraMonitor = () => {
                     <div className="absolute inset-0 pointer-events-none opacity-5 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[size:100%_4px,6px_100%]"></div>
                     <VideoOff className="w-12 h-12 text-slate-700 animate-pulse mb-3" />
                     <p className="text-sm font-semibold text-slate-500 uppercase tracking-wide">
-                      {!cam?.active ? 'Kamera Dinonaktifkan' : 'Koneksi AI Engine Terputus'}
+                      {!cam?.active ? t('liveCamera.cameraDisabled') : t('liveCamera.aiDisconnected')}
                     </p>
                     <p className="text-xs text-slate-600 mt-1">
-                      {cam?.ipAddress ? `IP: ${cam.ipAddress}` : 'Periksa status service AI Engine'}
+                      {cam?.ipAddress ? `IP: ${cam.ipAddress}` : t('liveCamera.checkAiService')}
                     </p>
                   </div>
                 </div>
@@ -317,9 +319,9 @@ const LiveCameraMonitor = () => {
           })() : (
             <div className="bg-slate-50 border border-dashed border-slate-200 rounded-xl p-8 text-center text-slate-400 flex flex-col items-center justify-center aspect-[21/9]">
               <Video className="w-10 h-10 text-slate-300 mb-2 animate-pulse" />
-              <h4 className="font-semibold text-slate-700 text-sm">Pilih Kamera dari Daftar</h4>
+              <h4 className="font-semibold text-slate-700 text-sm">{t('liveCamera.selectCameraFromList')}</h4>
               <p className="text-xs text-slate-400 max-w-xs mt-1">
-                Pilih salah satu kamera di sebelah kiri untuk melihat tayangan langsung (live CCTV feed) dan memonitor secara real-time.
+                {t('liveCamera.selectCameraDesc')}
               </p>
             </div>
           )}
@@ -328,17 +330,17 @@ const LiveCameraMonitor = () => {
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-slate-700 text-sm flex items-center gap-2">
-                <Activity className="w-4 h-4" /> Face Events Feed
+                <Activity className="w-4 h-4" /> {t('liveCamera.eventFeed')}
                 {selectedCamera && <span className="text-xs text-blue-600">({selectedCamera})</span>}
               </h3>
-              <span className="text-xs text-slate-400">{events.length} events</span>
+              <span className="text-xs text-slate-400">{t('liveCamera.eventsCount', { count: events.length })}</span>
             </div>
 
             <div className="max-h-[400px] overflow-y-auto space-y-1.5">
               {events.length === 0 ? (
                 <div className="text-center py-12 text-slate-400">
                   <Clock className="w-10 h-10 mx-auto mb-2 text-slate-300" />
-                  <p className="text-sm">Belum ada event tercatat</p>
+                  <p className="text-sm">{t('liveCamera.noEvents')}</p>
                 </div>
               ) : (
                 events.map((event, i) => (
@@ -390,7 +392,7 @@ const LiveCameraMonitor = () => {
             <div className="flex justify-between items-center mb-5">
               <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                 <Activity className="w-5 h-5 text-purple-600" />
-                Simulasi Auto Capture CCTV
+                {t('liveCamera.simulationTitle')}
               </h2>
               <button onClick={() => setIsSimulationOpen(false)} className="text-slate-400 hover:bg-slate-100 p-1 rounded-lg">
                 <XCircle className="w-5 h-5" />
@@ -398,19 +400,19 @@ const LiveCameraMonitor = () => {
             </div>
 
             <div className="mb-4 text-xs text-slate-500 bg-slate-50 p-3 rounded-lg border border-slate-100">
-              Uji coba sistem tanpa perlu berdiri di depan kamera. Waktu simulasi akan dicocokkan dengan Jadwal Capture Kamera di API.
+              {t('liveCamera.simulationHelp')}
             </div>
 
             <form onSubmit={handleSimulate} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Karyawan</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">{t('liveCamera.employee')}</label>
                 <select
                   required
                   className="w-full px-3 py-2 border rounded-lg text-sm bg-white"
                   value={simData.employeeId}
                   onChange={e => setSimData({...simData, employeeId: e.target.value})}
                 >
-                  <option value="">-- Pilih Karyawan --</option>
+                  <option value="">{t('liveCamera.selectEmployeePlaceholder')}</option>
                   {employees.map(emp => (
                     <option key={emp.id} value={emp.id}>{emp.name}</option>
                   ))}
@@ -418,14 +420,14 @@ const LiveCameraMonitor = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Kamera (Trigger)</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">{t('liveCamera.cameraTrigger')}</label>
                 <select
                   required
                   className="w-full px-3 py-2 border rounded-lg text-sm bg-white"
                   value={simData.cameraId}
                   onChange={e => setSimData({...simData, cameraId: e.target.value})}
                 >
-                  <option value="">-- Pilih Kamera --</option>
+                  <option value="">{t('liveCamera.selectCameraPlaceholder')}</option>
                   {cameras.map(cam => (
                     <option key={cam.id} value={cam.id}>{cam.name} ({cam.id})</option>
                   ))}
@@ -433,27 +435,27 @@ const LiveCameraMonitor = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Status Absen</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">{t('liveCamera.attendanceStatus')}</label>
                 <select
                   required
                   className="w-full px-3 py-2 border rounded-lg text-sm bg-white"
                   value={simData.status}
                   onChange={e => setSimData({...simData, status: e.target.value})}
                 >
-                  <option value="PRESENT">Hadir Tepat Waktu (PRESENT)</option>
-                  <option value="LATE">Terlambat (LATE)</option>
+                  <option value="PRESENT">{t('liveCamera.statusPresentOption')}</option>
+                  <option value="LATE">{t('liveCamera.statusLateOption')}</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Waktu Mocking (Jam:Menit)</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">{t('liveCamera.mockingTime')}</label>
                 <input
                   type="time"
                   className="w-full px-3 py-2 border rounded-lg text-sm"
                   value={simData.time || ''}
                   onChange={e => setSimData({...simData, time: e.target.value})}
                 />
-                <p className="text-[10px] text-slate-400 mt-1">Biarkan kosong untuk ambil waktu sekarang.</p>
+                <p className="text-[10px] text-slate-400 mt-1">{t('liveCamera.mockingTimeHelp')}</p>
               </div>
 
               <div className="pt-4 flex gap-3">
@@ -462,14 +464,14 @@ const LiveCameraMonitor = () => {
                   onClick={() => setIsSimulationOpen(false)}
                   className="flex-1 py-2 text-slate-600 font-semibold bg-slate-100 hover:bg-slate-200 rounded-lg text-sm transition-all"
                 >
-                  Batal
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
                   disabled={simulateMutation.isPending}
                   className="flex-1 py-2 text-white font-semibold bg-purple-600 hover:bg-purple-700 rounded-lg text-sm transition-all flex justify-center items-center gap-2 disabled:opacity-50"
                 >
-                  {simulateMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Kirim Event'}
+                  {simulateMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : t('liveCamera.sendEvent')}
                 </button>
               </div>
             </form>

@@ -1,9 +1,11 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle, Clock, Camera, Eye, XCircle, Loader2, Shield } from 'lucide-react';
 import api from '../../services/api';
 
 const UnknownAlerts = () => {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState('unresolved'); // all | unresolved | resolved
   const [selectedAlert, setSelectedAlert] = useState(null);
@@ -42,18 +44,18 @@ const UnknownAlerts = () => {
         <div>
           <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
             <Shield className="w-7 h-7 text-amber-600" />
-            Alert Wajah Asing
+            {t('unknownAlerts.title')}
           </h1>
-          <p className="text-sm text-slate-500 mt-1">Wajah yang terdeteksi CCTV namun tidak terdaftar dalam database karyawan</p>
+          <p className="text-sm text-slate-500 mt-1">{t('unknownAlerts.subtitle')}</p>
         </div>
       </div>
 
       {/* Filter Tabs */}
       <div className="flex gap-2">
         {[
-          { key: 'unresolved', label: 'Belum Ditangani', icon: AlertTriangle, color: 'amber' },
-          { key: 'resolved', label: 'Sudah Ditangani', icon: CheckCircle, color: 'green' },
-          { key: 'all', label: 'Semua', icon: Eye, color: 'slate' },
+          { key: 'unresolved', label: t('unknownAlerts.tabs.unresolved'), icon: AlertTriangle, color: 'amber' },
+          { key: 'resolved', label: t('unknownAlerts.tabs.resolved'), icon: CheckCircle, color: 'green' },
+          { key: 'all', label: t('unknownAlerts.tabs.all'), icon: Eye, color: 'slate' },
         ].map(tab => (
           <button
             key={tab.key}
@@ -76,8 +78,8 @@ const UnknownAlerts = () => {
       ) : alerts.length === 0 ? (
         <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
           <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-3" />
-          <h3 className="font-semibold text-slate-700">Tidak Ada Alert</h3>
-          <p className="text-sm text-slate-400">Semua wajah yang terdeteksi sudah terdaftar dalam sistem.</p>
+          <h3 className="font-semibold text-slate-700">{t('unknownAlerts.noAlerts')}</h3>
+          <p className="text-sm text-slate-400">{t('unknownAlerts.noAlertsDesc')}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -124,7 +126,7 @@ const UnknownAlerts = () => {
 
                 {alert.resolved ? (
                   <div className="text-xs text-green-600 bg-green-50 rounded p-2">
-                    <span className="font-semibold">Oleh: {alert.resolvedBy}</span>
+                    <span className="font-semibold">{t('unknownAlerts.resolvedBy', { name: alert.resolvedBy })}</span>
                     {alert.notes && <p className="mt-1 text-green-700">{alert.notes}</p>}
                   </div>
                 ) : (
@@ -132,7 +134,7 @@ const UnknownAlerts = () => {
                     onClick={() => setSelectedAlert(alert)}
                     className="w-full px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-semibold hover:bg-amber-700 transition-all"
                   >
-                    Tangani Alert
+                    {t('unknownAlerts.handleAlert')}
                   </button>
                 )}
               </div>
@@ -145,16 +147,16 @@ const UnknownAlerts = () => {
       {selectedAlert && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
-            <h3 className="font-bold text-lg text-slate-800">Tangani Alert #{selectedAlert.id}</h3>
+            <h3 className="font-bold text-lg text-slate-800">{t('unknownAlerts.handleAlertTitle', { id: selectedAlert.id })}</h3>
             <p className="text-sm text-slate-500">
-              Kamera: {selectedAlert.camera?.name || selectedAlert.cameraId}<br />
-              Waktu: {new Date(selectedAlert.eventTime).toLocaleString('id-ID')}
+              {t('unknownAlerts.camera')}: {selectedAlert.camera?.name || selectedAlert.cameraId}<br />
+              {t('unknownAlerts.time')}: {new Date(selectedAlert.eventTime).toLocaleString('id-ID')}
             </p>
 
             <textarea
               value={resolveNote}
               onChange={(e) => setResolveNote(e.target.value)}
-              placeholder="Catatan penanganan (opsional)..."
+              placeholder={t('unknownAlerts.notesPlaceholder')}
               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm resize-none h-24 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 outline-none"
             />
 
@@ -165,13 +167,13 @@ const UnknownAlerts = () => {
                 className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {resolveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                Tandai Selesai
+                {t('unknownAlerts.markResolved')}
               </button>
               <button
                 onClick={() => { setSelectedAlert(null); setResolveNote(''); }}
                 className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200"
               >
-                Batal
+                {t('common.cancel')}
               </button>
             </div>
           </div>

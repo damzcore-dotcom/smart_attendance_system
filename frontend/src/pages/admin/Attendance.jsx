@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { attendanceAPI, employeeAPI, payrollAPI, settingsAPI } from '../../services/api';
 import PrintableAttendanceReport from '../../components/payroll/PrintableAttendanceReport';
 import { Edit2, LayoutDashboard, Calendar, Clock, RefreshCw, Upload, AlertCircle, CheckCircle2, XCircle, Search, Filter, Scan, X, FileSpreadsheet, Printer, FileText, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, ArrowRight, Loader2, AlertTriangle, ShieldCheck, ShieldAlert, TrendingUp, Fingerprint, Camera, Eye } from 'lucide-react';
@@ -224,6 +225,8 @@ const getPrintPaddedLogs = (rawLogs, emp, selectedMonth, summary) => {
 
 const Attendance = () => {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [isImportOpen, setImportOpen] = useState(false);
   const [isRecalcModalOpen, setRecalcModalOpen] = useState(false);
   const [isSwapModalOpen, setSwapModalOpen] = useState(false);
@@ -272,6 +275,32 @@ const Attendance = () => {
     order: 'desc',
     excludeBhl: true
   });
+
+  useEffect(() => {
+    if (location.state) {
+      const { date, search, status, viewTab } = location.state;
+      setAppliedFilters(prev => {
+        const updated = { ...prev };
+        if (date) {
+          updated.period = 'Custom';
+          updated.startDate = date;
+          updated.endDate = date;
+        }
+        if (search !== undefined) {
+          updated.search = search;
+        }
+        if (status !== undefined) {
+          updated.status = status;
+        }
+        return updated;
+      });
+      if (viewTab) {
+        setActiveViewTab(viewTab);
+      }
+      // Clear location state so it doesn't freeze the filters on subsequent reloads
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.state, navigate]);
 
   const [isReportModalOpen, setReportModalOpen] = useState(false);
   const [reportEmployees, setReportEmployees] = useState(null);
@@ -494,7 +523,8 @@ const Attendance = () => {
           mangkirDetails: [],
           absentDetails: [],
           otherDetails: [],
-          lateDetails: []
+          lateDetails: [],
+          pulangCepatDetails: []
         };
       }
 
@@ -512,6 +542,8 @@ const Attendance = () => {
       } else if (status === 'EARLY_DEPARTURE' || status === 'Pulang Cepat') {
         g.present++;
         g.pulangCepat++;
+        const shiftEnd = row.shiftTime ? row.shiftTime.split(' - ')[1] : '17:00';
+        g.pulangCepatDetails.push({ date: row.date, checkIn: row.checkIn, checkOut: row.checkOut, shiftEnd });
       } else if (status === 'MANGKIR' || status === 'Mangkir') {
         g.mangkir++;
         const rule1Enabled = companySettings?.penaltyRule1Enabled !== 'false';
@@ -551,7 +583,10 @@ const Attendance = () => {
   };
 
   let filteredData = data?.data || [];
-  let displaySummary = data?.summary || null;
+  let displaySummary = data?.summary ? {
+    ...data.summary,
+    pulangCepat: data.summary.pulangCepat ?? data.summary.earlyDeparture ?? 0
+  } : null;
 
   if (anomalyFilter === 'ANOMALY') {
     filteredData = filteredData.filter(isAnomaly);
@@ -589,6 +624,20 @@ const Attendance = () => {
       uniqueEmployeeCount: 1
     };
   }
+
+  const handleCardClick = (label) => {
+    let targetStatus = '';
+    if (label === 'Hadir') targetStatus = 'PRESENT';
+    else if (label === 'Terlambat' || label === 'Total Terlambat') targetStatus = 'LATE';
+    else if (label === 'Pulang Cepat') targetStatus = 'EARLY_DEPARTURE';
+    else if (label === 'Mangkir') targetStatus = 'MANGKIR';
+    else if (label === 'Alpa') targetStatus = 'ABSENT';
+    else if (label === 'Lainnya') targetStatus = 'HOLIDAY';
+    
+    setAppliedFilters(prev => ({ ...prev, status: targetStatus, page: 1 }));
+    setActiveViewTab('DETAIL');
+    setAnomalyFilter('ALL');
+  };
 
   const handleSort = (key) => {
     const newOrder = sortConfig.key === key && sortConfig.order === 'asc' ? 'desc' : 'asc';
@@ -1066,6 +1115,20 @@ const Attendance = () => {
                 <FileSpreadsheet className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:rotate-12 transition-transform" /> 
                 <span>Ekspor Excel</span>
               </button>
+              
+              <button 
+                onClick={() => {
+                  let activeDate = new Date().toISOString().split('T')[0];
+                  if (appliedFilters.period !== 'Today' && appliedFilters.startDate) {
+                    activeDate = appliedFilters.startDate;
+                  }
+                  navigate('/admin/manual-correction', { state: { date: activeDate } });
+                }}
+                className="flex items-center gap-2 bg-rose-600 hover:bg-rose-700 text-white px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-bold uppercase tracking-wider transition-all shadow-sm active:scale-95 group cursor-pointer"
+              >
+                <Edit2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:scale-110 transition-transform" /> 
+                <span>Koreksi Manual (Bulk)</span>
+              </button>
             </div>
           </div>
         </div>
@@ -1076,6 +1139,7 @@ const Attendance = () => {
         onApply={setAppliedFilters}
         isLoading={isLoading}
         currentSearch={appliedFilters.search}
+        initialFilters={appliedFilters}
       />
 
       {/* Operational Summary Metrics */}
@@ -1213,22 +1277,44 @@ const Attendance = () => {
               { label: 'Alpa', value: displaySummary.absen, color: 'red', icon: XCircle, desc: 'Tidak Ada Finger' },
               displaySummary.uniqueEmployeeCount === 1 && { label: 'Total Terlambat', value: formatDuration(displaySummary.totalLate || 0), color: 'rose', icon: Clock, desc: 'Akumulasi Waktu' },
               { label: 'Lainnya', value: (displaySummary.holiday || 0) + (displaySummary.cuti || 0) + (displaySummary.sakit || 0) + (displaySummary.izin || 0), color: 'slate', icon: Calendar, desc: 'Libur/Cuti/Sakit' },
-            ].filter(Boolean).map((item) => (
-              <div key={item.label} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-3 hover:shadow-md hover:border-blue-200 transition-all group">
-                <div className="flex justify-between items-start">
-                  <div className={`w-8 h-8 rounded-xl bg-${item.color}-50 flex items-center justify-center border border-${item.color}-100 transition-transform group-hover:scale-110 group-hover:-rotate-3`}>
-                    <item.icon className={`w-4 h-4 text-${item.color}-600`} />
+            ].filter(Boolean).map((item) => {
+              const isActive = 
+                (item.label === 'Total Data' && !appliedFilters.status) ||
+                (item.label === 'Hadir' && appliedFilters.status === 'PRESENT') ||
+                ((item.label === 'Terlambat' || item.label === 'Total Terlambat') && appliedFilters.status === 'LATE') ||
+                (item.label === 'Pulang Cepat' && appliedFilters.status === 'EARLY_DEPARTURE') ||
+                (item.label === 'Mangkir' && appliedFilters.status === 'MANGKIR') ||
+                (item.label === 'Alpa' && appliedFilters.status === 'ABSENT') ||
+                (item.label === 'Lainnya' && appliedFilters.status === 'HOLIDAY');
+
+              return (
+                <div 
+                  key={item.label} 
+                  onClick={() => handleCardClick(item.label)}
+                  className={`bg-white p-4 rounded-2xl border shadow-sm flex flex-col gap-3 hover:shadow-md hover:border-blue-300 hover:-translate-y-0.5 cursor-pointer active:scale-95 transition-all duration-200 group ${
+                    isActive 
+                      ? 'ring-2 ring-blue-500/50 border-blue-400 bg-blue-50/10' 
+                      : 'border-slate-200'
+                  }`}
+                >
+                  <div className="flex justify-between items-start">
+                    <div className={`w-8 h-8 rounded-xl bg-${item.color}-50 flex items-center justify-center border border-${item.color}-100 transition-transform group-hover:scale-110 group-hover:-rotate-3`}>
+                      <item.icon className={`w-4 h-4 text-${item.color}-600`} />
+                    </div>
+                    {isActive && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping shadow-[0_0_5px_rgba(37,99,235,0.5)]" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{item.label}</p>
+                    <p className="text-lg font-bold text-slate-800 leading-tight">{item.value}</p>
+                  </div>
+                  <div className="pt-2 border-t border-slate-50">
+                    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{item.desc}</p>
                   </div>
                 </div>
-                <div>
-                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{item.label}</p>
-                  <p className="text-lg font-bold text-slate-800 leading-tight">{item.value}</p>
-                </div>
-                <div className="pt-2 border-t border-slate-50">
-                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{item.desc}</p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Individual Search Summary Card */}
@@ -1554,6 +1640,19 @@ const Attendance = () => {
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
+
+                            <button 
+                              onClick={() => navigate('/admin/manual-correction', { 
+                                state: { 
+                                  date: row.date, 
+                                  search: row.employeeCode 
+                                } 
+                              })}
+                              className="p-1.5 rounded-lg bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200 hover:border-rose-200 transition-all active:scale-95 cursor-pointer"
+                              title="Koreksi Bulk HRD"
+                            >
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -1675,9 +1774,22 @@ const Attendance = () => {
                           )}
                         </td>
                         
-                        {/* Pulang Cepat Column */}
-                        <td className="px-4 py-4 text-center text-xs font-bold text-blue-600">
-                          {row.pulangCepat || 0}
+                        {/* Pulang Cepat Column with Tooltip */}
+                        <td className="relative group/tooltip px-4 py-4 text-center text-xs font-bold text-blue-600 cursor-help">
+                          <span className={row.pulangCepat > 0 ? "underline decoration-dotted decoration-blue-400" : ""}>{row.pulangCepat || 0}</span>
+                          {row.pulangCepat > 0 && (
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-none transition-all duration-200">
+                              <p className="font-extrabold border-b border-slate-700 pb-1 mb-1.5 text-[9px] uppercase tracking-wider text-blue-400">Detail Hari Pulang Cepat</p>
+                              <div className="space-y-1 text-left max-h-[150px] overflow-y-auto custom-scrollbar">
+                                {row.pulangCepatDetails.map((d, i) => (
+                                  <div key={i} className="flex justify-between gap-4 py-0.5 border-b border-slate-850 last:border-0">
+                                    <span className="font-bold text-slate-250">{d.date}</span>
+                                    <span className="text-slate-400">({d.checkOut || '--:--'} / Jdwl: {d.shiftEnd || '17:00'})</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </td>
                         
                         {/* Mangkir Column with Tooltip */}
@@ -2409,17 +2521,30 @@ const Attendance = () => {
 
 // --- Sub-component to optimize performance ---
 
-const FilterBar = ({ onApply, isLoading, currentSearch }) => {
+const FilterBar = ({ onApply, isLoading, currentSearch, initialFilters }) => {
   const { t } = useTranslation();
-  const [filterDate, setFilterDate] = useState('Today');
-  const [customStart, setCustomStart] = useState('');
-  const [customEnd, setCustomEnd] = useState('');
-  const [filterDept, setFilterDept] = useState('');
-  const [filterSection, setFilterSection] = useState('');
-  const [filterPosition, setFilterPosition] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [filterDate, setFilterDate] = useState(initialFilters?.period || 'Today');
+  const [customStart, setCustomStart] = useState(initialFilters?.startDate || '');
+  const [customEnd, setCustomEnd] = useState(initialFilters?.endDate || '');
+  const [filterDept, setFilterDept] = useState(initialFilters?.dept || '');
+  const [filterSection, setFilterSection] = useState(initialFilters?.section || '');
+  const [filterPosition, setFilterPosition] = useState(initialFilters?.position || '');
+  const [filterStatus, setFilterStatus] = useState(initialFilters?.status || '');
+  const [searchQuery, setSearchQuery] = useState(currentSearch || '');
+  const [debouncedSearch, setDebouncedSearch] = useState(currentSearch || '');
+
+  useEffect(() => {
+    if (initialFilters) {
+      setFilterDate(initialFilters.period || 'Today');
+      setCustomStart(initialFilters.startDate || '');
+      setCustomEnd(initialFilters.endDate || '');
+      setFilterDept(initialFilters.dept || '');
+      setFilterSection(initialFilters.section || '');
+      setFilterPosition(initialFilters.position || '');
+      setFilterStatus(initialFilters.status || '');
+      setSearchQuery(initialFilters.search || '');
+    }
+  }, [initialFilters]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchQuery), 500);

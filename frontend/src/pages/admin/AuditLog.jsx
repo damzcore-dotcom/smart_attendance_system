@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { auditLogAPI } from '../../services/api';
 import { 
@@ -19,6 +20,7 @@ const ACTION_ICONS = {
 };
 
 const AuditLog = () => {
+  const { t } = useTranslation();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const [filters, setFilters] = useState({
     page: 1,
@@ -73,7 +75,7 @@ const AuditLog = () => {
         
         <div className="flex flex-row items-center justify-between w-full gap-4">
           <h1 className="text-2xl xl:text-3xl font-bold text-slate-800 tracking-tight flex items-center gap-3 whitespace-nowrap">
-            <span>Histori Aktivitas Admin</span>
+            <span>{t('auditLog.title')}</span>
             <div className="px-3 py-1 rounded-lg bg-rose-50 border border-rose-100 text-rose-600 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-rose-600 animate-pulse" />
               Audit Trail
@@ -85,10 +87,10 @@ const AuditLog = () => {
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Total Log', value: stats.totalLogs || 0, color: 'blue', icon: Activity, desc: 'Seluruh Aktivitas' },
-          { label: 'Hari Ini', value: stats.todayLogs || 0, color: 'emerald', icon: Calendar, desc: 'Aktivitas Hari Ini' },
-          { label: '7 Hari Terakhir', value: stats.weekLogs || 0, color: 'amber', icon: Clock, desc: 'Aktivitas Minggu Ini' },
-          { label: 'Admin Aktif', value: stats.uniqueAdmins || 0, color: 'violet', icon: Users, desc: 'Pengguna Unik' },
+          { label: t('auditLog.stats.totalLogs'), value: stats.totalLogs || 0, color: 'blue', icon: Activity, desc: t('auditLog.stats.allActivities') },
+          { label: t('auditLog.stats.todayLogs'), value: stats.todayLogs || 0, color: 'emerald', icon: Calendar, desc: t('auditLog.stats.todayDesc') },
+          { label: t('auditLog.stats.weekLogs'), value: stats.weekLogs || 0, color: 'amber', icon: Clock, desc: t('auditLog.stats.weekDesc') },
+          { label: t('auditLog.stats.activeAdmins'), value: stats.uniqueAdmins || 0, color: 'violet', icon: Users, desc: t('auditLog.stats.uniqueUsers') },
         ].map((item) => (
           <div key={item.label} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-4 hover:shadow-md hover:border-blue-200 transition-all group">
             <div className="flex justify-between items-start">
@@ -116,7 +118,7 @@ const AuditLog = () => {
               <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
               <input 
                 type="text" 
-                placeholder="Cari admin..." 
+                placeholder={t('auditLog.filters.searchPlaceholder')}
                 value={filters.username}
                 onChange={(e) => setFilters(prev => ({ ...prev, username: e.target.value, page: 1 }))}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder:text-slate-400 shadow-sm"
@@ -125,21 +127,21 @@ const AuditLog = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">Aksi</label>
+            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('auditLog.filters.actionLabel')}</label>
             <div className="relative">
               <select 
                 value={filters.action}
                 onChange={(e) => setFilters(prev => ({ ...prev, action: e.target.value, page: 1 }))}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-10 py-3 text-[10px] font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer appearance-none uppercase tracking-wider shadow-sm"
               >
-                <option value="">Semua Aksi</option>
-                <option value="CREATE">Tambah Data</option>
-                <option value="UPDATE">Ubah Data</option>
-                <option value="DELETE">Hapus Data</option>
-                <option value="IMPORT">Import</option>
-                <option value="CORRECTION">Koreksi</option>
-                <option value="SYNC">Sinkronisasi</option>
-                <option value="LOGIN">Login</option>
+                <option value="">{t('auditLog.filters.allActions')}</option>
+                <option value="CREATE">{t('auditLog.actions.create')}</option>
+                <option value="UPDATE">{t('auditLog.actions.update')}</option>
+                <option value="DELETE">{t('auditLog.actions.delete')}</option>
+                <option value="IMPORT">{t('auditLog.actions.import')}</option>
+                <option value="CORRECTION">{t('auditLog.actions.correction')}</option>
+                <option value="SYNC">{t('auditLog.actions.sync')}</option>
+                <option value="LOGIN">{t('auditLog.actions.login')}</option>
               </select>
               <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
                 <Filter className="w-3.5 h-3.5 text-slate-400" />
@@ -148,19 +150,19 @@ const AuditLog = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">Entitas</label>
+            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('auditLog.filters.entityLabel')}</label>
             <div className="relative">
               <select 
                 value={filters.entity}
                 onChange={(e) => setFilters(prev => ({ ...prev, entity: e.target.value, page: 1 }))}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-10 py-3 text-[10px] font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer appearance-none uppercase tracking-wider shadow-sm"
               >
-                <option value="">Semua Entitas</option>
-                <option value="Employee">Karyawan</option>
-                <option value="Attendance">Absensi</option>
-                <option value="User">User</option>
-                <option value="Leave">Cuti</option>
-                <option value="Settings">Pengaturan</option>
+                <option value="">{t('auditLog.filters.allEntities')}</option>
+                <option value="Employee">{t('auditLog.entities.employee')}</option>
+                <option value="Attendance">{t('auditLog.entities.attendance')}</option>
+                <option value="User">{t('auditLog.entities.user')}</option>
+                <option value="Leave">{t('auditLog.entities.leave')}</option>
+                <option value="Settings">{t('auditLog.entities.settings')}</option>
               </select>
               <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
                 <Filter className="w-3.5 h-3.5 text-slate-400" />
@@ -169,7 +171,7 @@ const AuditLog = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">Dari Tanggal</label>
+            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('auditLog.filters.startDate')}</label>
             <input 
               type="date" 
               value={filters.startDate}
@@ -179,7 +181,7 @@ const AuditLog = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">Sampai Tanggal</label>
+            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('auditLog.filters.endDate')}</label>
             <input 
               type="date" 
               value={filters.endDate}
@@ -194,7 +196,7 @@ const AuditLog = () => {
               className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-3 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all shadow-sm flex items-center justify-center gap-2 active:scale-95"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              Reset
+              {t('auditLog.filters.reset')}
             </button>
           </div>
         </div>
@@ -207,7 +209,7 @@ const AuditLog = () => {
             <div className="w-2 h-2 rounded-full bg-rose-600 animate-pulse shadow-[0_0_5px_rgba(225,29,72,0.5)]" />
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
               Audit Trail <span className="text-slate-300 mx-2">|</span> 
-              Total Log: <span className="text-slate-700 ml-1">{data?.total || 0} Entri</span>
+              {t('auditLog.table.totalEntries', { count: data?.total || 0 })}
             </p>
           </div>
         </div>
@@ -216,13 +218,13 @@ const AuditLog = () => {
           <table className="w-full text-left whitespace-nowrap">
             <thead className="sticky top-0 z-30 bg-slate-50 border-b border-slate-100 shadow-sm">
               <tr className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">
-                <th className="px-6 py-4">Waktu</th>
-                <th className="px-4 py-4">Admin</th>
-                <th className="px-4 py-4">Role</th>
-                <th className="px-4 py-4">Aksi</th>
-                <th className="px-4 py-4">Entitas</th>
-                <th className="px-4 py-4">Detail</th>
-                <th className="px-4 py-4">IP Address</th>
+                <th className="px-6 py-4">{t('auditLog.table.time')}</th>
+                <th className="px-4 py-4">{t('auditLog.table.admin')}</th>
+                <th className="px-4 py-4">{t('auditLog.table.role')}</th>
+                <th className="px-4 py-4">{t('auditLog.table.action')}</th>
+                <th className="px-4 py-4">{t('auditLog.table.entity')}</th>
+                <th className="px-4 py-4">{t('auditLog.table.detail')}</th>
+                <th className="px-4 py-4">{t('auditLog.table.ipAddress')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -231,7 +233,7 @@ const AuditLog = () => {
                   <td colSpan="7" className="text-center py-24">
                     <div className="flex flex-col items-center gap-4">
                       <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest animate-pulse">Memuat Data Audit...</p>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest animate-pulse">{t('auditLog.table.loading')}</p>
                     </div>
                   </td>
                 </tr>
@@ -242,8 +244,8 @@ const AuditLog = () => {
                       <div className="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center border border-slate-100">
                         <Shield className="w-8 h-8 text-slate-400" />
                       </div>
-                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Data Audit Kosong</p>
-                      <p className="text-[9px] text-slate-400 uppercase font-medium">Belum ada aktivitas admin yang tercatat</p>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t('auditLog.table.empty')}</p>
+                      <p className="text-[9px] text-slate-400 uppercase font-medium">{t('auditLog.table.emptyDesc')}</p>
                     </div>
                   </td>
                 </tr>
@@ -283,12 +285,14 @@ const AuditLog = () => {
                           <div className={`w-7 h-7 rounded-lg bg-${actionInfo.color}-50 flex items-center justify-center border border-${actionInfo.color}-100`}>
                             <ActionIcon className={`w-3.5 h-3.5 text-${actionInfo.color}-600`} />
                           </div>
-                          <span className={`text-[10px] font-bold text-${actionInfo.color}-600 uppercase tracking-wider`}>{actionInfo.label}</span>
+                          <span className={`text-[10px] font-bold text-${actionInfo.color}-600 uppercase tracking-wider`}>
+                            {t(`auditLog.actions.${log.action.toLowerCase()}`, { defaultValue: actionInfo.label })}
+                          </span>
                         </div>
                       </td>
                       <td className="px-4 py-4">
                         <span className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 text-[10px] font-bold border border-slate-200 uppercase tracking-widest">
-                          {log.entity}
+                          {t(`auditLog.entities.${log.entity.toLowerCase()}`, { defaultValue: log.entity })}
                         </span>
                         {log.entityId && (
                           <span className="ml-1.5 text-[9px] text-slate-400 font-semibold">#{log.entityId}</span>
@@ -327,11 +331,11 @@ const AuditLog = () => {
           <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-                Halaman <span className="text-slate-800 mx-1">{filters.page}</span> / <span className="text-slate-600 ml-1">{data?.totalPages || 1}</span>
+                {t('auditLog.table.page')} <span className="text-slate-800 mx-1">{filters.page}</span> / <span className="text-slate-600 ml-1">{data?.totalPages || 1}</span>
               </p>
               <div className="w-1 h-1 rounded-full bg-slate-300" />
               <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-                Total: <span className="text-blue-600 font-bold">{data?.total || 0}</span>
+                {t('auditLog.table.totalEntries', { count: data?.total || 0 })}
               </p>
             </div>
             <div className="flex items-center gap-2">

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { leaveAPI, employeeAPI } from '../../services/api';
 import { 
@@ -18,6 +19,7 @@ import {
 import { getStatusLabel, getStatusColor } from '../../utils/statusUtils';
 
 const AdminLeaveRequests = () => {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState('PENDING');
   const [searchQuery, setSearchQuery] = useState('');
@@ -55,13 +57,13 @@ const AdminLeaveRequests = () => {
   const reviewMutation = useMutation({
     mutationFn: ({ id, data }) => leaveAPI.review(id, data),
     onSuccess: () => {
-      alert('Request processed successfully!');
+      alert(t('leave.alertSuccessReview'));
       setSelectedRequest(null);
       setReviewData({ status: '', note: '' });
       queryClient.invalidateQueries(['admin-leave-requests']);
       queryClient.invalidateQueries(['attendance']); 
     },
-    onError: (err) => alert(`Error: ${err.message}`),
+    onError: (err) => alert(t('leave.alertError', { message: err.message })),
   });
 
   const massLeaveMutation = useMutation({
@@ -73,7 +75,7 @@ const AdminLeaveRequests = () => {
       queryClient.invalidateQueries(['admin-leave-requests']);
       queryClient.invalidateQueries(['attendance']);
     },
-    onError: (err) => alert(`Error: ${err.message}`),
+    onError: (err) => alert(t('leave.alertError', { message: err.message })),
   });
 
   const handleReview = (status) => {
@@ -94,15 +96,15 @@ const AdminLeaveRequests = () => {
             <div className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center">
               <FileText className="w-3 h-3 text-slate-400" />
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider">Administrative Oversight</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider">{t('leave.adminOversight')}</span>
             <div className="w-1 h-1 rounded-full bg-slate-300" />
-            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Leave Protocols</span>
+            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">{t('leave.leaveProtocols')}</span>
           </div>
           <h1 className="text-3xl font-bold text-slate-800 tracking-tight flex items-center gap-4">
-            Leave Requests
+            {t('leave.title')}
             <div className="px-3 py-1 rounded-lg bg-blue-50 border border-blue-100 text-blue-600 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-              GLOBAL QUEUE
+              {t('leave.globalQueue')}
             </div>
           </h1>
         </div>
@@ -113,7 +115,7 @@ const AdminLeaveRequests = () => {
             className="flex items-center gap-2 bg-white hover:bg-slate-50 border border-slate-200 px-6 py-3 rounded-xl text-xs font-bold text-slate-700 uppercase tracking-wider transition-all shadow-sm active:scale-95"
           >
             <Calendar className="w-4 h-4 text-blue-600" />
-            MASS LEAVE PROTOCOL
+            {t('leave.massLeaveProtocolBtn')}
           </button>
         </div>
       </div>
@@ -122,7 +124,7 @@ const AdminLeaveRequests = () => {
       <div className="bg-white p-8 border border-slate-200 shadow-sm rounded-3xl">
         <div className="flex flex-wrap items-center justify-between gap-8">
           <div className="space-y-3">
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Protocol Status Filter</label>
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('leave.statusFilterLabel')}</label>
             <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-100">
               {['PENDING', 'APPROVED', 'REJECTED'].map((status) => (
                 <button
@@ -142,14 +144,14 @@ const AdminLeaveRequests = () => {
 
           <div className="flex flex-wrap items-end gap-5 w-full lg:w-auto">
             <div className="space-y-3 min-w-[200px]">
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Unit Scope</label>
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('leave.unitScope')}</label>
               <div className="relative">
                 <select
                   value={deptFilter}
                   onChange={(e) => setDeptFilter(e.target.value)}
                   className="w-full bg-white border border-slate-200 rounded-xl px-5 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 cursor-pointer appearance-none transition-all shadow-sm"
                 >
-                  <option value="All">All Departments</option>
+                  <option value="All">{t('leave.allDepartments')}</option>
                   {departments.map(d => (
                     <option key={d.id || d.name} value={d.name}>{d.name}</option>
                   ))}
@@ -161,12 +163,12 @@ const AdminLeaveRequests = () => {
             </div>
 
             <div className="space-y-3 flex-1 lg:flex-none lg:min-w-[280px]">
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Personnel Search</label>
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('leave.personnelSearch')}</label>
               <div className="relative group">
                 <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
                 <input 
                   type="text" 
-                  placeholder="Search name or ID..." 
+                  placeholder={t('leave.searchPersonnelPlaceholder')} 
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-5 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder:text-slate-400 shadow-sm"
@@ -183,8 +185,8 @@ const AdminLeaveRequests = () => {
           <div className="flex items-center gap-3">
             <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.6)]" />
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-              Request Stream <span className="text-slate-300 mx-3">|</span> 
-              Active Entries: <span className="text-slate-800 ml-1 font-black">{list.length}</span>
+              {t('leave.requestStream')} <span className="text-slate-300 mx-3">|</span> 
+              {t('leave.activeEntries')} <span className="text-slate-800 ml-1 font-black">{list.length}</span>
             </p>
           </div>
         </div>
@@ -193,12 +195,12 @@ const AdminLeaveRequests = () => {
           <table className="w-full text-left border-collapse whitespace-nowrap">
             <thead>
               <tr className="bg-white text-slate-500 text-[10px] font-bold uppercase tracking-wider border-b border-slate-100">
-                <th className="px-8 py-5 font-bold">Personnel Identity</th>
-                <th className="px-6 py-5 font-bold">Protocol Type</th>
-                <th className="px-6 py-5 font-bold">Temporal Range</th>
-                <th className="px-6 py-5 font-bold">Justification</th>
-                <th className="px-6 py-5 font-bold">Transmission Stamp</th>
-                <th className="px-8 py-5 font-bold text-right">Operational Action</th>
+                <th className="px-8 py-5 font-bold">{t('leave.personnelIdentity')}</th>
+                <th className="px-6 py-5 font-bold">{t('leave.protocolType')}</th>
+                <th className="px-6 py-5 font-bold">{t('leave.temporalRange')}</th>
+                <th className="px-6 py-5 font-bold">{t('leave.justification')}</th>
+                <th className="px-6 py-5 font-bold">{t('leave.transmissionStamp')}</th>
+                <th className="px-8 py-5 font-bold text-right">{t('leave.operationalAction')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -207,7 +209,7 @@ const AdminLeaveRequests = () => {
                   <td colSpan="6" className="text-center py-24">
                     <div className="flex flex-col items-center gap-4">
                       <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-                      <p className="text-xs text-slate-500 font-bold uppercase tracking-wider animate-pulse">Syncing Request Relays...</p>
+                      <p className="text-xs text-slate-500 font-bold uppercase tracking-wider animate-pulse">{t('leave.syncingRequest')}</p>
                     </div>
                   </td>
                 </tr>
@@ -218,7 +220,7 @@ const AdminLeaveRequests = () => {
                       <div className="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center border border-slate-100">
                         <FileText className="w-8 h-8 text-slate-400" />
                       </div>
-                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Zero Protocol Requests</p>
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t('leave.zeroRequests')}</p>
                     </div>
                   </td>
                 </tr>
@@ -262,7 +264,7 @@ const AdminLeaveRequests = () => {
                         onClick={() => setSelectedRequest(item)}
                         className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[10px] font-bold uppercase tracking-wider shadow-sm transition-all active:scale-95"
                       >
-                        REVIEW
+                        {t('leave.reviewBtn')}
                       </button>
                     ) : (
                       <span className={`inline-flex items-center px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${
@@ -290,8 +292,8 @@ const AdminLeaveRequests = () => {
                   <FileText className="w-6 h-6 text-blue-600" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-800 text-lg uppercase tracking-tight">Protocol Review</h3>
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">Personnel Time-Off Audit</p>
+                  <h3 className="font-bold text-slate-800 text-lg uppercase tracking-tight">{t('leave.protocolReviewTitle')}</h3>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">{t('leave.personnelTimeOffAudit')}</p>
                 </div>
               </div>
               <button onClick={() => setSelectedRequest(null)} className="w-10 h-10 flex items-center justify-center hover:bg-slate-200 rounded-xl transition-all">
@@ -306,21 +308,21 @@ const AdminLeaveRequests = () => {
                     <User className="w-6 h-6" />
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-1">Authenticated Personnel</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-1">{t('leave.authenticatedPersonnel')}</span>
                     <span className="text-base font-bold text-slate-800 uppercase tracking-tight">{selectedRequest.employeeName}</span>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-6 border-t border-slate-200 pt-6">
                   <div>
-                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-2">Temporal Window</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-2">{t('leave.temporalWindow')}</span>
                     <div className="flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-slate-400" />
                       <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">{new Date(selectedRequest.startDate).toLocaleDateString()} — {new Date(selectedRequest.endDate).toLocaleDateString()}</span>
                     </div>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-2">Protocol Type</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-2">{t('leave.protocolType')}</span>
                     <span className={`inline-flex items-center px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${getStatusColor(selectedRequest.type)}`}>
                       {getStatusLabel(selectedRequest.type)}
                     </span>
@@ -328,7 +330,7 @@ const AdminLeaveRequests = () => {
                 </div>
 
                 <div className="border-t border-slate-200 pt-6">
-                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-2">Submission Justification</span>
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-2">{t('leave.submissionJustification')}</span>
                   <div className="bg-white p-4 rounded-xl border border-slate-200 italic">
                     <p className="text-sm text-slate-600 leading-relaxed">"{selectedRequest.reason}"</p>
                   </div>
@@ -336,9 +338,9 @@ const AdminLeaveRequests = () => {
               </div>
 
               <div className="space-y-3">
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Administrative Annotation (Optional)</label>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('leave.adminAnnotationLabel')}</label>
                 <textarea 
-                  placeholder="Decision rationale..."
+                  placeholder={t('leave.decisionRationalePlaceholder')}
                   className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all min-h-[100px] resize-none placeholder:text-slate-400 shadow-sm"
                   value={reviewData.note}
                   onChange={(e) => setReviewData({...reviewData, note: e.target.value})}
@@ -351,14 +353,14 @@ const AdminLeaveRequests = () => {
                   disabled={reviewMutation.isPending}
                   className="flex-1 py-4 border border-rose-200 text-rose-600 bg-rose-50 text-xs font-bold uppercase tracking-wider rounded-xl hover:bg-rose-100 transition-all flex items-center justify-center gap-2 active:scale-95"
                 >
-                  <XCircle className="w-4 h-4" /> DENY
+                  <XCircle className="w-4 h-4" /> {t('leave.denyBtn')}
                 </button>
                 <button 
                   onClick={() => handleReview('APPROVED')}
                   disabled={reviewMutation.isPending}
                   className="flex-[2] py-4 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 active:scale-95"
                 >
-                  <CheckCircle2 className="w-4 h-4" /> AUTHORIZE
+                  <CheckCircle2 className="w-4 h-4" /> {t('leave.authorizeBtn')}
                 </button>
               </div>
             </div>
@@ -377,8 +379,8 @@ const AdminLeaveRequests = () => {
                   <Calendar className="w-6 h-6 text-blue-600" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-800 text-lg uppercase tracking-tight">Mass Protocol Deploy</h3>
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">Global Attendance Override</p>
+                  <h3 className="font-bold text-slate-800 text-lg uppercase tracking-tight">{t('leave.massProtocolDeployTitle')}</h3>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">{t('leave.globalAttendanceOverride')}</p>
                 </div>
               </div>
               <button onClick={() => !massLeaveMutation.isPending && setMassLeaveModalOpen(false)} className="w-10 h-10 flex items-center justify-center hover:bg-slate-200 rounded-xl transition-all">
@@ -396,7 +398,7 @@ const AdminLeaveRequests = () => {
                       activeMassTab === tab ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'
                     }`}
                   >
-                    {tab} DEPLOYMENT
+                    {tab === 'Apply' ? t('leave.tabApply') : t('leave.tabHistory')} {t('leave.deployTab')}
                     {activeMassTab === tab && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t-full shadow-sm" />}
                   </button>
                 ))}
@@ -408,7 +410,7 @@ const AdminLeaveRequests = () => {
                 <div className="space-y-6">
                   <div className="grid grid-cols-2 gap-5">
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Start Date</label>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('leave.startDate')}</label>
                       <input 
                         type="date" 
                         value={massLeaveData.startDate}
@@ -417,7 +419,7 @@ const AdminLeaveRequests = () => {
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">End Date</label>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('leave.endDate')}</label>
                       <input 
                         type="date" 
                         value={massLeaveData.endDate}
@@ -429,15 +431,15 @@ const AdminLeaveRequests = () => {
 
                   <div className="grid grid-cols-2 gap-5 items-center">
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Type</label>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('common.type')}</label>
                       <div className="relative">
                         <select 
                           value={massLeaveData.type}
                           onChange={(e) => setMassLeaveData({...massLeaveData, type: e.target.value})}
                           className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 cursor-pointer appearance-none transition-all shadow-sm"
                         >
-                          <option value="Holiday">National Holiday</option>
-                          <option value="Cuti">Mass Leave (Quota)</option>
+                          <option value="Holiday">{t('leave.nationalHoliday')}</option>
+                          <option value="Cuti">{t('leave.massLeaveQuota')}</option>
                         </select>
                         <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
                           <Filter className="w-4 h-4 text-slate-400" />
@@ -452,16 +454,16 @@ const AdminLeaveRequests = () => {
                           onChange={(e) => setMassLeaveData({...massLeaveData, deductQuota: e.target.checked})}
                           className="w-4 h-4 rounded-md border-slate-300 text-blue-600 focus:ring-blue-500 transition-all cursor-pointer"
                         />
-                        <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Deduct Quota</span>
+                        <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">{t('leave.deductQuotaLabel')}</span>
                       </label>
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Reason / Event Identifier</label>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('leave.reasonEventIdentifier')}</label>
                     <input 
                       type="text"
-                      placeholder="e.g. Eid al-Fitr 2026"
+                      placeholder={t('leave.eventPlaceholder')}
                       className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder:text-slate-400 shadow-sm"
                       value={massLeaveData.reason}
                       onChange={(e) => setMassLeaveData({...massLeaveData, reason: e.target.value})}
@@ -471,7 +473,7 @@ const AdminLeaveRequests = () => {
                   <div className="bg-amber-50 p-5 rounded-2xl border border-amber-100 flex gap-4">
                     <AlertCircle className="w-6 h-6 text-amber-500 shrink-0" />
                     <p className="text-xs text-amber-800 font-semibold leading-relaxed">
-                      This deployment will overwrite attendance records for all active personnel within the specified dates.
+                      {t('leave.massLeaveWarningText')}
                     </p>
                   </div>
 
@@ -481,7 +483,7 @@ const AdminLeaveRequests = () => {
                       disabled={massLeaveMutation.isPending}
                       className="flex-1 py-3 text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-xl uppercase tracking-wider transition-all"
                     >
-                      Cancel
+                      {t('common.cancel')}
                     </button>
                     <button 
                       onClick={() => massLeaveMutation.mutate(massLeaveData)}
@@ -489,7 +491,7 @@ const AdminLeaveRequests = () => {
                       className="flex-[2] py-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
                     >
                       {massLeaveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calendar className="w-4 h-4" />}
-                      Execute Global Override
+                      {t('leave.executeGlobalOverrideBtn')}
                     </button>
                   </div>
                 </div>
@@ -500,7 +502,7 @@ const AdminLeaveRequests = () => {
                       <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100 mx-auto mb-4">
                         <Calendar className="w-8 h-8 text-slate-300" />
                       </div>
-                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Zero Deployment History</p>
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t('leave.zeroDeploymentHistory')}</p>
                     </div>
                   ) : massLeaves.map((leave) => (
                     <div key={leave.id} className="bg-white rounded-xl p-5 border border-slate-200 hover:border-blue-300 hover:shadow-sm transition-all group">

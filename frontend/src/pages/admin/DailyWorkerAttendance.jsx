@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { employeeAPI, attendanceAPI } from '../../services/api';
 import MasterDataBhl from './MasterDataBhl';
@@ -18,6 +19,7 @@ const STATUS_OPTIONS = [
 ];
 
 const DailyWorkerAttendance = () => {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('INPUT'); // INPUT or HISTORY
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -25,6 +27,7 @@ const DailyWorkerAttendance = () => {
   const [deptFilter, setDeptFilter] = useState('');
   const [sectionFilter, setSectionFilter] = useState('');
   const [rankFilter, setRankFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   
   const [statusInputs, setStatusInputs] = useState({});
   const [searchGrid, setSearchGrid] = useState('');
@@ -65,6 +68,16 @@ const DailyWorkerAttendance = () => {
         return false;
       }
     }
+    if (statusFilter) {
+      const s = statusInputs[e.dbId];
+      if (statusFilter === 'PRESENT') {
+        if (!['PRESENT', 'LATE'].includes(s)) return false;
+      } else if (statusFilter === 'ABSENT') {
+        if (!['ABSENT', 'MANGKIR'].includes(s)) return false;
+      } else if (statusFilter === 'OTHER') {
+        if (!['SAKIT', 'IZIN', 'HALF_DAY'].includes(s)) return false;
+      }
+    }
     return true;
   });
 
@@ -103,7 +116,7 @@ const DailyWorkerAttendance = () => {
       queryClient.invalidateQueries({ queryKey: ['bhl-history'] });
     },
     onError: (err) => {
-      alert(`Gagal menyimpan: ${err.message}`);
+      alert(`${t('dailyWorker.alerts.saveFailed')}${err.message}`);
     }
   });
 
@@ -127,11 +140,11 @@ const DailyWorkerAttendance = () => {
     });
 
     if (records.length === 0) {
-      alert("Tidak ada data absen yang dipilih.");
+      alert(t('dailyWorker.alerts.noRecords'));
       return;
     }
 
-    if (window.confirm(`Simpan absen manual untuk ${records.length} Karyawan Harian (BHL) di tanggal ${selectedDate}?`)) {
+    if (window.confirm(t('dailyWorker.alerts.confirmSave', { count: records.length, date: selectedDate }))) {
       saveMutation.mutate({
         date: selectedDate,
         records
@@ -141,7 +154,7 @@ const DailyWorkerAttendance = () => {
 
   const handleExportHistory = () => {
     if (!historyData?.data || historyData.data.length === 0) {
-      alert("Tidak ada data BHL di bulan ini untuk diexport.");
+      alert(t('dailyWorker.alerts.noExportData'));
       return;
     }
 
@@ -191,17 +204,17 @@ const DailyWorkerAttendance = () => {
           <div className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center">
             <HardHat className="w-3 h-3 text-emerald-500" />
           </div>
-          <span className="text-[10px] font-bold uppercase tracking-wider">Workforce Control</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider">{t('dailyWorker.filters.search')}</span>
           <div className="w-1 h-1 rounded-full bg-slate-300" />
-          <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">BHL Massal</span>
+          <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">{t('dailyWorker.tag', 'BHL Massal')}</span>
         </div>
         
         <div className="flex flex-col md:flex-row md:items-center justify-between w-full gap-4">
           <div>
             <h1 className="text-2xl xl:text-3xl font-bold text-slate-800 tracking-tight flex items-center gap-3">
-              Absen Harian (BHL)
+              {t('dailyWorker.title')}
             </h1>
-            <p className="text-xs text-slate-500 mt-1">Input massal kehadiran & rekap upah pekerja harian lepas</p>
+            <p className="text-xs text-slate-500 mt-1">{t('dailyWorker.subtitle')}</p>
           </div>
           
           <div className="flex items-center bg-slate-100 p-1 rounded-xl">
@@ -211,7 +224,7 @@ const DailyWorkerAttendance = () => {
                 activeTab === 'INPUT' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
-              Input Kehadiran
+              {t('dailyWorker.tabs.input')}
             </button>
             <button 
               onClick={() => setActiveTab('MASTER')}
@@ -220,7 +233,7 @@ const DailyWorkerAttendance = () => {
               }`}
             >
               <Users className="w-3.5 h-3.5" />
-              Master Data BHL
+              {t('dailyWorker.tabs.master')}
             </button>
             <button 
               onClick={() => setActiveTab('MONTHLY_GRID')}
@@ -229,7 +242,7 @@ const DailyWorkerAttendance = () => {
               }`}
             >
               <Calendar className="w-3.5 h-3.5" />
-              Detail Kehadiran
+              {t('dailyWorker.tabs.detail')}
             </button>
             <button 
               onClick={() => setActiveTab('HISTORY')}
@@ -238,7 +251,7 @@ const DailyWorkerAttendance = () => {
               }`}
             >
               <History className="w-3.5 h-3.5" />
-              Rekap Upah
+              {t('dailyWorker.tabs.payroll')}
             </button>
             <button 
               onClick={() => setActiveTab('SETTINGS')}
@@ -247,7 +260,7 @@ const DailyWorkerAttendance = () => {
               }`}
             >
               <SettingsIcon className="w-3.5 h-3.5" />
-              Pengaturan
+              {t('dailyWorker.tabs.settings')}
             </button>
           </div>
         </div>
@@ -286,16 +299,16 @@ const DailyWorkerAttendance = () => {
           switch (status) {
             case 'PRESENT':
             case 'LATE':
-              return <span className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[10px] font-black shadow-sm" title="Hadir">H</span>;
+              return <span className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[10px] font-black shadow-sm" title={t('dailyWorker.statuses.present')}>H</span>;
             case 'HALF_DAY':
-              return <span className="w-5 h-5 rounded-full bg-purple-500 text-white flex items-center justify-center text-[10px] font-black shadow-sm" title="Setengah Hari">½</span>;
+              return <span className="w-5 h-5 rounded-full bg-purple-500 text-white flex items-center justify-center text-[10px] font-black shadow-sm" title={t('dailyWorker.statuses.half_day')}>½</span>;
             case 'SAKIT':
-              return <span className="w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center text-[10px] font-black shadow-sm" title="Sakit">S</span>;
+              return <span className="w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center text-[10px] font-black shadow-sm" title={t('dailyWorker.statuses.sakit')}>S</span>;
             case 'IZIN':
-              return <span className="w-5 h-5 rounded-full bg-amber-500 text-white flex items-center justify-center text-[10px] font-black shadow-sm" title="Izin">I</span>;
+              return <span className="w-5 h-5 rounded-full bg-amber-500 text-white flex items-center justify-center text-[10px] font-black shadow-sm" title={t('dailyWorker.statuses.izin')}>I</span>;
             case 'ABSENT':
             case 'MANGKIR':
-              return <span className="w-5 h-5 rounded-full bg-rose-500 text-white flex items-center justify-center text-[10px] font-black shadow-sm" title="Alpa / Mangkir">A</span>;
+              return <span className="w-5 h-5 rounded-full bg-rose-500 text-white flex items-center justify-center text-[10px] font-black shadow-sm" title={t('dailyWorker.statuses.absent')}>A</span>;
             default:
               return <span className="text-slate-300 font-normal">-</span>;
           }
@@ -303,7 +316,7 @@ const DailyWorkerAttendance = () => {
 
         const handleExportMonthlyGrid = (gridData, days, yearMonthStr) => {
           if (!gridData || gridData.length === 0) {
-            alert("Tidak ada data untuk diekspor.");
+            alert(t('dailyWorker.alerts.noExportGrid'));
             return;
           }
 
@@ -383,7 +396,7 @@ const DailyWorkerAttendance = () => {
                     <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center">
                       <Calendar className="w-4 h-4 text-emerald-600" />
                     </div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">BULAN TARGET:</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('dailyWorker.filters.targetMonth')}</label>
                   </div>
                   <div className="flex items-center bg-slate-50 p-1.5 rounded-xl border border-slate-200">
                     <input 
@@ -399,19 +412,19 @@ const DailyWorkerAttendance = () => {
                   onClick={() => handleExportMonthlyGrid(filteredGridList, days, selectedMonth)}
                   className="bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all ml-auto self-end shadow-sm"
                 >
-                  <FileDown className="w-4 h-4" /> Export Grid Excel
+                  <FileDown className="w-4 h-4" /> {t('dailyWorker.filters.exportGrid')}
                 </button>
               </div>
 
               {/* Advanced Filters */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-5 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
                 <div className="space-y-1.5">
-                  <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">PENCARIAN KARYAWAN</label>
+                  <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('dailyWorker.filters.searchGrid')}</label>
                   <div className="relative group">
                     <Search className="w-3.5 h-3.5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
                     <input 
                       type="text" 
-                      placeholder="NAMA / NIK..." 
+                      placeholder={t('dailyWorker.filters.searchGridPlaceholder')} 
                       value={searchGrid}
                       onChange={(e) => setSearchGrid(e.target.value)}
                       className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-[10px] font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-400 shadow-sm transition-all uppercase tracking-wider"
@@ -420,13 +433,13 @@ const DailyWorkerAttendance = () => {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">DEPARTEMEN</label>
+                  <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('dailyWorker.filters.department')}</label>
                   <select 
                     value={deptGrid}
                     onChange={(e) => { setDeptGrid(e.target.value); setSecGrid(''); }}
                     className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer shadow-sm uppercase tracking-wider"
                   >
-                    <option value="">SEMUA DEPARTEMEN</option>
+                    <option value="">{t('dailyWorker.filters.allDepartments')}</option>
                     {[...new Set(rawGridList.map(e => e.department).filter(Boolean))].map(d => (
                       <option key={d} value={d}>{d}</option>
                     ))}
@@ -434,13 +447,13 @@ const DailyWorkerAttendance = () => {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">BAGIAN / SECTION</label>
+                  <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('dailyWorker.filters.section')}</label>
                   <select 
                     value={secGrid}
                     onChange={(e) => setSecGrid(e.target.value)}
                     className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer shadow-sm uppercase tracking-wider"
                   >
-                    <option value="">SEMUA BAGIAN</option>
+                    <option value="">{t('dailyWorker.filters.allSections')}</option>
                     {[...new Set(rawGridList.filter(e => !deptGrid || e.department === deptGrid).map(e => e.section).filter(Boolean))].map(s => (
                       <option key={s} value={s}>{s}</option>
                     ))}
@@ -455,7 +468,7 @@ const DailyWorkerAttendance = () => {
                 <div className="flex items-center gap-3">
                   <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                    Detail Presensi Bulanan BHL | Menampilkan {filteredGridList.length} Karyawan
+                    {t('dailyWorker.table.infoDetail', { count: filteredGridList.length })}
                   </p>
                 </div>
               </div>
@@ -464,10 +477,10 @@ const DailyWorkerAttendance = () => {
                 <table className="w-full text-left text-xs border-collapse">
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">
-                      <th className="px-4 py-3 border-r border-slate-200 w-10 text-center bg-slate-50">No</th>
-                      <th className="px-4 py-3 border-r border-slate-200 w-48 bg-slate-50">Karyawan BHL</th>
-                      <th className="px-3 py-3 border-r border-slate-200 bg-slate-50">Dept</th>
-                      <th className="px-3 py-3 border-r border-slate-200 bg-slate-50">Bagian</th>
+                      <th className="px-4 py-3 border-r border-slate-200 w-10 text-center bg-slate-50">{t('dailyWorker.table.no')}</th>
+                      <th className="px-4 py-3 border-r border-slate-200 w-48 bg-slate-50">{t('dailyWorker.table.employee')}</th>
+                      <th className="px-3 py-3 border-r border-slate-200 bg-slate-50">{t('dailyWorker.table.department')}</th>
+                      <th className="px-3 py-3 border-r border-slate-200 bg-slate-50">{t('dailyWorker.table.section')}</th>
                       
                       {days.map(day => (
                         <th key={day} className="px-1 py-3 text-center border-r border-slate-100 min-w-[28px] max-w-[28px]">{day}</th>
@@ -486,7 +499,7 @@ const DailyWorkerAttendance = () => {
                         <td colSpan={days.length + 10} className="text-center py-20">
                           <div className="flex flex-col items-center gap-3">
                             <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
-                            <p className="text-xs font-bold text-slate-400">Loading Data Grid...</p>
+                            <p className="text-xs font-bold text-slate-400">{t('dailyWorker.table.loadingGrid')}</p>
                           </div>
                         </td>
                       </tr>
@@ -494,7 +507,7 @@ const DailyWorkerAttendance = () => {
                       <tr>
                         <td colSpan={days.length + 10} className="text-center py-20">
                           <HardHat className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-                          <p className="text-sm font-bold text-slate-400">Tidak ada data kehadiran ditemukan.</p>
+                          <p className="text-sm font-bold text-slate-400">{t('dailyWorker.table.noEmployees')}</p>
                         </td>
                       </tr>
                     ) : (
@@ -536,30 +549,30 @@ const DailyWorkerAttendance = () => {
 
             {/* Legend Guide */}
             <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-wrap items-center gap-6 text-[10px] font-bold text-slate-500 uppercase shadow-sm">
-              <span className="text-slate-400">Keterangan:</span>
+              <span className="text-slate-400">{t('dailyWorker.legend.title')}</span>
               <div className="flex items-center gap-1.5">
                 <span className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[9px] font-black">H</span>
-                <span>Hadir</span>
+                <span>{t('dailyWorker.legend.present')}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-4 h-4 rounded-full bg-purple-500 text-white flex items-center justify-center text-[9px] font-black">½</span>
-                <span>Setengah Hari</span>
+                <span>{t('dailyWorker.legend.halfDay')}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-4 h-4 rounded-full bg-blue-500 text-white flex items-center justify-center text-[9px] font-black">S</span>
-                <span>Sakit</span>
+                <span>{t('dailyWorker.legend.sick')}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-4 h-4 rounded-full bg-amber-500 text-white flex items-center justify-center text-[9px] font-black">I</span>
-                <span>Izin</span>
+                <span>{t('dailyWorker.legend.leave')}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center text-[9px] font-black">A</span>
-                <span>Alpa / Mangkir</span>
+                <span>{t('dailyWorker.legend.absent')}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="text-slate-400 font-normal">-</span>
-                <span>Libur / Tidak Ada Data</span>
+                <span>{t('dailyWorker.legend.off')}</span>
               </div>
             </div>
           </div>
@@ -573,7 +586,7 @@ const DailyWorkerAttendance = () => {
               <Users className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Pekerja BHL</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t('dailyWorker.stats.totalEmployees')}</p>
               <h3 className="text-2xl font-black text-slate-800">{historyData?.totals?.totalEmployees || 0}</h3>
             </div>
           </div>
@@ -582,8 +595,8 @@ const DailyWorkerAttendance = () => {
               <CheckCircle2 className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Hari Kerja</p>
-              <h3 className="text-2xl font-black text-slate-800">{historyData?.totals?.totalWorkingDays || 0} <span className="text-sm font-medium text-slate-400">hari</span></h3>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t('dailyWorker.stats.totalWorkingDays')}</p>
+              <h3 className="text-2xl font-black text-slate-800">{historyData?.totals?.totalWorkingDays || 0} <span className="text-sm font-medium text-slate-400">${t('dailyWorker.stats.days')}</span></h3>
             </div>
           </div>
           <div className="bg-white p-6 rounded-2xl border border-slate-200 flex items-center gap-4 shadow-sm">
@@ -591,7 +604,7 @@ const DailyWorkerAttendance = () => {
               <FileDown className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Estimasi Upah</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t('dailyWorker.stats.totalEstimatedWage')}</p>
               <h3 className="text-2xl font-black text-slate-800">
                 Rp {(historyData?.totals?.totalWage || 0).toLocaleString('id-ID')}
               </h3>
@@ -602,21 +615,41 @@ const DailyWorkerAttendance = () => {
 
       {activeTab === 'INPUT' && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 flex flex-col items-center justify-center gap-1 shadow-sm text-center">
+          <div 
+            onClick={() => setStatusFilter('')}
+            className={`cursor-pointer transition-all p-4 rounded-2xl flex flex-col items-center justify-center gap-1 shadow-sm text-center border ${
+              statusFilter === '' ? 'ring-2 ring-slate-500 bg-slate-50/50 border-slate-400 scale-98 shadow-inner' : 'bg-white border-slate-200 hover:border-slate-300 hover:-translate-y-0.5'
+            }`}
+          >
             <span className="text-2xl font-black text-slate-800">{currentStats.total}</span>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">BHL Terdaftar</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t('dailyWorker.stats.registered')}</span>
           </div>
-          <div className="bg-white p-4 rounded-2xl border border-emerald-200 flex flex-col items-center justify-center gap-1 shadow-sm text-center bg-emerald-50/30">
+          <div 
+            onClick={() => setStatusFilter(prev => prev === 'PRESENT' ? '' : 'PRESENT')}
+            className={`cursor-pointer transition-all p-4 rounded-2xl flex flex-col items-center justify-center gap-1 shadow-sm text-center border ${
+              statusFilter === 'PRESENT' ? 'ring-2 ring-emerald-500 bg-emerald-50/50 border-emerald-400 scale-98 shadow-inner' : 'bg-white border-emerald-200 hover:border-emerald-300 bg-emerald-50/30 hover:-translate-y-0.5'
+            }`}
+          >
             <span className="text-2xl font-black text-emerald-600">{currentStats.present}</span>
-            <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Hadir</span>
+            <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">{t('dailyWorker.stats.present')}</span>
           </div>
-          <div className="bg-white p-4 rounded-2xl border border-rose-200 flex flex-col items-center justify-center gap-1 shadow-sm text-center bg-rose-50/30">
+          <div 
+            onClick={() => setStatusFilter(prev => prev === 'ABSENT' ? '' : 'ABSENT')}
+            className={`cursor-pointer transition-all p-4 rounded-2xl flex flex-col items-center justify-center gap-1 shadow-sm text-center border ${
+              statusFilter === 'ABSENT' ? 'ring-2 ring-rose-500 bg-rose-50/50 border-rose-400 scale-98 shadow-inner' : 'bg-white border-rose-200 hover:border-rose-300 bg-rose-50/30 hover:-translate-y-0.5'
+            }`}
+          >
             <span className="text-2xl font-black text-rose-600">{currentStats.absent}</span>
-            <span className="text-[10px] font-bold text-rose-500 uppercase tracking-wider">Alpa / Mangkir</span>
+            <span className="text-[10px] font-bold text-rose-500 uppercase tracking-wider">{t('dailyWorker.stats.absent')}</span>
           </div>
-          <div className="bg-white p-4 rounded-2xl border border-amber-200 flex flex-col items-center justify-center gap-1 shadow-sm text-center bg-amber-50/30">
+          <div 
+            onClick={() => setStatusFilter(prev => prev === 'OTHER' ? '' : 'OTHER')}
+            className={`cursor-pointer transition-all p-4 rounded-2xl flex flex-col items-center justify-center gap-1 shadow-sm text-center border ${
+              statusFilter === 'OTHER' ? 'ring-2 ring-amber-500 bg-amber-50/50 border-amber-400 scale-98 shadow-inner' : 'bg-white border-amber-200 hover:border-amber-300 bg-amber-50/30 hover:-translate-y-0.5'
+            }`}
+          >
             <span className="text-2xl font-black text-amber-600">{currentStats.other}</span>
-            <span className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">Lainnya (Sakit/Izin)</span>
+            <span className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">{t('dailyWorker.stats.other')}</span>
           </div>
         </div>
       )}
@@ -631,7 +664,7 @@ const DailyWorkerAttendance = () => {
                   <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center">
                     <Calendar className="w-4 h-4 text-emerald-600" />
                   </div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">TANGGAL TARGET:</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('dailyWorker.filters.targetDate')}</label>
                 </div>
                 <div className="flex items-center bg-slate-50 p-1.5 rounded-xl border border-slate-200">
                   <input 
@@ -648,7 +681,7 @@ const DailyWorkerAttendance = () => {
                   onClick={handleExportHistory}
                   className="bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all"
                 >
-                  <FileDown className="w-4 h-4" /> Export Excel
+                  <FileDown className="w-4 h-4" /> {t('dailyWorker.filters.exportExcel')}
                 </button>
               )}
             </div>
@@ -656,12 +689,12 @@ const DailyWorkerAttendance = () => {
             {activeTab === 'INPUT' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6 items-end bg-slate-50/50 p-5 rounded-2xl border border-slate-100">
                 <div className="space-y-2">
-                  <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">PERSONNEL FILTER</label>
+                  <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('dailyWorker.filters.search')}</label>
                   <div className="relative group">
                     <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
                     <input 
                       type="text" 
-                      placeholder="ID SEQUENCE / NAMA..." 
+                      placeholder={t('dailyWorker.filters.searchPlaceholder')} 
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
                       className="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-[10px] font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-400 shadow-sm transition-all uppercase tracking-wider"
@@ -702,7 +735,7 @@ const DailyWorkerAttendance = () => {
                         onChange={(e) => field.setter(e.target.value)}
                         className="w-full bg-white border border-slate-200 rounded-xl pl-4 pr-10 py-3 text-[10px] font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer appearance-none uppercase tracking-wider shadow-sm truncate transition-all"
                       >
-                        <option value="">GLOBAL ARCHIVE</option>
+                        <option value="">{t('dailyWorker.filters.globalArchive')}</option>
                         {field.opts.map((o, i) => <option key={i} value={o}>{o}</option>)}
                       </select>
                       <Filter className="w-3.5 h-3.5 text-slate-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -719,8 +752,8 @@ const DailyWorkerAttendance = () => {
                 <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                   {activeTab === 'INPUT' 
-                    ? `Papan Kehadiran BHL | Menampilkan ${filteredEmployees.length} Karyawan`
-                    : `Rekap Upah BHL Bulan ${selectedMonth} | ${(historyData?.data || []).length} Karyawan`
+                    ? t('dailyWorker.table.infoInput', { count: filteredEmployees.length })
+                    : t('dailyWorker.table.infoPayroll', { month: selectedMonth, count: (historyData?.data || []).length })
                   }
                 </p>
               </div>
@@ -730,17 +763,17 @@ const DailyWorkerAttendance = () => {
               <table className="w-full text-left whitespace-nowrap">
                 <thead className="bg-slate-50 border-b border-slate-100">
                   <tr className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">
-                    <th className="px-6 py-4 w-12 text-center">No</th>
-                    <th className="px-6 py-4">Karyawan BHL</th>
-                    <th className="px-4 py-4">Departemen</th>
+                    <th className="px-6 py-4 w-12 text-center">{t('dailyWorker.table.no')}</th>
+                    <th className="px-6 py-4">{t('dailyWorker.table.employee')}</th>
+                    <th className="px-4 py-4">{t('dailyWorker.table.department')}</th>
                     
                     {activeTab === 'INPUT' ? (
-                      <th className="px-6 py-4 text-center bg-emerald-50/50 text-emerald-700">Status Kehadiran</th>
+                      <th className="px-6 py-4 text-center bg-emerald-50/50 text-emerald-700">{t('dailyWorker.table.attendanceStatus')}</th>
                     ) : (
                       <>
-                        <th className="px-6 py-4 text-center">Hari Efektif</th>
-                        <th className="px-6 py-4 text-right">Upah Harian</th>
-                        <th className="px-6 py-4 text-right bg-emerald-50/50 text-emerald-700">Total Upah</th>
+                        <th className="px-6 py-4 text-center">{t('dailyWorker.table.effectiveDays')}</th>
+                        <th className="px-6 py-4 text-right">{t('dailyWorker.table.dailyRate')}</th>
+                        <th className="px-6 py-4 text-right bg-emerald-50/50 text-emerald-700">{t('dailyWorker.table.totalWage')}</th>
                       </>
                     )}
                   </tr>
@@ -751,7 +784,7 @@ const DailyWorkerAttendance = () => {
                       <td colSpan={activeTab === 'INPUT' ? 4 : 6} className="text-center py-20">
                         <div className="flex flex-col items-center gap-3">
                           <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
-                          <p className="text-xs font-bold text-slate-400">Loading Data...</p>
+                          <p className="text-xs font-bold text-slate-400">{t('dailyWorker.table.loading')}</p>
                         </div>
                       </td>
                     </tr>
@@ -760,8 +793,8 @@ const DailyWorkerAttendance = () => {
                       <tr>
                         <td colSpan={4} className="text-center py-20">
                           <HardHat className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-                          <p className="text-sm font-bold text-slate-400">Tidak ada karyawan BHL ditemukan.</p>
-                          <p className="text-xs text-slate-400 mt-1">Pastikan status karyawan diset ke HARIAN.</p>
+                          <p className="text-sm font-bold text-slate-400">{t('dailyWorker.table.noEmployees')}</p>
+                          <p className="text-xs text-slate-400 mt-1">{t('dailyWorker.table.noEmployeesSub')}</p>
                         </td>
                       </tr>
                     ) : (
@@ -797,7 +830,7 @@ const DailyWorkerAttendance = () => {
                                       `}
                                     >
                                       <Icon className="w-3.5 h-3.5" />
-                                      {opt.label}
+                                      {t('dailyWorker.statuses.' + opt.val.toLowerCase())}
                                     </button>
                                   );
                                 })}
@@ -811,7 +844,7 @@ const DailyWorkerAttendance = () => {
                     (historyData?.data || []).length === 0 ? (
                       <tr>
                         <td colSpan={6} className="text-center py-20 text-slate-400">
-                          Tidak ada data BHL di bulan ini
+                          {t('dailyWorker.table.noDataMonth')}
                         </td>
                       </tr>
                     ) : (
@@ -858,7 +891,7 @@ const DailyWorkerAttendance = () => {
                <AlertCircle className="w-5 h-5 text-emerald-600" />
             </div>
             <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase">Status Perubahan</p>
+              <p className="text-[10px] font-bold text-slate-500 uppercase">{t('dailyWorker.floatingSave.title')}</p>
               <p className="text-sm font-bold text-slate-800">
                 {Object.keys(statusInputs).filter(k => statusInputs[k]).length} Karyawan akan di-update
               </p>
@@ -871,7 +904,7 @@ const DailyWorkerAttendance = () => {
             className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-3 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-lg hover:shadow-xl hover:shadow-emerald-500/20 active:scale-95 transition-all outline-none"
           >
             {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            <span>Simpan Absen BHL</span>
+            <span>{t('dailyWorker.floatingSave.btnSave')}</span>
           </button>
         </div>
       )}

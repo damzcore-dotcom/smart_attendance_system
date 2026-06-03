@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Settings as SettingsIcon, Save, Loader2, AlertCircle } from 'lucide-react';
 import { settingsAPI } from '../../services/api';
 
 export default function BhlSettings() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [formData, setFormData] = useState({});
   const [isSaving, setIsSaving] = useState(false);
@@ -24,11 +26,11 @@ export default function BhlSettings() {
     mutationFn: settingsAPI.update,
     onSuccess: () => {
       queryClient.invalidateQueries(['settings']);
-      setSaveMessage({ type: 'success', text: 'Pengaturan BHL berhasil disimpan!' });
+      setSaveMessage({ type: 'success', text: t('bhlSettings.alertSuccessSave') });
       setTimeout(() => setSaveMessage({ type: '', text: '' }), 3000);
     },
     onError: (error) => {
-      setSaveMessage({ type: 'error', text: error.message || 'Gagal menyimpan pengaturan.' });
+      setSaveMessage({ type: 'error', text: error.message || t('bhlSettings.alertFailSave') });
     },
     onSettled: () => setIsSaving(false)
   });
@@ -51,7 +53,7 @@ export default function BhlSettings() {
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <Loader2 className="w-8 h-8 animate-spin text-emerald-600 mb-4" />
-        <p className="text-sm font-semibold text-slate-500 uppercase tracking-widest">Loading Settings...</p>
+        <p className="text-sm font-semibold text-slate-500 uppercase tracking-widest">{t('common.loading')}</p>
       </div>
     );
   }
@@ -64,8 +66,8 @@ export default function BhlSettings() {
             <SettingsIcon className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-slate-800 tracking-tight">Pengaturan BHL</h2>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mt-1">Konfigurasi Default Karyawan Harian Lepas</p>
+            <h2 className="text-xl font-bold text-slate-800 tracking-tight">{t('bhlSettings.title')}</h2>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mt-1">{t('bhlSettings.subtitle')}</p>
           </div>
         </div>
 
@@ -77,43 +79,43 @@ export default function BhlSettings() {
 
         <div className="space-y-6">
           <div className="space-y-2">
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Status Karyawan BHL Default</label>
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('bhlSettings.defaultStatusLabel')}</label>
             <select 
               value={formData.bhlContractStatus || 'NON_KONTRAK'}
               onChange={(e) => handleInputChange('bhlContractStatus', e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all appearance-none cursor-pointer"
             >
-              <option value="KONTRAK">Kontrak</option>
-              <option value="NON_KONTRAK">Non-Kontrak (Freelance)</option>
+              <option value="KONTRAK">{t('bhlSettings.statusContract')}</option>
+              <option value="NON_KONTRAK">{t('bhlSettings.statusFreelance')}</option>
             </select>
-            <p className="text-[10px] text-slate-400 font-medium ml-1">Status ini akan otomatis terpilih saat Anda menambah data BHL baru.</p>
+            <p className="text-[10px] text-slate-400 font-medium ml-1">{t('bhlSettings.defaultStatusHelp')}</p>
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Skema Upah BHL Default</label>
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('bhlSettings.defaultWageSchemeLabel')}</label>
             <select 
               value={formData.bhlPaymentScheme || 'HARIAN'}
               onChange={(e) => handleInputChange('bhlPaymentScheme', e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all appearance-none cursor-pointer"
             >
-              <option value="HARIAN">Harian (Per Kehadiran)</option>
-              <option value="BORONGAN">Borongan (Per Project)</option>
+              <option value="HARIAN">{t('bhlSettings.schemeDaily')}</option>
+              <option value="BORONGAN">{t('bhlSettings.schemeProject')}</option>
             </select>
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Default Gaji Pokok Harian (Rp)</label>
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('bhlSettings.defaultDailyWageLabel')}</label>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">Rp</span>
               <input 
                 type="number"
                 value={formData.bhlDefaultDailyWage || ''}
                 onChange={(e) => handleInputChange('bhlDefaultDailyWage', e.target.value)}
-                placeholder="Contoh: 150000"
+                placeholder={t('bhlSettings.defaultDailyWagePlaceholder')}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-12 pr-5 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
               />
             </div>
-            <p className="text-[10px] text-slate-400 font-medium ml-1">Gaji ini akan otomatis diisi saat membuat BHL baru, menghemat waktu input Anda.</p>
+            <p className="text-[10px] text-slate-400 font-medium ml-1">{t('bhlSettings.defaultDailyWageHelp')}</p>
           </div>
 
           <div className="pt-6 border-t border-slate-100 flex justify-end">
@@ -123,7 +125,7 @@ export default function BhlSettings() {
               className="px-8 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-sm hover:shadow-md transition-all flex items-center gap-2 disabled:opacity-50"
             >
               {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              {isSaving ? 'Menyimpan...' : 'Simpan Pengaturan'}
+              {isSaving ? t('common.saving') : t('bhlSettings.saveSettingsBtn')}
             </button>
           </div>
         </div>

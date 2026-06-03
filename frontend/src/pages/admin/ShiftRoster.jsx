@@ -3,8 +3,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { employeeAPI, settingsAPI, userAPI } from '../../services/api'; 
 import { Calendar, Users, Save, Trash2, Loader2, AlertCircle } from 'lucide-react';
 import { scheduleAPI } from '../../services/api';
+import { useTranslation } from 'react-i18next';
 
 const ShiftRoster = () => {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   
   // Tab control state
@@ -59,9 +61,9 @@ const ShiftRoster = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['shift-overrides'] });
       setSelectedEmployees(new Set());
-      alert('Shift rolling berhasil disimpan!');
+      alert(t('shiftRoster.alertSuccessSave'));
     },
-    onError: (err) => alert(err.response?.data?.message || 'Gagal menyimpan rolling')
+    onError: (err) => alert(err.response?.data?.message || t('shiftRoster.alertFailSave'))
   });
 
   // Tab 2: Bulk Generate Roster Mutation
@@ -69,9 +71,9 @@ const ShiftRoster = () => {
     mutationFn: (data) => scheduleAPI.bulkGenerateOverrides(data),
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['shift-overrides'] });
-      alert(res.message || 'Roster rolling berhasil di-generate!');
+      alert(res.message || t('shiftRoster.alertSuccessGenerate'));
     },
-    onError: (err) => alert(err.response?.data?.message || err.message || 'Gagal men-generate roster')
+    onError: (err) => alert(err.response?.data?.message || err.message || t('shiftRoster.alertFailGenerate'))
   });
 
   const deleteOverrideMutation = useMutation({
@@ -136,7 +138,7 @@ const ShiftRoster = () => {
 
   const handleApply = () => {
     if (selectedEmployees.size === 0 || !targetShift || !startDate || !endDate) {
-      return alert('Harap lengkapi semua pilihan (Karyawan, Shift, dan Tanggal)');
+      return alert(t('shiftRoster.alertCompleteSelection'));
     }
     createOverrideMutation.mutate({
       employeeIds: Array.from(selectedEmployees),
@@ -157,7 +159,7 @@ const ShiftRoster = () => {
 
   const handleRemoveGroup = (id) => {
     if (autoGroups.length === 1) {
-      alert('Minimal harus ada 1 Regu!');
+      alert(t('shiftRoster.alertMinOneGroup'));
       return;
     }
     setAutoGroups(prev => prev.filter(g => g.id !== id));
@@ -172,7 +174,7 @@ const ShiftRoster = () => {
     setAutoGroups(prev => prev.map(g => {
       if (g.id === id) {
         if (g.pattern.length >= 31) {
-          alert('Maksimal panjang pola adalah 31 hari!');
+          alert(t('shiftRoster.alertMaxPattern'));
           return g;
         }
         return { ...g, pattern: [...g.pattern, ""] };
@@ -286,27 +288,27 @@ const ShiftRoster = () => {
     ];
 
     setAutoGroups(presetGroups);
-    alert('Preset Security berhasil diterapkan untuk Juni 2026! Silakan cek tanggal dan nama karyawan di setiap Regu.');
+    alert(t('shiftRoster.alertSecurityPresetApplied'));
   };
 
   const handleGenerateRoster = () => {
     if (!autoStartDate || !autoEndDate) {
-      return alert('Harap pilih Tanggal Mulai dan Tanggal Selesai.');
+      return alert(t('shiftRoster.alertSelectStartEnd'));
     }
 
     let hasError = false;
     const formattedGroups = autoGroups.map(g => {
       if (!g.name.trim()) {
-        alert('Nama Regu tidak boleh kosong.');
+        alert(t('shiftRoster.alertGroupNameEmpty'));
         hasError = true;
       }
       if (g.employeeIds.size === 0) {
-        alert(`Regu "${g.name}" belum memiliki anggota karyawan.`);
+        alert(t('shiftRoster.alertGroupNoMembers', { name: g.name }));
         hasError = true;
       }
       const hasValidPattern = g.pattern.some(p => p !== null && p !== undefined && p !== "");
       if (!hasValidPattern) {
-        alert(`Pola rotasi untuk "${g.name}" harus memiliki minimal 1 hari kerja (bukan OFF semua).`);
+        alert(t('shiftRoster.alertGroupMinOneWorkday', { name: g.name }));
         hasError = true;
       }
 
@@ -318,7 +320,7 @@ const ShiftRoster = () => {
 
     if (hasError) return;
 
-    if (confirm('Men-generate roster baru akan menimpa override jadwal yang bertabrakan pada rentang tanggal tersebut. Lanjutkan?')) {
+    if (confirm(t('shiftRoster.confirmGenerateOverwrite'))) {
       bulkGenerateMutation.mutate({
         startDate: autoStartDate,
         endDate: autoEndDate,
@@ -331,7 +333,7 @@ const ShiftRoster = () => {
     <div className="space-y-6">
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
         <h2 className="text-xl font-bold flex items-center gap-3 mb-4">
-          <Calendar className="text-blue-600"/> Setup Rolling Shift & Roster Karyawan
+          <Calendar className="text-blue-600"/> {t('shiftRoster.setupTitle')}
         </h2>
 
         {/* Tab Navigation */}
@@ -344,7 +346,7 @@ const ShiftRoster = () => {
                 : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
-            Setup Manual (Satu per Satu)
+            {t('shiftRoster.tabManual')}
           </button>
           <button
             onClick={() => setActiveTab('auto')}
@@ -354,7 +356,7 @@ const ShiftRoster = () => {
                 : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
-            Generator Otomatis (Roster Regu)
+            {t('shiftRoster.tabAuto')}
           </button>
         </div>
 
@@ -363,18 +365,18 @@ const ShiftRoster = () => {
             {/* Step 1: Shift & Date Config */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
               <div>
-                <label className="text-xs font-bold text-slate-500 uppercase">Target Shift Ganti</label>
+                <label className="text-xs font-bold text-slate-500 uppercase">{t('shiftRoster.targetShiftLabel')}</label>
                 <select value={targetShift} onChange={(e) => setTargetShift(e.target.value)} className="w-full mt-2 p-3 border rounded-xl bg-slate-50">
-                   <option value="">-- Pilih Shift --</option>
+                   <option value="">{t('shiftRoster.selectShiftPlaceholder')}</option>
                    {shifts.map(s => <option key={s.id} value={s.id}>{s.name} ({s.startTime}-{s.endTime})</option>)}
                 </select>
               </div>
               <div>
-                <label className="text-xs font-bold text-slate-500 uppercase">Mulai Tanggal</label>
+                <label className="text-xs font-bold text-slate-500 uppercase">{t('shiftRoster.startDate')}</label>
                 <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full mt-2 p-3 border rounded-xl bg-slate-50" />
               </div>
               <div>
-                <label className="text-xs font-bold text-slate-500 uppercase">Sampai Tanggal</label>
+                <label className="text-xs font-bold text-slate-500 uppercase">{t('shiftRoster.endDate')}</label>
                 <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full mt-2 p-3 border rounded-xl bg-slate-50" />
               </div>
             </div>
@@ -382,12 +384,12 @@ const ShiftRoster = () => {
             {/* Step 2: Employee Select header with search and filter */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 pt-4 border-t border-slate-100">
               <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                <Users className="w-5 h-5 text-blue-600"/> Pilih Karyawan
+                <Users className="w-5 h-5 text-blue-600"/> {t('shiftRoster.selectEmployee')}
               </h3>
               <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
                 <input
                   type="text"
-                  placeholder="Cari Karyawan (Nama / NIK)..."
+                  placeholder={t('shiftRoster.searchEmpPlaceholder')}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full sm:w-64 p-2.5 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
@@ -397,7 +399,7 @@ const ShiftRoster = () => {
                   onChange={(e) => setDeptFilter(e.target.value)}
                   className="w-full sm:w-56 p-2.5 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-700"
                 >
-                  <option value="">Semua Departemen</option>
+                  <option value="">{t('shiftRoster.allDepts')}</option>
                   {departments.map((dept) => (
                     <option key={dept.id} value={dept.id.toString()}>
                       {dept.name}
@@ -419,9 +421,9 @@ const ShiftRoster = () => {
                         checked={filteredEmployees.length > 0 && filteredEmployees.every(emp => selectedEmployees.has(emp.id.toString()))} 
                       />
                     </th>
-                    <th className="p-3 uppercase text-xs font-bold text-slate-500">Nama</th>
-                    <th className="p-3 uppercase text-xs font-bold text-slate-500">Departemen</th>
-                    <th className="p-3 uppercase text-xs font-bold text-slate-500">Shift Asli</th>
+                    <th className="p-3 uppercase text-xs font-bold text-slate-500">{t('shiftRoster.nameHeader')}</th>
+                    <th className="p-3 uppercase text-xs font-bold text-slate-500">{t('shiftRoster.deptHeader')}</th>
+                    <th className="p-3 uppercase text-xs font-bold text-slate-500">{t('shiftRoster.originalShiftHeader')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -430,14 +432,14 @@ const ShiftRoster = () => {
                       <td colSpan={4} className="p-8 text-center text-slate-500">
                         <div className="flex items-center justify-center gap-2">
                           <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
-                          <span>Memuat data karyawan...</span>
+                          <span>{t('shiftRoster.loadingEmployees')}</span>
                         </div>
                       </td>
                     </tr>
                   ) : filteredEmployees.length === 0 ? (
                     <tr>
                       <td colSpan={4} className="p-8 text-center text-slate-500">
-                        Tidak ada karyawan yang cocok dengan filter.
+                        {t('shiftRoster.noEmployees')}
                       </td>
                     </tr>
                   ) : (
@@ -452,7 +454,7 @@ const ShiftRoster = () => {
                         </td>
                         <td className="p-3 font-semibold">{emp.name}</td>
                         <td className="p-3">{emp.department?.name}</td>
-                        <td className="p-3 text-slate-500">{emp.shift?.name || 'Default'}</td>
+                        <td className="p-3 text-slate-500">{emp.shift?.name || t('shiftRoster.defaultText')}</td>
                       </tr>
                     ))
                   )}
@@ -462,9 +464,9 @@ const ShiftRoster = () => {
 
             {/* Selected Summary and Actions */}
             <div className="flex justify-between items-center bg-blue-50 p-4 rounded-xl border border-blue-100">
-               <span className="text-blue-700 font-bold">{selectedEmployees.size} Karyawan Dipilih</span>
+               <span className="text-blue-700 font-bold">{t('shiftRoster.employeesSelected', { count: selectedEmployees.size })}</span>
                <button onClick={handleApply} disabled={createOverrideMutation.isPending} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 disabled:opacity-50">
-                 {createOverrideMutation.isPending ? <Loader2 className="animate-spin w-4 h-4"/> : <Save className="w-4 h-4" />} Terapkan Rolling Shift
+                 {createOverrideMutation.isPending ? <Loader2 className="animate-spin w-4 h-4"/> : <Save className="w-4 h-4" />} {t('shiftRoster.applyShiftRolling')}
                </button>
             </div>
           </div>
@@ -473,23 +475,23 @@ const ShiftRoster = () => {
             {/* Tab 2: Generator Otomatis */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               <div>
-                <label className="text-xs font-bold text-slate-500 uppercase">Mulai Tanggal</label>
+                <label className="text-xs font-bold text-slate-500 uppercase">{t('shiftRoster.startDate')}</label>
                 <input type="date" value={autoStartDate} onChange={e => setAutoStartDate(e.target.value)} className="w-full mt-2 p-3 border rounded-xl bg-slate-50" />
               </div>
               <div>
-                <label className="text-xs font-bold text-slate-500 uppercase">Sampai Tanggal</label>
+                <label className="text-xs font-bold text-slate-500 uppercase">{t('shiftRoster.endDate')}</label>
                 <input type="date" value={autoEndDate} onChange={e => setAutoEndDate(e.target.value)} className="w-full mt-2 p-3 border rounded-xl bg-slate-50" />
               </div>
             </div>
 
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-bold text-slate-800">Daftar Regu / Kelompok</h3>
+              <h3 className="text-lg font-bold text-slate-800">{t('shiftRoster.groupListTitle')}</h3>
               <button
                 type="button"
                 onClick={applySecurityPreset}
                 className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
               >
-                ⚡ Preset Roster Security (3 Regu)
+                {t('shiftRoster.securityPresetBtn')}
               </button>
             </div>
 
@@ -504,26 +506,26 @@ const ShiftRoster = () => {
                 </button>
 
                 <div className="mb-4">
-                  <label className="text-xs font-bold text-slate-500 uppercase">Nama Regu / Grup</label>
+                  <label className="text-xs font-bold text-slate-500 uppercase">{t('shiftRoster.groupNameLabel')}</label>
                   <input
                     type="text"
                     value={group.name}
                     onChange={(e) => handleGroupNameChange(group.id, e.target.value)}
-                    placeholder="Contoh: Regu A, Security Group..."
+                    placeholder={t('shiftRoster.groupNamePlaceholder')}
                     className="w-full mt-1.5 p-2.5 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm font-semibold border-slate-200"
                   />
                 </div>
 
                 <div className="mb-4">
                   <div className="flex justify-between items-center mb-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Pola Rotasi Hari (Cycle Pattern)</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase">{t('shiftRoster.cyclePatternLabel')}</label>
                     <div className="flex gap-3">
                       <button
                         type="button"
                         onClick={() => handleAddDayToPattern(group.id)}
                         className="text-blue-600 hover:text-blue-800 text-xs font-bold"
                       >
-                        + Tambah Hari
+                        {t('shiftRoster.addDay')}
                       </button>
                       {group.pattern.length > 1 && (
                         <button
@@ -531,7 +533,7 @@ const ShiftRoster = () => {
                           onClick={() => handleRemoveDayFromPattern(group.id)}
                           className="text-red-600 hover:text-red-800 text-xs font-bold"
                         >
-                          - Hapus Hari
+                          {t('shiftRoster.removeDay')}
                         </button>
                       )}
                     </div>
@@ -539,13 +541,13 @@ const ShiftRoster = () => {
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
                     {group.pattern.map((dayShiftId, dayIdx) => (
                       <div key={dayIdx} className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-1.5 text-center">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">Hari {dayIdx + 1}</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">{t('shiftRoster.dayNum', { num: dayIdx + 1 })}</span>
                         <select
                           value={dayShiftId || ""}
                           onChange={(e) => handlePatternShiftChange(group.id, dayIdx, e.target.value)}
                           className="p-1.5 border rounded-lg text-xs bg-slate-50 focus:ring-2 focus:ring-blue-500 w-full font-medium"
                         >
-                          <option value="">OFF (Libur)</option>
+                          <option value="">{t('shiftRoster.offShift')}</option>
                           {shifts.map(s => (
                             <option key={s.id} value={s.id}>{s.name} ({s.startTime}-{s.endTime})</option>
                           ))}
@@ -557,13 +559,13 @@ const ShiftRoster = () => {
 
                 <div className="mt-4 pt-4 border-t border-slate-200">
                   <div className="flex justify-between items-center mb-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Anggota Regu ({group.employeeIds.size} Karyawan)</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase">{t('shiftRoster.groupMembers', { count: group.employeeIds.size })}</label>
                     <button
                       type="button"
                       onClick={() => toggleEmployeeSelector(group.id)}
                       className="text-blue-600 hover:text-blue-800 text-xs font-bold"
                     >
-                      {expandedGroupSelector === group.id ? "Sembunyikan Daftar" : "Pilih Karyawan"}
+                      {expandedGroupSelector === group.id ? t('shiftRoster.hideList') : t('shiftRoster.showList')}
                     </button>
                   </div>
 
@@ -572,7 +574,7 @@ const ShiftRoster = () => {
                       const emp = employees.find(e => e.id.toString() === id.toString());
                       return emp ? (
                         <span key={id} className="inline-flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-700 px-2.5 py-1 rounded-full text-xs font-bold">
-                          {emp.name} ({emp.employeeCode})
+                           {emp.name} ({emp.employeeCode})
                           <button
                             type="button"
                             onClick={() => handleToggleEmployeeInGroup(group.id, id)}
@@ -584,7 +586,7 @@ const ShiftRoster = () => {
                       ) : null;
                     })}
                     {group.employeeIds.size === 0 && (
-                      <span className="text-xs text-slate-400 italic">Belum ada karyawan yang dimasukkan ke regu ini.</span>
+                      <span className="text-xs text-slate-400 italic">{t('shiftRoster.noMembers')}</span>
                     )}
                   </div>
 
@@ -593,7 +595,7 @@ const ShiftRoster = () => {
                       <div className="flex gap-3 mb-3">
                         <input
                           type="text"
-                          placeholder="Cari nama / NIK..."
+                          placeholder={t('shiftRoster.searchPlaceholder')}
                           value={groupSearchQuery}
                           onChange={(e) => setGroupSearchQuery(e.target.value)}
                           className="w-full p-2 border border-slate-200 rounded-lg text-xs bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -603,7 +605,7 @@ const ShiftRoster = () => {
                           onChange={(e) => setGroupDeptFilter(e.target.value)}
                           className="p-2 border border-slate-200 rounded-lg text-xs bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700"
                         >
-                          <option value="">Semua Departemen</option>
+                          <option value="">{t('shiftRoster.allDepts')}</option>
                           {departments.map((dept) => (
                             <option key={dept.id} value={dept.id.toString()}>
                               {dept.name}
@@ -642,7 +644,7 @@ const ShiftRoster = () => {
                                 </label>
                                 {belongsToOtherGroup && (
                                   <span className="text-[10px] text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200 whitespace-nowrap">
-                                    Ada di Regu Lain
+                                    {t('shiftRoster.belongsToOtherGroup')}
                                   </span>
                                 )}
                               </div>
@@ -661,7 +663,7 @@ const ShiftRoster = () => {
                 onClick={handleAddNewGroup}
                 className="border border-blue-500 text-blue-600 hover:bg-blue-50 px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-1.5 transition-all shadow-sm bg-white animate-pulse"
               >
-                + Tambah Regu Baru
+                {t('shiftRoster.addNewGroup')}
               </button>
               
               <button
@@ -670,7 +672,7 @@ const ShiftRoster = () => {
                 disabled={bulkGenerateMutation.isPending}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm disabled:opacity-50"
               >
-                {bulkGenerateMutation.isPending ? <Loader2 className="animate-spin w-4 h-4"/> : <Save className="w-4 h-4" />} Generate & Simpan Roster
+                {bulkGenerateMutation.isPending ? <Loader2 className="animate-spin w-4 h-4"/> : <Save className="w-4 h-4" />} {t('shiftRoster.generateRoster')}
               </button>
             </div>
           </div>
@@ -680,11 +682,11 @@ const ShiftRoster = () => {
       {/* Roster History List */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-          <h3 className="font-bold text-slate-800">Daftar Rolling Shift Aktif / Riwayat</h3>
+          <h3 className="font-bold text-slate-800">{t('shiftRoster.activeRollingTitle')}</h3>
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
             <input
               type="text"
-              placeholder="Cari Karyawan / Shift..."
+              placeholder={t('shiftRoster.searchHistoryPlaceholder')}
               value={historySearch}
               onChange={(e) => setHistorySearch(e.target.value)}
               className="w-full sm:w-60 p-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-slate-700"
@@ -694,7 +696,7 @@ const ShiftRoster = () => {
               onChange={(e) => setHistoryDept(e.target.value)}
               className="w-full sm:w-48 p-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-700 font-medium"
             >
-              <option value="">Semua Departemen</option>
+              <option value="">{t('shiftRoster.allDepts')}</option>
               {historyDepartments.map((deptName) => (
                 <option key={deptName} value={deptName}>
                   {deptName}
@@ -708,10 +710,10 @@ const ShiftRoster = () => {
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="p-3 font-bold text-slate-500">Employee</th>
-                <th className="p-3 font-bold text-slate-500">Shift Ganti</th>
-                <th className="p-3 font-bold text-slate-500">Rentang Tanggal</th>
-                <th className="p-3 font-bold text-slate-500">Hapus</th>
+                <th className="p-3 font-bold text-slate-500">{t('shiftRoster.historyEmployee')}</th>
+                <th className="p-3 font-bold text-slate-500">{t('shiftRoster.historyShift')}</th>
+                <th className="p-3 font-bold text-slate-500">{t('shiftRoster.historyDateRange')}</th>
+                <th className="p-3 font-bold text-slate-500">{t('shiftRoster.historyAction')}</th>
               </tr>
             </thead>
             <tbody>
@@ -720,14 +722,14 @@ const ShiftRoster = () => {
                   <td colSpan={4} className="p-8 text-center text-slate-500">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
-                      <span>Memuat riwayat rolling shift...</span>
+                      <span>{t('shiftRoster.loadingHistory')}</span>
                     </div>
                   </td>
                 </tr>
               ) : filteredOverrides.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="p-8 text-center text-slate-500">
-                    Tidak ada data rolling shift yang cocok dengan filter.
+                    {t('shiftRoster.noHistory')}
                   </td>
                 </tr>
               ) : (
@@ -735,11 +737,11 @@ const ShiftRoster = () => {
                   <tr key={ov.id} className="border-t hover:bg-slate-50 transition-colors">
                     <td className="p-3 font-semibold">
                       <div>{ov.employee?.name}</div>
-                      <div className="text-[10px] text-slate-400 font-medium">{ov.employee?.department?.name || 'No Dept'}</div>
+                      <div className="text-[10px] text-slate-400 font-medium">{ov.employee?.department?.name || t('shiftRoster.noDept')}</div>
                     </td>
                     <td className="p-3 text-blue-600 font-bold">{ov.shift?.name}</td>
                     <td className="p-3 text-slate-600">
-                       {new Date(ov.startDate).toLocaleDateString()} s/d {new Date(ov.endDate).toLocaleDateString()}
+                       {new Date(ov.startDate).toLocaleDateString()} {t('shiftRoster.dateTo')} {new Date(ov.endDate).toLocaleDateString()}
                     </td>
                     <td className="p-3">
                       <button 

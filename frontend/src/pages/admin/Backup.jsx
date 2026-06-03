@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { 
   Database, 
   Download, 
@@ -14,6 +15,7 @@ import {
 import { backupAPI, authAPI } from '../../services/api';
 
 const Backup = () => {
+  const { t } = useTranslation();
   const [isRestoring, setIsRestoring] = useState(false);
   const [restoreStatus, setRestoreStatus] = useState(null);
   const user = authAPI.getStoredUser();
@@ -36,7 +38,7 @@ const Backup = () => {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch (err) {
-      alert(`Export failed: ${err.message}`);
+      alert(t('backup.alertExportFailed', { message: err.message }));
     }
   };
 
@@ -44,34 +46,34 @@ const Backup = () => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const confirm = window.confirm('WARNING: Restoring will overwrite ALL current data. This cannot be undone. Are you sure?');
+    const confirm = window.confirm(t('backup.confirmRestore'));
     if (!confirm) return;
 
     setIsRestoring(true);
-    setRestoreStatus('Reading file...');
+    setRestoreStatus(t('backup.statusReadingFile'));
 
     try {
       const reader = new FileReader();
       reader.onload = async (event) => {
         try {
           const backupData = JSON.parse(event.target.result);
-          setRestoreStatus('Processing database restore...');
+          setRestoreStatus(t('backup.statusProcessingRestore'));
           const res = await backupAPI.restore(backupData);
           if (res.success) {
-            alert('Database restored successfully! The application will now reload.');
+            alert(t('backup.alertSuccessRestore'));
             window.location.reload();
           } else {
             throw new Error(res.message);
           }
         } catch (err) {
-          alert(`Restore failed: ${err.message}`);
+          alert(t('backup.alertRestoreFailed', { message: err.message }));
           setIsRestoring(false);
           setRestoreStatus(null);
         }
       };
       reader.readAsText(file);
     } catch (err) {
-      alert(`Error reading file: ${err.message}`);
+      alert(t('backup.alertReadFailed', { message: err.message }));
       setIsRestoring(false);
       setRestoreStatus(null);
     }
@@ -85,15 +87,15 @@ const Backup = () => {
             <div className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center">
               <Database className="w-3 h-3 text-slate-400" />
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider">System Administration</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider">{t('backup.systemAdministration')}</span>
             <div className="w-1 h-1 rounded-full bg-slate-300" />
-            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Data Operations</span>
+            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">{t('backup.dataOperations')}</span>
           </div>
           <h1 className="text-3xl font-bold text-slate-800 tracking-tight flex items-center gap-4">
-            Database Backup
+            {t('backup.title')}
             <div className="px-3 py-1 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-600 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              SYSTEM SECURE
+              {t('backup.systemSecure')}
             </div>
           </h1>
         </div>
@@ -107,15 +109,15 @@ const Backup = () => {
             <div className="w-14 h-14 bg-blue-50 border border-blue-100 rounded-2xl flex items-center justify-center text-blue-600 mb-6 group-hover:scale-110 transition-transform shadow-sm">
               <Download className="w-6 h-6" />
             </div>
-            <h3 className="text-xl font-bold text-slate-800 mb-2">Create Backup</h3>
+            <h3 className="text-xl font-bold text-slate-800 mb-2">{t('backup.createBackupTitle')}</h3>
             <p className="text-sm text-slate-500 mb-8 leading-relaxed">
-              Generate a full snapshot of your database including employees, attendance records, settings, and configurations.
+              {t('backup.createBackupDesc')}
             </p>
             <button 
               onClick={handleExport}
               className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-sm hover:bg-blue-700 transition-all flex items-center justify-center gap-3 active:scale-95"
             >
-              Download JSON Backup
+              {t('backup.downloadJsonBackup')}
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
@@ -128,9 +130,9 @@ const Backup = () => {
             <div className="w-14 h-14 bg-rose-50 border border-rose-100 rounded-2xl flex items-center justify-center text-rose-600 mb-6 group-hover:scale-110 transition-transform shadow-sm">
               <RefreshCw className={`w-6 h-6 ${isRestoring ? 'animate-spin' : ''}`} />
             </div>
-            <h3 className="text-xl font-bold text-slate-800 mb-2">Restore System</h3>
+            <h3 className="text-xl font-bold text-slate-800 mb-2">{t('backup.restoreSystemTitle')}</h3>
             <p className="text-sm text-slate-500 mb-8 leading-relaxed">
-              Restore data from a previously created backup file. <span className="text-rose-600 font-bold uppercase text-[9px] tracking-widest bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-md ml-1 inline-flex items-center">Danger Zone</span>
+              {t('backup.restoreSystemDesc')} <span className="text-rose-600 font-bold uppercase text-[9px] tracking-widest bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-md ml-1 inline-flex items-center">{t('backup.dangerZone')}</span>
             </p>
             
             <label className={`w-full py-4 border-2 border-dashed border-rose-200 bg-rose-50/30 rounded-xl flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-rose-50 hover:border-rose-300 transition-all ${isRestoring ? 'opacity-50 cursor-not-allowed' : ''}`}>
@@ -142,7 +144,7 @@ const Backup = () => {
                 className="hidden" 
               />
               <Upload className="w-5 h-5 text-rose-500" />
-              <span className="text-[10px] font-bold text-rose-600 uppercase tracking-wider">Select Backup File</span>
+              <span className="text-[10px] font-bold text-rose-600 uppercase tracking-wider">{t('backup.selectBackupFile')}</span>
             </label>
           </div>
         </div>
@@ -155,11 +157,11 @@ const Backup = () => {
         </div>
         <div className="space-y-1 text-center md:text-left">
           <h4 className="font-bold text-amber-900 flex items-center justify-center md:justify-start gap-2 text-lg">
-            Important Security Notice
+            {t('backup.securityNoticeTitle')}
             <AlertTriangle className="w-4 h-4" />
           </h4>
           <p className="text-xs text-amber-700/80 font-medium leading-relaxed max-w-3xl">
-            Database backups contain sensitive employee data and face biometric descriptors. Store these files in a secure, encrypted location. Never share backup files through unencrypted channels. Only <span className="font-bold">Super Admins</span> should have access to these tools.
+            {t('backup.securityNoticeDesc')}
           </p>
         </div>
       </div>
@@ -173,11 +175,11 @@ const Backup = () => {
               <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
             </div>
             <div>
-              <h3 className="text-xl font-bold text-slate-800">Restoring Data</h3>
+              <h3 className="text-xl font-bold text-slate-800">{t('backup.restoringDataTitle')}</h3>
               <p className="text-xs text-slate-500 mt-2 font-medium">{restoreStatus}</p>
             </div>
             <div className="p-3 bg-slate-50 rounded-xl text-[10px] text-slate-400 font-bold uppercase tracking-wider border border-slate-100">
-              Please do not close this window or refresh the page.
+              {t('backup.restoringDataWarn')}
             </div>
           </div>
         </div>

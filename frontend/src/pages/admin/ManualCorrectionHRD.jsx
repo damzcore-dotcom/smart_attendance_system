@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { employeeAPI, attendanceAPI, settingsAPI } from '../../services/api';
 import * as XLSX from 'xlsx';
 import { 
@@ -9,12 +11,26 @@ import {
 } from 'lucide-react';
 
 const ManualCorrectionHRD = () => {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [search, setSearch] = useState('');
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [selectedDate, setSelectedDate] = useState(() => {
+    return location.state?.date || new Date().toISOString().split('T')[0];
+  });
+  const [search, setSearch] = useState(() => {
+    return location.state?.search || '';
+  });
   const [deptFilter, setDeptFilter] = useState('');
   const [sectionFilter, setSectionFilter] = useState('');
   const [rankFilter, setRankFilter] = useState('');
+
+  useEffect(() => {
+    if (location.state) {
+      // Clear navigation state so reload/re-nav doesn't freeze the inputs
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.state, navigate]);
   
   const [activeTab, setActiveTab] = useState('KEHADIRAN'); // KEHADIRAN | LUPA_FINGER | RIWAYAT
   const [historyMonth, setHistoryMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
@@ -77,20 +93,20 @@ const ManualCorrectionHRD = () => {
     if (!status) {
       return (
         <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-black bg-slate-100 text-slate-500 border border-slate-200 uppercase tracking-wider">
-          BELUM ABSEN
+          {t('manualCorrection.badge.notChecked')}
         </span>
       );
     }
     
     const config = {
-      'PRESENT': { label: 'HADIR', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-      'LATE': { label: 'TELAT', color: 'bg-amber-50 text-amber-700 border-amber-200' },
-      'ABSENT': { label: 'ALPA', color: 'bg-rose-50 text-rose-700 border-rose-200' },
-      'MANGKIR': { label: 'MANGKIR', color: 'bg-orange-50 text-orange-700 border-orange-200' },
-      'SAKIT': { label: 'SAKIT', color: 'bg-blue-50 text-blue-700 border-blue-200' },
-      'IZIN': { label: 'IZIN', color: 'bg-sky-50 text-sky-700 border-sky-200' },
-      'CUTI': { label: 'CUTI', color: 'bg-purple-50 text-purple-700 border-purple-200' },
-      'HOLIDAY': { label: 'LIBUR', color: 'bg-slate-150 text-slate-700 border-slate-255' },
+      'PRESENT': { label: t('manualCorrection.badge.present'), color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+      'LATE': { label: t('manualCorrection.badge.late'), color: 'bg-amber-50 text-amber-700 border-amber-200' },
+      'ABSENT': { label: t('manualCorrection.badge.absent'), color: 'bg-rose-50 text-rose-700 border-rose-200' },
+      'MANGKIR': { label: t('manualCorrection.badge.mangkir'), color: 'bg-orange-50 text-orange-700 border-orange-200' },
+      'SAKIT': { label: t('manualCorrection.badge.sakit'), color: 'bg-blue-50 text-blue-700 border-blue-200' },
+      'IZIN': { label: t('manualCorrection.badge.izin'), color: 'bg-sky-50 text-sky-700 border-sky-200' },
+      'CUTI': { label: t('manualCorrection.badge.cuti'), color: 'bg-purple-50 text-purple-700 border-purple-200' },
+      'HOLIDAY': { label: t('manualCorrection.badge.libur'), color: 'bg-slate-150 text-slate-700 border-slate-255' },
     };
 
     const cfg = config[status] || { label: status, color: 'bg-slate-50 text-slate-600 border-slate-200' };
@@ -109,10 +125,10 @@ const ManualCorrectionHRD = () => {
         const prevStatus = data.previousStatus;
         return (
           <div className="text-[11px] font-medium text-slate-600 space-y-1.5">
-            <div>Tanggal Koreksi: <span className="font-bold text-slate-800">{data.date}</span></div>
+            <div>{t('manualCorrection.details.date')} <span className="font-bold text-slate-800">{data.date}</span></div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Status:</span>
-              {prevStatus ? renderStatusBadge(prevStatus) : <span className="text-slate-400 italic text-[10px]">Lama</span>}
+              {prevStatus ? renderStatusBadge(prevStatus) : <span className="text-slate-400 italic text-[10px]">{t('manualCorrection.badge.old')}</span>}
               <span className="text-slate-400 font-bold">&rarr;</span>
               {renderStatusBadge(data.status)}
             </div>
@@ -122,7 +138,7 @@ const ManualCorrectionHRD = () => {
         const hasPrev = 'previousCheckIn' in data;
         return (
           <div className="text-[11px] text-slate-600 font-medium space-y-1.5">
-            <div>Tanggal Koreksi: <span className="font-bold text-slate-800">{data.date}</span></div>
+            <div>{t('manualCorrection.details.date')} <span className="font-bold text-slate-800">{data.date}</span></div>
             {!hasPrev ? (
               <div className="text-[10px] text-slate-500 font-bold bg-slate-50 border border-slate-100 rounded-lg p-1.5 w-fit flex gap-3">
                 <span>CHECK IN: <span className="text-slate-800 font-extrabold">{data.checkIn || '--:--'}</span></span>
@@ -151,13 +167,13 @@ const ManualCorrectionHRD = () => {
             )}
             {data.photoUrl && (
               <div className="flex items-center gap-2 mt-1.5">
-                <span className="text-[9px] text-slate-400 font-bold uppercase">Bukti Lupa Finger:</span>
+                <span className="text-[9px] text-slate-400 font-bold uppercase">{t('manualCorrection.details.evidence')}</span>
                 <button 
                   onClick={() => setPreviewPhoto(data.photoUrl)}
                   className="flex items-center gap-1.5 text-[9px] text-rose-600 hover:text-rose-700 font-bold uppercase bg-rose-50 hover:bg-rose-100 border border-rose-100 rounded-lg px-2.5 py-1 transition-all shadow-sm hover:scale-105 active:scale-95"
                 >
                   <Eye className="w-3.5 h-3.5" />
-                  <span>Lihat Foto Bukti</span>
+                  <span>{t('manualCorrection.details.viewPhoto')}</span>
                 </button>
               </div>
             )}
@@ -166,7 +182,7 @@ const ManualCorrectionHRD = () => {
       } else if (log.action === 'CORRECTION') {
         return (
           <div className="text-[11px] text-slate-600 font-medium space-y-1">
-            <div>Edit Pengajuan: <span className="font-bold text-slate-500">{data.oldStatus}</span> &rarr; <span className="font-bold text-rose-600">{data.newStatus}</span></div>
+            <div>{t('manualCorrection.details.editSubmission')} <span className="font-bold text-slate-500">{data.oldStatus}</span> &rarr; <span className="font-bold text-rose-600">{data.newStatus}</span></div>
             {data.notes && <div className="text-[10px] text-slate-400 italic font-semibold">&ldquo;{data.notes}&rdquo;</div>}
           </div>
         );
@@ -250,7 +266,7 @@ const ManualCorrectionHRD = () => {
   const handleExportExcel = () => {
     try {
       if (filteredHistoryLogs.length === 0) {
-        return alert('Tidak ada data riwayat untuk diexport.');
+        return alert(t('manualCorrection.alert.noHistoryExport'));
       }
       
       const exportData = filteredHistoryLogs.map((log, index) => {
@@ -260,9 +276,9 @@ const ManualCorrectionHRD = () => {
         const position = employeeObj?.position || '-';
 
         let typeStr = 'UPDATE';
-        if (log.action === 'MANUAL_CORRECTION_STATUS') typeStr = 'KOREKSI KEHADIRAN (STATUS)';
-        else if (log.action === 'MANUAL_CORRECTION_TIME') typeStr = 'KOREKSI LUPA FINGER (JAM)';
-        else if (log.action === 'CORRECTION') typeStr = 'PENGAJUAN KOREKSI KARYAWAN';
+        if (log.action === 'MANUAL_CORRECTION_STATUS') typeStr = t('manualCorrection.alert.khdStatus');
+        else if (log.action === 'MANUAL_CORRECTION_TIME') typeStr = t('manualCorrection.alert.lfTime');
+        else if (log.action === 'CORRECTION') typeStr = t('manualCorrection.alert.empCorrection');
 
         let detailStr = '';
         try {
@@ -283,11 +299,11 @@ const ManualCorrectionHRD = () => {
           'Waktu Tindakan': new Date(log.createdAt).toLocaleString('id-ID'),
           'Operator': log.username || 'System',
           'Role Operator': log.role || 'HRD',
-          'NIK Karyawan': empDetails.code,
-          'Nama Karyawan': empDetails.name,
-          'Departemen': dept,
+          [`NIK ${t('manualCorrection.table.employee')}`]: empDetails.code,
+          [`Nama ${t('manualCorrection.table.employee')}`]: empDetails.name,
+          [t('manualCorrection.table.dept')]: dept,
           'Jabatan': position,
-          'Tipe Koreksi': typeStr,
+          [t('manualCorrection.table.type')]: typeStr,
           'Detail Perubahan': detailStr,
           'IP Address': log.ipAddress || '-'
         };
@@ -295,7 +311,7 @@ const ManualCorrectionHRD = () => {
 
       const ws = XLSX.utils.json_to_sheet(exportData);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Riwayat Koreksi');
+      XLSX.utils.book_append_sheet(wb, ws, t('manualCorrection.tabs.history'));
       
       // Auto-fit columns
       const maxLens = {};
@@ -310,13 +326,13 @@ const ManualCorrectionHRD = () => {
       XLSX.writeFile(wb, `Laporan_Koreksi_HRD_${historyMonth}_${new Date().toISOString().split('T')[0]}.xlsx`);
     } catch (err) {
       console.error('Export error:', err);
-      alert('Gagal mengekspor data: ' + err.message);
+      alert(`${t('manualCorrection.alert.exportError')}${err.message}`);
     }
   };
 
   const handlePrintReport = () => {
     if (filteredHistoryLogs.length === 0) {
-      return alert('Tidak ada data riwayat untuk dicetak.');
+      return alert(t('manualCorrection.alert.noHistoryPrint'));
     }
     window.print();
   };
@@ -383,7 +399,7 @@ const ManualCorrectionHRD = () => {
       setFingerInputs({});
     },
     onError: (err) => {
-      alert(`Gagal menyimpan: ${err.message}`);
+      alert(`${t('manualCorrection.alert.saveError')}${err.message}`);
     }
   });
 
@@ -396,8 +412,8 @@ const ManualCorrectionHRD = () => {
           status: attendanceInputs[empId]
         }));
       
-      if (records.length === 0) return alert('Belum ada data kehadiran yang diubah.');
-      if (window.confirm(`Simpan manual koreksi kehadiran untuk ${records.length} karyawan?`)) {
+      if (records.length === 0) return alert(t('manualCorrection.alert.noChanges'));
+      if (window.confirm(t('manualCorrection.alert.confirmStatus', { count: records.length }))) {
         saveMutation.mutate({ type: 'KEHADIRAN', date: selectedDate, records });
       }
     } else {
@@ -410,8 +426,8 @@ const ManualCorrectionHRD = () => {
           photo: fingerInputs[empId].photo || null
         }));
       
-      if (records.length === 0) return alert('Belum ada data waktu lupa finger yang diisi.');
-      if (window.confirm(`Simpan manual jam lupa finger untuk ${records.length} karyawan?`)) {
+      if (records.length === 0) return alert(t('manualCorrection.alert.noFingerChanges'));
+      if (window.confirm(t('manualCorrection.alert.confirmFinger', { count: records.length }))) {
         saveMutation.mutate({ type: 'LUPA_FINGER', date: selectedDate, records });
       }
     }
@@ -429,16 +445,24 @@ const ManualCorrectionHRD = () => {
           </div>
           <span className="text-[10px] font-bold uppercase tracking-wider">Attendance Admin</span>
           <div className="w-1 h-1 rounded-full bg-slate-300" />
-          <span className="text-[10px] font-bold text-rose-600 uppercase tracking-wider">Koreksi Manual</span>
+          <span className="text-[10px] font-bold text-rose-600 uppercase tracking-wider">{t('manualCorrection.categoryTitle')}</span>
         </div>
         
-        <div className="flex flex-col md:flex-row md:items-center justify-between w-full gap-4">
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between w-full gap-4">
           <div>
             <h1 className="text-2xl xl:text-3xl font-bold text-slate-800 tracking-tight flex items-center gap-3">
-              Koreksi Manual HRD
+              {t('manualCorrection.title')}
             </h1>
-            <p className="text-xs text-slate-500 mt-1">Direct override untuk rekayasa status absensi dan revisi lupa finger</p>
+            <p className="text-xs text-slate-500 mt-1">{t('manualCorrection.titleDesc')}</p>
           </div>
+          
+          <button 
+            onClick={() => navigate('/admin/attendance', { state: { date: selectedDate } })}
+            className="flex items-center gap-2 bg-white hover:bg-slate-50 px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-slate-600 hover:text-slate-800 transition-all border border-slate-200 shadow-sm active:scale-95 group self-start xl:self-auto cursor-pointer"
+          >
+            <ChevronLeft className="w-4 h-4 text-slate-400 group-hover:-translate-x-0.5 transition-transform" />
+            Kembali ke Log Absensi
+          </button>
         </div>
       </div>
 
@@ -450,7 +474,7 @@ const ManualCorrectionHRD = () => {
               <div className="w-8 h-8 rounded-lg bg-rose-50 border border-rose-100 flex items-center justify-center">
                 <Calendar className="w-4 h-4 text-rose-600" />
               </div>
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">TANGGAL KOREKSI:</label>
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('manualCorrection.filters.date')}</label>
             </div>
             <div className="flex items-center bg-slate-50 p-1.5 rounded-xl border border-slate-200">
               <input 
@@ -464,12 +488,12 @@ const ManualCorrectionHRD = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6 items-end bg-slate-50/50 p-5 rounded-2xl border border-slate-100">
             <div className="space-y-2">
-              <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">PENCARIAN KARYAWAN</label>
+              <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('manualCorrection.filters.search')}</label>
               <div className="relative group">
                 <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-rose-500 transition-colors" />
                 <input 
                   type="text" 
-                  placeholder="NAMA / NIK..." 
+                  placeholder={t('manualCorrection.filters.searchPlaceholder')} 
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-[10px] font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-rose-500 placeholder:text-slate-400 shadow-sm transition-all uppercase tracking-wider"
@@ -479,13 +503,13 @@ const ManualCorrectionHRD = () => {
 
             {[
               { 
-                label: 'DEPARTEMEN', 
+                label: t('manualCorrection.filters.dept'), 
                 val: deptFilter, 
                 setter: (val) => { setDeptFilter(val); setSectionFilter(''); setRankFilter(''); }, 
                 opts: [...new Set((employees || []).map(e => e.dept).filter(Boolean))] 
               },
               { 
-                label: 'BAGIAN / SECTION', 
+                label: t('manualCorrection.filters.section'), 
                 val: sectionFilter, 
                 setter: (val) => { setSectionFilter(val); setRankFilter(''); }, 
                 opts: [...new Set((employees || [])
@@ -493,7 +517,7 @@ const ManualCorrectionHRD = () => {
                   .map(e => e.section).filter(Boolean))] 
               },
               { 
-                label: 'JABATAN / RANK', 
+                label: t('manualCorrection.filters.rank'), 
                 val: rankFilter, 
                 setter: setRankFilter, 
                 opts: [...new Set((employees || [])
@@ -510,7 +534,7 @@ const ManualCorrectionHRD = () => {
                     onChange={(e) => field.setter(e.target.value)}
                     className="w-full bg-white border border-slate-200 rounded-xl pl-4 pr-10 py-3 text-[10px] font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer appearance-none uppercase tracking-wider shadow-sm truncate transition-all"
                   >
-                    <option value="">SEMUA</option>
+                    <option value="">{t('manualCorrection.filters.all')}</option>
                     {field.opts.map((o, i) => <option key={i} value={o}>{o}</option>)}
                   </select>
                   <Filter className="w-3.5 h-3.5 text-slate-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -527,10 +551,10 @@ const ManualCorrectionHRD = () => {
           {/* Summary Dashboard Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 print:hidden">
             {[
-              { label: 'Total Koreksi', value: historyStats.total, color: 'text-slate-800 border-slate-200 bg-white' },
-              { label: 'Koreksi Kehadiran', value: historyStats.statusCorrections, color: 'text-rose-600 border-rose-100 bg-rose-50/20' },
-              { label: 'Lupa Finger', value: historyStats.timeCorrections, color: 'text-amber-600 border-amber-100 bg-amber-50/20' },
-              { label: 'Bukti Terlampir', value: historyStats.photoCount, color: 'text-blue-600 border-blue-100 bg-blue-50/20' }
+              { label: t('manualCorrection.stats.total'), value: historyStats.total, color: 'text-slate-800 border-slate-200 bg-white' },
+              { label: t('manualCorrection.stats.status'), value: historyStats.statusCorrections, color: 'text-rose-600 border-rose-100 bg-rose-50/20' },
+              { label: t('manualCorrection.stats.finger'), value: historyStats.timeCorrections, color: 'text-amber-600 border-amber-100 bg-amber-50/20' },
+              { label: t('manualCorrection.stats.evidence'), value: historyStats.photoCount, color: 'text-blue-600 border-blue-100 bg-blue-50/20' }
             ].map((card, idx) => (
               <div key={idx} className={`p-5 rounded-2xl border shadow-sm ${card.color} flex flex-col justify-between h-28`}>
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">{card.label}</span>
@@ -547,7 +571,7 @@ const ManualCorrectionHRD = () => {
                   <Calendar className="w-4 h-4 text-rose-600" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">BULAN LAPORAN:</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{t('manualCorrection.historyFilters.month')}</label>
                   <input 
                     type="month"
                     value={historyMonth}
@@ -562,26 +586,26 @@ const ManualCorrectionHRD = () => {
                   className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-sm active:scale-95 hover:shadow-lg hover:shadow-emerald-500/10"
                 >
                   <FileSpreadsheet className="w-4 h-4" />
-                  <span>Excel Export</span>
+                  <span>{t('manualCorrection.historyFilters.excel')}</span>
                 </button>
                 <button
                   onClick={handlePrintReport}
                   className="flex items-center gap-2 bg-rose-600 hover:bg-rose-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-sm active:scale-95 hover:shadow-lg hover:shadow-rose-500/10"
                 >
                   <Printer className="w-4 h-4" />
-                  <span>Cetak Laporan</span>
+                  <span>{t('manualCorrection.historyFilters.print')}</span>
                 </button>
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-1.5">
-                <label className="text-[9px] font-black text-slate-450 uppercase tracking-wider ml-1">Cari Karyawan / Operator</label>
+                <label className="text-[9px] font-black text-slate-450 uppercase tracking-wider ml-1">{t('manualCorrection.historyFilters.search')}</label>
                 <div className="relative group">
                   <Search className="w-3.5 h-3.5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-rose-500 transition-colors" />
                   <input 
                     type="text" 
-                    placeholder="NIK, Nama, Operator..." 
+                    placeholder={t('manualCorrection.historyFilters.searchPlaceholder')} 
                     value={historySearch}
                     onChange={(e) => setHistorySearch(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-3 py-2.5 text-[10px] font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-rose-500 placeholder:text-slate-400 shadow-sm transition-all uppercase tracking-wider"
@@ -597,10 +621,10 @@ const ManualCorrectionHRD = () => {
                     onChange={(e) => setHistoryTypeFilter(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-10 py-2.5 text-[10px] font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer appearance-none uppercase tracking-wider shadow-sm transition-all"
                   >
-                    <option value="">Semua Tipe</option>
-                    <option value="MANUAL_CORRECTION_STATUS">Kehadiran (Status)</option>
-                    <option value="MANUAL_CORRECTION_TIME">Lupa Finger (Jam)</option>
-                    <option value="CORRECTION">Pengajuan Karyawan</option>
+                    <option value="">{t('manualCorrection.historyFilters.allTypes')}</option>
+                    <option value="MANUAL_CORRECTION_STATUS">{t('manualCorrection.historyFilters.typeStatus')}</option>
+                    <option value="MANUAL_CORRECTION_TIME">{t('manualCorrection.historyFilters.typeTime')}</option>
+                    <option value="CORRECTION">{t('manualCorrection.historyFilters.typeEmployee')}</option>
                   </select>
                   <Filter className="w-3.5 h-3.5 text-slate-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
@@ -614,7 +638,7 @@ const ManualCorrectionHRD = () => {
                     onChange={(e) => setHistoryDeptFilter(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-10 py-2.5 text-[10px] font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer appearance-none uppercase tracking-wider shadow-sm transition-all"
                   >
-                    <option value="">Semua Departemen</option>
+                    <option value="">{t('manualCorrection.historyFilters.allDepts')}</option>
                     {allDepts.map((d, i) => <option key={i} value={d}>{d}</option>)}
                   </select>
                   <Filter className="w-3.5 h-3.5 text-slate-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -632,14 +656,14 @@ const ManualCorrectionHRD = () => {
           className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold transition-all uppercase tracking-wider ${activeTab === 'KEHADIRAN' ? 'bg-white text-rose-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800'}`}
         >
           <CheckSquare className="w-4 h-4" />
-          Koreksi Kehadiran
+          {t('manualCorrection.tabs.attendance')}
         </button>
         <button 
            onClick={() => setActiveTab('LUPA_FINGER')}
            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold transition-all uppercase tracking-wider ${activeTab === 'LUPA_FINGER' ? 'bg-white text-rose-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800'}`}
         >
           <Clock className="w-4 h-4" />
-          Koreksi Lupa Finger
+          {t('manualCorrection.tabs.finger')}
         </button>
         <button 
            onClick={() => setActiveTab('RIWAYAT')}
@@ -657,8 +681,8 @@ const ManualCorrectionHRD = () => {
             <div className="flex items-center gap-3">
               <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                Spreadsheet Koreksi <span className="text-slate-300 mx-2">|</span> 
-                Menampilkan {filteredEmployees.length > 0 ? `${startIndex + 1} - ${Math.min(startIndex + itemsPerPage, filteredEmployees.length)} dari ` : ''}{filteredEmployees.length} Karyawan
+                {t('manualCorrection.table.title')} <span className="text-slate-300 mx-2">|</span> 
+                {t('manualCorrection.table.showing')} {filteredEmployees.length > 0 ? `${startIndex + 1} - ${Math.min(startIndex + itemsPerPage, filteredEmployees.length)} ${t('manualCorrection.table.of')} ` : ''}{filteredEmployees.length} {t('manualCorrection.table.employees')}
               </p>
             </div>
             
@@ -672,7 +696,7 @@ const ManualCorrectionHRD = () => {
                   <ChevronLeft className="w-4 h-4" />
                 </button>
                 <span className="text-[10px] font-bold text-slate-600">
-                  Halaman {currentPage} / {totalPages}
+                  {t('manualCorrection.table.page')} {currentPage} / {totalPages}
                 </span>
                 <button 
                   disabled={currentPage >= totalPages} 
@@ -689,22 +713,22 @@ const ManualCorrectionHRD = () => {
              <table className="w-full text-left whitespace-nowrap">
                <thead className="bg-slate-50 border-b border-slate-100">
                  <tr className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">
-                   <th className="px-6 py-4 w-12 text-center">No</th>
-                   <th className="px-6 py-4">Karyawan</th>
-                   <th className="px-4 py-4">Departemen</th>
+                   <th className="px-6 py-4 w-12 text-center">{t('manualCorrection.table.no')}</th>
+                   <th className="px-6 py-4">{t('manualCorrection.table.employee')}</th>
+                   <th className="px-4 py-4">{t('manualCorrection.table.dept')}</th>
                    
                    {activeTab === 'KEHADIRAN' ? (
                      <>
-                       <th className="px-4 py-4 text-center">Status Saat Ini</th>
-                       <th className="px-6 py-4 text-center bg-rose-50/50 text-rose-700">Override Status</th>
+                       <th className="px-4 py-4 text-center">{t('manualCorrection.table.currentStatus')}</th>
+                       <th className="px-6 py-4 text-center bg-rose-50/50 text-rose-700">{t('manualCorrection.table.overrideStatus')}</th>
                      </>
                    ) : (
                      <>
-                       <th className="px-4 py-4 text-center border-r border-slate-100">Check In Saat Ini</th>
-                       <th className="px-4 py-4 text-center border-r border-slate-100">Check Out Saat Ini</th>
-                       <th className="px-6 py-4 text-center bg-rose-50/50 text-rose-700">Check In</th>
-                       <th className="px-6 py-4 text-center bg-rose-50/50 text-rose-700">Check Out</th>
-                       <th className="px-6 py-4 text-center bg-rose-50/50 text-rose-700">Bukti Foto Lupa Finger</th>
+                       <th className="px-4 py-4 text-center border-r border-slate-100">{t('manualCorrection.table.currentIn')}</th>
+                       <th className="px-4 py-4 text-center border-r border-slate-100">{t('manualCorrection.table.currentOut')}</th>
+                       <th className="px-6 py-4 text-center bg-rose-50/50 text-rose-700">{t('manualCorrection.table.in')}</th>
+                       <th className="px-6 py-4 text-center bg-rose-50/50 text-rose-700">{t('manualCorrection.table.out')}</th>
+                       <th className="px-6 py-4 text-center bg-rose-50/50 text-rose-700">{t('manualCorrection.table.evidence')}</th>
                      </>
                    )}
                  </tr>
@@ -714,13 +738,13 @@ const ManualCorrectionHRD = () => {
                     <tr>
                       <td colSpan={activeTab === 'KEHADIRAN' ? 5 : 8} className="text-center py-20">
                         <Loader2 className="w-8 h-8 animate-spin text-rose-600 mx-auto mb-3" />
-                        <p className="text-xs font-bold text-slate-400">Loading Data...</p>
+                        <p className="text-xs font-bold text-slate-400">{t('manualCorrection.table.loading')}</p>
                       </td>
                     </tr>
                   ) : filteredEmployees.length === 0 ? (
                     <tr>
                       <td colSpan={activeTab === 'KEHADIRAN' ? 5 : 8} className="text-center py-20 text-slate-400 text-xs">
-                        Tidak ada Karyawan ditemukan
+                        {t('manualCorrection.table.noEmployees')}
                       </td>
                     </tr>
                   ) : (
@@ -755,15 +779,10 @@ const ManualCorrectionHRD = () => {
                                   <select
                                     value={attendanceInputs[emp.dbId] || ''}
                                     onChange={(e) => setAttendanceInputs(prev => ({ ...prev, [emp.dbId]: e.target.value }))}
-                                    disabled={currentAtt?.status === 'PRESENT'}
-                                    className={`border rounded-lg px-3 py-1.5 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-rose-500 uppercase transition-all ${
-                                      currentAtt?.status === 'PRESENT'
-                                        ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
-                                        : 'bg-white border-slate-300 text-slate-700 cursor-pointer'
-                                    }`}
+                                    className="bg-white border border-slate-300 text-slate-700 cursor-pointer rounded-lg px-3 py-1.5 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-rose-500 uppercase transition-all"
                                   >
-                                    <option value="">- Tidak Dirubah -</option>
-                                    <option value="PRESENT">HADIR NORMAL</option>
+                                    <option value="">{t('manualCorrection.table.noChange')}</option>
+                                    <option value="PRESENT">{t('manualCorrection.table.presentNormal')}</option>
                                     <option value="IZIN">IZIN</option>
                                     <option value="SAKIT">SAKIT</option>
                                     <option value="CUTI">CUTI</option>
@@ -785,12 +804,7 @@ const ManualCorrectionHRD = () => {
                                     type="time"
                                     value={fingerInputs[emp.dbId]?.checkIn || ''}
                                     onChange={(e) => setFingerInputs(prev => ({ ...prev, [emp.dbId]: { ...prev[emp.dbId], checkIn: e.target.value } }))}
-                                    disabled={currentAtt?.status === 'PRESENT'}
-                                    className={`border rounded-lg px-2 py-1 text-xs font-bold focus:ring-2 focus:ring-rose-500 outline-none transition-all ${
-                                      currentAtt?.status === 'PRESENT'
-                                        ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
-                                        : 'bg-white border-slate-300 text-slate-800'
-                                    }`}
+                                    className="bg-white border border-slate-300 text-slate-800 rounded-lg px-2 py-1 text-xs font-bold focus:ring-2 focus:ring-rose-500 outline-none transition-all"
                                   />
                                 </td>
                                 <td className="px-6 py-4 text-center bg-rose-50/10 group-hover:bg-rose-50/50 transition-colors border-r border-white">
@@ -798,42 +812,31 @@ const ManualCorrectionHRD = () => {
                                     type="time"
                                     value={fingerInputs[emp.dbId]?.checkOut || ''}
                                     onChange={(e) => setFingerInputs(prev => ({ ...prev, [emp.dbId]: { ...prev[emp.dbId], checkOut: e.target.value } }))}
-                                    disabled={currentAtt?.status === 'PRESENT'}
-                                    className={`border rounded-lg px-2 py-1 text-xs font-bold focus:ring-2 focus:ring-rose-500 outline-none transition-all ${
-                                      currentAtt?.status === 'PRESENT'
-                                        ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
-                                        : 'bg-white border-slate-300 text-slate-800'
-                                    }`}
+                                    className="bg-white border border-slate-300 text-slate-800 rounded-lg px-2 py-1 text-xs font-bold focus:ring-2 focus:ring-rose-500 outline-none transition-all"
                                   />
                                 </td>
                                 <td className="px-6 py-4 text-center bg-rose-50/10 group-hover:bg-rose-50/50 transition-colors">
                                    <div className="flex items-center justify-center gap-3">
                                      {fingerInputs[emp.dbId]?.photo ? (
-                                       <div className="relative group/img">
-                                          <img src={fingerInputs[emp.dbId].photo} alt="Bukti" className="h-10 w-10 object-cover rounded-lg border-2 border-rose-200" />
-                                          <button 
-                                            onClick={() => setFingerInputs(prev => { const n = {...prev}; n[emp.dbId].photo = null; return n; })}
-                                            className="absolute -top-2 -right-2 bg-rose-500 text-white rounded-full p-0.5 opacity-0 group-hover/img:opacity-100 transition-opacity"
-                                            disabled={currentAtt?.status === 'PRESENT'}
-                                          >
-                                            <X className="w-3 h-3" />
-                                          </button>
-                                       </div>
+                                        <div className="relative group/img">
+                                           <img src={fingerInputs[emp.dbId].photo} alt="Bukti" className="h-10 w-10 object-cover rounded-lg border-2 border-rose-200" />
+                                           <button 
+                                             onClick={() => setFingerInputs(prev => { const n = {...prev}; n[emp.dbId].photo = null; return n; })}
+                                             className="absolute -top-2 -right-2 bg-rose-500 text-white rounded-full p-0.5 opacity-0 group-hover/img:opacity-100 transition-opacity"
+                                           >
+                                             <X className="w-3 h-3" />
+                                           </button>
+                                        </div>
                                      ) : (
-                                       <label className={`flex flex-col items-center justify-center w-10 h-10 border-2 border-dashed rounded-lg transition-colors ${
-                                         currentAtt?.status === 'PRESENT'
-                                           ? 'bg-slate-50 border-slate-200 text-slate-300 cursor-not-allowed opacity-50'
-                                           : 'bg-white border-rose-300 text-rose-400 cursor-pointer hover:bg-rose-50'
-                                       }`}>
-                                         <ImageIcon className={`w-4 h-4 ${currentAtt?.status === 'PRESENT' ? 'text-slate-300' : 'text-rose-400'}`} />
-                                         <input 
-                                           type="file" 
-                                           accept="image/*" 
-                                           className="hidden" 
-                                           onChange={(e) => handlePhotoUpload(emp.dbId, e)}
-                                           disabled={currentAtt?.status === 'PRESENT'}
-                                         />
-                                       </label>
+                                        <label className="bg-white border-rose-300 text-rose-450 cursor-pointer hover:bg-rose-50 flex flex-col items-center justify-center w-10 h-10 border-2 border-dashed rounded-lg transition-colors">
+                                          <ImageIcon className="w-4 h-4 text-rose-400" />
+                                          <input 
+                                            type="file" 
+                                            accept="image/*" 
+                                            className="hidden" 
+                                            onChange={(e) => handlePhotoUpload(emp.dbId, e)}
+                                          />
+                                        </label>
                                      )}
                                    </div>
                                 </td>
@@ -868,13 +871,13 @@ const ManualCorrectionHRD = () => {
                <thead className="bg-slate-50 border-b border-slate-100">
                  <tr className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">
                    <th className="px-6 py-4 w-12 text-center">No</th>
-                   <th className="px-6 py-4">Waktu Tindakan</th>
-                   <th className="px-6 py-4">Operator HRD</th>
-                   <th className="px-6 py-4">Karyawan Terkait</th>
-                   <th className="px-4 py-4">Departemen</th>
-                   <th className="px-6 py-4 text-center">Tipe Koreksi</th>
-                   <th className="px-6 py-4">Detail Perubahan</th>
-                   <th className="px-6 py-4 text-center">IP Address</th>
+                   <th className="px-6 py-4">{t('manualCorrection.table.actionTime')}</th>
+                   <th className="px-6 py-4">{t('manualCorrection.table.operator')}</th>
+                   <th className="px-6 py-4">{t('manualCorrection.table.relatedEmployee')}</th>
+                   <th className="px-4 py-4">{t('manualCorrection.table.dept')}</th>
+                   <th className="px-6 py-4 text-center">{t('manualCorrection.table.type')}</th>
+                   <th className="px-6 py-4">{t('manualCorrection.table.changesDetail')}</th>
+                   <th className="px-6 py-4 text-center">{t('manualCorrection.table.ip')}</th>
                  </tr>
                </thead>
                <tbody className="divide-y divide-slate-100">
@@ -882,13 +885,13 @@ const ManualCorrectionHRD = () => {
                     <tr>
                       <td colSpan={8} className="text-center py-20">
                         <Loader2 className="w-8 h-8 animate-spin text-rose-600 mx-auto mb-3" />
-                        <p className="text-xs font-bold text-slate-400">Memuat data riwayat...</p>
+                        <p className="text-xs font-bold text-slate-400">{t('manualCorrection.table.loadingHistory')}</p>
                       </td>
                     </tr>
                   ) : filteredHistoryLogs.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="text-center py-20 text-slate-400 text-xs font-bold">
-                        Tidak ada riwayat koreksi ditemukan untuk kriteria bulan atau pencarian ini.
+                        {t('manualCorrection.table.noHistory')}
                       </td>
                     </tr>
                   ) : (
@@ -929,7 +932,7 @@ const ManualCorrectionHRD = () => {
                                 ? 'bg-amber-50 text-amber-700 border-amber-100'
                                 : 'bg-slate-100 text-slate-700 border-slate-200'
                             }`}>
-                              {log.action === 'MANUAL_CORRECTION_STATUS' ? 'KEHADIRAN' : log.action === 'MANUAL_CORRECTION_TIME' ? 'LUPA FINGER' : 'UPDATE'}
+                              {log.action === 'MANUAL_CORRECTION_STATUS' ? t('manualCorrection.tabs.attendance') : log.action === 'MANUAL_CORRECTION_TIME' ? t('manualCorrection.tabs.finger') : 'UPDATE'}
                             </span>
                           </td>
                           <td className="px-6 py-4">
@@ -956,12 +959,12 @@ const ManualCorrectionHRD = () => {
                <AlertCircle className="w-5 h-5 text-rose-600" />
             </div>
             <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase">Perubahan Disimpan</p>
+              <p className="text-[10px] font-bold text-slate-500 uppercase">{t('manualCorrection.floating.savedChanges')}</p>
               <p className="text-sm font-bold text-slate-800">
                 {activeTab === 'KEHADIRAN' 
                    ? Object.keys(attendanceInputs).filter(k => attendanceInputs[k]).length 
                    : Object.keys(fingerInputs).filter(k => fingerInputs[k]?.checkIn || fingerInputs[k]?.checkOut).length
-                } Data Koreksi Siap
+                } {t('manualCorrection.floating.ready')}
               </p>
             </div>
           </div>
@@ -972,7 +975,7 @@ const ManualCorrectionHRD = () => {
             className="bg-rose-600 hover:bg-rose-700 text-white px-8 py-3 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-lg hover:shadow-xl hover:shadow-rose-500/20 active:scale-95 transition-all outline-none"
           >
             {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            <span>Jalankan Koreksi ({activeTab})</span>
+            <span>{t('manualCorrection.floating.execute')} ({activeTab})</span>
           </button>
         </div>
       )}
@@ -994,9 +997,9 @@ const ManualCorrectionHRD = () => {
               </div>
             </div>
             <div className="text-right">
-              <h2 className="font-black text-lg text-slate-900 uppercase tracking-tight">LAPORAN KOREKSI & LUPA FINGER</h2>
+              <h2 className="font-black text-lg text-slate-900 uppercase tracking-tight">{t('manualCorrection.print.title')}</h2>
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                Periode: {new Date(historyMonth + '-02').toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
+                {t('manualCorrection.print.periode')} {new Date(historyMonth + '-02').toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
               </p>
             </div>
           </div>
@@ -1004,15 +1007,15 @@ const ManualCorrectionHRD = () => {
           {/* Report Metadata */}
           <div className="grid grid-cols-3 gap-4 bg-slate-50 p-4 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 mb-6 uppercase tracking-wider">
             <div>
-              <p className="text-slate-400 font-medium">Tanggal Cetak</p>
+              <p className="text-slate-400 font-medium">{t('manualCorrection.print.printDate')}</p>
               <p className="text-slate-800 font-bold text-xs mt-0.5">{new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
             </div>
             <div>
               <p className="text-slate-400 font-medium">Total Log Koreksi</p>
-              <p className="text-slate-800 font-bold text-xs mt-0.5">{historyStats.total} Records</p>
+              <p className="text-slate-800 font-bold text-xs mt-0.5">{historyStats.total} {t('manualCorrection.print.records')}</p>
             </div>
             <div>
-              <p className="text-slate-400 font-medium">Klasifikasi</p>
+              <p className="text-slate-400 font-medium">{t('manualCorrection.print.classification')}</p>
               <p className="text-slate-800 font-bold text-xs mt-0.5">
                 KHD: {historyStats.statusCorrections} | LF: {historyStats.timeCorrections}
               </p>
@@ -1023,12 +1026,12 @@ const ManualCorrectionHRD = () => {
           <table className="w-full text-[10px] text-left border-collapse border border-slate-300">
             <thead>
               <tr className="bg-slate-100 border-b border-slate-300 font-black uppercase text-slate-700 tracking-wider">
-                <th className="py-2.5 px-3 border border-slate-300 w-8 text-center">No</th>
-                <th className="py-2.5 px-3 border border-slate-300 w-24">Tanggal & Waktu</th>
-                <th className="py-2.5 px-3 border border-slate-300 w-24">Operator HRD</th>
-                <th className="py-2.5 px-3 border border-slate-300 w-32">Karyawan</th>
-                <th className="py-2.5 px-3 border border-slate-300 w-24 text-center">Tipe</th>
-                <th className="py-2.5 px-3 border border-slate-300">Rincian Perubahan</th>
+                <th className="py-2.5 px-3 border border-slate-300 w-8 text-center">{t('manualCorrection.print.no')}</th>
+                <th className="py-2.5 px-3 border border-slate-300 w-24">{t('manualCorrection.print.dateTime')}</th>
+                <th className="py-2.5 px-3 border border-slate-300 w-24">{t('manualCorrection.print.operator')}</th>
+                <th className="py-2.5 px-3 border border-slate-300 w-32">{t('manualCorrection.print.employee')}</th>
+                <th className="py-2.5 px-3 border border-slate-300 w-24 text-center">{t('manualCorrection.print.type')}</th>
+                <th className="py-2.5 px-3 border border-slate-300">{t('manualCorrection.print.details')}</th>
               </tr>
             </thead>
             <tbody>
@@ -1088,14 +1091,14 @@ const ManualCorrectionHRD = () => {
           {/* Footer Signature */}
           <div className="mt-16 grid grid-cols-2 gap-20 text-[10px] uppercase font-bold text-center">
             <div className="space-y-16">
-              <p>Dibuat Oleh:</p>
+              <p>{t('manualCorrection.print.creator')}</p>
               <div className="border-b border-slate-900 w-48 mx-auto" />
-              <p className="text-slate-500">Staf HRD / Operator</p>
+              <p className="text-slate-500">{t('manualCorrection.print.staff')}</p>
             </div>
             <div className="space-y-16">
-              <p>Mengetahui & Disetujui:</p>
+              <p>{t('manualCorrection.print.approved')}</p>
               <div className="border-b border-slate-900 w-48 mx-auto" />
-              <p className="text-slate-500">Manager HRD / Pimpinan</p>
+              <p className="text-slate-500">{t('manualCorrection.print.manager')}</p>
             </div>
           </div>
         </div>
@@ -1106,7 +1109,7 @@ const ManualCorrectionHRD = () => {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[999] flex items-center justify-center p-4 animate-in fade-in duration-200 print:hidden">
           <div className="bg-white rounded-3xl overflow-hidden shadow-2xl border border-slate-100 max-w-lg w-full relative animate-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-              <span className="text-xs font-extrabold uppercase text-slate-500 tracking-wider">Foto Bukti Lupa Finger</span>
+              <span className="text-xs font-extrabold uppercase text-slate-500 tracking-wider">{t('manualCorrection.print.evidenceTitle')}</span>
               <button 
                 onClick={() => setPreviewPhoto(null)}
                 className="w-8 h-8 rounded-full bg-slate-100 hover:bg-rose-500 hover:text-white flex items-center justify-center text-slate-500 transition-all active:scale-95"
@@ -1122,7 +1125,7 @@ const ManualCorrectionHRD = () => {
                 onClick={() => setPreviewPhoto(null)}
                 className="bg-slate-200 hover:bg-slate-300 text-slate-800 px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all active:scale-95"
               >
-                Tutup
+                {t('manualCorrection.print.close')}
               </button>
             </div>
           </div>

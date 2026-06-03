@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { employeeAPI, settingsAPI, payrollAPI, deviceAPI, fingerprintAPI, getFileUrl } from '../../services/api';
@@ -25,6 +26,7 @@ const emptyEmployee = {
 };
 
 const Employees = () => {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const location = useLocation();
   const navigate = useNavigate();
@@ -33,6 +35,7 @@ const Employees = () => {
   const [sectionFilter, setSectionFilter] = useState('');
   const [positionFilter, setPositionFilter] = useState('');
   const [empStatusFilter, setEmpStatusFilter] = useState('');
+  const [selectedStatsFilter, setSelectedStatsFilter] = useState('');
   const [isImportModalOpen, setImportModalOpen] = useState(false);
 
   const [importResult, setImportResult] = useState(null);
@@ -76,6 +79,11 @@ const Employees = () => {
       key,
       direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
     }));
+    setPage(1);
+  };
+
+  const handleStatsFilterChange = (filterType) => {
+    setSelectedStatsFilter(prev => prev === filterType ? '' : filterType);
     setPage(1);
   };
 
@@ -130,8 +138,21 @@ const Employees = () => {
   }, [location.state]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['employees', { search: searchTerm, dept: deptFilter, section: sectionFilter, position: positionFilter, empStatus: empStatusFilter, page, sortBy: sortConfig.key, order: sortConfig.direction }],
-    queryFn: () => employeeAPI.getAll({ search: searchTerm, dept: deptFilter, section: sectionFilter, position: positionFilter, empStatus: empStatusFilter, page, limit: PAGE_SIZE, sortBy: sortConfig.key, order: sortConfig.direction, excludeBhl: true }),
+    queryKey: ['employees', { search: searchTerm, dept: deptFilter, section: sectionFilter, position: positionFilter, empStatus: empStatusFilter, page, sortBy: sortConfig.key, order: sortConfig.direction, selectedStatsFilter }],
+    queryFn: () => employeeAPI.getAll({ 
+      search: searchTerm, 
+      dept: deptFilter, 
+      section: sectionFilter, 
+      position: positionFilter, 
+      empStatus: empStatusFilter, 
+      page, 
+      limit: PAGE_SIZE, 
+      sortBy: sortConfig.key, 
+      order: sortConfig.direction, 
+      excludeBhl: true,
+      noFingerprint: selectedStatsFilter === 'noFingerprint' ? 'true' : undefined,
+      noFace: selectedStatsFilter === 'noFace' ? 'true' : undefined
+    }),
     keepPreviousData: true,
   });
 
@@ -473,15 +494,15 @@ const Employees = () => {
             <div className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center">
               <ShieldCheck className="w-3 h-3 text-slate-400" />
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider">Pengawasan Administratif</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider">{t('employees.adminOversight')}</span>
             <div className="w-1 h-1 rounded-full bg-slate-300" />
-            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Arsip Karyawan</span>
+            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">{t('employees.subtitle')}</span>
           </div>
           <h1 className="text-3xl font-bold text-slate-800 tracking-tight flex items-center gap-4">
-            Data Karyawan
+            {t('employees.title')}
             <div className="px-3 py-1 rounded-lg bg-blue-50 border border-blue-100 text-blue-600 text-[10px] font-bold uppercase tracking-wider shadow-sm flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
-              Database Aktif
+              {t('employees.activeDb')}
             </div>
           </h1>
         </div>
@@ -496,7 +517,7 @@ const Employees = () => {
             }} 
             className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.98]"
           >
-            <UserPlus className="w-4 h-4" /> Tambah Karyawan
+            <UserPlus className="w-4 h-4" /> {t('employees.addEmp')}
           </button>
           
           <button 
@@ -504,7 +525,7 @@ const Employees = () => {
             className="flex items-center gap-2 bg-white hover:bg-slate-50 px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-slate-600 hover:text-slate-800 transition-all border border-slate-200 shadow-sm active:scale-95 group"
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
-            Impor Excel
+            {t('employees.importExcel')}
           </button>
 
           <button 
@@ -512,7 +533,7 @@ const Employees = () => {
             className="flex items-center gap-2 bg-white hover:bg-slate-50 px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-slate-600 hover:text-slate-800 transition-all border border-slate-200 shadow-sm active:scale-95 group"
           >
             <Download className="w-4 h-4 text-slate-500 group-hover:scale-110 transition-transform" />
-            Template Excel
+            {t('employees.excelTemplate')}
           </button>
         </div>
       </div>
@@ -520,49 +541,85 @@ const Employees = () => {
       {/* 2. Dashboard Information Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 px-1">
         {/* Card 1: Total Karyawan */}
-        <div className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm flex items-center justify-between hover:border-blue-300 transition-all group">
+        <div 
+          onClick={() => {
+            setSelectedStatsFilter('');
+            setPage(1);
+          }}
+          className={`p-5 border rounded-2xl shadow-sm flex items-center justify-between transition-all group cursor-pointer active:scale-[0.98] ${
+            selectedStatsFilter === '' 
+              ? 'border-blue-500 bg-blue-50/20 ring-2 ring-blue-500/20' 
+              : 'bg-white border-slate-200 hover:border-blue-300'
+          }`}
+        >
           <div className="space-y-1.5">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Karyawan</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t('employees.stats.totalEmp')}</span>
             <div className="text-2xl font-bold text-slate-800 tracking-tight">
-              {totalEmployees} <span className="text-xs text-slate-500 font-medium">orang</span>
+              {allEmployees.length} <span className="text-xs text-slate-500 font-medium">{t('employees.stats.people')}</span>
             </div>
             <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
-              {totalActiveEmployees} Aktif / Cuti
+              {totalActiveEmployees} {t('employees.stats.activeOnLeave')}
             </p>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-sm">
+          <div className={`w-12 h-12 rounded-xl flex items-center justify-center border transition-all shadow-sm ${
+            selectedStatsFilter === ''
+              ? 'bg-blue-600 text-white border-blue-600'
+              : 'bg-blue-50 text-blue-600 border-blue-100 group-hover:bg-blue-600 group-hover:text-white'
+          }`}>
             <Users className="w-5 h-5" />
           </div>
         </div>
 
         {/* Card 2: Belum Terhubung Finger */}
-        <div className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm flex items-center justify-between hover:border-rose-300 transition-all group">
+        <div 
+          onClick={() => handleStatsFilterChange('noFingerprint')}
+          className={`p-5 border rounded-2xl shadow-sm flex items-center justify-between transition-all group cursor-pointer active:scale-[0.98] ${
+            selectedStatsFilter === 'noFingerprint' 
+              ? 'border-rose-500 bg-rose-50/20 ring-2 ring-rose-500/20' 
+              : 'bg-white border-slate-200 hover:border-rose-300'
+          }`}
+        >
           <div className="space-y-1.5">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Belum Link Sidik Jari</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t('employees.stats.noFingerprint')}</span>
             <div className="text-2xl font-bold text-rose-600 tracking-tight">
-              {withoutFingerCount} <span className="text-xs text-slate-500 font-medium">orang</span>
+              {withoutFingerCount} <span className="text-xs text-slate-500 font-medium">{t('employees.stats.people')}</span>
             </div>
             <p className="text-[10px] text-rose-500 font-semibold uppercase tracking-wider">
-              Registrasi Fingerprint
+              {t('employees.stats.fingerprintReg')}
             </p>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-100 group-hover:bg-rose-600 group-hover:text-white transition-all shadow-sm">
+          <div className={`w-12 h-12 rounded-xl flex items-center justify-center border transition-all shadow-sm ${
+            selectedStatsFilter === 'noFingerprint'
+              ? 'bg-rose-600 text-white border-rose-600'
+              : 'bg-rose-50 text-rose-600 border-rose-100 group-hover:bg-rose-600 group-hover:text-white'
+          }`}>
             <Fingerprint className="w-5 h-5" />
           </div>
         </div>
 
         {/* Card 3: Pendaftaran Wajah Tertunda */}
-        <div className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm flex items-center justify-between hover:border-amber-300 transition-all group">
+        <div 
+          onClick={() => handleStatsFilterChange('noFace')}
+          className={`p-5 border rounded-2xl shadow-sm flex items-center justify-between transition-all group cursor-pointer active:scale-[0.98] ${
+            selectedStatsFilter === 'noFace' 
+              ? 'border-amber-500 bg-amber-50/20 ring-2 ring-amber-500/20' 
+              : 'bg-white border-slate-200 hover:border-amber-300'
+          }`}
+        >
           <div className="space-y-1.5">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Wajah Belum Terdaftar</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t('employees.stats.noFace')}</span>
             <div className="text-2xl font-bold text-amber-600 tracking-tight">
-              {pendingBiometricsCount} <span className="text-xs text-slate-500 font-medium">orang</span>
+              {pendingBiometricsCount} <span className="text-xs text-slate-500 font-medium">{t('employees.stats.people')}</span>
             </div>
             <p className="text-[10px] text-amber-500 font-semibold uppercase tracking-wider">
-              Belum Registrasi CCTV
+              {t('employees.stats.cctvReg')}
             </p>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100 group-hover:bg-amber-600 group-hover:text-white transition-all shadow-sm">
+          <div className={`w-12 h-12 rounded-xl flex items-center justify-center border transition-all shadow-sm ${
+            selectedStatsFilter === 'noFace'
+              ? 'bg-amber-600 text-white border-amber-600'
+              : 'bg-amber-50 text-amber-600 border-amber-100 group-hover:bg-amber-600 group-hover:text-white'
+          }`}>
             <ScanFace className="w-5 h-5" />
           </div>
         </div>
@@ -573,12 +630,12 @@ const Employees = () => {
           className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm flex items-center justify-between hover:border-orange-300 transition-all group cursor-pointer active:scale-[0.98]"
         >
           <div className="space-y-1.5">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Kontrak Segera Berakhir</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t('employees.stats.expiringContract')}</span>
             <div className="text-2xl font-bold text-orange-600 tracking-tight">
-              {criticalAlertsCount} <span className="text-xs text-slate-500 font-medium">orang</span>
+              {criticalAlertsCount} <span className="text-xs text-slate-500 font-medium">{t('employees.stats.people')}</span>
             </div>
             <p className="text-[10px] text-orange-500 font-semibold uppercase tracking-wider">
-              Habis &lt; 30 Hari (PKWT)
+              {t('employees.stats.expires30Days')}
             </p>
           </div>
           <div className="w-12 h-12 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center border border-orange-100 group-hover:bg-orange-600 group-hover:text-white transition-all shadow-sm">
@@ -592,7 +649,7 @@ const Employees = () => {
         <div className="flex items-center gap-3">
           <div className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse" />
           <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-            Alat & Aksi Massal Karyawan
+            {t('employees.bulk.title')}
           </span>
         </div>
         
@@ -602,7 +659,7 @@ const Employees = () => {
             className="bg-white border border-slate-200 text-slate-700 hover:border-blue-300 hover:text-blue-600 font-bold py-2.5 px-4 rounded-xl flex items-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all active:scale-95 cursor-pointer group"
           >
             <RefreshCw className="w-3.5 h-3.5 text-blue-600 group-hover:scale-110 transition-transform" />
-            Ubah Shift Massal
+            {t('employees.bulk.changeShift')}
           </button>
           
           <button 
@@ -620,7 +677,7 @@ const Employees = () => {
             className="bg-white border border-slate-200 text-slate-700 hover:border-indigo-300 hover:text-indigo-600 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all active:scale-95 cursor-pointer group"
           >
             <Printer className="w-3.5 h-3.5 text-indigo-500 group-hover:scale-110 transition-transform" /> 
-            Cetak ID Card (Massal)
+            {t('employees.bulk.printId')}
           </button>
 
           <button 
@@ -628,7 +685,7 @@ const Employees = () => {
             className="bg-white border border-slate-200 text-slate-700 hover:border-orange-300 hover:text-orange-600 font-bold py-2.5 px-4 rounded-xl flex items-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all active:scale-95 cursor-pointer relative group"
           >
             <FileText className="w-3.5 h-3.5 text-orange-500 group-hover:scale-110 transition-transform" />
-            Kontrak Kerja (PKWT)
+            {t('employees.bulk.contracts')}
             {criticalAlertsCount > 0 && (
               <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
                 {criticalAlertsCount}
@@ -642,12 +699,12 @@ const Employees = () => {
       <div className="bg-white p-6 border border-slate-200 rounded-2xl shadow-sm mb-6">
         <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-5">
           <div className="space-y-2">
-            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">Cari Karyawan</label>
+            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">{t('employees.filters.search')}</label>
             <div className="relative group">
               <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
               <input 
                 type="text" 
-                placeholder="Nama, NIK, ID..." 
+                placeholder={t('employees.filters.placeholder')} 
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 transition-all placeholder:text-slate-400"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -656,14 +713,14 @@ const Employees = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">Departemen</label>
+            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">{t('employees.filters.department')}</label>
             <div className="relative">
               <select 
                 value={deptFilter} 
                 onChange={e => { setDeptFilter(e.target.value); setSectionFilter(''); setPositionFilter(''); }} 
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 cursor-pointer appearance-none transition-all"
               >
-                <option value="">Semua Departemen</option>
+                <option value="">{t('employees.filters.allDepts')}</option>
                 {masterOptions.departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
               </select>
               <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
@@ -673,14 +730,14 @@ const Employees = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">Bagian (Section)</label>
+            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">{t('employees.filters.section')}</label>
             <div className="relative">
               <select 
                 value={sectionFilter} 
                 onChange={e => { setSectionFilter(e.target.value); setPositionFilter(''); }} 
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 cursor-pointer appearance-none transition-all"
               >
-                <option value="">Semua Bagian</option>
+                <option value="">{t('employees.filters.allSections')}</option>
                 {masterOptions.sections.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
               <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
@@ -690,14 +747,14 @@ const Employees = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">Jabatan</label>
+            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">{t('employees.filters.position')}</label>
             <div className="relative">
               <select 
                 value={positionFilter} 
                 onChange={e => setPositionFilter(e.target.value)} 
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 cursor-pointer appearance-none transition-all"
               >
-                <option value="">Semua Jabatan</option>
+                <option value="">{t('employees.filters.allPositions')}</option>
                 {masterOptions.positions.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
               <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
@@ -707,14 +764,14 @@ const Employees = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">Status Karyawan</label>
+            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">{t('employees.filters.status')}</label>
             <div className="relative">
               <select 
                 value={empStatusFilter} 
                 onChange={e => setEmpStatusFilter(e.target.value)} 
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 cursor-pointer appearance-none transition-all"
               >
-                <option value="">Semua Status</option>
+                <option value="">{t('employees.filters.allStatus')}</option>
                 {masterOptions.employmentStatuses.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
               <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
@@ -731,14 +788,14 @@ const Employees = () => {
             <thead className="sticky top-0 z-20 bg-slate-50">
               <tr>
                 <th className="px-6 py-4 sticky left-0 z-30 bg-slate-50 border-b border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] text-center">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Aksi</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('employees.table.actions')}</span>
                 </th>
                 <th 
                   className="px-6 py-4 sticky left-[120px] z-30 bg-slate-50 border-b border-r border-slate-200 text-center cursor-pointer hover:bg-slate-100 transition-colors group"
                   onClick={() => handleSort('employeeCode')}
                 >
                   <div className="flex items-center justify-center gap-2">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">NIK</span>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('employees.table.nik')}</span>
                     {sortConfig.key === 'employeeCode' ? (
                       sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3 text-blue-600" /> : <ChevronDown className="w-3 h-3 text-blue-600" />
                     ) : (
@@ -747,14 +804,14 @@ const Employees = () => {
                   </div>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center block">Sidik Jari</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center block">{t('employees.table.fingerprint')}</span>
                 </th>
                 <th 
                   className="px-6 py-4 sticky left-[250px] z-30 bg-slate-50 border-b border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] cursor-pointer hover:bg-slate-100 transition-colors group"
                   onClick={() => handleSort('name')}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Nama Karyawan</span>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('employees.table.name')}</span>
                     {sortConfig.key === 'name' ? (
                       sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3 text-blue-600" /> : <ChevronDown className="w-3 h-3 text-blue-600" />
                     ) : (
@@ -763,29 +820,29 @@ const Employees = () => {
                   </div>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center block">Foto</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center block">{t('employees.table.photo')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Status</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('employees.table.status')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Kuota Cuti</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('employees.table.leaveQuota')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Deteksi Wajah</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('employees.table.faceDetect')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Shift</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('employees.table.shift')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Grade</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('employees.table.grade')}</span>
                 </th>
                 <th 
                   className="px-6 py-4 border-b border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors group"
                   onClick={() => handleSort('position')}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Jabatan</span>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('common.position')}</span>
                     {sortConfig.key === 'position' ? (
                       sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3 text-blue-600" /> : <ChevronDown className="w-3 h-3 text-blue-600" />
                     ) : (
@@ -798,7 +855,7 @@ const Employees = () => {
                   onClick={() => handleSort('section')}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Bagian</span>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('common.section')}</span>
                     {sortConfig.key === 'section' ? (
                       sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3 text-blue-600" /> : <ChevronDown className="w-3 h-3 text-blue-600" />
                     ) : (

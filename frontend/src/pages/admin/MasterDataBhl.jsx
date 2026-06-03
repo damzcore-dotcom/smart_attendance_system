@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   UserPlus, Search, Edit2, Trash2, X, AlertCircle, Loader2,
@@ -8,6 +9,7 @@ import api, { employeeAPI, settingsAPI, payrollAPI } from '../../services/api';
 import * as XLSX from 'xlsx';
 
 export default function MasterDataBhl() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const fileInputRef = useRef(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -82,7 +84,7 @@ export default function MasterDataBhl() {
       setIsModalOpen(false);
     },
     onError: (error) => {
-      alert(`Failed to save: ${error.message || 'Unknown error'}`);
+      alert(`${t('masterDataBhl.alerts.saveFailed')}${error.message || 'Unknown error'}`);
       console.error(error);
     }
   });
@@ -107,7 +109,7 @@ export default function MasterDataBhl() {
       setIsModalOpen(false);
     },
     onError: (error) => {
-      alert(`Failed to update: ${error.message || 'Unknown error'}`);
+      alert(`${t('masterDataBhl.alerts.updateFailed')}${error.message || 'Unknown error'}`);
       console.error(error);
     }
   });
@@ -120,7 +122,7 @@ export default function MasterDataBhl() {
       queryClient.invalidateQueries(['employees-for-bhl']);
     },
     onError: (error) => {
-      alert(`Failed to delete: ${error.message || 'Unknown error'}`);
+      alert(`${t('masterDataBhl.alerts.deleteFailed')}${error.message || 'Unknown error'}`);
       console.error(error);
     }
   });
@@ -184,7 +186,7 @@ export default function MasterDataBhl() {
   };
 
   const handleDelete = (emp) => {
-    if (window.confirm(`Are you sure you want to delete ${emp.name}?`)) {
+    if (window.confirm(t('masterDataBhl.alerts.deleteConfirm', { name: emp.name }))) {
       deleteMutation.mutate(emp.dbId);
     }
   };
@@ -216,7 +218,7 @@ export default function MasterDataBhl() {
       });
       const allBhl = res?.data || [];
       if (allBhl.length === 0) {
-        alert("Tidak ada data BHL untuk diexport.");
+        alert(t("masterDataBhl.alerts.noDataExport"));
         return;
       }
       
@@ -245,7 +247,7 @@ export default function MasterDataBhl() {
 
       XLSX.writeFile(wb, `Master_Data_BHL_${new Date().toISOString().split('T')[0]}.xlsx`);
     } catch (error) {
-      alert("Gagal melakukan export: " + error.message);
+      alert(t("masterDataBhl.alerts.exportFailed") + error.message);
     }
   };
 
@@ -257,12 +259,12 @@ export default function MasterDataBhl() {
     const jobId = Date.now().toString();
     try {
       await employeeAPI.importExcel(file, jobId);
-      alert("Data BHL berhasil diimport!");
+      alert(t("masterDataBhl.alerts.importSuccess"));
       queryClient.invalidateQueries(['bhl_employees']);
       queryClient.invalidateQueries(['bhl_employees_all']);
       queryClient.invalidateQueries(['employees-for-bhl']);
     } catch (err) {
-      alert(`Gagal mengimport data BHL: ${err.message}`);
+      alert(`${t('masterDataBhl.alerts.importFailed')}${err.message}`);
     } finally {
       setIsImporting(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -279,8 +281,8 @@ export default function MasterDataBhl() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between group hover:border-slate-300 transition-all duration-300">
           <div className="space-y-2">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total BHL Terdaftar</p>
-            <h3 className="text-3xl font-black text-slate-800">{stats.total} <span className="text-xs font-semibold text-slate-400">Orang</span></h3>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('masterDataBhl.totalRegistered')}</p>
+            <h3 className="text-3xl font-black text-slate-800">{stats.total} <span className="text-xs font-semibold text-slate-400">{t('masterDataBhl.people')}</span></h3>
           </div>
           <div className="w-12 h-12 bg-slate-50 text-slate-500 rounded-2xl flex items-center justify-center border border-slate-100 group-hover:scale-110 transition-all duration-300">
             <HardHat className="w-6 h-6" />
@@ -289,8 +291,8 @@ export default function MasterDataBhl() {
 
         <div className="bg-white p-5 rounded-2xl border border-emerald-200 shadow-sm flex items-center justify-between group hover:border-emerald-300 transition-all duration-300 bg-emerald-50/10">
           <div className="space-y-2">
-            <p className="text-[10px] font-bold text-emerald-600/80 uppercase tracking-widest">BHL Aktif</p>
-            <h3 className="text-3xl font-black text-emerald-600">{stats.active} <span className="text-xs font-semibold text-emerald-500/70">Orang</span></h3>
+            <p className="text-[10px] font-bold text-emerald-600/80 uppercase tracking-widest">{t('masterDataBhl.activeBhl')}</p>
+            <h3 className="text-3xl font-black text-emerald-600">{stats.active} <span className="text-xs font-semibold text-emerald-500/70">{t('masterDataBhl.people')}</span></h3>
           </div>
           <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center border border-emerald-100 group-hover:scale-110 transition-all duration-300">
             <ShieldCheck className="w-6 h-6" />
@@ -299,7 +301,7 @@ export default function MasterDataBhl() {
 
         <div className="bg-white p-5 rounded-2xl border border-blue-200 shadow-sm flex items-center justify-between group hover:border-blue-300 transition-all duration-300 bg-blue-50/10">
           <div className="space-y-2">
-            <p className="text-[10px] font-bold text-blue-600/80 uppercase tracking-widest">Rata-rata Upah Harian</p>
+            <p className="text-[10px] font-bold text-blue-600/80 uppercase tracking-widest">{t('masterDataBhl.avgWage')}</p>
             <h3 className="text-3xl font-black text-blue-600">Rp {stats.avgWage.toLocaleString('id-ID')}</h3>
           </div>
           <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center border border-blue-100 group-hover:scale-110 transition-all duration-300">
@@ -315,7 +317,7 @@ export default function MasterDataBhl() {
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input 
               type="text" 
-              placeholder="Search BHL..." 
+              placeholder={t('masterDataBhl.searchPlaceholder')} 
               value={searchTerm}
               onChange={e => { setSearchTerm(e.target.value); setPage(1); }}
               className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
@@ -323,15 +325,15 @@ export default function MasterDataBhl() {
           </div>
 
           <div className="flex items-center gap-2">
-            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Status:</label>
+            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">{t('masterDataBhl.statusLabel')}</label>
             <select
               value={statusFilter}
               onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
               className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 cursor-pointer transition-all"
             >
-              <option value="ACTIVE">Aktif</option>
-              <option value="TERMINATED">Non-Aktif</option>
-              <option value="All">Semua Status</option>
+              <option value="ACTIVE">{t('masterDataBhl.statusActive')}</option>
+              <option value="TERMINATED">{t('masterDataBhl.statusInactive')}</option>
+              <option value="All">{t('masterDataBhl.statusAll')}</option>
             </select>
           </div>
         </div>
@@ -376,7 +378,7 @@ export default function MasterDataBhl() {
             onClick={openAddModal}
             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
           >
-            <UserPlus className="w-3.5 h-3.5" /> Add BHL
+            <UserPlus className="w-3.5 h-3.5" /> {t('masterDataBhl.addBhl')}
           </button>
         </div>
       </div>
@@ -387,15 +389,15 @@ export default function MasterDataBhl() {
           <table className="w-full text-left text-xs whitespace-nowrap">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">NIK</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Name</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">KTP / NIK</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Nomor HP</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Dept / Section / Pos</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Join Date</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">Upah Harian</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center">Status</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center">Actions</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('masterDataBhl.table.nik')}</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('masterDataBhl.table.name')}</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('masterDataBhl.table.ktp')}</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('masterDataBhl.table.phone')}</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('masterDataBhl.table.deptSectionPos')}</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('masterDataBhl.table.joinDate')}</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">{t('masterDataBhl.table.dailyWage')}</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center">{t('masterDataBhl.table.status')}</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center">{t('masterDataBhl.table.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -403,12 +405,12 @@ export default function MasterDataBhl() {
                 <tr>
                   <td colSpan="9" className="text-center py-12">
                     <Loader2 className="w-6 h-6 animate-spin text-emerald-600 mx-auto mb-2" />
-                    <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Loading Data...</p>
+                    <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">{t('masterDataBhl.table.loading')}</p>
                   </td>
                 </tr>
               ) : bhlList.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="text-center py-12 text-slate-500 text-xs">No BHL employees found.</td>
+                  <td colSpan="9" className="text-center py-12 text-slate-500 text-xs">{t('masterDataBhl.table.noEmployees')}</td>
                 </tr>
               ) : (
                 bhlList.map(emp => (
@@ -432,7 +434,7 @@ export default function MasterDataBhl() {
                             ? 'bg-blue-50 text-blue-700 border border-blue-200'
                             : 'bg-slate-100 text-slate-600 border border-slate-200'
                       }`}>
-                        {emp.status === 'Active' ? 'Aktif' : emp.status === 'On Leave' ? 'Cuti' : 'Non-Aktif'}
+                        {emp.status === 'Active' ? t('masterDataBhl.modal.statusActiveOption') : emp.status === 'On Leave' ? t('masterDataBhl.modal.statusLeaveOption') : t('masterDataBhl.table.statusInactive')}
                       </span>
                     </td>
                     <td className="px-6 py-3 text-center">
@@ -452,11 +454,11 @@ export default function MasterDataBhl() {
           </table>
         </div>
         <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-between items-center text-[10px] font-semibold text-slate-500">
-          <span>Showing {totalRecords} records</span>
+          <span>{t('masterDataBhl.table.showing')} {totalRecords} {t('masterDataBhl.table.records')}</span>
           <div className="flex gap-2">
-            <button disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1 bg-white border rounded hover:bg-slate-50 disabled:opacity-50">Prev</button>
-            <span className="px-3 py-1 font-bold text-slate-700">Page {page} of {totalPages}</span>
-            <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="px-3 py-1 bg-white border rounded hover:bg-slate-50 disabled:opacity-50">Next</button>
+            <button disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1 bg-white border rounded hover:bg-slate-50 disabled:opacity-50">{t('masterDataBhl.table.prev')}</button>
+            <span className="px-3 py-1 font-bold text-slate-700">{t('masterDataBhl.table.pageOf', { page, total: totalPages })}</span>
+            <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="px-3 py-1 bg-white border rounded hover:bg-slate-50 disabled:opacity-50">{t('masterDataBhl.table.next')}</button>
           </div>
         </div>
       </div>
@@ -467,8 +469,8 @@ export default function MasterDataBhl() {
           <div className="bg-white rounded-2xl w-full max-w-2xl relative z-10 overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-emerald-50/50">
               <div>
-                <h3 className="font-bold text-slate-800 text-lg">{newBhl.dbId ? 'Edit BHL Employee' : 'Add New BHL'}</h3>
-                <p className="text-xs text-slate-500 mt-1">Sistem akan otomatis mengatur tipe pengupahan ke HARIAN</p>
+                <h3 className="font-bold text-slate-800 text-lg">{newBhl.dbId ? t('masterDataBhl.modal.editTitle') : t('masterDataBhl.modal.addTitle')}</h3>
+                <p className="text-xs text-slate-500 mt-1">{t('masterDataBhl.modal.autoNotice')}</p>
               </div>
               <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-xl transition-colors">
                 <X className="w-5 h-5 text-slate-500" />
@@ -478,64 +480,64 @@ export default function MasterDataBhl() {
             <form onSubmit={handleSave} className="p-6">
               <div className="grid grid-cols-2 gap-5">
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">NIK (Kosongkan untuk Auto)</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">{t('masterDataBhl.modal.nikField')}</label>
                   <input value={newBhl.employeeCode} onChange={e => setNewBhl({...newBhl, employeeCode: e.target.value})} readOnly={!!newBhl.dbId} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Nama Lengkap *</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">{t('masterDataBhl.modal.fullName')}</label>
                   <input required value={newBhl.name} onChange={e => setNewBhl({...newBhl, name: e.target.value})} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">No. KTP / NIK *</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">{t('masterDataBhl.modal.ktpField')}</label>
                   <input required value={newBhl.idNumber} onChange={e => setNewBhl({...newBhl, idNumber: e.target.value})} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Nomor HP</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">{t('masterDataBhl.modal.phoneField')}</label>
                   <input value={newBhl.phone} onChange={e => setNewBhl({...newBhl, phone: e.target.value})} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Departemen</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">{t('masterDataBhl.modal.deptField')}</label>
                   <input value={newBhl.dept} onChange={e => setNewBhl({...newBhl, dept: e.target.value})} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Bagian / Section</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">{t('masterDataBhl.modal.sectionField')}</label>
                   <input value={newBhl.section} onChange={e => setNewBhl({...newBhl, section: e.target.value})} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Bagian / Posisi (Position)</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">{t('masterDataBhl.modal.positionField')}</label>
                   <input value={newBhl.position} onChange={e => setNewBhl({...newBhl, position: e.target.value})} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">TANGGAL BERGABUNG</label>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">{t('masterDataBhl.modal.joinDateField')}</label>
                   <input type="date" value={newBhl.joinDate} onChange={e => setNewBhl({...newBhl, joinDate: e.target.value})} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all" />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">JAM KERJA (SHIFT)</label>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">{t('masterDataBhl.modal.shiftField')}</label>
                   <select value={newBhl.shiftId} onChange={e => setNewBhl({...newBhl, shiftId: e.target.value})} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all cursor-pointer">
-                    <option value="">-- Pilih Jam Kerja (Otomatis Default) --</option>
+                    <option value="">{t('masterDataBhl.modal.selectShiftPlaceholder')}</option>
                     {shiftsList.map(shift => (
                       <option key={shift.id} value={shift.id}>{shift.name} ({shift.startTime} - {shift.endTime})</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Status Keaktifan</label>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">{t('masterDataBhl.modal.statusField')}</label>
                   <select value={newBhl.status} onChange={e => setNewBhl({...newBhl, status: e.target.value})} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all cursor-pointer">
-                    <option value="ACTIVE">Aktif (Bekerja)</option>
-                    <option value="ON_LEAVE">Cuti</option>
-                    <option value="TERMINATED">Non-Aktif (Diberhentikan / Resign)</option>
+                    <option value="ACTIVE">{t('masterDataBhl.modal.statusActiveOption')}</option>
+                    <option value="ON_LEAVE">{t('masterDataBhl.modal.statusLeaveOption')}</option>
+                    <option value="TERMINATED">{t('masterDataBhl.modal.statusTerminatedOption')}</option>
                   </select>
                 </div>
                 <div className="col-span-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Upah Harian (Rp)</label>
-                  <input type="number" value={newBhl.dailyWage} onChange={e => setNewBhl({...newBhl, dailyWage: e.target.value})} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" placeholder="Contoh: 103000" />
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">{t('masterDataBhl.modal.wageField')}</label>
+                  <input type="number" value={newBhl.dailyWage} onChange={e => setNewBhl({...newBhl, dailyWage: e.target.value})} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" placeholder={t('masterDataBhl.modal.wagePlaceholder')} />
                 </div>
               </div>
               
               <div className="mt-8 flex justify-end gap-3">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all">Cancel</button>
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all">{t('common.cancel')}</button>
                 <button type="submit" disabled={addMutation.isPending || updateMutation.isPending} className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow transition-all disabled:opacity-50">
-                  {addMutation.isPending || updateMutation.isPending ? 'Saving...' : 'Save BHL'}
+                  {addMutation.isPending || updateMutation.isPending ? t('common.saving') : t('common.save')}
                 </button>
               </div>
             </form>

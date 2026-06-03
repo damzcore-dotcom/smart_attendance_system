@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { 
   Banknote, Download, FileText, CheckCircle, XCircle, Search, Calendar, ChevronDown, Filter, Printer 
 } from 'lucide-react';
@@ -6,6 +7,7 @@ import { payrollAPI, settingsAPI, attendanceAPI } from '../../services/api';
 import PrintableSlip from '../../components/payroll/PrintableSlip';
 
 const Payroll = () => {
+  const { t } = useTranslation();
   const [payrolls, setPayrolls] = useState([]);
   const [loading, setLoading] = useState(false);
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
@@ -51,15 +53,15 @@ const Payroll = () => {
   };
 
   const handleGenerate = async () => {
-    if (!selectedPeriod) return alert('Pilih periode (YYYY-MM)');
+    if (!selectedPeriod) return alert(t('payroll.selectPeriodAlert'));
     setLoading(true);
     try {
       await payrollAPI.generate({ period: selectedPeriod });
-      alert('Payroll berhasil di-generate!');
+      alert(t('payroll.generateSuccess'));
       setGenerateModalOpen(false);
       fetchPayrolls();
     } catch (err) {
-      alert('Gagal generate: ' + err.message);
+      alert(t('payroll.generateFailed', { message: err.message }));
     } finally {
       setLoading(false);
     }
@@ -76,29 +78,29 @@ const Payroll = () => {
       link.click();
       link.remove();
     } catch (err) {
-      alert('Gagal export data');
+      alert(t('payroll.exportFailed'));
     }
   };
 
   const handleSubmitForApproval = async (id) => {
-    if (!window.confirm('Kirim draft ini ke Direktur untuk disetujui?')) return;
+    if (!window.confirm(t('payroll.confirmApproval'))) return;
     try {
       await payrollAPI.submitForApproval(id);
-      alert('Payroll berhasil diajukan untuk persetujuan.');
+      alert(t('payroll.submitApprovalSuccess'));
       fetchPayrolls();
     } catch (err) {
-      alert('Gagal mengajukan persetujuan: ' + err.message);
+      alert(t('payroll.submitApprovalFailed', { message: err.message }));
     }
   };
 
   const handleFinalize = async (id) => {
-    if (!window.confirm('Finalisasi payroll ini? Setelah difinalisasi, slip gaji akan tersedia untuk karyawan.')) return;
+    if (!window.confirm(t('payroll.confirmFinalize'))) return;
     try {
       await payrollAPI.finalize(id);
-      alert('Payroll berhasil difinalisasi.');
+      alert(t('payroll.finalizeSuccess'));
       fetchPayrolls();
     } catch (err) {
-      alert('Gagal memfinalisasi: ' + err.message);
+      alert(t('payroll.finalizeFailed', { message: err.message }));
     }
   };
 
@@ -125,36 +127,36 @@ const Payroll = () => {
         <div>
           <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
             <Banknote className="text-blue-600" />
-            Payroll Management
+            {t('payroll.title')}
           </h1>
-          <p className="text-gray-500 mt-1">Kelola dan generate gaji bulanan karyawan</p>
+          <p className="text-gray-500 mt-1">{t('payroll.subtitle')}</p>
         </div>
         <button 
           onClick={() => setGenerateModalOpen(true)}
           className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg flex items-center font-medium shadow-sm transition-all"
         >
           <Calendar className="w-5 h-5 mr-2" />
-          Generate Payroll
+          {t('payroll.generatePayrollBtn')}
         </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-          <div className="text-sm font-medium text-gray-500 mb-1">Total Payroll</div>
+          <div className="text-sm font-medium text-gray-500 mb-1">{t('payroll.totalPayroll')}</div>
           <div className="text-2xl font-bold text-gray-800">{payrolls.length}</div>
           <div className="text-xs text-green-600 mt-2 font-medium flex items-center">
-            Periode Tercatat
+            {t('payroll.recordedPeriods')}
           </div>
         </div>
         <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-          <div className="text-sm font-medium text-gray-500 mb-1">Awaiting Approval</div>
+          <div className="text-sm font-medium text-gray-500 mb-1">{t('payroll.awaitingApproval')}</div>
           <div className="text-2xl font-bold text-yellow-600">
             {payrolls.filter(p => p.status === 'PENDING_APPROVAL').length}
           </div>
-          <div className="text-xs text-gray-500 mt-2 font-medium">Butuh Persetujuan</div>
+          <div className="text-xs text-gray-500 mt-2 font-medium">{t('payroll.needsApproval')}</div>
         </div>
         <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm md:col-span-2">
-          <div className="text-sm font-medium text-gray-500 mb-1">Latest Total Net Pay</div>
+          <div className="text-sm font-medium text-gray-500 mb-1">{t('payroll.latestNetPay')}</div>
           <div className="text-2xl font-bold text-blue-600">
             Rp {payrolls[0]?.totalNet.toLocaleString('id-ID') || 0}
           </div>
@@ -166,18 +168,18 @@ const Payroll = () => {
         <table className="w-full text-left">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              <th className="px-6 py-4 font-medium text-gray-600">Periode</th>
-              <th className="px-6 py-4 font-medium text-gray-600">Karyawan</th>
-              <th className="px-6 py-4 font-medium text-gray-600">Total Net (Rp)</th>
-              <th className="px-6 py-4 font-medium text-gray-600">Status</th>
-              <th className="px-6 py-4 font-medium text-gray-600 text-right">Aksi</th>
+              <th className="px-6 py-4 font-medium text-gray-600">{t('payroll.periodLabel')}</th>
+              <th className="px-6 py-4 font-medium text-gray-600">{t('payroll.employeesLabel')}</th>
+              <th className="px-6 py-4 font-medium text-gray-600">{t('payroll.totalNetLabel')}</th>
+              <th className="px-6 py-4 font-medium text-gray-600">{t('payroll.statusLabel')}</th>
+              <th className="px-6 py-4 font-medium text-gray-600 text-right">{t('payroll.actionLabel')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {payrolls.map((p) => (
               <tr key={p.id} className="hover:bg-gray-50 transition-colors">
                 <td className="px-6 py-4 font-medium text-gray-800">{p.periodName}</td>
-                <td className="px-6 py-4 text-gray-600">{p.totalEmployees} Orang</td>
+                <td className="px-6 py-4 text-gray-600">{t('payroll.employeesCount', { count: p.totalEmployees })}</td>
                 <td className="px-6 py-4 font-semibold text-gray-800">
                   {p.totalNet.toLocaleString('id-ID')}
                 </td>
@@ -197,7 +199,7 @@ const Payroll = () => {
                       onClick={() => handleSubmitForApproval(p.id)}
                       className="px-3 py-1.5 text-xs font-semibold bg-yellow-100 text-yellow-700 hover:bg-yellow-200 rounded-lg transition-colors flex items-center gap-1"
                     >
-                      Ajukan Approval
+                      {t('payroll.submitApprovalBtn')}
                     </button>
                   )}
                   {p.status === 'APPROVED' && (
@@ -205,20 +207,20 @@ const Payroll = () => {
                       onClick={() => handleFinalize(p.id)}
                       className="px-3 py-1.5 text-xs font-semibold bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-lg transition-colors flex items-center gap-1"
                     >
-                      Finalisasi
+                      {t('payroll.finalizeBtn')}
                     </button>
                   )}
                   <button 
                     onClick={() => loadDetail(p.id)}
                     className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                    title="View Detail"
+                    title={t('payroll.viewDetailBtn')}
                   >
                     <Search className="w-5 h-5" />
                   </button>
                   <button 
                     onClick={() => handleExport(p.id)}
                     className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                    title="Export Excel"
+                    title={t('payroll.exportExcelBtn')}
                   >
                     <Download className="w-5 h-5" />
                   </button>
@@ -228,7 +230,7 @@ const Payroll = () => {
             {payrolls.length === 0 && !loading && (
               <tr>
                 <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
-                  Belum ada data payroll
+                  {t('payroll.noData')}
                 </td>
               </tr>
             )}
@@ -240,9 +242,9 @@ const Payroll = () => {
       {generateModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 print:hidden">
           <div className="bg-white rounded-xl p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4">Generate Payroll</h2>
+            <h2 className="text-xl font-bold mb-4">{t('payroll.generatePayrollBtn')}</h2>
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Pilih Periode</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{t('payroll.selectPeriod')}</label>
               <input 
                 type="month" 
                 value={selectedPeriod}
@@ -255,14 +257,14 @@ const Payroll = () => {
                 onClick={() => setGenerateModalOpen(false)}
                 className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
               >
-                Batal
+                {t('common.cancel')}
               </button>
               <button 
                 onClick={handleGenerate}
                 disabled={loading}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
               >
-                {loading ? 'Processing...' : 'Generate Sekarang'}
+                {loading ? t('payroll.processing') : t('payroll.generateNow')}
               </button>
             </div>
           </div>
@@ -275,8 +277,8 @@ const Payroll = () => {
           <div className="bg-white rounded-xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center">
               <div>
-                <h2 className="text-xl font-bold text-gray-800">Detail Payroll: {selectedPayroll.periodName}</h2>
-                <p className="text-sm text-gray-500 mt-1">Status: {selectedPayroll.status}</p>
+                <h2 className="text-xl font-bold text-gray-800">{t('payroll.detailTitle', { period: selectedPayroll.periodName })}</h2>
+                <p className="text-sm text-gray-500 mt-1">{t('payroll.statusLabel')}: {selectedPayroll.status}</p>
               </div>
               <button onClick={() => setSelectedPayroll(null)} className="p-2 hover:bg-gray-100 rounded-lg">
                 <XCircle className="w-6 h-6 text-gray-400" />
@@ -286,14 +288,14 @@ const Payroll = () => {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 text-gray-600 sticky top-0">
                   <tr>
-                    <th className="p-3 text-left">Karyawan</th>
-                    <th className="p-3 text-left">Dept</th>
-                    <th className="p-3 text-right">Gaji Pokok</th>
-                    <th className="p-3 text-right">Kehadiran</th>
-                    <th className="p-3 text-right">Lembur</th>
-                    <th className="p-3 text-right">Potongan</th>
-                    <th className="p-3 text-right font-bold">Net Pay</th>
-                    <th className="p-3 text-center">Print</th>
+                    <th className="p-3 text-left">{t('payroll.employeesLabel')}</th>
+                    <th className="p-3 text-left">{t('payroll.detailDept')}</th>
+                    <th className="p-3 text-right">{t('payroll.detailBaseSalary')}</th>
+                    <th className="p-3 text-right">{t('payroll.detailAttendance')}</th>
+                    <th className="p-3 text-right">{t('payroll.detailOvertime')}</th>
+                    <th className="p-3 text-right">{t('payroll.detailDeductions')}</th>
+                    <th className="p-3 text-right font-bold">{t('payroll.detailNetPay')}</th>
+                    <th className="p-3 text-center">{t('payroll.printSlip')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -306,8 +308,8 @@ const Payroll = () => {
                       <td className="p-3">{d.department}</td>
                       <td className="p-3 text-right">Rp {d.baseSalary.toLocaleString('id-ID')}</td>
                       <td className="p-3 text-right">
-                        <div>Hadir: {d.daysPresent}</div>
-                        <div className="text-red-500 text-xs">Telat: {d.totalLateMinutes}m</div>
+                        <div>{t('payroll.detailDaysPresent', { days: d.daysPresent })}</div>
+                        <div className="text-red-500 text-xs">{t('payroll.detailLateMinutes', { mins: d.totalLateMinutes })}</div>
                       </td>
                       <td className="p-3 text-right">Rp {d.overtimePay.toLocaleString('id-ID')}</td>
                       <td className="p-3 text-right text-red-600">Rp {d.totalDeduction.toLocaleString('id-ID')}</td>
@@ -317,7 +319,7 @@ const Payroll = () => {
                           <button 
                             onClick={() => handlePrint(d)}
                             className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                            title="Print Slip Gaji"
+                            title={t('payroll.printSlip')}
                           >
                             <Printer className="w-4 h-4" />
                           </button>

@@ -40,6 +40,25 @@ const getAll = async (req, res) => {
       });
     }
 
+    if (req.query.noFingerprint === 'true') {
+      conditions.push({
+        OR: [
+          { fingerPrintId: null },
+          { fingerPrintId: '' }
+        ]
+      });
+    }
+
+    if (req.query.noFace === 'true') {
+      conditions.push({
+        OR: [
+          { faceStatus: 'PENDING' },
+          { faceId: null },
+          { faceId: '' }
+        ]
+      });
+    }
+
     if (conditions.length > 0) {
       where.AND = conditions;
     }

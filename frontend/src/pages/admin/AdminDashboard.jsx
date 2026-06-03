@@ -40,9 +40,12 @@ import { useQuery } from '@tanstack/react-query';
 import api, { dashboardAPI, employeeAPI, attendanceAPI, deviceAPI } from '../../services/api';
 
 
-const StatCard = ({ title, value, change, icon: Icon, color, delay }) => (
+const StatCard = ({ title, value, change, icon: Icon, color, delay, onClick }) => (
   <div 
-    className={`relative overflow-hidden group p-7 bg-white/70 backdrop-blur-xl border border-slate-200/60 hover:border-${color}-300 transition-all duration-700 hover:-translate-y-2 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-2xl hover:shadow-${color}-500/10 animate-in slide-in-from-bottom-4 fade-in`}
+    onClick={onClick}
+    className={`relative overflow-hidden group p-7 bg-white/70 backdrop-blur-xl border border-slate-200/60 hover:border-${color}-300 transition-all duration-700 hover:-translate-y-2 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-2xl hover:shadow-${color}-500/10 animate-in slide-in-from-bottom-4 fade-in ${
+      onClick ? 'cursor-pointer' : ''
+    }`}
     style={{ animationFillMode: 'both', animationDelay: `${delay}ms` }}
   >
     <div className={`absolute -right-16 -top-16 w-56 h-56 bg-gradient-to-br from-${color}-100/80 to-${color}-50/10 rounded-full blur-[40px] group-hover:scale-150 transition-all duration-1000 ease-out`}></div>
@@ -366,10 +369,10 @@ const AdminDashboard = () => {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-        <StatCard delay={100} title="Global Workforce" value={stats.totalEmployees} change="+12" icon={Users} color="blue" />
-        <StatCard delay={200} title="Current Presence" value={stats.presentToday} change="+4.2%" icon={Activity} color="emerald" />
-        <StatCard delay={300} title="Morning Lates" value={stats.lateArrivals} change="-2.1%" icon={Clock} color="rose" />
-        <StatCard delay={400} title="System Lateness" value={stats.avgLateTime} change="-5m" icon={TrendingUp} color="indigo" />
+        <StatCard delay={100} title={t('dashboard.stats.workforce')} value={stats.totalEmployees} change="+12" icon={Users} color="blue" onClick={() => navigate('/admin/employees')} />
+        <StatCard delay={200} title={t('dashboard.stats.presence')} value={stats.presentToday} change="+4.2%" icon={Activity} color="emerald" onClick={() => navigate('/admin/attendance', { state: { status: 'PRESENT', viewTab: 'DETAIL' } })} />
+        <StatCard delay={300} title={t('dashboard.stats.lates')} value={stats.lateArrivals} change="-2.1%" icon={Clock} color="rose" onClick={() => navigate('/admin/attendance', { state: { status: 'LATE', viewTab: 'DETAIL' } })} />
+        <StatCard delay={400} title={t('dashboard.stats.systemLateness')} value={stats.avgLateTime} change="-5m" icon={TrendingUp} color="indigo" onClick={() => navigate('/admin/attendance', { state: { status: 'LATE', viewTab: 'DETAIL' } })} />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -379,15 +382,15 @@ const AdminDashboard = () => {
           
           <div className="flex justify-between items-center mb-8 relative z-10">
             <div>
-              <h3 className="font-extrabold text-xl text-slate-800 tracking-tight">Vectors & Analytics</h3>
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">7-Day Biometric Punctuality Trend</p>
+              <h3 className="font-extrabold text-xl text-slate-800 tracking-tight">{t('dashboard.charts.analytics')}</h3>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">{t('dashboard.charts.punctualityTrend')}</p>
             </div>
             <div className="flex gap-2">
               <span className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-600 bg-white shadow-sm px-3 py-1.5 rounded-lg border border-slate-200">
-                <div className="w-2 h-2 rounded-full bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.6)] animate-pulse"></div> Present
+                <div className="w-2 h-2 rounded-full bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.6)] animate-pulse"></div> {t('dashboard.charts.present')}
               </span>
               <span className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-600 bg-white shadow-sm px-3 py-1.5 rounded-lg border border-slate-200">
-                <div className="w-2 h-2 rounded-full bg-slate-300"></div> Late
+                <div className="w-2 h-2 rounded-full bg-slate-300"></div> {t('dashboard.charts.late')}
               </span>
             </div>
           </div>
@@ -438,7 +441,7 @@ const AdminDashboard = () => {
                     : 'text-slate-400 border-transparent hover:text-slate-600'
                 }`}
               >
-                Keterlambatan
+                {t('dashboard.alerts.lateness')}
               </button>
               <button
                 type="button"
@@ -453,7 +456,7 @@ const AdminDashboard = () => {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
-                Live CCTV Capture
+                {t('dashboard.alerts.cctvCapture')}
               </button>
             </div>
             <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${activeAlertTab === 'late' ? 'bg-rose-50 text-rose-500 border border-rose-100' : 'bg-emerald-50 text-emerald-500 border border-emerald-100'}`}>
@@ -470,7 +473,7 @@ const AdminDashboard = () => {
                   <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center">
                     <CalendarCheck className="w-6 h-6 text-slate-300" />
                   </div>
-                  <p className="text-slate-405 font-bold text-xs tracking-wide">Clear skies today.<br/>No late arrivals detected.</p>
+                  <p className="text-slate-400 font-bold text-xs tracking-wide">{t('dashboard.alerts.clearSkies')}<br/>{t('dashboard.alerts.noLates')}</p>
                 </div>
               ) : (
                 recentLate.map((row, i) => (
@@ -497,7 +500,7 @@ const AdminDashboard = () => {
                   <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center">
                     <Video className="w-6 h-6 text-slate-300" />
                   </div>
-                  <p className="text-slate-400 font-bold text-xs tracking-wide">Menunggu tangkapan kamera...<br/>Berdiri di depan CCTV untuk tes.</p>
+                  <p className="text-slate-405 font-bold text-xs tracking-wide">{t('dashboard.alerts.waitingCamera')}<br/>{t('dashboard.alerts.cameraTestDesc')}</p>
                 </div>
               ) : (
                 liveEvents.map((row, i) => (
@@ -530,7 +533,7 @@ const AdminDashboard = () => {
             )}
           </div>
           <button onClick={() => navigate('/admin/attendance')} className="w-full mt-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500 bg-white hover:bg-slate-800 hover:text-white border border-slate-200 rounded-2xl transition-all duration-300 shadow-sm active:scale-95 cursor-pointer">
-            Audit Full Logs
+            {t('dashboard.alerts.auditLogs')}
           </button>
         </div>
       </div>
@@ -543,8 +546,8 @@ const AdminDashboard = () => {
           
           <div className="flex justify-between items-center mb-10 relative z-10">
             <div>
-              <h3 className="font-extrabold text-xl text-slate-800 tracking-tight">Departmental Heatmap</h3>
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">Cumulative loss in minutes</p>
+              <h3 className="font-extrabold text-xl text-slate-800 tracking-tight">{t('dashboard.charts.heatmap')}</h3>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">{t('dashboard.charts.cumulativeLoss')}</p>
             </div>
             <button className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 transition-colors">
               <MoreHorizontal className="w-5 h-5" />
@@ -588,8 +591,8 @@ const AdminDashboard = () => {
           
           <div className="flex justify-between items-center mb-6 relative z-10">
             <div>
-              <h3 className="font-extrabold text-xl text-slate-800 tracking-tight">Tindakan Tertunda</h3>
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">Persetujuan & Aksi</p>
+              <h3 className="font-extrabold text-xl text-slate-800 tracking-tight">{t('dashboard.actions.title')}</h3>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">{t('dashboard.actions.subtitle')}</p>
             </div>
             <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-500 flex items-center justify-center border border-amber-100 shadow-inner shrink-0">
               <Bell className="w-5 h-5 animate-bounce" />
@@ -604,7 +607,7 @@ const AdminDashboard = () => {
                 <div className="w-14 h-14 rounded-full bg-slate-50 flex items-center justify-center">
                   <CheckSquare className="w-6 h-6 text-slate-350" />
                 </div>
-                <p className="text-slate-400 font-bold text-xs tracking-wide">Semua beres!<br/>Tidak ada tindakan tertunda.</p>
+                <p className="text-slate-400 font-bold text-xs tracking-wide">{t('dashboard.actions.allDone')}<br/>{t('dashboard.actions.noPending')}</p>
               </div>
             ) : (
               notifications.map((n) => {

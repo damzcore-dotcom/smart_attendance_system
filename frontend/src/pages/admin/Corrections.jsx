@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { correctionAPI } from '../../services/api';
 import { 
@@ -14,6 +15,7 @@ import {
 } from 'lucide-react';
 
 const AdminCorrections = () => {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [filterStatus, setFilterStatus] = useState('PENDING');
 
@@ -26,9 +28,9 @@ const AdminCorrections = () => {
     mutationFn: ({ id, status, note }) => correctionAPI.review(id, { status, reviewNote: note }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-corrections'] });
-      alert('Correction request updated successfully');
+      alert(t('corrections.alertSuccessUpdate'));
     },
-    onError: (err) => alert(err.message || 'Failed to update request'),
+    onError: (err) => alert(err.message || t('corrections.alertFailUpdate')),
   });
 
   const corrections = data?.data || [];
@@ -41,15 +43,15 @@ const AdminCorrections = () => {
             <div className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center">
               <Edit3 className="w-3 h-3 text-slate-400" />
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider">Administrative Oversight</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider">{t('corrections.adminOversight')}</span>
             <div className="w-1 h-1 rounded-full bg-slate-300" />
-            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Data Corrections</span>
+            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">{t('corrections.dataCorrections')}</span>
           </div>
           <h1 className="text-3xl font-bold text-slate-800 tracking-tight flex items-center gap-4">
-            Correction Requests
+            {t('corrections.title')}
             <div className="px-3 py-1 rounded-lg bg-blue-50 border border-blue-100 text-blue-600 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-              GLOBAL QUEUE
+              {t('leave.globalQueue')}
             </div>
           </h1>
         </div>
@@ -59,7 +61,7 @@ const AdminCorrections = () => {
       <div className="bg-white p-6 border border-slate-200 shadow-sm rounded-3xl">
         <div className="flex flex-wrap items-center justify-between gap-6">
           <div className="space-y-3">
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Status Filter</label>
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('corrections.statusFilter')}</label>
             <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-100">
               {['PENDING', 'APPROVED', 'REJECTED'].map((status) => (
                 <button
@@ -89,7 +91,7 @@ const AdminCorrections = () => {
             <div className="w-16 h-16 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center">
               <Edit3 className="w-8 h-8 text-slate-300" />
             </div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">No correction requests found.</p>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t('corrections.noRequests')}</p>
           </div>
         ) : corrections.map((item) => (
           <div key={item.id} className="bg-white border border-slate-200 rounded-3xl p-8 flex flex-col lg:flex-row lg:items-center justify-between gap-6 hover:border-blue-300 hover:shadow-sm transition-all shadow-sm group">
@@ -116,25 +118,25 @@ const AdminCorrections = () => {
               <div className="flex gap-3 shrink-0 pt-4 lg:pt-0 border-t lg:border-t-0 border-slate-100 mt-4 lg:mt-0">
                 <button 
                   onClick={() => {
-                    const note = prompt('Add a review note (optional):');
+                    const note = prompt(t('corrections.promptReviewNote'));
                     reviewMutation.mutate({ id: item.id, status: 'REJECTED', note });
                   }}
                   disabled={reviewMutation.isPending}
                   className="flex items-center justify-center gap-2 px-5 py-3 text-rose-600 font-bold text-xs uppercase tracking-wider bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors disabled:opacity-50"
                 >
                   <XCircle className="w-4 h-4" />
-                  Reject
+                  {t('corrections.rejectBtn')}
                 </button>
                 <button 
                   onClick={() => {
-                    const note = prompt('Add a review note (optional):');
+                    const note = prompt(t('corrections.promptReviewNote'));
                     reviewMutation.mutate({ id: item.id, status: 'APPROVED', note });
                   }}
                   disabled={reviewMutation.isPending}
                   className="flex items-center justify-center gap-2 px-5 py-3 text-white font-bold text-xs uppercase tracking-wider bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors disabled:opacity-50 shadow-sm"
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  Approve
+                  {t('corrections.approveBtn')}
                 </button>
               </div>
             )}

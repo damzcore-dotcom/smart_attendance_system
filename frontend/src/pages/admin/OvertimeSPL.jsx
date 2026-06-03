@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { employeeAPI, attendanceAPI, settingsAPI } from '../../services/api';
 import { 
@@ -7,6 +8,7 @@ import {
 import * as XLSX from 'xlsx';
 
 const OvertimeSPL = () => {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('INPUT'); // INPUT or HISTORY
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -110,7 +112,7 @@ const OvertimeSPL = () => {
       queryClient.invalidateQueries({ queryKey: ['overtime-history'] });
     },
     onError: (err) => {
-      alert(`Gagal menyimpan: ${err.message}`);
+      alert(`${t('overtimeSpl.alerts.saveFailed')}${err.message}`);
     }
   });
 
@@ -137,16 +139,16 @@ const OvertimeSPL = () => {
     });
 
     if (records.length === 0) {
-      alert("Tidak ada data lembur yang diinput. Isi setidaknya 1.");
+      alert(t("overtimeSpl.alerts.noInput"));
       return;
     }
 
     if (hasExceededLimit) {
-      if (!window.confirm(`Peringatan: Ada input yang melebihi batas lembur harian (${settings.overtimeMaxPerDay} jam). Tetap simpan?`)) {
+      if (!window.confirm(t('overtimeSpl.alerts.overLimitConfirm', { limit: settings.overtimeMaxPerDay }))) {
         return;
       }
     } else {
-      if (!window.confirm(`Simpan lembur untuk ${records.length} karyawan di tanggal ${selectedDate}?`)) {
+      if (!window.confirm(t('overtimeSpl.alerts.saveConfirm', { count: records.length, date: selectedDate }))) {
         return;
       }
     }
@@ -159,17 +161,17 @@ const OvertimeSPL = () => {
 
   const handleExportHistory = () => {
     if (!historyData?.data || historyData.data.length === 0) {
-      alert("Tidak ada data lembur di bulan ini untuk diexport.");
+      alert(t("overtimeSpl.alerts.noHistoryExport"));
       return;
     }
 
     const exportData = historyData.data.map((item, idx) => ({
       'No': idx + 1,
-      'NIK': item.employeeCode,
-      'Nama Karyawan': item.name,
-      'Departemen': item.department,
-      'Total Jam Lembur': item.totalOvertimeHours,
-      'Estimasi Biaya': item.totalCost
+      [t('overtimeSpl.filters.searchPlaceholder').split(' / ')[1]]: item.employeeCode,
+      [`Nama ${t('overtimeSpl.table.employee')}`]: item.name,
+      [t('overtimeSpl.table.dept')]: item.department,
+      [t('overtimeSpl.table.totalHours')]: item.totalOvertimeHours,
+      [t('overtimeSpl.table.estimatedCost')]: item.totalCost
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -237,17 +239,17 @@ const OvertimeSPL = () => {
           <div className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center">
             <Clock className="w-3 h-3 text-slate-400" />
           </div>
-          <span className="text-[10px] font-bold uppercase tracking-wider">Payroll Control</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider">{t('overtimeSpl.categoryAdmin')}</span>
           <div className="w-1 h-1 rounded-full bg-slate-300" />
-          <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">SPL Massal</span>
+          <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">{t('overtimeSpl.categoryTitle')}</span>
         </div>
         
         <div className="flex flex-col md:flex-row md:items-center justify-between w-full gap-4">
           <div>
             <h1 className="text-2xl xl:text-3xl font-bold text-slate-800 tracking-tight flex items-center gap-3">
-              Manajemen Surat Perintah Lembur
+              {t('overtimeSpl.title')}
             </h1>
-            <p className="text-xs text-slate-500 mt-1">Input massal jam lembur & rekap bulanan</p>
+            <p className="text-xs text-slate-500 mt-1">{t('overtimeSpl.titleDesc')}</p>
           </div>
           
           <div className="flex items-center bg-slate-100 p-1 rounded-xl">
@@ -257,7 +259,7 @@ const OvertimeSPL = () => {
                 activeTab === 'INPUT' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
-              Input Lembur
+              {t('overtimeSpl.tabs.input')}
             </button>
             <button 
               onClick={() => setActiveTab('HISTORY')}
@@ -266,7 +268,7 @@ const OvertimeSPL = () => {
               }`}
             >
               <History className="w-3.5 h-3.5" />
-              Riwayat {selectedMonth}
+              {t('overtimeSpl.tabs.history', { month: selectedMonth })}
             </button>
           </div>
         </div>
@@ -279,7 +281,7 @@ const OvertimeSPL = () => {
               <Users className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Karyawan Lembur</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t('overtimeSpl.stats.totalEmployees')}</p>
               <h3 className="text-2xl font-black text-slate-800">{historyData?.totals?.totalEmployees || 0}</h3>
             </div>
           </div>
@@ -288,8 +290,8 @@ const OvertimeSPL = () => {
               <BarChart3 className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Jam Lembur</p>
-              <h3 className="text-2xl font-black text-slate-800">{historyData?.totals?.totalHours || 0} <span className="text-sm font-medium text-slate-400">jam</span></h3>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t('overtimeSpl.stats.totalHours')}</p>
+              <h3 className="text-2xl font-black text-slate-800">{historyData?.totals?.totalHours || 0} <span className="text-sm font-medium text-slate-400">{t('overtimeSpl.stats.hours')}</span></h3>
             </div>
           </div>
           <div className="bg-white p-6 rounded-2xl border border-slate-200 flex items-center gap-4 shadow-sm">
@@ -297,7 +299,7 @@ const OvertimeSPL = () => {
               <Wallet className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Estimasi Biaya</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t('overtimeSpl.stats.estimatedCost')}</p>
               <h3 className="text-2xl font-black text-slate-800">
                 Rp {(historyData?.totals?.estimatedCost || 0).toLocaleString('id-ID', { maximumFractionDigits: 0 })}
               </h3>
@@ -313,7 +315,7 @@ const OvertimeSPL = () => {
               <Users className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Input Aktif (Orang)</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t('overtimeSpl.stats.activeInput')}</p>
               <h3 className="text-2xl font-black text-slate-800">{currentInputStats.totalEmployees}</h3>
             </div>
           </div>
@@ -322,7 +324,7 @@ const OvertimeSPL = () => {
               <BarChart3 className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Jam Input</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t('overtimeSpl.stats.activeHours')}</p>
               <h3 className="text-2xl font-black text-slate-800">{currentInputStats.totalHours} <span className="text-sm font-medium text-slate-400">jam</span></h3>
             </div>
           </div>
@@ -337,7 +339,7 @@ const OvertimeSPL = () => {
               <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center">
                 <Calendar className="w-4 h-4 text-indigo-600" />
               </div>
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">TANGGAL TARGET:</label>
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('overtimeSpl.filters.date')}</label>
             </div>
             <div className="flex items-center bg-slate-50 p-1.5 rounded-xl border border-slate-200">
               <input 
@@ -364,7 +366,7 @@ const OvertimeSPL = () => {
                   />
                 </button>
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider cursor-pointer select-none" onClick={() => setOnlyPresent(prev => !prev)}>
-                  {onlyPresent ? 'Hanya Karyawan Hadir' : 'Semua Karyawan Aktif'}
+                  {onlyPresent ? t('overtimeSpl.filters.onlyPresent') : t('overtimeSpl.filters.allActive')}
                 </span>
               </div>
             )}
@@ -375,7 +377,7 @@ const OvertimeSPL = () => {
               onClick={handleExportHistory}
               className="bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all"
             >
-              <FileDown className="w-4 h-4" /> Export Excel
+              <FileDown className="w-4 h-4" /> {t('overtimeSpl.filters.excel')}
             </button>
           )}
         </div>
@@ -389,12 +391,12 @@ const OvertimeSPL = () => {
           return (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6 items-end bg-slate-50/50 p-5 rounded-2xl border border-slate-100">
             <div className="space-y-2">
-              <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">PENCARIAN KARYAWAN</label>
+              <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('overtimeSpl.filters.search')}</label>
               <div className="relative group">
                 <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
                 <input 
                   type="text" 
-                  placeholder="NAMA / NIK..." 
+                  placeholder={t('overtimeSpl.filters.searchPlaceholder')} 
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-[10px] font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder:text-slate-400 shadow-sm transition-all uppercase tracking-wider"
@@ -404,13 +406,13 @@ const OvertimeSPL = () => {
 
             {[
               { 
-                label: 'DEPARTEMEN', 
+                label: t('overtimeSpl.filters.dept'), 
                 val: deptFilter, 
                 setter: (val) => { setDeptFilter(val); setSectionFilter(''); setRankFilter(''); }, 
                 opts: [...new Set(filterSource.map(e => e.dept).filter(Boolean))] 
               },
               { 
-                label: 'BAGIAN / SECTION', 
+                label: t('overtimeSpl.filters.section'), 
                 val: sectionFilter, 
                 setter: (val) => { setSectionFilter(val); setRankFilter(''); }, 
                 opts: [...new Set(filterSource
@@ -418,7 +420,7 @@ const OvertimeSPL = () => {
                   .map(e => e.section).filter(Boolean))] 
               },
               { 
-                label: 'JABATAN / RANK', 
+                label: t('overtimeSpl.filters.rank'), 
                 val: rankFilter, 
                 setter: setRankFilter, 
                 opts: [...new Set(filterSource
@@ -435,7 +437,7 @@ const OvertimeSPL = () => {
                     onChange={(e) => field.setter(e.target.value)}
                     className="w-full bg-white border border-slate-200 rounded-xl pl-4 pr-10 py-3 text-[10px] font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer appearance-none uppercase tracking-wider shadow-sm truncate transition-all"
                   >
-                    <option value="">SEMUA</option>
+                    <option value="">{t('overtimeSpl.filters.all')}</option>
                     {field.opts.map((o, i) => <option key={i} value={o}>{o}</option>)}
                   </select>
                   <Filter className="w-3.5 h-3.5 text-slate-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -454,8 +456,8 @@ const OvertimeSPL = () => {
             <div className="w-2 h-2 rounded-full bg-indigo-600 animate-pulse" />
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
               {activeTab === 'INPUT' 
-                ? `Spreadsheet Lembur | Menampilkan ${filteredEmployees.length} Karyawan`
-                : `Riwayat Lembur Bulan ${selectedMonth} | ${(historyData?.data || []).length} Karyawan`
+                ? t('overtimeSpl.table.titleInput', { count: filteredEmployees.length })
+                : t('overtimeSpl.table.titleHistory', { month: selectedMonth, count: (historyData?.data || []).length })
               }
             </p>
           </div>
@@ -465,22 +467,22 @@ const OvertimeSPL = () => {
            <table className="w-full text-left whitespace-nowrap">
              <thead className="bg-slate-50 border-b border-slate-100">
                <tr className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">
-                 <th className="px-6 py-4 w-12 text-center">No</th>
-                 <th className="px-6 py-4">Karyawan</th>
-                 <th className="px-4 py-4">Departemen</th>
+                 <th className="px-6 py-4 w-12 text-center">{t('overtimeSpl.table.no')}</th>
+                 <th className="px-6 py-4">{t('overtimeSpl.table.employee')}</th>
+                 <th className="px-4 py-4">{t('overtimeSpl.table.dept')}</th>
                  
                  {activeTab === 'INPUT' ? (
                    <>
-                     <th className="px-6 py-4 text-center bg-indigo-50/50 text-indigo-700">Jam Lembur (Jml)</th>
-                     <th className="px-6 py-4 bg-slate-50/50">Keterangan / Alasan</th>
+                     <th className="px-6 py-4 text-center bg-indigo-50/50 text-indigo-700">{t('overtimeSpl.table.hoursInput')}</th>
+                     <th className="px-6 py-4 bg-slate-50/50">{t('overtimeSpl.table.reasonInput')}</th>
                    </>
                  ) : (
                    <>
                      {days.map(day => (
                        <th key={day} className="px-1 py-3 text-center border-r border-slate-100 min-w-[28px] max-w-[28px]">{day}</th>
                      ))}
-                     <th className="px-3 py-4 text-center border-l bg-indigo-50 text-indigo-800 font-bold min-w-[50px]">Total Jam</th>
-                     <th className="px-4 py-4 text-left bg-slate-100 text-slate-800 font-bold min-w-[120px]">Estimasi Biaya</th>
+                     <th className="px-3 py-4 text-center border-l bg-indigo-50 text-indigo-800 font-bold min-w-[50px]">{t('overtimeSpl.table.totalHours')}</th>
+                     <th className="px-4 py-4 text-left bg-slate-100 text-slate-800 font-bold min-w-[120px]">{t('overtimeSpl.table.estimatedCost')}</th>
                    </>
                  )}
                </tr>
@@ -491,7 +493,7 @@ const OvertimeSPL = () => {
                     <td colSpan={activeTab === 'INPUT' ? 5 : (days.length + 5)} className="text-center py-20">
                       <div className="flex flex-col items-center gap-3">
                         <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
-                        <p className="text-xs font-bold text-slate-400">Loading Data...</p>
+                        <p className="text-xs font-bold text-slate-400">{t('overtimeSpl.table.loading')}</p>
                       </div>
                     </td>
                   </tr>
@@ -499,7 +501,7 @@ const OvertimeSPL = () => {
                   filteredEmployees.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="text-center py-20 text-slate-400">
-                        Tidak ada karyawan di filter ini
+                        {t('overtimeSpl.table.noEmployees')}
                       </td>
                     </tr>
                   ) : (
@@ -533,13 +535,13 @@ const OvertimeSPL = () => {
                                    isOverLimit ? 'border-red-400 text-red-600' : 'border-slate-300 text-indigo-700'
                                  }`}
                               />
-                              {isOverLimit && <span className="text-[9px] text-red-500 mt-1">Lebih dr batas ({settings.overtimeMaxPerDay})</span>}
+                              {isOverLimit && <span className="text-[9px] text-red-500 mt-1">{t('overtimeSpl.table.overLimit', { limit: settings.overtimeMaxPerDay })}</span>}
                             </div>
                           </td>
                           <td className="px-6 py-2">
                             <input
                               type="text"
-                              placeholder="Keterangan pekerjaan..."
+                              placeholder={t('overtimeSpl.table.reasonPlaceholder')}
                               value={reasonInputs[emp.dbId] || ''}
                               onChange={(e) => handleReasonChange(emp.dbId, e.target.value)}
                               className="w-full min-w-[200px] bg-white border border-slate-200 rounded-lg px-4 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
@@ -553,7 +555,7 @@ const OvertimeSPL = () => {
                   filteredHistory.length === 0 ? (
                     <tr>
                       <td colSpan={days.length + 5} className="text-center py-20 text-slate-400">
-                        Tidak ada data lembur di bulan ini
+                        {t('overtimeSpl.table.noHistory')}
                       </td>
                     </tr>
                   ) : (
@@ -590,7 +592,7 @@ const OvertimeSPL = () => {
                           {emp.totalCost > 0 ? (
                              `Rp ${emp.totalCost.toLocaleString('id-ID', { maximumFractionDigits: 0 })}`
                            ) : (
-                             <span className="text-slate-400 font-normal">Rp 0 (Gaji Rp 0)</span>
+                             <span className="text-slate-400 font-normal">{t('overtimeSpl.table.wageZero')}</span>
                            )}
                         </td>
                       </tr>
@@ -610,9 +612,9 @@ const OvertimeSPL = () => {
                <AlertCircle className="w-5 h-5 text-indigo-600" />
             </div>
             <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase">Status Perubahan</p>
+              <p className="text-[10px] font-bold text-slate-500 uppercase">{t('overtimeSpl.floating.status')}</p>
               <p className="text-sm font-bold text-slate-800">
-                {Object.keys(overtimeInputs).filter(k => overtimeInputs[k] !== '' && parseFloat(overtimeInputs[k]) > 0).length} Karyawan akan di-update
+                {t('overtimeSpl.floating.willUpdate', { count: Object.keys(overtimeInputs).filter(k => overtimeInputs[k] !== '' && parseFloat(overtimeInputs[k]) > 0).length })}
               </p>
             </div>
           </div>
@@ -623,7 +625,7 @@ const OvertimeSPL = () => {
             className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-lg hover:shadow-xl hover:shadow-indigo-500/20 active:scale-95 transition-all outline-none"
           >
             {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            <span>Simpan Semua Lembur</span>
+            <span>{t('overtimeSpl.floating.saveBtn')}</span>
           </button>
         </div>
       )}
