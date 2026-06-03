@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Calendar, Save, Plus, Trash2, Loader2, AlertCircle, Edit, Sparkles, CheckCircle2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { calendarAPI, settingsAPI } from '../../services/api';
 import { getNationalHoliday, getNationalHolidaysForMonth } from '../../utils/nationalHolidays';
 
 
 const CompanyCalendarSettings = ({ permissions = { canCreate: true, canUpdate: true, canDelete: true } }) => {
+  const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const [currentYear] = useState(new Date().getFullYear());
   const [selectedYear, setSelectedYear] = useState(currentYear);
@@ -56,10 +58,10 @@ const CompanyCalendarSettings = ({ permissions = { canCreate: true, canUpdate: t
 
   const handleUpsert = async (e) => {
     e.preventDefault();
-    if (!form.date || !form.description) return alert('Lengkapi data');
+    if (!form.date || !form.description) return alert(t('settingsPage.calendar.alertCompleteData'));
     
     if (form.type === 'WORKDAY') {
-      if (!form.swapDate) return alert('Tanggal Libur Pengganti wajib diisi untuk Tukar Hari!');
+      if (!form.swapDate) return alert(t('settingsPage.calendar.alertSwapDateRequired'));
       try {
         const workdayDesc = `Tukar Hari (Wajib Masuk): ${form.description} (Diganti ke ${form.swapDate})`;
         const holidayDesc = `Tukar Hari (Libur Pengganti): ${form.description} (Dari ${form.date})`;
@@ -69,9 +71,9 @@ const CompanyCalendarSettings = ({ permissions = { canCreate: true, canUpdate: t
         
         queryClient.invalidateQueries({ queryKey: ['calendar'] });
         setForm({ date: '', swapDate: '', type: 'HOLIDAY', description: '' });
-        alert('Tukar hari berhasil disimpan!');
+        alert(t('settingsPage.calendar.alertSwapSuccess'));
       } catch (err) {
-        alert('Gagal memproses tukar hari: ' + err.message);
+        alert(t('settingsPage.calendar.alertSwapFailed') + err.message);
       }
     } else {
       upsertMutation.mutate(form);
@@ -96,14 +98,14 @@ const CompanyCalendarSettings = ({ permissions = { canCreate: true, canUpdate: t
 
   const handleDeleteFromForm = () => {
     if (!editingId) return;
-    if (confirm('Hapus pengecualian kalender ini?')) {
+    if (confirm(t('settingsPage.calendar.alertDeleteConfirm'))) {
       deleteMutation.mutate(editingId);
     }
   };
 
   const parseLocalDateString = (dateStr) => {
     const [year, month, day] = dateStr.split('T')[0].split('-').map(Number);
-    return new Date(year, month - 1, day).toLocaleDateString('id-ID', { 
+    return new Date(year, month - 1, day).toLocaleDateString(i18n.language, { 
       weekday: 'long', 
       day: 'numeric', 
       month: 'long', 
@@ -131,14 +133,15 @@ const CompanyCalendarSettings = ({ permissions = { canCreate: true, canUpdate: t
 
   const holidays = calendarData?.data || [];
   const daysInMonth = getDaysInMonth(selectedYear, selectedMonth);
-  const weekdayNames = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+  const weekdayNamesObj = t('settingsPage.calendar.weekdayNames', { returnObjects: true });
+  const weekdayNames = Array.isArray(weekdayNamesObj) ? weekdayNamesObj : ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 
   return (
     <div className="space-y-6">
       <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex items-start gap-3">
         <AlertCircle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
         <p className="text-xs text-blue-800 font-medium leading-relaxed">
-          Atur pengecualian kalender di sini. Anda bisa mengatur <b>Tanggal Merah (Cuti Bersama)</b> yang akan menimpa jadwal masuk normal, atau mengatur <b>Wajib Masuk (Tukar Hari)</b> untuk mewajibkan absen pada hari yang secara default adalah hari libur (misal: masuk di hari Minggu).
+          {t('settingsPage.calendar.warningBanner')}
         </p>
       </div>
 
@@ -148,35 +151,35 @@ const CompanyCalendarSettings = ({ permissions = { canCreate: true, canUpdate: t
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-fit">
             <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4 text-sm">
               {editingId ? (
-                <><Edit className="w-4 h-4 text-blue-500" /> Edit Pengecualian</>
+                <><Edit className="w-4 h-4 text-blue-500" /> {t('settingsPage.calendar.editException')}</>
               ) : (
-                <><Plus className="w-4 h-4 text-emerald-500" /> Tambah Pengecualian</>
+                <><Plus className="w-4 h-4 text-emerald-500" /> {t('settingsPage.calendar.addException')}</>
               )}
             </h3>
 
             {editingId && (
               <div className="flex items-center gap-2 mb-4 p-2.5 bg-amber-50 border border-amber-200 rounded-xl">
                 <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                <span className="text-[10px] font-bold text-amber-700">Mode Edit — mengubah data pengecualian yang sudah ada.</span>
+                <span className="text-[10px] font-bold text-amber-700">{t('settingsPage.calendar.editModeAlert')}</span>
               </div>
             )}
             <form onSubmit={handleUpsert} className="space-y-4">
               <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Tipe Pengecualian</label>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">{t('settingsPage.calendar.exceptionType')}</label>
                 <select 
                   value={form.type} 
                   onChange={e => setForm({...form, type: e.target.value, swapDate: ''})} 
                   disabled={(!editingId && !permissions.canCreate) || (editingId && !permissions.canUpdate)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 disabled:opacity-60"
                 >
-                  <option value="HOLIDAY">Tanggal Merah / Libur / Cuti Bersama</option>
-                  <option value="WORKDAY">Wajib Masuk (Tukar Hari Libur)</option>
+                  <option value="HOLIDAY">{t('settingsPage.calendar.holidayOption')}</option>
+                  <option value="WORKDAY">{t('settingsPage.calendar.workdayOption')}</option>
                 </select>
               </div>
 
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                  {form.type === 'WORKDAY' ? 'Tanggal Wajib Masuk' : 'Tanggal'}
+                  {form.type === 'WORKDAY' ? t('settingsPage.calendar.workdayDateLabel') : t('settingsPage.calendar.dateLabel')}
                 </label>
                 <input 
                   type="date" 
@@ -190,7 +193,7 @@ const CompanyCalendarSettings = ({ permissions = { canCreate: true, canUpdate: t
 
               {form.type === 'WORKDAY' && (
                 <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl space-y-2 mt-2">
-                  <label className="text-[10px] font-bold text-blue-700 uppercase tracking-wider block">Tanggal Libur Pengganti <span className="text-red-500">*</span></label>
+                  <label className="text-[10px] font-bold text-blue-700 uppercase tracking-wider block">{t('settingsPage.calendar.swapDateLabel')} <span className="text-red-500">*</span></label>
                   <input 
                     type="date" 
                     value={form.swapDate || ''} 
@@ -200,16 +203,16 @@ const CompanyCalendarSettings = ({ permissions = { canCreate: true, canUpdate: t
                     required 
                   />
                   <p className="text-[9px] text-blue-500 font-medium leading-normal">
-                    Sistem otomatis membuat hari libur (HOLIDAY) pada tanggal ini sebagai pengganti, sehingga Anda cukup input 1x saja.
+                    {t('settingsPage.calendar.swapDateHelp')}
                   </p>
                 </div>
               )}
 
               <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Keterangan</label>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">{t('settingsPage.calendar.descriptionLabel')}</label>
                 <input 
                   type="text" 
-                  placeholder="Misal: Tukar Libur Waisak" 
+                  placeholder={t('settingsPage.calendar.descriptionPlaceholder')} 
                   value={form.description} 
                   onChange={e => setForm({...form, description: e.target.value})} 
                   disabled={(!editingId && !permissions.canCreate) || (editingId && !permissions.canUpdate)}
@@ -222,7 +225,7 @@ const CompanyCalendarSettings = ({ permissions = { canCreate: true, canUpdate: t
                 disabled={upsertMutation.isPending || (!editingId && !permissions.canCreate) || (editingId && !permissions.canUpdate)} 
                 className={`w-full ${editingId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-emerald-600 hover:bg-emerald-700'} disabled:opacity-50 text-white rounded-xl py-2.5 text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer`}
               >
-                {upsertMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} {editingId ? 'Update' : 'Simpan'}
+                {upsertMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} {editingId ? t('settingsPage.calendar.btnUpdate') : t('settingsPage.calendar.btnSave')}
               </button>
               {editingId && (
                 <div className="flex gap-2 mt-2">
@@ -232,14 +235,14 @@ const CompanyCalendarSettings = ({ permissions = { canCreate: true, canUpdate: t
                     disabled={deleteMutation.isPending || !permissions.canDelete}
                     className="flex-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl py-2 text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
                   >
-                    {deleteMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />} Hapus
+                    {deleteMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />} {t('settingsPage.calendar.btnDelete')}
                   </button>
                   <button 
                     type="button"
                     onClick={handleCancelEdit}
                     className="flex-1 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-xl py-2 text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer"
                   >
-                    Batal
+                    {t('settingsPage.calendar.btnCancel')}
                   </button>
                 </div>
               )}
@@ -250,20 +253,20 @@ const CompanyCalendarSettings = ({ permissions = { canCreate: true, canUpdate: t
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
-                <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" /> Saran Hari Libur
+                <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" /> {t('settingsPage.calendar.suggestionsTitle')}
               </h3>
               <span className="text-[9px] bg-amber-100 text-amber-800 font-extrabold px-2 py-0.5 rounded-full border border-amber-200/30 uppercase tracking-wide">
-                Nasional
+                {t('settingsPage.calendar.nationalTag')}
               </span>
             </div>
             <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
-              Berikut adalah hari libur nasional Indonesia untuk bulan berjalan. Anda dapat menerapkannya langsung ke kalender perusahaan.
+              {t('settingsPage.calendar.suggestionsDesc')}
             </p>
 
             <div className="space-y-2.5 max-h-[280px] overflow-y-auto pr-1">
               {getNationalHolidaysForMonth(selectedYear, selectedMonth).length === 0 ? (
                 <div className="text-center py-6 text-[10px] text-slate-400 font-semibold uppercase tracking-wider border border-dashed border-slate-100 rounded-xl bg-slate-50/50">
-                  Tidak ada libur nasional
+                  {t('settingsPage.calendar.noNationalHolidays')}
                 </div>
               ) : (
                 getNationalHolidaysForMonth(selectedYear, selectedMonth).map((s) => {
@@ -294,13 +297,13 @@ const CompanyCalendarSettings = ({ permissions = { canCreate: true, canUpdate: t
                           </span>
                         </div>
                         <span className="text-[9px] text-slate-400 font-medium block mt-1.5">
-                          {new Date(s.date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })}
+                          {new Date(s.date).toLocaleDateString(i18n.language, { weekday: 'long', day: 'numeric', month: 'long' })}
                         </span>
                       </div>
 
                       {isAlreadyAdded ? (
                         <div className="flex items-center gap-1 text-[9px] font-extrabold text-emerald-600 shrink-0">
-                          <CheckCircle2 className="w-3.5 h-3.5" /> Diterapkan
+                          <CheckCircle2 className="w-3.5 h-3.5" /> {t('settingsPage.calendar.appliedStatus')}
                         </div>
                       ) : (
                         <button
@@ -309,7 +312,7 @@ const CompanyCalendarSettings = ({ permissions = { canCreate: true, canUpdate: t
                           onClick={() => upsertMutation.mutate({ date: s.date, type: 'HOLIDAY', description: s.description })}
                           className="bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-bold text-[9px] px-2.5 py-1.5 rounded-lg transition-all cursor-pointer shadow-xs whitespace-nowrap"
                         >
-                          Terapkan
+                          {t('settingsPage.calendar.btnApply')}
                         </button>
                       )}
                     </div>
@@ -324,7 +327,7 @@ const CompanyCalendarSettings = ({ permissions = { canCreate: true, canUpdate: t
         <div className="md:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col min-h-[400px]">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-5 border-b border-slate-100 pb-4">
             <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
-              <Calendar className="w-4 h-4 text-blue-500" /> Kalender Perusahaan
+              <Calendar className="w-4 h-4 text-blue-500" /> {t('settingsPage.calendar.calendarTitle')}
             </h3>
             <div className="flex flex-wrap gap-2 items-center w-full sm:w-auto">
               {/* Tab Selector */}
@@ -338,7 +341,7 @@ const CompanyCalendarSettings = ({ permissions = { canCreate: true, canUpdate: t
                       : 'text-slate-500 hover:text-slate-800'
                   }`}
                 >
-                  Grid
+                  {t('settingsPage.calendar.btnGrid')}
                 </button>
                 <button
                   type="button"
@@ -349,7 +352,7 @@ const CompanyCalendarSettings = ({ permissions = { canCreate: true, canUpdate: t
                       : 'text-slate-500 hover:text-slate-800'
                   }`}
                 >
-                  Daftar
+                  {t('settingsPage.calendar.btnList')}
                 </button>
               </div>
 
@@ -361,7 +364,7 @@ const CompanyCalendarSettings = ({ permissions = { canCreate: true, canUpdate: t
               >
                 {Array.from({length: 12}, (_, i) => (
                   <option key={i+1} value={i+1}>
-                    {new Date(2000, i).toLocaleString('id-ID', {month:'long'})}
+                    {new Date(2000, i).toLocaleString(i18n.language, {month:'long'})}
                   </option>
                 ))}
               </select>
@@ -386,8 +389,8 @@ const CompanyCalendarSettings = ({ permissions = { canCreate: true, canUpdate: t
               /* Calendar Grid View */
               <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-150 animate-in fade-in duration-300">
                 <div className="grid grid-cols-7 gap-1.5 text-center mb-2.5">
-                  {weekdayNames.map(w => (
-                    <div key={w} className={`text-[10px] font-bold uppercase py-1 ${w === 'Min' ? 'text-red-500' : 'text-slate-400'}`}>
+                  {weekdayNames.map((w, idx) => (
+                    <div key={w} className={`text-[10px] font-bold uppercase py-1 ${idx === 0 ? 'text-red-500' : 'text-slate-400'}`}>
                       {w}
                     </div>
                   ))}
@@ -412,19 +415,19 @@ const CompanyCalendarSettings = ({ permissions = { canCreate: true, canUpdate: t
                     if (exception) {
                       if (exception.type === 'HOLIDAY') {
                         bgClass = "bg-rose-50/90 border-rose-200 text-rose-700 hover:bg-rose-100/90 hover:border-rose-300 font-bold shadow-xs";
-                        label = "LIBUR";
+                        label = t('settingsPage.calendar.cellLabelHoliday');
                         labelClass = "bg-rose-100/70 text-rose-700";
                       } else if (exception.type === 'WORKDAY') {
                         bgClass = "bg-emerald-50/90 border-emerald-200 text-emerald-700 hover:bg-emerald-100/90 hover:border-emerald-300 font-bold shadow-xs";
-                        label = "MASUK";
+                        label = t('settingsPage.calendar.cellLabelWorkday');
                         labelClass = "bg-emerald-100/70 text-emerald-700";
                       }
                     } else if (natHoliday) {
                       bgClass = "bg-amber-50/30 border-amber-300 border-dashed text-amber-700 hover:bg-amber-100/40 hover:border-amber-400 font-semibold shadow-xs";
-                      label = "SUGESTI";
+                      label = t('settingsPage.calendar.cellLabelSuggestion');
                       labelClass = "bg-amber-100/80 text-amber-800";
                     } else if (isWeekend) {
-                      bgClass = "bg-slate-100/50 border-slate-1.50 text-slate-400 hover:border-blue-300 hover:bg-blue-50/30";
+                      bgClass = "bg-slate-100/50 border-slate-150 text-slate-400 hover:border-blue-300 hover:bg-blue-50/30";
                     }
 
                     if (isToday) {
@@ -432,11 +435,11 @@ const CompanyCalendarSettings = ({ permissions = { canCreate: true, canUpdate: t
                     }
 
                     let titleText = exception 
-                      ? `${exception.description} (${exception.type === 'HOLIDAY' ? 'Libur' : 'Wajib Masuk'})` 
-                      : (natHoliday ? `Saran Libur Nasional: ${natHoliday}` : (isWeekend ? "Akhir Pekan" : "Hari Kerja Normal"));
+                      ? `${exception.description} (${exception.type === 'HOLIDAY' ? t('settingsPage.calendar.tooltipLabelHoliday') : t('settingsPage.calendar.tooltipLabelWorkday')})` 
+                      : (natHoliday ? `${t('settingsPage.calendar.tooltipLabelHoliday')}: ${natHoliday}` : (isWeekend ? t('settingsPage.calendar.tooltipLabelWeekend') : t('settingsPage.calendar.tooltipLabelNormal')));
 
                     if (isToday) {
-                      titleText += " (Hari Ini)";
+                      titleText += ` (${t('settingsPage.calendar.cellLabelToday')})`;
                     }
 
                     return (
@@ -472,7 +475,7 @@ const CompanyCalendarSettings = ({ permissions = { canCreate: true, canUpdate: t
                           </span>
                         ) : isToday ? (
                           <span className="text-[7px] font-black tracking-wider px-1 py-0.5 rounded-sm bg-blue-100 text-blue-700 w-full text-center leading-none mt-1">
-                            HARI INI
+                            {t('settingsPage.calendar.cellLabelToday')}
                           </span>
                         ) : (
                           <span className="h-2" />
@@ -490,7 +493,7 @@ const CompanyCalendarSettings = ({ permissions = { canCreate: true, canUpdate: t
             ) : holidays.length === 0 ? (
               /* List View Empty */
               <div className="text-center py-16 text-xs text-slate-400 font-bold uppercase tracking-wider border-2 border-dashed border-slate-100 rounded-2xl bg-slate-5/50">
-                Tidak ada pengecualian di bulan ini
+                {t('settingsPage.calendar.noExceptionsMonth')}
               </div>
             ) : (
               /* List View Grid */
@@ -503,7 +506,7 @@ const CompanyCalendarSettings = ({ permissions = { canCreate: true, canUpdate: t
                           ? 'bg-rose-50 text-rose-600 border-rose-100' 
                           : 'bg-emerald-50 text-emerald-600 border-emerald-100'
                       }`}>
-                        {h.type === 'HOLIDAY' ? 'LIBUR' : 'MASUK'}
+                        {h.type === 'HOLIDAY' ? t('settingsPage.calendar.cellLabelHoliday') : t('settingsPage.calendar.cellLabelWorkday')}
                       </div>
                       <div>
                         <p className="text-xs font-bold text-slate-800">{parseLocalDateString(h.date)}</p>
@@ -516,7 +519,7 @@ const CompanyCalendarSettings = ({ permissions = { canCreate: true, canUpdate: t
                           type="button"
                           onClick={() => handleEdit(h)} 
                           className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-slate-100 hover:border-blue-100 cursor-pointer"
-                          title="Edit Pengecualian"
+                          title={t('settingsPage.calendar.editException')}
                         >
                           <Edit className="w-4 h-4" />
                         </button>
@@ -524,10 +527,10 @@ const CompanyCalendarSettings = ({ permissions = { canCreate: true, canUpdate: t
                       {permissions.canDelete && (
                         <button 
                           type="button"
-                          onClick={() => { if(confirm('Hapus pengecualian kalender ini?')) deleteMutation.mutate(h.id) }} 
+                          onClick={() => { if(confirm(t('settingsPage.calendar.alertDeleteConfirm'))) deleteMutation.mutate(h.id) }} 
                           disabled={deleteMutation.isPending} 
                           className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all border border-slate-100 hover:border-rose-100 disabled:opacity-50 cursor-pointer"
-                          title="Hapus Pengecualian"
+                          title={t('settingsPage.calendar.btnDelete')}
                         >
                           {deleteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                         </button>

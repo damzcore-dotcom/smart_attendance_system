@@ -68,6 +68,38 @@ if (!fs.existsSync(uploadsDir)) {
 }
 app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
 
+// ── MinIO Proxy — Serve face snapshots from MinIO storage ───────────────
+const http = require('http');
+app.get('/minio/:bucket/*', (req, res) => {
+  const bucket = req.params.bucket;
+  const objectKey = req.params[0]; // everything after /minio/<bucket>/
+  if (!bucket || !objectKey) {
+    return res.status(400).json({ success: false, message: 'Invalid path' });
+  }
+
+  // Only allow known buckets
+  const allowedBuckets = ['face-snapshots', 'unknown-faces'];
+  if (!allowedBuckets.includes(bucket)) {
+    return res.status(403).json({ success: false, message: 'Bucket not allowed' });
+  }
+
+  const minioEndpoint = process.env.MINIO_ENDPOINT || 'localhost';
+  const minioPort = process.env.MINIO_PORT || '9000';
+  const minioUrl = `http://${minioEndpoint}:${minioPort}/${bucket}/${objectKey}`;
+
+  http.get(minioUrl, (minioRes) => {
+    if (minioRes.statusCode !== 200) {
+      return res.status(minioRes.statusCode || 404).json({ success: false, message: 'Image not found' });
+    }
+    res.setHeader('Content-Type', minioRes.headers['content-type'] || 'image/jpeg');
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache 24h
+    minioRes.pipe(res);
+  }).on('error', (err) => {
+    console.error('[MinIO Proxy] Error:', err.message);
+    res.status(502).json({ success: false, message: 'Failed to fetch image from storage' });
+  });
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
   const checkTimezone = require('./utils/timezoneCheck');

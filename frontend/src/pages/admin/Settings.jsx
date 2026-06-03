@@ -36,6 +36,8 @@ import PenaltySettings from '../../components/admin/PenaltySettings';
 
 const Settings = () => {
   const { t } = useTranslation();
+  const weekdayNamesObj = t('settingsPage.calendar.weekdayNames', { returnObjects: true });
+  const weekdayNames = Array.isArray(weekdayNamesObj) ? weekdayNamesObj : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const queryClient = useQueryClient();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState(location.state?.tab || 'General');
@@ -388,8 +390,8 @@ const Settings = () => {
                     <Building2 className="w-6 h-6" />
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-slate-800 tracking-tight">Enterprise Identity</h3>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">Core Organizational Metadata</p>
+                    <h3 className="text-xl font-bold text-slate-800 tracking-tight">{t('settingsPage.general.title')}</h3>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">{t('settingsPage.general.subtitle')}</p>
                   </div>
                 </div>
 
@@ -405,7 +407,7 @@ const Settings = () => {
                         <button 
                           onClick={() => handleInputChange('appLogo', '')}
                           className="w-8 h-8 rounded-full bg-white/20 hover:bg-rose-500 text-white flex items-center justify-center backdrop-blur-sm transition-colors"
-                          title="Remove Logo"
+                          title={t('settingsPage.general.removeLogo')}
                         >
                           <X className="w-4 h-4" />
                         </button>
@@ -413,7 +415,7 @@ const Settings = () => {
                     )}
                   </div>
                   <div className="space-y-2 flex-1 w-full text-center md:text-left">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Enterprise App Logo</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">{t('settingsPage.general.logoLabel')}</label>
                     <input 
                       type="file" 
                       accept="image/png, image/jpeg, image/svg+xml"
@@ -421,7 +423,7 @@ const Settings = () => {
                         const file = e.target.files[0];
                         if (file) {
                           if (file.size > 2 * 1024 * 1024) {
-                            alert('Logo file size must be less than 2MB');
+                            alert(t('settingsPage.general.alerts.logoSize'));
                             return;
                           }
                           const reader = new FileReader();
@@ -431,13 +433,13 @@ const Settings = () => {
                       }}
                       className="block w-full text-sm text-slate-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:uppercase file:tracking-wider file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-colors cursor-pointer"
                     />
-                    <p className="text-[10px] text-slate-400 mt-1">Recommended: PNG transparent, max 2MB.</p>
+                    <p className="text-[10px] text-slate-400 mt-1">{t('settingsPage.general.logoHelp')}</p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Corporate Designation</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.general.companyName')}</label>
                     <input 
                       type="text" 
                       value={formData.companyName || ''} 
@@ -446,7 +448,7 @@ const Settings = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Global Intelligence Node (Website)</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.general.companyWebsite')}</label>
                     <input 
                       type="url" 
                       value={formData.companyWebsite || ''} 
@@ -455,7 +457,7 @@ const Settings = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Administrative Link (Email)</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.general.companyEmail')}</label>
                     <input 
                       type="email" 
                       value={formData.companyEmail || ''} 
@@ -464,7 +466,7 @@ const Settings = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Telecommunication Matrix</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.general.companyPhone')}</label>
                     <input 
                       type="tel" 
                       value={formData.companyPhone || ''} 
@@ -475,7 +477,7 @@ const Settings = () => {
                 </div>
 
                 <div className="mt-8 space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Geographic Headquarters Address</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.general.companyAddress')}</label>
                   <textarea 
                     className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder:text-slate-400 min-h-[120px] resize-none"
                     value={formData.companyAddress || ''}
@@ -495,8 +497,8 @@ const Settings = () => {
                       <MapPin className="w-6 h-6" />
                     </div>
                     <div>
-                      <h3 className="text-xl font-bold text-slate-800 tracking-tight">Geofencing Nodes</h3>
-                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">Authorized Operational Boundaries</p>
+                      <h3 className="text-xl font-bold text-slate-800 tracking-tight">{t('settingsPage.location.title')}</h3>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">{t('settingsPage.location.subtitle')}</p>
                     </div>
                   </div>
                   {hasTabPermission('Location').canCreate && (
@@ -504,7 +506,7 @@ const Settings = () => {
                       onClick={handleOpenAddModal}
                       className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
                     >
-                      <Plus className="w-4 h-4" /> NEW LOCATION
+                      <Plus className="w-4 h-4" /> {t('settingsPage.location.newBtn')}
                     </button>
                   )}
                 </div>
@@ -513,7 +515,7 @@ const Settings = () => {
                   {locations.length === 0 ? (
                     <div className="py-16 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
                       <MapPin className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">No location nodes identified.</p>
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t('settingsPage.location.empty')}</p>
                     </div>
                   ) : (
                     locations.map((loc) => (
@@ -533,7 +535,7 @@ const Settings = () => {
                                 </div>
                                 <div className="flex items-center gap-1.5 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100">
                                   <Target className="w-3.5 h-3.5 text-emerald-600" />
-                                  <span className="text-[10px] font-bold text-emerald-700 tracking-wider">{loc.radius}m RADIUS</span>
+                                  <span className="text-[10px] font-bold text-emerald-700 tracking-wider">{loc.radius}m {t('settingsPage.locationModal.radius')}</span>
                                 </div>
                               </div>
                             </div>
@@ -544,22 +546,22 @@ const Settings = () => {
                               onClick={() => handleOpenMap(loc)}
                               className="px-4 py-2.5 bg-white hover:bg-blue-50 text-slate-600 hover:text-blue-700 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border border-slate-200 hover:border-blue-200 flex items-center gap-2"
                             >
-                              <Globe className="w-3.5 h-3.5" /> TEST MAP
+                              <Globe className="w-3.5 h-3.5" /> {t('settingsPage.location.testMap')}
                             </button>
                             {hasTabPermission('Location').canUpdate && (
                               <button 
                                 onClick={() => handleOpenEditModal(loc)}
                                 className="w-10 h-10 flex items-center justify-center bg-white hover:bg-slate-50 text-slate-400 hover:text-blue-600 rounded-lg transition-all border border-slate-200 hover:border-blue-200 cursor-pointer"
-                                title="Edit Location"
+                                title={t('settingsPage.locationModal.editTitle')}
                               >
                                 <Save className="w-4 h-4" />
                               </button>
                             )}
                             {hasTabPermission('Location').canDelete && (
                               <button 
-                                onClick={() => { if(confirm('Permanently terminate location node?')) deleteLocationMutation.mutate(loc.id) }}
+                                onClick={() => { if(confirm(t('settingsPage.location.alerts.deleteConfirm'))) deleteLocationMutation.mutate(loc.id) }}
                                 className="w-10 h-10 flex items-center justify-center bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-all border border-slate-200 hover:border-rose-200 cursor-pointer"
-                                title="Delete Location"
+                                title={t('settingsPage.location.alerts.deleteConfirm')}
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -577,14 +579,14 @@ const Settings = () => {
                   <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
                     <ShieldCheck className="w-5 h-5" />
                   </div>
-                  <h3 className="text-lg font-bold text-slate-800 tracking-tight">Global Sector Protocols</h3>
+                  <h3 className="text-lg font-bold text-slate-800 tracking-tight">{t('settingsPage.location.protocols')}</h3>
                 </div>
                 
                 <div className="space-y-4">
                   <div className="flex items-center justify-between p-6 bg-slate-50 border border-slate-100 rounded-2xl hover:border-blue-200 transition-all duration-300">
                     <div className="space-y-1">
-                      <p className="text-sm font-bold text-slate-800 tracking-tight">Strict Geofencing Protocol</p>
-                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Enforce physical proximity requirements for all check-in/out events.</p>
+                      <p className="text-sm font-bold text-slate-800 tracking-tight">{t('settingsPage.location.strictTitle')}</p>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{t('settingsPage.location.strictDesc')}</p>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input 
@@ -616,7 +618,7 @@ const Settings = () => {
               </div>
             </div>
           )}
-
+          
           {activeTab === 'Shifts' && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="bg-white p-8 md:p-10 border border-slate-200 shadow-sm rounded-3xl">
@@ -626,8 +628,8 @@ const Settings = () => {
                       <Clock className="w-6 h-6" />
                     </div>
                     <div>
-                      <h3 className="text-xl font-bold text-slate-800 tracking-tight">Temporal Protocols</h3>
-                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">Operational Shift Configurations</p>
+                      <h3 className="text-xl font-bold text-slate-800 tracking-tight">{t('settingsPage.shifts.title')}</h3>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">{t('settingsPage.shifts.subtitle')}</p>
                     </div>
                   </div>
                   {hasTabPermission('Shifts').canCreate && (
@@ -635,7 +637,7 @@ const Settings = () => {
                       onClick={() => { setShiftForm({ name: '', startTime: '08:00', endTime: '17:00', breakStart: '12:00', breakEnd: '13:00', gracePeriod: 15, saturdayType: 'HALF_DAY', saturdayEndTime: '13:00' }); setShiftModalOpen(true); }}
                       className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
                     >
-                      <Plus className="w-4 h-4" /> NEW SHIFT
+                      <Plus className="w-4 h-4" /> {t('settingsPage.shifts.newBtn')}
                     </button>
                   )}
                 </div>
@@ -657,7 +659,7 @@ const Settings = () => {
                             {hasTabPermission('Shifts').canUpdate && (
                               <button 
                                 onClick={() => handleOpenEditShift(shift)}
-                                title="Edit Shift"
+                                title={t('settingsPage.shiftModal.editTitle')}
                                 className="w-9 h-9 flex items-center justify-center bg-white hover:bg-slate-50 text-slate-400 hover:text-blue-600 rounded-lg transition-all border border-slate-200 hover:border-blue-200 cursor-pointer"
                               >
                                 <Edit className="w-4 h-4" />
@@ -665,9 +667,9 @@ const Settings = () => {
                             )}
                             {hasTabPermission('Shifts').canDelete && (
                               <button 
-                                onClick={() => { if(confirm('Permanently delete shift protocol?')) deleteShiftMutation.mutate(shift.id) }}
+                                onClick={() => { if(confirm(t('settingsPage.shifts.alerts.deleteConfirm'))) deleteShiftMutation.mutate(shift.id) }}
                                 className="w-9 h-9 flex items-center justify-center bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-all border border-slate-200 hover:border-rose-200 cursor-pointer"
-                                title="Delete Shift"
+                                title={t('settingsPage.shifts.alerts.deleteConfirm')}
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -677,26 +679,26 @@ const Settings = () => {
                         <h4 className="text-base font-bold text-slate-800 tracking-tight group-hover:text-blue-600 transition-colors uppercase mb-4">{shift.name}</h4>
                         <div className="space-y-3">
                           <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 rounded-lg border border-slate-100">
-                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Active Span</span>
+                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{t('settingsPage.shifts.span')}</span>
                             <span className="text-xs font-bold text-slate-700">{shift.startTime} <span className="text-slate-400 mx-1">—</span> {shift.endTime}</span>
                           </div>
                           <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 rounded-lg border border-slate-100">
-                             <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Grace Tolerance</span>
+                             <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{t('settingsPage.shifts.grace')}</span>
                              <span className="text-xs font-bold text-amber-600">{shift.gracePeriod}m PROTOCOL</span>
                            </div>
                            <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 rounded-lg border border-slate-100">
-                             <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Hari Sabtu</span>
+                             <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{t('settingsPage.shifts.saturday')}</span>
                              <span className="text-xs font-bold text-indigo-600 uppercase">
                                {
-                                 shift.saturdayType === 'OFF' ? 'Libur' :
-                                 shift.saturdayType === 'FULL_DAY' ? 'Kerja Penuh' :
-                                 `Setengah Hari (${shift.saturdayEndTime || '13:00'})`
+                                 shift.saturdayType === 'OFF' ? t('settingsPage.shifts.saturdayTypes.OFF') :
+                                 shift.saturdayType === 'FULL_DAY' ? t('settingsPage.shifts.saturdayTypes.FULL_DAY') :
+                                 `${t('settingsPage.shifts.saturdayTypes.HALF_DAY')} (${shift.saturdayEndTime || '13:00'})`
                                }
                              </span>
                            </div>
                           <div className="flex flex-wrap gap-2 pt-2 items-center">
                             <div className="px-3 py-1 bg-emerald-50 text-emerald-700 text-[9px] font-bold uppercase tracking-widest rounded-md border border-emerald-100">
-                              {shift._count?.employees || 0} Assets Assigned
+                              {shift._count?.employees || 0} {t('settingsPage.license.personnel')}
                             </div>
                             {departments.length > 0 && (
                               <div className="flex flex-wrap gap-1">
@@ -715,7 +717,7 @@ const Settings = () => {
                   {shifts.length === 0 && (
                     <div className="col-span-1 md:col-span-2 py-16 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
                       <Clock className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">No shift protocols defined.</p>
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t('settingsPage.shifts.empty')}</p>
                     </div>
                   )}
                 </div>
@@ -726,18 +728,18 @@ const Settings = () => {
                   <div className="w-10 h-10 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600">
                     <CalendarCheck className="w-5 h-5" />
                   </div>
-                  <h3 className="text-lg font-bold text-slate-800 tracking-tight">Weekly Operational Matrix</h3>
+                  <h3 className="text-lg font-bold text-slate-800 tracking-tight">{t('settingsPage.shifts.matrix')}</h3>
                 </div>
                 
                 <div className="flex flex-wrap gap-3">
                   {[
-                    { id: 0, label: 'SUN' },
-                    { id: 1, label: 'MON' },
-                    { id: 2, label: 'TUE' },
-                    { id: 3, label: 'WED' },
-                    { id: 4, label: 'THU' },
-                    { id: 5, label: 'FRI' },
-                    { id: 6, label: 'SAT' },
+                    { id: 0, label: weekdayNames[0]?.toUpperCase() || 'SUN' },
+                    { id: 1, label: weekdayNames[1]?.toUpperCase() || 'MON' },
+                    { id: 2, label: weekdayNames[2]?.toUpperCase() || 'TUE' },
+                    { id: 3, label: weekdayNames[3]?.toUpperCase() || 'WED' },
+                    { id: 4, label: weekdayNames[4]?.toUpperCase() || 'THU' },
+                    { id: 5, label: weekdayNames[5]?.toUpperCase() || 'FRI' },
+                    { id: 6, label: weekdayNames[6]?.toUpperCase() || 'SAT' },
                   ].map((day) => {
                     const workingDays = JSON.parse(formData.workingDays || '[1,2,3,4,5]');
                     const isSelected = workingDays.includes(day.id);
@@ -773,16 +775,16 @@ const Settings = () => {
                   <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
                     <Clock className="w-5 h-5" />
                   </div>
-                  <h3 className="text-lg font-bold text-slate-800 tracking-tight">Saturday Special Rules</h3>
+                  <h3 className="text-lg font-bold text-slate-800 tracking-tight">{t('settingsPage.shifts.satRules')}</h3>
                 </div>
                 
                 <div className="space-y-6">
                   <div className="flex items-center justify-between p-6 bg-slate-50 border border-slate-100 rounded-2xl hover:border-blue-200 transition-all duration-300">
                     <div className="space-y-1">
-                      <p className="text-sm font-bold text-slate-800 tracking-tight">Saturday Half-Day Protocol</p>
-                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Enable special early checkout rules for Saturdays (Sabtu Setengah Hari).</p>
+                      <p className="text-sm font-bold text-slate-800 tracking-tight">{t('settingsPage.shifts.satHalf')}</p>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{t('settingsPage.shifts.satHalfDesc')}</p>
                     </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
+                    <label className="relative inline-flex inline-flex items-center cursor-pointer">
                       <input 
                         type="checkbox" 
                         className="sr-only peer" 
@@ -796,8 +798,8 @@ const Settings = () => {
                   {formData.saturdayHalfDay === 'true' && (
                     <div className="flex items-center justify-between p-6 bg-slate-50 border border-slate-100 rounded-2xl transition-all duration-300 animate-in fade-in">
                       <div className="space-y-1">
-                        <p className="text-sm font-bold text-slate-800 tracking-tight">Checkout Deadline</p>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Expected checkout time on Saturdays</p>
+                        <p className="text-sm font-bold text-slate-800 tracking-tight">{t('settingsPage.shifts.satDeadline')}</p>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{t('settingsPage.shifts.satExpected')}</p>
                       </div>
                       <input
                         type="time"
@@ -812,10 +814,10 @@ const Settings = () => {
 
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                 <div className="bg-white p-8 border border-slate-200 shadow-sm rounded-3xl">
-                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-widest mb-6 border-l-4 border-blue-500 pl-4">Default Compliance</h3>
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-widest mb-6 border-l-4 border-blue-500 pl-4">{t('settingsPage.shifts.compliance')}</h3>
                   <div className="space-y-6">
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Payroll Cut-Off Date (Tgl Tutup Buku)</label>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.shifts.cutoff')}</label>
                       <input 
                         type="number" 
                         min="0"
@@ -825,10 +827,10 @@ const Settings = () => {
                         onChange={(e) => handleInputChange('payrollCutoffDate', e.target.value)}
                         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all"
                       />
-                      <p className="text-[10px] text-slate-400 ml-1">Isi 0 untuk tanggal 1 s/d Akhir Bulan. Isi 25 untuk tgl 26 bulan lalu s/d 25 bulan ini.</p>
+                      <p className="text-[10px] text-slate-400 ml-1">{t('settingsPage.shifts.cutoffHelp')}</p>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Global Grace Period (Minutes)</label>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.shifts.graceMin')}</label>
                       <input 
                         type="number" 
                         value={formData.gracePeriod || 15} 
@@ -837,17 +839,17 @@ const Settings = () => {
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Timezone Offset to UTC (Minutes)</label>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.shifts.timezone')}</label>
                       <input 
                         type="number" 
                         value={formData.timezoneOffset || 420} 
                         onChange={(e) => handleInputChange('timezoneOffset', e.target.value)}
                         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all"
                       />
-                      <p className="text-[10px] text-slate-400 ml-1">e.g. 420 for WIB (UTC+7), 480 for WITA (UTC+8), 540 for WIT (UTC+9).</p>
+                      <p className="text-[10px] text-slate-400 ml-1">{t('settingsPage.shifts.timezoneHelp')}</p>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">System Auto-Termination (Check-out)</label>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.shifts.autoCheckout')}</label>
                       <input 
                         type="time" 
                         value={formData.autoCheckoutTime || '23:59'} 
@@ -859,11 +861,11 @@ const Settings = () => {
                 </div>
 
                 <div className="bg-white p-8 border border-slate-200 shadow-sm rounded-3xl">
-                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-widest mb-6 border-l-4 border-amber-500 pl-4">Overtime Intelligence</h3>
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-widest mb-6 border-l-4 border-amber-500 pl-4">{t('settingsPage.shifts.otIntel')}</h3>
                   
                   <div className="space-y-4 mb-6">
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Batas Maksimal Lembur Per Hari (Jam)</label>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.shifts.otMaxDay')}</label>
                       <input 
                         type="number" 
                         value={formData.overtimeMaxPerDay || 4} 
@@ -872,7 +874,7 @@ const Settings = () => {
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Batas Maksimal Lembur Per Bulan (Jam)</label>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.shifts.otMaxMonth')}</label>
                       <input 
                         type="number" 
                         value={formData.overtimeMaxPerMonth || 40} 
@@ -888,8 +890,8 @@ const Settings = () => {
                         <Bell className="w-5 h-5" />
                       </div>
                       <div className="space-y-1">
-                        <p className="text-sm font-bold text-slate-800 tracking-tight">OT Notification Relay</p>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Alert HR when shift exceeds 9 hours.</p>
+                        <p className="text-sm font-bold text-slate-800 tracking-tight">{t('settingsPage.shifts.otNotify')}</p>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{t('settingsPage.shifts.otNotifyDesc')}</p>
                       </div>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
@@ -909,8 +911,8 @@ const Settings = () => {
                         <Clock className="w-5 h-5" />
                       </div>
                       <div className="space-y-1">
-                        <p className="text-sm font-bold text-slate-800 tracking-tight">Auto-Calculate Overtime</p>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Turn off to rely strictly on manual SPL inputs.</p>
+                        <p className="text-sm font-bold text-slate-800 tracking-tight">{t('settingsPage.shifts.otAuto')}</p>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{t('settingsPage.shifts.otAutoDesc')}</p>
                       </div>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
@@ -924,8 +926,6 @@ const Settings = () => {
                     </label>
                   </div>
                 </div>
-
-
               </div>
             </div>
           )}
@@ -938,8 +938,8 @@ const Settings = () => {
                     <ShieldCheck className="w-6 h-6" />
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-slate-800 tracking-tight">Biometric Authentication</h3>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">Personnel Identification Protocols</p>
+                    <h3 className="text-xl font-bold text-slate-800 tracking-tight">{t('settingsPage.security.title')}</h3>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">{t('settingsPage.security.subtitle')}</p>
                   </div>
                 </div>
 
@@ -947,8 +947,8 @@ const Settings = () => {
                   <div className="space-y-4">
                     <div className="flex justify-between items-end px-2">
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Face Match Confidence</label>
-                        <p className="text-[9px] text-slate-400 font-semibold uppercase tracking-tight">Minimum similarity for authorization.</p>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('settingsPage.security.match')}</label>
+                        <p className="text-[9px] text-slate-400 font-semibold uppercase tracking-tight">{t('settingsPage.security.matchDesc')}</p>
                       </div>
                       <span className="text-xl font-bold text-blue-600 tabular-nums">{formData.faceMatchThreshold || 85}%</span>
                     </div>
@@ -970,8 +970,8 @@ const Settings = () => {
 
                     <div className="flex items-center justify-between p-6 bg-slate-50 border border-slate-100 rounded-2xl hover:border-blue-200 transition-all duration-300">
                       <div className="space-y-1">
-                        <p className="text-sm font-bold text-slate-800 tracking-tight">Auto-Enrollment</p>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Update biometrics on match.</p>
+                        <p className="text-sm font-bold text-slate-800 tracking-tight">{t('settingsPage.security.autoEnroll')}</p>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{t('settingsPage.security.autoEnrollDesc')}</p>
                       </div>
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input 
@@ -992,10 +992,10 @@ const Settings = () => {
                   <ShieldCheck className="w-8 h-8" />
                 </div>
                 <div className="space-y-2 text-center md:text-left">
-                  <h4 className="text-base font-bold text-emerald-900 tracking-tight">Enterprise Encryption Assurance</h4>
+                  <h4 className="text-base font-bold text-emerald-900 tracking-tight">{t('settingsPage.security.encryption')}</h4>
                   <p className="text-xs text-emerald-700 font-medium leading-relaxed">
-                    All biometric templates are processed via non-reversible mathematical hashing. 
-                    Raw pixel data is never persisted. Security compliance: <span className="font-bold">ISO/IEC 27001</span>
+                    {t('settingsPage.security.encryptionDesc').split('ISO/IEC 27001')[0]}
+                    <span className="font-bold">ISO/IEC 27001</span>
                   </p>
                 </div>
               </div>
@@ -1013,18 +1013,18 @@ const Settings = () => {
                     <ShieldCheck className="w-6 h-6" />
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-slate-800 tracking-tight">System License</h3>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">Software Activation Key</p>
+                    <h3 className="text-xl font-bold text-slate-800 tracking-tight">{t('settingsPage.license.title')}</h3>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">{t('settingsPage.license.subtitle')}</p>
                   </div>
                 </div>
 
                 <div className="space-y-4">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">License Key (Provided by Vendor)</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.license.key')}</label>
                   <textarea 
                     className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-5 text-sm font-mono text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder:text-slate-400 min-h-[120px] resize-none"
                     value={formData.licenseKey || ''}
                     onChange={(e) => handleInputChange('licenseKey', e.target.value)}
-                    placeholder="Paste your license key here..."
+                    placeholder={t('settingsPage.license.placeholder')}
                   ></textarea>
                   
                   {(() => {
@@ -1039,21 +1039,21 @@ const Settings = () => {
                           <div className="flex items-center gap-3 mb-4">
                             {isExpired ? <AlertCircle className="w-6 h-6 text-red-600" /> : <CheckCircle2 className="w-6 h-6 text-emerald-600" />}
                             <h4 className={`text-sm font-bold ${isExpired ? 'text-red-900' : 'text-emerald-900'}`}>
-                              {isExpired ? 'License Expired' : 'License Valid'}
+                              {isExpired ? t('settingsPage.license.expired') : t('settingsPage.license.valid')}
                             </h4>
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
-                              <p className="text-[10px] uppercase font-bold text-slate-500 mb-1">Licensed To</p>
+                              <p className="text-[10px] uppercase font-bold text-slate-500 mb-1">{t('settingsPage.license.to')}</p>
                               <p className="text-sm font-semibold text-slate-800">{payload.client}</p>
                             </div>
                             <div>
-                              <p className="text-[10px] uppercase font-bold text-slate-500 mb-1">Expiration Date</p>
+                              <p className="text-[10px] uppercase font-bold text-slate-500 mb-1">{t('settingsPage.license.expiry')}</p>
                               <p className={`text-sm font-semibold ${isExpired ? 'text-red-600' : 'text-slate-800'}`}>{payload.expiry}</p>
                             </div>
                             <div>
-                              <p className="text-[10px] uppercase font-bold text-slate-500 mb-1">Max Employees</p>
-                              <p className="text-sm font-semibold text-slate-800">{payload.limit} Personnel</p>
+                              <p className="text-[10px] uppercase font-bold text-slate-500 mb-1">{t('settingsPage.license.limit')}</p>
+                              <p className="text-sm font-semibold text-slate-800">{payload.limit} {t('settingsPage.license.personnel')}</p>
                             </div>
                           </div>
                         </div>
@@ -1062,14 +1062,14 @@ const Settings = () => {
                       return (
                         <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-sm flex items-center gap-3">
                           <AlertCircle className="w-5 h-5" />
-                          Invalid license key format.
+                          {t('settingsPage.license.invalid')}
                         </div>
                       );
                     }
                   })()}
                   
                   <p className="text-xs text-slate-500 mt-2">
-                    Enter the license key provided by the software vendor to activate the product and verify your employee limits and expiration dates.
+                    {t('settingsPage.license.help')}
                   </p>
                 </div>
               </div>
@@ -1092,9 +1092,9 @@ const Settings = () => {
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-slate-800 tracking-tight">
-                    {editingLocation ? 'Configure Geofence' : 'Register Location'}
+                    {editingLocation ? t('settingsPage.locationModal.editTitle') : t('settingsPage.locationModal.addTitle')}
                   </h3>
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">Spatial Boundary Calibration</p>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">{t('settingsPage.locationModal.subtitle')}</p>
                 </div>
               </div>
               <button onClick={() => setLocationModalOpen(false)} className="w-8 h-8 flex items-center justify-center hover:bg-slate-200 rounded-lg transition-colors text-slate-500">
@@ -1104,31 +1104,31 @@ const Settings = () => {
             
             <form onSubmit={handleLocationSubmit} className="p-8 space-y-6">
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Node Designation (Name)</label>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.locationModal.name')}</label>
                 <input 
                   type="text" 
                   required
                   value={locationForm.name}
                   onChange={(e) => setLocationForm({...locationForm, name: e.target.value})}
                   className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm"
-                  placeholder="e.g. ALPHA HQ"
+                  placeholder={t('settingsPage.locationModal.namePlaceholder')}
                 />
               </div>
               
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Physical Interface (Address)</label>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.locationModal.address')}</label>
                 <input 
                   type="text" 
                   value={locationForm.address}
                   onChange={(e) => setLocationForm({...locationForm, address: e.target.value})}
                   className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm"
-                  placeholder="Operational address..."
+                  placeholder={t('settingsPage.locationModal.addressPlaceholder')}
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-5">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Lateral Axis</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.locationModal.lat')}</label>
                   <input 
                     type="number" 
                     step="any"
@@ -1140,7 +1140,7 @@ const Settings = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Longitudinal Axis</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.locationModal.lng')}</label>
                   <input 
                     type="number" 
                     step="any"
@@ -1155,7 +1155,7 @@ const Settings = () => {
 
               <div className="space-y-4">
                 <div className="flex justify-between items-end px-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Operational Radius</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('settingsPage.locationModal.radius')}</label>
                   <span className="text-lg font-bold text-blue-600 tabular-nums">{locationForm.radius}m</span>
                 </div>
                 <div className="relative h-8 flex items-center">
@@ -1178,7 +1178,7 @@ const Settings = () => {
                   onClick={() => setLocationModalOpen(false)}
                   className="flex-1 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider hover:text-slate-800 hover:bg-slate-50 rounded-xl transition-all"
                 >
-                  Cancel
+                  {t('settingsPage.locationModal.cancel')}
                 </button>
                 <button 
                   type="submit"
@@ -1186,7 +1186,7 @@ const Settings = () => {
                   className="flex-[2] bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 disabled:opacity-50 transition-all shadow-sm"
                 >
                   {createLocationMutation.isPending || updateLocationMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  {editingLocation ? 'Save Changes' : 'Create Location'}
+                  {t('settingsPage.locationModal.submit')}
                 </button>
               </div>
             </form>
@@ -1206,9 +1206,9 @@ const Settings = () => {
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-slate-800 tracking-tight">
-                    {editingShift ? 'Reconfigure Shift' : 'Initialize Shift'}
+                    {editingShift ? t('settingsPage.shiftModal.editTitle') : t('settingsPage.shiftModal.addTitle')}
                   </h3>
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">Temporal Alignment</p>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">{t('settingsPage.shiftModal.subtitle')}</p>
                 </div>
               </div>
               <button onClick={() => setShiftModalOpen(false)} className="w-8 h-8 flex items-center justify-center hover:bg-slate-200 rounded-lg transition-colors text-slate-500">
@@ -1218,20 +1218,20 @@ const Settings = () => {
             
             <form onSubmit={handleShiftSubmit} className="p-8 space-y-6">
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Protocol Identifier (Name)</label>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.shiftModal.name')}</label>
                 <input 
                   type="text" 
                   required
                   value={shiftForm.name}
                   onChange={(e) => setShiftForm({...shiftForm, name: e.target.value})}
                   className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm"
-                  placeholder="e.g. MORNING SHIFT"
+                  placeholder={t('settingsPage.shiftModal.namePlaceholder')}
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-5">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Start Time</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.shiftModal.start')}</label>
                   <input 
                     type="time" 
                     required
@@ -1241,7 +1241,7 @@ const Settings = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">End Time</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.shiftModal.end')}</label>
                   <input 
                     type="time" 
                     required
@@ -1254,7 +1254,7 @@ const Settings = () => {
 
               <div className="grid grid-cols-2 gap-5">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Break Start</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.shiftModal.breakStart')}</label>
                   <input 
                     type="time" 
                     value={shiftForm.breakStart}
@@ -1263,7 +1263,7 @@ const Settings = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Break End</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.shiftModal.breakEnd')}</label>
                   <input 
                     type="time" 
                     value={shiftForm.breakEnd}
@@ -1274,7 +1274,7 @@ const Settings = () => {
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Tolerance (Grace Minutes)</label>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.shiftModal.grace')}</label>
                 <input 
                   type="number" 
                   value={shiftForm.gracePeriod}
@@ -1285,20 +1285,20 @@ const Settings = () => {
 
               <div className="grid grid-cols-2 gap-5">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Protokol Hari Sabtu</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.shiftModal.saturday')}</label>
                   <select 
                     value={shiftForm.saturdayType || 'HALF_DAY'}
                     onChange={(e) => setShiftForm({...shiftForm, saturdayType: e.target.value})}
                     className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm"
                   >
-                    <option value="HALF_DAY">Setengah Hari (Half-Day)</option>
-                    <option value="FULL_DAY">Hari Kerja Penuh (Full-Day)</option>
-                    <option value="OFF">Hari Libur (Off-Day)</option>
+                    <option value="HALF_DAY">{t('settingsPage.shiftModal.saturdayOptions.HALF_DAY')}</option>
+                    <option value="FULL_DAY">{t('settingsPage.shiftModal.saturdayOptions.FULL_DAY')}</option>
+                    <option value="OFF">{t('settingsPage.shiftModal.saturdayOptions.OFF')}</option>
                   </select>
                 </div>
                 {(shiftForm.saturdayType || 'HALF_DAY') === 'HALF_DAY' && (
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Jam Pulang Sabtu</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.shiftModal.saturdayEnd')}</label>
                     <input 
                       type="time" 
                       required={(shiftForm.saturdayType || 'HALF_DAY') === 'HALF_DAY'}
@@ -1316,7 +1316,7 @@ const Settings = () => {
                   onClick={() => setShiftModalOpen(false)}
                   className="flex-1 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider hover:text-slate-800 hover:bg-slate-50 rounded-xl transition-all"
                 >
-                  Cancel
+                  {t('settingsPage.shiftModal.cancel')}
                 </button>
                 <button 
                   type="submit"
@@ -1324,7 +1324,7 @@ const Settings = () => {
                   className="flex-[2] bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 disabled:opacity-50 transition-all shadow-sm"
                 >
                   {createShiftMutation.isPending || updateShiftMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  {editingShift ? 'Save Changes' : 'Create Shift'}
+                  {t('settingsPage.shiftModal.submit')}
                 </button>
               </div>
             </form>

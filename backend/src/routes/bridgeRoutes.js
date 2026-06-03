@@ -21,6 +21,15 @@ const verifyBridgeKey = (req, res, next) => {
   next();
 };
 
+const verifyTokenOrBridgeKey = (req, res, next) => {
+  const key = req.headers['x-bridge-key'];
+  const BRIDGE_KEY = process.env.INTERNAL_BRIDGE_KEY;
+  if (key && BRIDGE_KEY && key === BRIDGE_KEY) {
+    return next();
+  }
+  verifyToken(req, res, next);
+};
+
 // We no longer apply this globally, because some routes are for the Admin panel.
 // router.use(verifyBridgeKey);
 
@@ -347,8 +356,8 @@ router.post('/event/broadcast', verifyBridgeKey, async (req, res) => {
 // Camera Management Endpoints (for Admin Panel)
 // ══════════════════════════════════════════════════════════════════════════
 
-// Get all cameras
-router.get('/cameras', verifyToken, async (req, res) => {
+// Get all cameras (accessible by Admin JWT or AI Engine Bridge Key)
+router.get('/cameras', verifyTokenOrBridgeKey, async (req, res) => {
   try {
     const cameras = await prisma.camera.findMany({
       orderBy: { createdAt: 'desc' },
@@ -359,6 +368,100 @@ router.get('/cameras', verifyToken, async (req, res) => {
     res.json({ success: true, data: cameras });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Test camera connection (via AI Engine proxy)
+router.post('/cameras/test', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { rtspUrl } = req.body;
+    if (!rtspUrl) {
+      return res.status(400).json({ success: false, message: 'URL RTSP diperlukan untuk pengujian.' });
+    }
+
+    const aiHost = process.env.AI_ENGINE_URL || 'http://127.0.0.1:8002';
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    try {
+      const response = await fetch(`${aiHost}/cameras/test`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ rtspUrl }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return res.status(response.status).json({
+          success: false,
+          message: `AI Engine error (${response.status}): ${errorText || response.statusText}`
+        });
+      }
+
+      const data = await response.json();
+      res.json(data);
+    } catch (fetchErr) {
+      clearTimeout(timeoutId);
+      throw fetchErr;
+    }
+  } catch (err) {
+    console.error('[Bridge] Camera connection test error:', err.message);
+    res.status(500).json({ 
+      success: false, 
+      message: 'AI Engine tidak merespons atau tidak dapat dijangkau. Pastikan AI Engine berjalan.' 
+    });
+  }
+});
+
+// Get camera ROI configurations
+router.get('/cameras/rois', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const aiHost = process.env.AI_ENGINE_URL || 'http://127.0.0.1:8002';
+    const response = await fetch(`${aiHost}/cameras/rois`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      return res.status(response.status).json({
+        success: false,
+        message: `AI Engine error: ${errorText || response.statusText}`
+      });
+    }
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    console.error('[Bridge] Get camera ROIs error:', err.message);
+    res.status(500).json({ success: false, message: 'Gagal mengambil konfigurasi ROI dari AI Engine.' });
+  }
+});
+
+// Update camera ROI configuration
+router.post('/cameras/rois', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const aiHost = process.env.AI_ENGINE_URL || 'http://127.0.0.1:8002';
+    const response = await fetch(`${aiHost}/cameras/rois`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(req.body)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      return res.status(response.status).json({
+        success: false,
+        message: `AI Engine error: ${errorText || response.statusText}`
+      });
+    }
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    console.error('[Bridge] Post camera ROIs error:', err.message);
+    res.status(500).json({ success: false, message: 'Gagal menyimpan konfigurasi ROI ke AI Engine.' });
   }
 });
 
@@ -419,7 +522,14 @@ router.get('/alerts/unknown', verifyToken, async (req, res) => {
       take: parseInt(limit),
       include: { camera: true }
     });
-    res.json({ success: true, data: alerts });
+
+    // Convert MinIO object paths to accessible proxy URLs
+    const mapped = alerts.map(a => ({
+      ...a,
+      photoUrl: a.photoUrl ? `/minio/${a.photoUrl}` : null
+    }));
+
+    res.json({ success: true, data: mapped });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -468,6 +578,7 @@ router.get('/face-events', verifyToken, async (req, res) => {
 
     const mappedEvents = events.map(e => ({
       ...e,
+      photoUrl: e.photoUrl ? (e.photoUrl.startsWith('/') || e.photoUrl.startsWith('http') || e.photoUrl.startsWith('data:') ? e.photoUrl : `/minio/${e.photoUrl}`) : null,
       employeeName: e.employeeId ? (empMap.get(e.employeeId)?.name || 'Karyawan Aktif') : null,
       employeeCode: e.employeeId ? (empMap.get(e.employeeId)?.employeeCode || '') : null
     }));

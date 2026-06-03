@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle, Clock, Camera, Eye, XCircle, Loader2, Shield } from 'lucide-react';
-import api from '../../services/api';
+import api, { getFileUrl } from '../../services/api';
 
 const UnknownAlerts = () => {
   const { t } = useTranslation();
@@ -94,7 +94,7 @@ const UnknownAlerts = () => {
               <div className="aspect-square bg-slate-100 relative">
                 {alert.photoUrl ? (
                   <img
-                    src={alert.photoUrl}
+                    src={getFileUrl(alert.photoUrl)}
                     alt="Unknown face"
                     className="w-full h-full object-cover"
                     onError={(e) => { e.target.src = ''; e.target.classList.add('hidden'); }}

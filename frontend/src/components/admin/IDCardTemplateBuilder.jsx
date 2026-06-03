@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Settings2, Palette, Layout, QrCode, Image as ImageIcon } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import PrintableIDCard from './PrintableIDCard';
 
 const IDCardTemplateBuilder = ({ formData, handleInputChange }) => {
+  const { t } = useTranslation();
   const [config, setConfig] = useState({
     primaryColor: '#1e40af',
     orientation: 'vertical',
@@ -46,8 +48,8 @@ const IDCardTemplateBuilder = ({ formData, handleInputChange }) => {
           <Settings2 className="w-5 h-5 text-blue-600" />
         </div>
         <div>
-          <h2 className="text-lg font-bold text-slate-800 tracking-tight">ID Card Template Builder</h2>
-          <p className="text-xs text-slate-500 font-medium">Customize the appearance of employee ID cards</p>
+          <h2 className="text-lg font-bold text-slate-800 tracking-tight">{t('settingsPage.idCardBuilder.title')}</h2>
+          <p className="text-xs text-slate-500 font-medium">{t('settingsPage.idCardBuilder.subtitle')}</p>
         </div>
       </div>
 
@@ -57,13 +59,13 @@ const IDCardTemplateBuilder = ({ formData, handleInputChange }) => {
           
           <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-5">
             <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-              <Palette className="w-4 h-4 text-blue-500" /> Theme & Layout
+              <Palette className="w-4 h-4 text-blue-500" /> {t('settingsPage.idCardBuilder.presetsLabel')}
             </h3>
             
             <div className="space-y-6">
               {/* Quick Themes */}
               <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-3 block">Theme Presets</label>
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-3 block">{t('settingsPage.idCardBuilder.presetsLabel')}</label>
                 <div className="grid grid-cols-4 gap-2">
                   {[
                     { name: 'Corporate', color: '#1e40af', style: 'gradient', bgClass: 'bg-blue-800' },
@@ -94,7 +96,7 @@ const IDCardTemplateBuilder = ({ formData, handleInputChange }) => {
               <div className="h-px w-full bg-slate-200"></div>
 
               <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2 block">Primary Color</label>
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2 block">{t('settingsPage.idCardBuilder.colorLabel')}</label>
                 <div className="flex items-center gap-3">
                   <input 
                     type="color" 
@@ -112,64 +114,64 @@ const IDCardTemplateBuilder = ({ formData, handleInputChange }) => {
               </div>
 
               <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2 block">Orientation</label>
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2 block">{t('settingsPage.idCardBuilder.orientationLabel')}</label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => updateConfig('orientation', 'vertical')}
                     className={`py-2 px-4 rounded-xl text-xs font-bold tracking-wider uppercase border transition-all ${config.orientation === 'vertical' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
                   >
-                    Vertical
+                    {t('settingsPage.idCardBuilder.orientationVertical')}
                   </button>
                   <button
                     type="button"
                     onClick={() => updateConfig('orientation', 'horizontal')}
                     className={`py-2 px-4 rounded-xl text-xs font-bold tracking-wider uppercase border transition-all ${config.orientation === 'horizontal' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
                   >
-                    Horizontal
+                    {t('settingsPage.idCardBuilder.orientationHorizontal')}
                   </button>
                 </div>
               </div>
               
               <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2 block">Card Layout Design</label>
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2 block">{t('settingsPage.idCardBuilder.layoutDesignLabel')}</label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => updateConfig('designTemplate', 'classic')}
                     className={`py-2 px-2 rounded-xl text-[10px] font-bold tracking-wider uppercase border transition-all ${config.designTemplate === 'classic' || !config.designTemplate ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
                   >
-                    Classic
+                    {t('settingsPage.idCardBuilder.layoutClassic')}
                   </button>
                   <button
                     type="button"
                     onClick={() => updateConfig('designTemplate', 'modern')}
                     className={`py-2 px-2 rounded-xl text-[10px] font-bold tracking-wider uppercase border transition-all ${config.designTemplate === 'modern' ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
                   >
-                    Modern
+                    {t('settingsPage.idCardBuilder.layoutModern')}
                   </button>
                   <button
                     type="button"
                     onClick={() => updateConfig('designTemplate', 'minimalist')}
                     className={`py-2 px-2 rounded-xl text-[10px] font-bold tracking-wider uppercase border transition-all ${config.designTemplate === 'minimalist' ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
                   >
-                    Minimalist
+                    {t('settingsPage.idCardBuilder.layoutMinimalist')}
                   </button>
                   <button
                     type="button"
                     onClick={() => updateConfig('designTemplate', 'professional')}
                     className={`py-2 px-2 rounded-xl text-[10px] font-bold tracking-wider uppercase border transition-all ${config.designTemplate === 'professional' ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
                   >
-                    Professional
+                    {t('settingsPage.idCardBuilder.layoutProfessional')}
                   </button>
                 </div>
                 
                 <div className="mt-3 p-3 bg-blue-50/50 rounded-xl border border-blue-100/50">
                   <p className="text-[9.5px] text-slate-600 leading-relaxed font-medium">
-                    {(!config.designTemplate || config.designTemplate === 'classic') && <><strong className="text-blue-700">Classic:</strong> Desain standar dengan lengkungan warna di bagian atas. Memberikan kesan ramah dan cocok untuk staf lapangan atau ritel.</>}
-                    {config.designTemplate === 'modern' && <><strong className="text-blue-700">Modern:</strong> Desain asimetris dan tegas dengan efek potongan diagonal. Cocok untuk perusahaan startup atau tech-agency.</>}
-                    {config.designTemplate === 'minimalist' && <><strong className="text-blue-700">Minimalist:</strong> Bersih, banyak ruang kosong (white space), dengan aksen border halus. Hemat tinta printer dan terlihat sangat elegan.</>}
-                    {config.designTemplate === 'professional' && <><strong className="text-blue-700">Professional:</strong> Struktur kotak grid ketat, font lebih formal, dan mirip standar ISO enterprise. Sangat cocok untuk ID card pabrik atau korporat besar.</>}
+                    {(!config.designTemplate || config.designTemplate === 'classic') && <><strong className="text-blue-700">{t('settingsPage.idCardBuilder.layoutClassic')}:</strong> {t('settingsPage.idCardBuilder.descClassic')}</>}
+                    {config.designTemplate === 'modern' && <><strong className="text-blue-700">{t('settingsPage.idCardBuilder.layoutModern')}:</strong> {t('settingsPage.idCardBuilder.descModern')}</>}
+                    {config.designTemplate === 'minimalist' && <><strong className="text-blue-700">{t('settingsPage.idCardBuilder.layoutMinimalist')}:</strong> {t('settingsPage.idCardBuilder.descMinimalist')}</>}
+                    {config.designTemplate === 'professional' && <><strong className="text-blue-700">{t('settingsPage.idCardBuilder.layoutProfessional')}:</strong> {t('settingsPage.idCardBuilder.descProfessional')}</>}
                   </p>
                 </div>
               </div>
@@ -177,21 +179,21 @@ const IDCardTemplateBuilder = ({ formData, handleInputChange }) => {
               <div className="h-px w-full bg-slate-200"></div>
 
               <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2 block">Background Fill</label>
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2 block">{t('settingsPage.idCardBuilder.bgFillLabel')}</label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => updateConfig('backgroundStyle', 'gradient')}
                     className={`py-2 px-4 rounded-xl text-xs font-bold tracking-wider uppercase border transition-all ${config.backgroundStyle === 'gradient' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
                   >
-                    Gradient
+                    {t('settingsPage.idCardBuilder.bgGradient')}
                   </button>
                   <button
                     type="button"
                     onClick={() => updateConfig('backgroundStyle', 'solid')}
                     className={`py-2 px-4 rounded-xl text-xs font-bold tracking-wider uppercase border transition-all ${config.backgroundStyle === 'solid' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
                   >
-                    Solid
+                    {t('settingsPage.idCardBuilder.bgSolid')}
                   </button>
                 </div>
               </div>
@@ -200,18 +202,18 @@ const IDCardTemplateBuilder = ({ formData, handleInputChange }) => {
 
           <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-5">
             <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-              <Layout className="w-4 h-4 text-emerald-500" /> Elements
+              <Layout className="w-4 h-4 text-emerald-500" /> {t('settingsPage.idCardBuilder.elementsTitle')}
             </h3>
             
             <div className="space-y-4">
-              <label className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-emerald-300 transition-colors">
+              <label className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-emerald-300 transition-colors" onClick={(e) => { e.preventDefault(); updateConfig('showQR', !config.showQR); }}>
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
                     <QrCode className="w-4 h-4" />
                   </div>
                   <div>
-                    <p className="text-sm font-bold text-slate-700">QR Code</p>
-                    <p className="text-[10px] text-slate-500">Show employee QR code on card</p>
+                    <p className="text-sm font-bold text-slate-700">{t('settingsPage.idCardBuilder.toggleQrCode')}</p>
+                    <p className="text-[10px] text-slate-500">{t('settingsPage.idCardBuilder.descQrCode')}</p>
                   </div>
                 </div>
                 <button
@@ -229,8 +231,8 @@ const IDCardTemplateBuilder = ({ formData, handleInputChange }) => {
                     <ImageIcon className="w-4 h-4" />
                   </div>
                   <div>
-                    <p className="text-sm font-bold text-slate-700">Company Logo</p>
-                    <p className="text-[10px] text-slate-500">Show company logo in header</p>
+                    <p className="text-sm font-bold text-slate-700">{t('settingsPage.idCardBuilder.toggleCompanyLogo')}</p>
+                    <p className="text-[10px] text-slate-500">{t('settingsPage.idCardBuilder.descCompanyLogo')}</p>
                   </div>
                 </div>
                 <button
@@ -250,7 +252,7 @@ const IDCardTemplateBuilder = ({ formData, handleInputChange }) => {
         <div className="w-full lg:w-1/2 bg-slate-100/50 rounded-3xl p-8 flex flex-col items-center justify-center relative border-2 border-dashed border-slate-200 min-h-[500px]">
           <div className="absolute top-4 left-4 flex items-center gap-2 bg-white px-3 py-1.5 rounded-full shadow-sm border border-slate-200">
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-            <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Live Preview</span>
+            <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">{t('settingsPage.idCardBuilder.livePreview')}</span>
           </div>
 
           <div className="transform scale-[0.85] sm:scale-100 origin-center transition-all duration-300 drop-shadow-2xl">

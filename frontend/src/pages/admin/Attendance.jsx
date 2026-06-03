@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { attendanceAPI, employeeAPI, payrollAPI, settingsAPI } from '../../services/api';
+import { attendanceAPI, employeeAPI, payrollAPI, settingsAPI, getFileUrl } from '../../services/api';
 import PrintableAttendanceReport from '../../components/payroll/PrintableAttendanceReport';
 import { Edit2, LayoutDashboard, Calendar, Clock, RefreshCw, Upload, AlertCircle, CheckCircle2, XCircle, Search, Filter, Scan, X, FileSpreadsheet, Printer, FileText, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, ArrowRight, Loader2, AlertTriangle, ShieldCheck, ShieldAlert, TrendingUp, Fingerprint, Camera, Eye } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -2474,7 +2474,7 @@ const Attendance = () => {
               <div className="relative aspect-video w-full bg-slate-950 rounded-2xl overflow-hidden border border-slate-200 flex items-center justify-center shadow-inner">
                 {photoModal.photoUrl ? (
                   <img 
-                    src={photoModal.photoUrl} 
+                    src={getFileUrl(photoModal.photoUrl)} 
                     alt="CCTV Snap" 
                     className="w-full h-full object-contain"
                   />
