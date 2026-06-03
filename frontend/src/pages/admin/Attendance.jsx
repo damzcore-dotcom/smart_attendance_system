@@ -1609,9 +1609,33 @@ const Attendance = () => {
                           )}
                         </td>
                         <td className="px-4 py-4">
-                          <span className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 text-[10px] font-bold border border-slate-200 uppercase tracking-widest">{row.dept || 'N/A'}</span>
+                          <button
+                            onClick={() => {
+                              if (row.dept) {
+                                setAppliedFilters(prev => ({ ...prev, dept: row.dept, section: '', page: 1 }));
+                              }
+                            }}
+                            className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 text-[10px] font-bold border border-slate-200 uppercase tracking-widest hover:bg-blue-600 hover:text-white hover:border-blue-600 cursor-pointer transition-all hover:scale-105 active:scale-95 shadow-sm"
+                            title="Klik untuk memfilter departemen ini"
+                          >
+                            {row.dept || 'N/A'}
+                          </button>
                         </td>
-                        <td className="px-4 py-4 text-[10px] font-bold text-slate-600 uppercase tracking-wider">{row.section || '—'}</td>
+                        <td className="px-4 py-4">
+                          {row.section ? (
+                            <button
+                              onClick={() => {
+                                setAppliedFilters(prev => ({ ...prev, dept: row.dept || '', section: row.section, page: 1 }));
+                              }}
+                              className="text-[10px] font-bold text-slate-600 hover:text-blue-600 hover:underline uppercase tracking-wider cursor-pointer transition-all hover:scale-105 active:scale-95"
+                              title="Klik untuk memfilter bagian ini"
+                            >
+                              {row.section}
+                            </button>
+                          ) : (
+                            <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">—</span>
+                          )}
+                        </td>
                         <td className="px-4 py-4 text-[10px] font-bold text-slate-600 uppercase tracking-wider">{row.position || '—'}</td>
                         <td className="px-4 py-4 text-center">
                           <div className="flex items-center justify-center gap-2">
@@ -1755,9 +1779,33 @@ const Attendance = () => {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold border border-slate-200 uppercase tracking-widest">{row.dept}</span>
+                          <button
+                            onClick={() => {
+                              if (row.dept) {
+                                setAppliedFilters(prev => ({ ...prev, dept: row.dept, section: '', page: 1 }));
+                              }
+                            }}
+                            className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold border border-slate-200 uppercase tracking-widest hover:bg-blue-600 hover:text-white hover:border-blue-600 cursor-pointer transition-all hover:scale-105 active:scale-95 shadow-sm"
+                            title="Klik untuk memfilter departemen ini"
+                          >
+                            {row.dept}
+                          </button>
                         </td>
-                        <td className="px-4 py-4 text-[10px] font-bold text-slate-700 uppercase tracking-wider">{row.section}</td>
+                        <td className="px-4 py-4">
+                          {row.section ? (
+                            <button
+                              onClick={() => {
+                                setAppliedFilters(prev => ({ ...prev, dept: row.dept || '', section: row.section, page: 1 }));
+                              }}
+                              className="text-[10px] font-bold text-slate-700 hover:text-blue-600 hover:underline uppercase tracking-wider cursor-pointer transition-all hover:scale-105 active:scale-95"
+                              title="Klik untuk memfilter bagian ini"
+                            >
+                              {row.section}
+                            </button>
+                          ) : (
+                            <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">—</span>
+                          )}
+                        </td>
                         <td className="px-4 py-4 text-center text-xs font-bold text-slate-800">{row.total}</td>
                         <td className="px-4 py-4 text-center text-xs font-bold text-emerald-600">{row.present}</td>
                         {/* Terlambat Column with Tooltip */}
