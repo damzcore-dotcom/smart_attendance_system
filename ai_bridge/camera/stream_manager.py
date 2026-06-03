@@ -11,9 +11,11 @@ from queue import Queue, Empty
 
 class HikvisionStreamManager:
     def __init__(self):
+        import os
         self.cameras = {}
         self.frame_queues = {}
         self._running = True
+        self.frame_skip = int(os.getenv("FRAME_SKIP", "10"))
 
     def load_from_config_sync(self, config_path: str):
         with open(config_path) as f:
@@ -30,48 +32,112 @@ class HikvisionStreamManager:
         """Memuat kamera dari respons HTTP API Smart Attendance"""
         for cam in cameras_list:
             if cam.get("active", True) and cam.get("rtspUrl"):
-                self.add_camera(cam["id"], cam["rtspUrl"], cam.get("direction", "BOTH"))
+                self.add_camera(cam["id"], cam["rtspUrl"], cam.get("direction", "BOTH"), cam.get("detectUnknown", True))
 
-    def add_camera(self, cam_id: str, rtsp_url: str, direction: str = "BOTH"):
+    def add_camera(self, cam_id: str, rtsp_url: str, direction: str = "BOTH", detect_unknown: bool = True):
         cap = cv2.VideoCapture(rtsp_url)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         self.cameras[cam_id] = {
             "cap": cap,
             "rtsp_url": rtsp_url,
             "direction": direction,
-            "connected": cap.isOpened()
+            "detect_unknown": detect_unknown,
+            "connected": cap.isOpened(),
+            "active_detections": [],
+            "viewers": 0
         }
         self.frame_queues[cam_id] = Queue(maxsize=5)
         t = threading.Thread(target=self._capture_loop, args=(cam_id,), daemon=True)
         t.start()
-        print(f"[Camera] Started stream for {cam_id} (dir={direction})")
+        print(f"[Camera] Started stream for {cam_id} (dir={direction}, skip={self.frame_skip})")
+
+    def increment_viewers(self, cam_id: str):
+        if cam_id in self.cameras:
+            self.cameras[cam_id]["viewers"] = self.cameras[cam_id].get("viewers", 0) + 1
+
+    def decrement_viewers(self, cam_id: str):
+        if cam_id in self.cameras:
+            self.cameras[cam_id]["viewers"] = max(0, self.cameras[cam_id].get("viewers", 0) - 1)
 
     def _capture_loop(self, cam_id: str):
         frame_count = 0
+        consecutive_failures = 0
+        import time
         while self._running:
             try:
                 ret, frame = self.cameras[cam_id]["cap"].read()
                 if ret:
+                    consecutive_failures = 0
                     frame_count += 1
-                    # Process every 3rd frame for efficiency
-                    if frame_count % 3 == 0:
+                    
+                    # Process every Nth frame for AI recognition
+                    if frame_count % self.frame_skip == 0:
                         if not self.frame_queues[cam_id].full():
                             self.frame_queues[cam_id].put(frame)
                     
-                    # Cache frame and encode to JPEG once to save CPU for streaming
-                    ret_jpeg, jpeg = cv2.imencode('.jpg', frame)
-                    if ret_jpeg:
-                        self.cameras[cam_id]["latest_jpeg"] = jpeg.tobytes()
+                    # Draw and encode to JPEG only if there are active viewers
+                    viewers = self.cameras[cam_id].get("viewers", 0)
+                    now = time.time()
+                    
+                    if viewers > 0:
+                        # Limit JPEG encoding rate to ~12.5 FPS (every 0.08 seconds) to save CPU
+                        if now - self.cameras[cam_id].get("last_jpeg_time", 0) >= 0.08:
+                            active_detections = self.cameras[cam_id].get("active_detections", [])
+                            active_detections = [d for d in active_detections if now - d["timestamp"] < 0.6]
+                            self.cameras[cam_id]["active_detections"] = active_detections
+                            
+                            draw_frame = frame
+                            roi_box = self.cameras[cam_id].get("roi_box")
+                            if active_detections or roi_box:
+                                draw_frame = frame.copy()
+                                
+                                # Draw ROI Box (Scanning boundary)
+                                if roi_box:
+                                    rx1, ry1, rx2, ry2 = roi_box
+                                    cv2.rectangle(draw_frame, (rx1, ry1), (rx2, ry2), (180, 180, 180), 1, cv2.LINE_AA)
+                                    cv2.putText(draw_frame, "DETECTION ZONE", (rx1 + 8, ry1 + 18),
+                                                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (180, 180, 180), 1, cv2.LINE_AA)
+                                
+                                # Draw Active Face Detections
+                                if active_detections:
+                                    for d in active_detections:
+                                        x1, y1, x2, y2 = d["bbox"]
+                                        color = d.get("color", (0, 255, 0)) # Default green
+                                        name = d.get("name", "Unknown")
+                                        cv2.rectangle(draw_frame, (x1, y1), (x2, y2), color, 2, cv2.LINE_AA)
+                                        cv2.putText(draw_frame, name, (x1, y1 - 10),
+                                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2, cv2.LINE_AA)
+                            
+                            ret_jpeg, jpeg = cv2.imencode('.jpg', draw_frame)
+                            if ret_jpeg:
+                                self.cameras[cam_id]["latest_jpeg"] = jpeg.tobytes()
+                                self.cameras[cam_id]["last_jpeg_time"] = now
+                    else:
+                        # Clear latest_jpeg to free memory when no one is watching
+                        if "latest_jpeg" in self.cameras[cam_id]:
+                            self.cameras[cam_id]["latest_jpeg"] = None
                     
                     self.cameras[cam_id]["connected"] = True
                 else:
+                    consecutive_failures += 1
+                    # Sleep briefly to not spin CPU on failures
+                    time.sleep(0.01)
+                    
+                    if consecutive_failures >= 30: # Tolerates brief frame loss (~1 second)
+                        print(f"[Camera {cam_id}] Stream disconnected (30 consecutive frame failures). Reconnecting...")
+                        self.cameras[cam_id]["connected"] = False
+                        self.cameras[cam_id]["latest_jpeg"] = None
+                        self._reconnect(cam_id)
+                        consecutive_failures = 0
+            except Exception as e:
+                consecutive_failures += 1
+                time.sleep(0.1)
+                if consecutive_failures >= 10:
+                    print(f"[Camera {cam_id}] Capture exception: {e}. Reconnecting...")
                     self.cameras[cam_id]["connected"] = False
                     self.cameras[cam_id]["latest_jpeg"] = None
                     self._reconnect(cam_id)
-            except Exception as e:
-                print(f"[Camera {cam_id}] Capture error: {e}")
-                self.cameras[cam_id]["latest_jpeg"] = None
-                self._reconnect(cam_id)
+                    consecutive_failures = 0
 
     def _reconnect(self, cam_id: str):
         import time

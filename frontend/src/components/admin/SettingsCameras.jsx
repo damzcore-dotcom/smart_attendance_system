@@ -106,7 +106,7 @@ const SettingsCameras = ({ permissions = { canCreate: true, canUpdate: true, can
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
-  const [formData, setFormData] = useState({ id: '', name: '', ipAddress: '', rtspUrl: '', location: '', direction: 'BOTH', captureInStart: '06:00', captureInEnd: '10:00', captureOutStart: '15:00', captureOutEnd: '21:00' });
+  const [formData, setFormData] = useState({ id: '', name: '', ipAddress: '', rtspUrl: '', location: '', direction: 'BOTH', detectUnknown: true, captureInStart: '06:00', captureInEnd: '10:00', captureOutStart: '15:00', captureOutEnd: '21:00' });
 
   // ROI Visual Editor States
   const [isRoiModalOpen, setIsRoiModalOpen] = useState(false);
@@ -222,6 +222,7 @@ const SettingsCameras = ({ permissions = { canCreate: true, canUpdate: true, can
     if (cam) {
       setFormData({
         ...cam,
+        detectUnknown: cam.detectUnknown !== false,
         captureInStart: cam.captureInStart || '06:00',
         captureInEnd: cam.captureInEnd || '10:00',
         captureOutStart: cam.captureOutStart || '15:00',
@@ -239,7 +240,7 @@ const SettingsCameras = ({ permissions = { canCreate: true, canUpdate: true, can
       setStreamType(parsed.streamType);
       setManualRtspUrl(parsed.manualRtspUrl || cam.rtspUrl || '');
     } else {
-      setFormData({ id: '', name: '', ipAddress: '', rtspUrl: '', location: '', direction: 'BOTH', captureInStart: '06:00', captureInEnd: '10:00', captureOutStart: '15:00', captureOutEnd: '21:00' });
+      setFormData({ id: '', name: '', ipAddress: '', rtspUrl: '', location: '', direction: 'BOTH', detectUnknown: true, captureInStart: '06:00', captureInEnd: '10:00', captureOutStart: '15:00', captureOutEnd: '21:00' });
       setIsEditing(false);
       
       setSourceType('STANDALONE');
@@ -256,7 +257,7 @@ const SettingsCameras = ({ permissions = { canCreate: true, canUpdate: true, can
 
   const closeModal = () => {
     setIsModalOpen(false);
-    setFormData({ id: '', name: '', ipAddress: '', rtspUrl: '', location: '', direction: 'BOTH', captureInStart: '06:00', captureInEnd: '10:00', captureOutStart: '15:00', captureOutEnd: '21:00' });
+    setFormData({ id: '', name: '', ipAddress: '', rtspUrl: '', location: '', direction: 'BOTH', detectUnknown: true, captureInStart: '06:00', captureInEnd: '10:00', captureOutStart: '15:00', captureOutEnd: '21:00' });
     setIsEditing(false);
   };
 
@@ -391,49 +392,49 @@ const SettingsCameras = ({ permissions = { canCreate: true, canUpdate: true, can
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="space-y-4 text-left">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <form onSubmit={handleSave} className="space-y-3.5 text-left">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">{t('settingsPage.cameras.form.cameraId')}</label>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('settingsPage.cameras.form.cameraId')}</label>
                   <input
                     type="text"
                     required
                     disabled={isEditing}
                     placeholder="e.g: CAM_LOBBY_01"
-                    className="w-full px-3 py-2 border rounded-lg text-sm bg-slate-50 border-slate-200 outline-none"
+                    className="w-full px-3 py-1.5 border rounded-lg text-sm bg-slate-50 border-slate-200 outline-none"
                     value={formData.id}
                     onChange={e => setFormData({ ...formData, id: e.target.value })}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">{t('settingsPage.cameras.form.displayName')}</label>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('settingsPage.cameras.form.displayName')}</label>
                   <input
                     type="text"
                     required
                     placeholder="e.g: Main Lobby Entrance"
-                    className="w-full px-3 py-2 border rounded-lg text-sm border-slate-200 outline-none focus:border-blue-500"
+                    className="w-full px-3 py-1.5 border rounded-lg text-sm border-slate-200 outline-none focus:border-blue-500"
                     value={formData.name}
                     onChange={e => setFormData({ ...formData, name: e.target.value })}
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">{t('settingsPage.cameras.form.location')}</label>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('settingsPage.cameras.form.location')}</label>
                   <input
                     type="text"
                     placeholder="e.g: Lantai 1 Lobby"
-                    className="w-full px-3 py-2 border rounded-lg text-sm border-slate-200 outline-none focus:border-blue-500"
+                    className="w-full px-3 py-1.5 border rounded-lg text-sm border-slate-200 outline-none focus:border-blue-500"
                     value={formData.location || ''}
                     onChange={e => setFormData({ ...formData, location: e.target.value })}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">{t('settingsPage.cameras.form.direction')}</label>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('settingsPage.cameras.form.direction')}</label>
                   <select
-                    className="w-full px-3 py-2 border rounded-lg text-sm bg-white border-slate-200 outline-none focus:border-blue-500"
+                    className="w-full px-3 py-1.5 border rounded-lg text-sm bg-white border-slate-200 outline-none focus:border-blue-500"
                     value={formData.direction}
                     onChange={e => setFormData({ ...formData, direction: e.target.value })}
                   >
@@ -445,9 +446,9 @@ const SettingsCameras = ({ permissions = { canCreate: true, canUpdate: true, can
               </div>
 
               {/* Source Type Selector Grid */}
-              <div className="space-y-1.5 border-t border-slate-100 pt-3">
-                <label className="block text-xs font-bold text-slate-700 mb-1">{t('settingsPage.cameras.form.sourceType')}</label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <div className="space-y-1 border-t border-slate-100 pt-2.5">
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('settingsPage.cameras.form.sourceType')}</label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {[
                     { id: 'STANDALONE', label: t('settingsPage.cameras.form.sourceStandalone'), icon: Camera, desc: t('settingsPage.cameras.form.sourceStandaloneDesc') },
                     { id: 'NVR', label: t('settingsPage.cameras.form.sourceNvr'), icon: Server, desc: t('settingsPage.cameras.form.sourceNvrDesc') },
@@ -461,15 +462,15 @@ const SettingsCameras = ({ permissions = { canCreate: true, canUpdate: true, can
                         key={item.id}
                         type="button"
                         onClick={() => setSourceType(item.id)}
-                        className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all cursor-pointer ${
+                        className={`flex flex-col items-center justify-center p-2 rounded-xl border text-center transition-all cursor-pointer ${
                           isSelected
                             ? 'border-blue-600 bg-blue-50/50 text-blue-700 shadow-sm font-semibold'
                             : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50/50'
                         }`}
                       >
-                        <Icon className={`w-4 h-4 mb-1 ${isSelected ? 'text-blue-600' : 'text-slate-400'}`} />
-                        <span className="text-[9px] font-bold tracking-tight uppercase leading-tight">{item.label}</span>
-                        <span className="text-[8px] text-slate-400 mt-0.5 leading-tight">{item.desc}</span>
+                        <Icon className={`w-3.5 h-3.5 mb-0.5 ${isSelected ? 'text-blue-600' : 'text-slate-400'}`} />
+                        <span className="text-[8px] font-bold tracking-tight uppercase leading-tight">{item.label}</span>
+                        <span className="text-[7px] text-slate-400 leading-tight truncate w-full">{item.desc}</span>
                       </button>
                     );
                   })}
@@ -477,12 +478,12 @@ const SettingsCameras = ({ permissions = { canCreate: true, canUpdate: true, can
               </div>
 
               {/* Dynamic Connection Inputs */}
-              <div className="bg-slate-50/50 border border-slate-100 p-4 rounded-xl space-y-4">
+              <div className="bg-slate-50/50 border border-slate-100 p-3 rounded-xl space-y-3">
                 {sourceType !== 'MANUAL' ? (
                   <div className="space-y-3">
                     <div className="grid grid-cols-3 gap-3">
                       <div className="col-span-2">
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('settingsPage.cameras.form.ipAddress')}</label>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">{t('settingsPage.cameras.form.ipAddress')}</label>
                         <input
                           type="text"
                           required
@@ -493,7 +494,7 @@ const SettingsCameras = ({ permissions = { canCreate: true, canUpdate: true, can
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('settingsPage.cameras.form.rtspPort')}</label>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">{t('settingsPage.cameras.form.rtspPort')}</label>
                         <input
                           type="text"
                           required
@@ -507,7 +508,7 @@ const SettingsCameras = ({ permissions = { canCreate: true, canUpdate: true, can
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('settingsPage.cameras.form.username')}</label>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">{t('settingsPage.cameras.form.username')}</label>
                         <input
                           type="text"
                           placeholder={t('settingsPage.cameras.form.usernamePlaceholder')}
@@ -517,7 +518,7 @@ const SettingsCameras = ({ permissions = { canCreate: true, canUpdate: true, can
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('settingsPage.cameras.form.password')}</label>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">{t('settingsPage.cameras.form.password')}</label>
                         <input
                           type="password"
                           placeholder={t('settingsPage.cameras.form.passwordPlaceholder')}
@@ -531,7 +532,7 @@ const SettingsCameras = ({ permissions = { canCreate: true, canUpdate: true, can
                     <div className="grid grid-cols-2 gap-3">
                       {(sourceType === 'NVR' || sourceType === 'LEGACY') && (
                         <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('settingsPage.cameras.form.nvrChannel')}</label>
+                          <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">{t('settingsPage.cameras.form.nvrChannel')}</label>
                           <input
                             type="number"
                             min="1"
@@ -544,7 +545,7 @@ const SettingsCameras = ({ permissions = { canCreate: true, canUpdate: true, can
                       )}
                       {(sourceType === 'STANDALONE' || sourceType === 'NVR') && (
                         <div className={sourceType === 'STANDALONE' ? 'col-span-2' : ''}>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('settingsPage.cameras.form.streamType')}</label>
+                          <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">{t('settingsPage.cameras.form.streamType')}</label>
                           <div className="flex gap-2">
                             {[
                               { id: 'MAIN', label: t('settingsPage.cameras.form.streamMain') },
@@ -554,7 +555,7 @@ const SettingsCameras = ({ permissions = { canCreate: true, canUpdate: true, can
                                 key={stream.id}
                                 type="button"
                                 onClick={() => setStreamType(stream.id)}
-                                className={`flex-1 py-1.5 text-xs font-semibold border rounded-lg transition-all cursor-pointer ${
+                                className={`flex-1 py-1.5 text-[11px] font-semibold border rounded-lg transition-all cursor-pointer ${
                                   streamType === stream.id
                                     ? 'border-blue-600 bg-blue-50/50 text-blue-700'
                                     : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-100'
@@ -570,7 +571,7 @@ const SettingsCameras = ({ permissions = { canCreate: true, canUpdate: true, can
                   </div>
                 ) : (
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('settingsPage.cameras.form.customRtsp')}</label>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">{t('settingsPage.cameras.form.customRtsp')}</label>
                     <input
                       type="text"
                       required
@@ -583,21 +584,21 @@ const SettingsCameras = ({ permissions = { canCreate: true, canUpdate: true, can
                 )}
 
                 {/* RTSP URL Preview & Test Connection */}
-                <div className="border-t border-slate-200/50 pt-3 space-y-3">
+                <div className="border-t border-slate-200/50 pt-2.5 space-y-2">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">{t('settingsPage.cameras.form.previewLink')}</span>
+                    <span className="block text-[8px] font-bold text-slate-400 uppercase tracking-wider">{t('settingsPage.cameras.form.previewLink')}</span>
                     <button
                       type="button"
                       disabled={isTesting || !formData.rtspUrl}
                       onClick={handleTestConnection}
-                      className="px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer active:scale-95"
+                      className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-[9px] font-bold tracking-wider uppercase transition-all flex items-center gap-1 disabled:opacity-50 cursor-pointer active:scale-95"
                     >
-                      {isTesting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wifi className="w-3 h-3" />}
+                      {isTesting ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Wifi className="w-2.5 h-2.5" />}
                       {isTesting ? t('settingsPage.cameras.form.testingBtn') : t('settingsPage.cameras.form.testBtn')}
                     </button>
                   </div>
                   {formData.rtspUrl && (
-                    <div className="font-mono text-[10px] bg-slate-900 text-slate-300 px-3 py-2 rounded-lg border border-slate-800 break-all select-all">
+                    <div className="font-mono text-[9px] bg-slate-900 text-slate-300 px-3 py-2 rounded-lg border border-slate-800 break-all select-all">
                       {formData.rtspUrl.replace(/:([^:@]+)@/, ':******@')}
                     </div>
                   )}
@@ -605,45 +606,42 @@ const SettingsCameras = ({ permissions = { canCreate: true, canUpdate: true, can
               </div>
 
               {/* Schedule Form */}
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-4">
-                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">{t('settingsPage.cameras.form.scheduleTitle')}</h4>
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-3">
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">{t('settingsPage.cameras.form.scheduleTitle')}</h4>
                 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <div>
-                    <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">{t('settingsPage.cameras.form.inStart')}</label>
+                    <label className="block text-[9px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">{t('settingsPage.cameras.form.inStart')}</label>
                     <input
                       type="time"
-                      className="w-full px-3 py-2 border rounded-lg text-sm bg-white border-slate-200"
+                      className="w-full px-2 py-1 border rounded-lg text-xs bg-white border-slate-200 outline-none"
                       value={formData.captureInStart}
                       onChange={e => setFormData({ ...formData, captureInStart: e.target.value })}
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">{t('settingsPage.cameras.form.inEnd')}</label>
+                    <label className="block text-[9px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">{t('settingsPage.cameras.form.inEnd')}</label>
                     <input
                       type="time"
-                      className="w-full px-3 py-2 border rounded-lg text-sm bg-white border-slate-200"
+                      className="w-full px-2 py-1 border rounded-lg text-xs bg-white border-slate-200 outline-none"
                       value={formData.captureInEnd}
                       onChange={e => setFormData({ ...formData, captureInEnd: e.target.value })}
                     />
                   </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[10px] font-semibold text-amber-500 uppercase tracking-wider mb-1">{t('settingsPage.cameras.form.outStart')}</label>
+                    <label className="block text-[9px] font-semibold text-amber-600 uppercase tracking-wider mb-0.5">{t('settingsPage.cameras.form.outStart')}</label>
                     <input
                       type="time"
-                      className="w-full px-3 py-2 border rounded-lg text-sm bg-white border-slate-200"
+                      className="w-full px-2 py-1 border rounded-lg text-xs bg-white border-slate-200 outline-none"
                       value={formData.captureOutStart}
                       onChange={e => setFormData({ ...formData, captureOutStart: e.target.value })}
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-semibold text-amber-500 uppercase tracking-wider mb-1">{t('settingsPage.cameras.form.outEnd')}</label>
+                    <label className="block text-[9px] font-semibold text-amber-600 uppercase tracking-wider mb-0.5">{t('settingsPage.cameras.form.outEnd')}</label>
                     <input
                       type="time"
-                      className="w-full px-3 py-2 border rounded-lg text-sm bg-white border-slate-200"
+                      className="w-full px-2 py-1 border rounded-lg text-xs bg-white border-slate-200 outline-none"
                       value={formData.captureOutEnd}
                       onChange={e => setFormData({ ...formData, captureOutEnd: e.target.value })}
                     />
@@ -651,17 +649,30 @@ const SettingsCameras = ({ permissions = { canCreate: true, canUpdate: true, can
                 </div>
               </div>
               
-              <div className="flex items-center gap-2 mt-4 bg-blue-50 p-3 rounded-lg border border-blue-100">
-                <input 
-                  type="checkbox" 
-                  checked={formData.active !== false}
-                  onChange={(e) => setFormData({...formData, active: e.target.checked})}
-                  className="rounded text-blue-600"
-                />
-                <span className="text-xs font-bold text-blue-700 uppercase">{t('settingsPage.cameras.form.active')}</span>
+              {/* Checkboxes: Active Status & Stranger Faces Detection */}
+              <div className="flex flex-col sm:flex-row gap-3.5 mt-4 bg-blue-50 p-3 rounded-lg border border-blue-100">
+                <label className="flex items-center gap-2 cursor-pointer flex-1 select-none">
+                  <input 
+                    type="checkbox" 
+                    checked={formData.active !== false}
+                    onChange={(e) => setFormData({...formData, active: e.target.checked})}
+                    className="rounded text-blue-600 focus:ring-blue-500/20"
+                  />
+                  <span className="text-xs font-bold text-blue-700 uppercase">{t('settingsPage.cameras.form.active')}</span>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer flex-1 select-none border-t sm:border-t-0 sm:border-l border-blue-200/60 pt-2 sm:pt-0 sm:pl-3">
+                  <input 
+                    type="checkbox" 
+                    checked={formData.detectUnknown !== false}
+                    onChange={(e) => setFormData({...formData, detectUnknown: e.target.checked})}
+                    className="rounded text-blue-600 focus:ring-blue-500/20"
+                  />
+                  <span className="text-xs font-bold text-blue-700 uppercase">{t('settingsPage.cameras.form.detectUnknown')}</span>
+                </label>
               </div>
 
-              <div className="pt-4 flex gap-3">
+              <div className="pt-3 flex gap-3">
                 <button
                   type="button"
                   onClick={closeModal}
@@ -678,6 +689,7 @@ const SettingsCameras = ({ permissions = { canCreate: true, canUpdate: true, can
                 </button>
               </div>
             </form>
+
           </div>
         </div>
       )}

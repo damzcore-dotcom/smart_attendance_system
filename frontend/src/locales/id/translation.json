@@ -1537,6 +1537,7 @@
         "outStart": "Keluar (Start)",
         "outEnd": "Keluar (End)",
         "active": "Kamera Aktif",
+        "detectUnknown": "Tampilkan Wajah Asing",
         "testBtn": "Test Koneksi",
         "testingBtn": "Menguji...",
         "saveBtn": "Simpan Kamera",

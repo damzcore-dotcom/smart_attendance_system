@@ -1537,6 +1537,7 @@
         "outStart": "Out (Start)",
         "outEnd": "Out (End)",
         "active": "Camera Active",
+        "detectUnknown": "Show Stranger Faces",
         "testBtn": "Test Connection",
         "testingBtn": "Testing...",
         "saveBtn": "Save Camera",

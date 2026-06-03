@@ -1537,6 +1537,7 @@
         "outStart": "퇴근 (시작)",
         "outEnd": "퇴근 (종료)",
         "active": "카메라 활성화",
+        "detectUnknown": "외부인 얼굴 표시",
         "testBtn": "연결 테스트",
         "testingBtn": "테스트 중...",
         "saveBtn": "카메라 저장",

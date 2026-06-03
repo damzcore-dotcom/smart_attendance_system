@@ -469,9 +469,10 @@ router.post('/cameras/rois', verifyToken, requireAdmin, async (req, res) => {
 // Create camera
 router.post('/cameras', verifyToken, requireAdmin, async (req, res) => {
   try {
-    const { id, name, location, ipAddress, rtspUrl, direction, captureInStart, captureInEnd, captureOutStart, captureOutEnd } = req.body;
+    const { id, name, location, ipAddress, rtspUrl, direction, detectUnknown, captureInStart, captureInEnd, captureOutStart, captureOutEnd } = req.body;
     const camera = await prisma.camera.create({
       data: { id, name, location, ipAddress, rtspUrl, direction: direction || 'BOTH',
+        detectUnknown: detectUnknown !== false,
         captureInStart: captureInStart || '06:00',
         captureInEnd: captureInEnd || '10:00',
         captureOutStart: captureOutStart || '15:00',
@@ -487,10 +488,11 @@ router.post('/cameras', verifyToken, requireAdmin, async (req, res) => {
 // Update camera
 router.put('/cameras/:id', verifyToken, requireAdmin, async (req, res) => {
   try {
-    const { name, location, ipAddress, rtspUrl, direction, active, captureInStart, captureInEnd, captureOutStart, captureOutEnd } = req.body;
+    const { name, location, ipAddress, rtspUrl, direction, active, detectUnknown, captureInStart, captureInEnd, captureOutStart, captureOutEnd } = req.body;
     const camera = await prisma.camera.update({
       where: { id: req.params.id },
       data: { name, location, ipAddress, rtspUrl, direction, active,
+        detectUnknown: detectUnknown !== false,
         captureInStart, captureInEnd, captureOutStart, captureOutEnd
       }
     });

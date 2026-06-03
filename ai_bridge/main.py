@@ -10,6 +10,11 @@ from contextlib import asynccontextmanager
 import asyncio
 import os
 
+# Force TCP transport and 5-second socket timeout (5,000,000 microseconds) globally
+# for all OpenCV/FFmpeg RTSP camera connections. This prevents offline cameras
+# from hanging startup/reconnection threads and blocking other threads.
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|stimeout;5000000"
+
 from camera.stream_manager import HikvisionStreamManager
 from ai.face_detector import FaceDetector
 from ai.face_recognizer import FaceRecognizer
@@ -127,21 +132,27 @@ async def cameras_status():
 # ── Camera Stream (MJPEG) ────────────────────────────────────────────────
 async def frame_generator(cam_id: str):
     """Generator asinkron untuk mengalirkan frame JPEG sebagai MJPEG"""
-    while True:
-        if not stream_manager:
-            await asyncio.sleep(0.1)
-            continue
-        
-        jpeg_bytes = stream_manager.get_latest_jpeg(cam_id)
-        if jpeg_bytes is None:
-            await asyncio.sleep(0.1)
-            continue
+    if stream_manager:
+        stream_manager.increment_viewers(cam_id)
+    try:
+        while True:
+            if not stream_manager:
+                await asyncio.sleep(0.1)
+                continue
             
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + jpeg_bytes + b'\r\n')
-        
-        # Batasi rate streaming ~15 FPS agar ramah bandwidth internet publik
-        await asyncio.sleep(0.06)
+            jpeg_bytes = stream_manager.get_latest_jpeg(cam_id)
+            if jpeg_bytes is None:
+                await asyncio.sleep(0.1)
+                continue
+                
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + jpeg_bytes + b'\r\n')
+            
+            # Batasi rate streaming ~15 FPS agar ramah bandwidth internet publik
+            await asyncio.sleep(0.06)
+    finally:
+        if stream_manager:
+            stream_manager.decrement_viewers(cam_id)
 
 
 @app.get("/cameras/{cam_id}/stream")
@@ -159,6 +170,116 @@ async def stream_camera(cam_id: str):
             "Expires": "0"
         }
     )
+
+
+
+
+# ── Test Camera RTSP Connection ──────────────────────────────────────────
+@app.post("/cameras/test")
+async def test_camera(payload: dict):
+    """
+    Test connection to a camera RTSP URL using OpenCV in a separate subprocess
+    to avoid GIL, global locks, and threading issues.
+    """
+    rtsp_url = payload.get("rtspUrl")
+    if not rtsp_url:
+        raise HTTPException(status_code=400, detail="rtspUrl is required")
+
+    import subprocess
+    import sys
+
+    # Python script code to run in subprocess
+    script_code = f"""
+import cv2
+import os
+import sys
+
+# Force TCP and 5s timeout
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|stimeout;5000000"
+
+url = {repr(rtsp_url)}
+try:
+    cap = cv2.VideoCapture(url)
+    if not cap.isOpened():
+        print("FAIL:Tidak dapat membuka stream RTSP. Periksa host, port, username, password, atau tipe stream.")
+        sys.exit(0)
+    
+    ret, frame = cap.read()
+    cap.release()
+    
+    if not ret:
+        print("FAIL:Koneksi berhasil terhubung, namun video stream tidak menghasilkan frame.")
+    else:
+        print("SUCCESS:Koneksi berhasil dan stream video aktif!")
+except Exception as e:
+    print("FAIL:Terjadi kesalahan saat menghubungi kamera: " + str(e))
+sys.exit(0)
+"""
+
+    try:
+        # Run subprocess with a 10 second timeout
+        proc = subprocess.run(
+            [sys.executable, "-c", script_code],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        output = proc.stdout.strip()
+        if output.startswith("SUCCESS:"):
+            return {"success": True, "message": output.split("SUCCESS:")[1]}
+        elif output.startswith("FAIL:"):
+            return {"success": False, "message": output.split("FAIL:")[1]}
+        else:
+            err_msg = proc.stderr.strip() or output or "Unknown subprocess error"
+            return {"success": False, "message": f"Gagal menguji koneksi: {err_msg}"}
+            
+    except subprocess.TimeoutExpired:
+        return {"success": False, "message": "Uji koneksi waktu habis (Timeout 10 detik)."}
+    except Exception as e:
+        return {"success": False, "message": f"Terjadi kesalahan internal: {str(e)}"}
+
+
+# ── Get and Set Detection Zone ROIs ──────────────────────────────────────
+@app.get("/cameras/rois")
+async def get_camera_rois():
+    """Get all ROI configurations."""
+    rois = load_rois()
+    return {"success": True, "rois": rois}
+
+
+@app.post("/cameras/rois")
+async def update_camera_rois(payload: dict):
+    """Update ROI configuration and save to rois.yaml."""
+    rois_path = "/app/config/rois.yaml"
+    if not os.path.exists(rois_path):
+        rois_path = os.path.join(os.path.dirname(__file__), "config", "rois.yaml")
+        
+    try:
+        import yaml
+        
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(rois_path), exist_ok=True)
+        
+        # Read existing or start with empty
+        existing = {}
+        if os.path.exists(rois_path):
+            with open(rois_path) as f:
+                existing = yaml.safe_load(f) or {}
+                
+        # Update configs from payload
+        for cam_id, config in payload.items():
+            if isinstance(config, dict) and "roi" in config:
+                existing[cam_id] = config
+            elif isinstance(config, list):
+                existing[cam_id] = {"roi": config}
+                
+        with open(rois_path, "w") as f:
+            yaml.safe_dump(existing, f)
+            
+        return {"success": True, "message": "Konfigurasi ROI berhasil disimpan!"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Gagal menyimpan konfigurasi ROI: {str(e)}")
 
 
 # ── Enrollment: Extract embedding from uploaded image ────────────────────
@@ -262,45 +383,139 @@ async def reload_cache():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── Load ROI configurations from file ────────────────────────────────────
+def load_rois() -> dict:
+    """Load ROI mapping from config/rois.yaml if it exists."""
+    rois_path = "/app/config/rois.yaml"
+    if not os.path.exists(rois_path):
+        rois_path = os.path.join(os.path.dirname(__file__), "config", "rois.yaml")
+        
+    if os.path.exists(rois_path):
+        try:
+            import yaml
+            with open(rois_path) as f:
+                data = yaml.safe_load(f)
+                return data if isinstance(data, dict) else {}
+        except Exception as e:
+            print(f"[AI Engine] Error loading ROIs: {e}")
+    return {}
+
+
 # ── Main Processing Loop ────────────────────────────────────────────────
 async def process_frames_loop(stream_manager, detector, recognizer, liveness, recorder):
     """Main loop: grab frames from all cameras, detect + recognize faces."""
     threshold = float(os.getenv("MIN_RECOGNITION_SCORE", "0.60"))
+    liveness_enabled = os.getenv("LIVENESS_ENABLED", "false").lower() == "true"
+    import time
+
+    rois = load_rois()
+    last_roi_load = time.time()
 
     while True:
+        # Reload ROI configurations every 10 seconds
+        now_time = time.time()
+        if now_time - last_roi_load > 10.0:
+            rois = load_rois()
+            last_roi_load = now_time
+
         for cam_id in stream_manager.get_active_cameras():
             try:
                 frame = await stream_manager.get_frame_async(cam_id)
                 if frame is None:
                     continue
 
-                faces = detector.detect(frame)
+                # Handle ROI (Region of Interest / Detection Zone)
+                cam_roi = rois.get(cam_id, {}).get("roi")
+                h, w = frame.shape[:2]
+                x1, y1, x2, y2 = 0, 0, w, h
+
+                if cam_roi and len(cam_roi) == 4:
+                    ymin, xmin, ymax, xmax = cam_roi
+                    x1 = max(0, int(xmin * w))
+                    y1 = max(0, int(ymin * h))
+                    x2 = min(w, int(xmax * w))
+                    y2 = min(h, int(ymax * h))
+
+                # Crop to detection zone if it restricts the frame
+                if y1 > 0 or x1 > 0 or y2 < h or x2 < w:
+                    if cam_id in stream_manager.cameras:
+                        stream_manager.cameras[cam_id]["roi_box"] = [x1, y1, x2, y2]
+                    roi_frame = frame[y1:y2, x1:x2].copy()
+                else:
+                    if cam_id in stream_manager.cameras:
+                        stream_manager.cameras[cam_id]["roi_box"] = None
+                    roi_frame = frame
+
+                # Detect faces only in the ROI frame
+                faces = detector.detect(roi_frame)
+                active_detections = []
+
                 for face in faces:
-                    # Check liveness
-                    liveness_result = liveness.check(face["region"])
-                    if not liveness_result["is_real"]:
+                    is_real = True
+                    if liveness_enabled:
+                        liveness_result = liveness.check(face["region"])
+                        is_real = liveness_result.get("is_real", True)
+
+                    name = "Unknown"
+                    color = (0, 255, 255)  # BGR: Yellow for Unknown
+
+                    if not is_real:
+                        name = "SPOOF DETECTED"
+                        color = (0, 0, 255)  # BGR: Red for spoof
                         # Log spoof attempt
                         await recorder.record_spoof(cam_id, face["region"])
-                        continue
-
-                    # Extract embedding
-                    embedding = recognizer.get_embedding(face["aligned"])
-                    if embedding is None:
-                        continue
-
-                    # Match against database
-                    all_embeddings = await recorder.cache.get_all()
-                    match = recognizer.match(embedding, all_embeddings, threshold=threshold)
-
-                    if match:
-                        await recorder.record(
-                            employee_id=match["employee_id"],
-                            camera_id=cam_id,
-                            face_snapshot=face["region"],
-                            similarity=match["similarity"]
-                        )
+                        
+                        bbox = face["bbox"]
+                        face["bbox"] = [bbox[0] + x1, bbox[1] + y1, bbox[2] + x1, bbox[3] + y1]
+                        active_detections.append({
+                            "bbox": face["bbox"],
+                            "color": color,
+                            "name": name,
+                            "timestamp": time.time()
+                        })
                     else:
-                        await recorder.record_unknown(cam_id, face["region"])
+                        # Extract embedding
+                        embedding = recognizer.get_embedding(face["aligned"])
+                        if embedding is not None:
+                            # Match against database
+                            all_embeddings = await recorder.cache.get_all()
+                            match = recognizer.match(embedding, all_embeddings, threshold=threshold)
+
+                            if match:
+                                emp_id = match["employee_id"]
+                                db_name = await recorder.cache.get_name(str(emp_id))
+                                name = db_name if db_name else f"Employee {emp_id}"
+                                color = (0, 255, 0)  # BGR: Green for match
+                                
+                                await recorder.record(
+                                    employee_id=str(emp_id),
+                                    camera_id=cam_id,
+                                    face_snapshot=face["region"],
+                                    similarity=match["similarity"]
+                                )
+                                bbox = face["bbox"]
+                                face["bbox"] = [bbox[0] + x1, bbox[1] + y1, bbox[2] + x1, bbox[3] + y1]
+                                active_detections.append({
+                                    "bbox": face["bbox"],
+                                    "color": color,
+                                    "name": name,
+                                    "timestamp": time.time()
+                                })
+                            else:
+                                detect_unknown = stream_manager.cameras.get(cam_id, {}).get("detect_unknown", True)
+                                if detect_unknown:
+                                    await recorder.record_unknown(cam_id, face["region"])
+                                    bbox = face["bbox"]
+                                    face["bbox"] = [bbox[0] + x1, bbox[1] + y1, bbox[2] + x1, bbox[3] + y1]
+                                    active_detections.append({
+                                        "bbox": face["bbox"],
+                                        "color": color,
+                                        "name": name,
+                                        "timestamp": time.time()
+                                    })
+
+                if cam_id in stream_manager.cameras:
+                    stream_manager.cameras[cam_id]["active_detections"] = active_detections
 
             except Exception as e:
                 print(f"[{cam_id}] Processing error: {e}")

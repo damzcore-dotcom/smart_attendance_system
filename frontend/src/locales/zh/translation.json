@@ -1537,6 +1537,7 @@
         "outStart": "下班签退 (开始)",
         "outEnd": "下班签退 (结束)",
         "active": "激活摄像机",
+        "detectUnknown": "显示陌生人脸",
         "testBtn": "测试连接",
         "testingBtn": "测试中...",
         "saveBtn": "保存设置",
