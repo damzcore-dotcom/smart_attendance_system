@@ -146,8 +146,42 @@ const formatLateAccumulation = (minutes, lang = 'id') => {
   return `${h} ${hrStr} ${m} ${minStr}`;
 };
 
+const SortIcon = ({ column, sortBy, order }) => {
+  if (sortBy !== column) return <ArrowUpDown className="w-3 h-3 text-slate-300" />;
+  return order === 'asc' ? <ArrowUp className="w-3 h-3 text-blue-500" /> : <ArrowDown className="w-3 h-3 text-blue-500" />;
+};
+
 const DirectorAttendance = () => {
   const { t, i18n } = useTranslation();
+  const lang = i18n.language || 'id';
+  const isIndo = lang.startsWith('id');
+  const isKo = lang.startsWith('ko');
+  const isZh = lang.startsWith('zh');
+
+  const rekapHeaders = {
+    no: isIndo ? 'No' : isKo ? '번호' : isZh ? '序号' : 'No',
+    employee: isIndo ? 'Karyawan' : isKo ? '사원' : isZh ? '员工' : 'Employee',
+    dept: isIndo ? 'Dept' : isKo ? '부서' : isZh ? '部门' : 'Dept',
+    section: isIndo ? 'Bagian' : isKo ? '파트' : isZh ? '班组' : 'Section',
+    total: isIndo ? 'Total' : isKo ? '총 일정' : isZh ? '总计' : 'Total',
+    present: isIndo ? 'Hadir' : isKo ? '출석' : isZh ? '出勤' : 'Present',
+    late: isIndo ? 'Telat' : isKo ? '지각' : isZh ? '迟到' : 'Late',
+    early: isIndo ? 'P. Cepat' : isKo ? '조퇴' : isZh ? '早退' : 'Early',
+    mangkir: isIndo ? 'Mangkir' : isKo ? '무단결근' : isZh ? '旷工' : 'Unexcused',
+    absent: isIndo ? 'Alpa' : isKo ? '결근' : isZh ? '缺勤' : 'Absent',
+    other: isIndo ? 'Lainnya' : isKo ? '기타' : isZh ? '其他' : 'Others',
+    rate: isIndo ? 'Rasio %' : isKo ? '출석률 %' : isZh ? '比例 %' : 'Rate %',
+    totalLate: isIndo ? 'Durasi Telat' : isKo ? '지각 시간' : isZh ? '迟到时长' : 'Late Duration',
+  };
+
+  const tooltipLabels = {
+    lateTitle: isIndo ? 'Rincian Keterlambatan' : isKo ? '지각 상세 내역' : isZh ? '迟到详情' : 'Lateness Details',
+    earlyTitle: isIndo ? 'Rincian Pulang Cepat' : isKo ? '조기 퇴근 상세 내역' : isZh ? '早退详情' : 'Early Leave Details',
+    mangkirTitle: isIndo ? 'Rincian Mangkir' : isKo ? '무단결근 상세 내역' : isZh ? '旷工详情' : 'Unexcused Details',
+    absentTitle: isIndo ? 'Rincian Alpa' : isKo ? '결근 상세 내역' : isZh ? '缺勤详情' : 'Absent Details',
+    otherTitle: isIndo ? 'Rincian Cuti & Izin' : isKo ? '휴가 및 병가 상세 내역' : isZh ? '休假事假详情' : 'Leave & Permit Details',
+  };
+
   const [appliedFilters, setAppliedFilters] = useState({
     page: 1,
     period: 'today',
@@ -261,10 +295,6 @@ const DirectorAttendance = () => {
     setAppliedFilters(prev => ({ ...prev, sortBy: key, order: newOrder, page: 1 }));
   };
 
-  const SortIcon = ({ column }) => {
-    if (appliedFilters.sortBy !== column) return <ArrowUpDown className="w-3 h-3 text-slate-300" />;
-    return appliedFilters.order === 'asc' ? <ArrowUp className="w-3 h-3 text-blue-500" /> : <ArrowDown className="w-3 h-3 text-blue-500" />;
-  };
 
   const handleExport = () => {
     try {
@@ -660,19 +690,19 @@ const DirectorAttendance = () => {
                   <th className="px-6 py-3 md:sticky left-0 top-0 z-50 bg-slate-50 border-b border-slate-200 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                     <button onClick={() => handleSort('name')} className="flex items-center gap-2 group/btn">
                       <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t('attendancePage.employeeName')}</span>
-                      <SortIcon column="name" />
+                      <SortIcon column="name" sortBy={appliedFilters.sortBy} order={appliedFilters.order} />
                     </button>
                   </th>
                   <th className="px-4 py-3 border-b border-slate-200">
                     <button onClick={() => handleSort('dept')} className="flex items-center gap-2 group/btn">
                       <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t('attendancePage.department')}</span>
-                      <SortIcon column="dept" />
+                      <SortIcon column="dept" sortBy={appliedFilters.sortBy} order={appliedFilters.order} />
                     </button>
                   </th>
                   <th className="px-4 py-3 border-b border-slate-200">
                     <button onClick={() => handleSort('date')} className="flex items-center gap-2 group/btn">
                       <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t('attendancePage.date')}</span>
-                      <SortIcon column="date" />
+                      <SortIcon column="date" sortBy={appliedFilters.sortBy} order={appliedFilters.order} />
                     </button>
                   </th>
                   <th className="px-4 py-3 border-b border-slate-200 text-center text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t('attendancePage.method')}</th>
@@ -682,7 +712,7 @@ const DirectorAttendance = () => {
                   <th className="px-6 py-3 md:sticky right-0 top-0 z-50 bg-slate-50 border-b border-slate-200 border-l border-slate-200 text-center shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                     <button onClick={() => handleSort('status')} className="flex items-center gap-2 mx-auto group/btn">
                       <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t('attendancePage.status')}</span>
-                      <SortIcon column="status" />
+                      <SortIcon column="status" sortBy={appliedFilters.sortBy} order={appliedFilters.order} />
                     </button>
                   </th>
                 </tr>

@@ -877,13 +877,12 @@ const Employees = ({ isReadOnly = false }) => {
                       <ChevronDown className="w-3 h-3 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
                     )}
                   </div>
-                </th>
-                <th 
+                             <th 
                   className="px-6 py-4 border-b border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors group"
                   onClick={() => handleSort('dept')}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Departemen</span>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('common.department')}</span>
                     {sortConfig.key === 'dept' ? (
                       sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3 text-blue-600" /> : <ChevronDown className="w-3 h-3 text-blue-600" />
                     ) : (
@@ -892,77 +891,77 @@ const Employees = ({ isReadOnly = false }) => {
                   </div>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Status Karyawan</span>
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{t('employees.table.empStatus')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Kontrak</span>
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{t('employees.table.contract')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Tgl Gabung</span>
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{t('employees.table.joinDate')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Akhir Kontrak</span>
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{t('employees.table.contractEnd')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">BPJS TK</span>
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{t('employees.table.bpjsTk')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">BPJS Kes</span>
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{t('employees.table.bpjsKes')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">NPWP</span>
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{t('employees.table.npwp')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">PTKP</span>
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{t('employees.table.ptkp')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Pernikahan</span>
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{t('employees.table.maritalStatus')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">No. KK</span>
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{t('employees.table.kkNumber')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">No. KTP</span>
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{t('employees.table.ktpNumber')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Tgl Lahir</span>
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{t('employees.table.birthDate')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Tempat Lahir</span>
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{t('employees.table.birthPlace')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Alamat</span>
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{t('employees.table.address')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Pendidikan</span>
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{t('employees.table.education')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Jurusan</span>
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{t('employees.table.major')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Agama</span>
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{t('employees.table.religion')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Telepon</span>
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{t('employees.table.phone')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Anak</span>
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{t('employees.table.children')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Nama Ayah</span>
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{t('employees.table.fatherName')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Nama Ibu</span>
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{t('employees.table.motherName')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Nama Pasangan</span>
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{t('employees.table.spouseName')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Kontak Darurat</span>
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{t('employees.table.emergencyContact')}</span>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Catatan</span>
-                </th>
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{t('employees.table.notes')}</span>
+                </th>     </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -971,7 +970,7 @@ const Employees = ({ isReadOnly = false }) => {
                   <td colSpan={isReadOnly ? 33 : 34} className="text-center py-24">
                     <div className="flex flex-col items-center gap-4">
                       <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-                      <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Memuat Data...</p>
+                      <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider">{t('employees.table.loadingData')}</p>
                     </div>
                   </td>
                 </tr>
@@ -1044,7 +1043,7 @@ const Employees = ({ isReadOnly = false }) => {
                       emp.status === 'Active' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' :
                       emp.status === 'On Leave' ? 'bg-amber-50 text-amber-600 border-amber-200' :
                       'bg-rose-50 text-rose-600 border-rose-200'
-                    }`}>{emp.status === 'Active' ? 'Aktif' : emp.status === 'On Leave' ? 'Cuti' : emp.status === 'Terminated' ? 'Diberhentikan' : emp.status || '-'}</span>
+                    }`}>{emp.status === 'Active' ? t('employees.table.statusActive') : emp.status === 'On Leave' ? t('employees.table.statusOnLeave') : emp.status === 'Terminated' ? t('employees.table.statusTerminated') : emp.status || '-'}</span>
                   </td>
                   <td className="px-6 py-3">
                     <div className="flex items-center gap-3">
@@ -1062,7 +1061,7 @@ const Employees = ({ isReadOnly = false }) => {
                   <td className="px-6 py-3">
                     <div className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-md border text-[10px] font-bold uppercase tracking-wider transition-all ${emp.faceIdDisplay === 'Enrolled' ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
                       {emp.faceIdDisplay === 'Enrolled' ? <ScanFace className="w-3 h-3"/> : <ScanFace className="w-3 h-3 opacity-50"/>}
-                      {emp.faceIdDisplay === 'Enrolled' ? 'Terdaftar' : emp.faceIdDisplay === 'Pending' ? 'Tertunda' : emp.faceIdDisplay || '-'}
+                      {emp.faceIdDisplay === 'Enrolled' ? t('employees.table.registered') : emp.faceIdDisplay === 'Pending' ? t('employees.table.pending') : emp.faceIdDisplay || '-'}
                     </div>
                   </td>
                   <td className="px-6 py-3">
@@ -1107,9 +1106,7 @@ const Employees = ({ isReadOnly = false }) => {
 
         {/* 3. Pagination */}
         <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
-          <p className="text-xs text-slate-500 font-medium">
-            Menampilkan <span className="font-bold text-slate-800">{totalEmployees}</span> data | Halaman <span className="font-bold text-slate-800">{page}</span> dari <span className="font-bold text-slate-800">{totalPages}</span>
-          </p>
+          <p className="text-xs text-slate-500 font-medium" dangerouslySetInnerHTML={{ __html: t('employees.table.showing', { count: totalEmployees, page, total: totalPages }) }} />
           <div className="flex gap-2">
             <button
               disabled={page <= 1}

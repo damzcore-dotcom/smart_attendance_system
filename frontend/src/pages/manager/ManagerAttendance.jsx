@@ -165,6 +165,11 @@ const formatLateAccumulation = (minutes, lang = 'id') => {
   return `${h} ${hrStr} ${m} ${minStr}`;
 };
 
+const SortIcon = ({ column, sortBy, order }) => {
+  if (sortBy !== column) return <ArrowUpDown className="w-3 h-3 text-slate-300" />;
+  return order === 'asc' ? <ArrowUp className="w-3 h-3 text-blue-500" /> : <ArrowDown className="w-3 h-3 text-blue-500" />;
+};
+
 const ManagerAttendance = () => {
   const { t, i18n } = useTranslation();
   const lang = i18n.language || 'id';
@@ -191,6 +196,8 @@ const ManagerAttendance = () => {
     queryFn: () => managerAPI.getAttendance(appliedFilters),
     keepPreviousData: true
   });
+
+  const summary = data?.summary || {};
 
   const [activeViewTab, setActiveViewTab] = useState('DETAIL'); // 'DETAIL' | 'REKAPITULASI'
 
@@ -271,7 +278,6 @@ const ManagerAttendance = () => {
   const records = data?.data || [];
   const total = data?.total || 0;
   const totalPages = data?.totalPages || 1;
-  const summary = data?.summary || {};
   const [showOnlyAnomalies, setShowOnlyAnomalies] = useState(false);
   const displayedRecords = showOnlyAnomalies ? records.filter(isAnomaly) : records;
 
@@ -282,11 +288,6 @@ const ManagerAttendance = () => {
   const handleSort = (key) => {
     const newOrder = appliedFilters.sortBy === key && appliedFilters.order === 'asc' ? 'desc' : 'asc';
     setAppliedFilters(prev => ({ ...prev, sortBy: key, order: newOrder, page: 1 }));
-  };
-
-  const SortIcon = ({ column }) => {
-    if (appliedFilters.sortBy !== column) return <ArrowUpDown className="w-3 h-3 text-slate-300" />;
-    return appliedFilters.order === 'asc' ? <ArrowUp className="w-3 h-3 text-blue-500" /> : <ArrowDown className="w-3 h-3 text-blue-500" />;
   };
 
   const handleExport = () => {
@@ -685,19 +686,19 @@ const ManagerAttendance = () => {
                 <th className="px-6 py-4 sticky left-0 z-10 bg-slate-50 border-b border-slate-200 border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.02)]">
                   <button onClick={() => handleSort('name')} className="flex items-center gap-2 group/btn">
                     <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t('attendancePage.employeeName')}</span>
-                    <SortIcon column="name" />
+                    <SortIcon column="name" sortBy={appliedFilters.sortBy} order={appliedFilters.order} />
                   </button>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200">
                   <button onClick={() => handleSort('dept')} className="flex items-center gap-2 group/btn">
                     <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t('attendancePage.department')}</span>
-                    <SortIcon column="dept" />
+                    <SortIcon column="dept" sortBy={appliedFilters.sortBy} order={appliedFilters.order} />
                   </button>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200 text-center">
                   <button onClick={() => handleSort('date')} className="flex items-center gap-2 mx-auto group/btn">
                     <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t('attendancePage.date')}</span>
-                    <SortIcon column="date" />
+                    <SortIcon column="date" sortBy={appliedFilters.sortBy} order={appliedFilters.order} />
                   </button>
                 </th>
                 <th className="px-6 py-4 border-b border-slate-200 text-center text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t('attendancePage.method')}</th>
@@ -707,7 +708,7 @@ const ManagerAttendance = () => {
                 <th className="px-6 py-4 sticky right-0 z-10 bg-slate-50 border-b border-slate-200 border-l border-slate-100 text-center shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.02)]">
                   <button onClick={() => handleSort('status')} className="flex items-center gap-2 mx-auto group/btn">
                     <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t('attendancePage.status')}</span>
-                    <SortIcon column="status" />
+                    <SortIcon column="status" sortBy={appliedFilters.sortBy} order={appliedFilters.order} />
                   </button>
                 </th>
               </tr>
