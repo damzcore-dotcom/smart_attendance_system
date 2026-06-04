@@ -397,6 +397,8 @@ export const managerAPI = {
   },
   getLeaveRequests: () => apiFetch('/manager/leave-requests'),
   updateLeaveRequest: (id, status, reviewNote) => apiFetch(`/manager/leave-requests/${id}`, { method: 'PUT', body: JSON.stringify({ status, reviewNote }) }),
+  getWeeklyTrends: () => apiFetch('/manager/weekly-trends'),
+  getRecentLate: () => apiFetch('/manager/recent-late'),
 };
 
 // ─── Direktur API ─────────────────────────────────
@@ -463,9 +465,9 @@ export const payrollAPI = {
   reject: (id, data) => apiFetch(`/payroll/${id}/reject`, { method: 'PUT', body: JSON.stringify(data) }),
   finalize: (id) => apiFetch(`/payroll/${id}/finalize`, { method: 'PUT' }),
   cancel: (id) => apiFetch(`/payroll/${id}/cancel`, { method: 'PUT' }),
-  exportExcel: async (id) => {
+  exportExcel: async (id, lang = 'id') => {
     const token = localStorage.getItem('accessToken');
-    const res = await fetch(`${API_BASE}/payroll/${id}/export-excel`, {
+    const res = await fetch(`${API_BASE}/payroll/${id}/export-excel?lang=${lang}`, {
       headers: { 'Authorization': `Bearer ${token}` },
     });
     if (!res.ok) throw new Error('Export failed');

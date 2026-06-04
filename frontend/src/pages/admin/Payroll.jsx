@@ -7,7 +7,7 @@ import { payrollAPI, settingsAPI, attendanceAPI } from '../../services/api';
 import PrintableSlip from '../../components/payroll/PrintableSlip';
 
 const Payroll = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [payrolls, setPayrolls] = useState([]);
   const [loading, setLoading] = useState(false);
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
@@ -69,7 +69,7 @@ const Payroll = () => {
 
   const handleExport = async (id) => {
     try {
-      const { data, filename } = await payrollAPI.exportExcel(id);
+      const { data, filename } = await payrollAPI.exportExcel(id, i18n.language || 'id');
       const url = window.URL.createObjectURL(new Blob([data]));
       const link = document.createElement('a');
       link.href = url;

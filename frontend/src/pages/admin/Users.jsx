@@ -491,7 +491,7 @@ const Users = () => {
                   </td>
                    <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      {(user.role === 'ADMIN' || user.role === 'SUPER_ADMIN' || user.role === 'ACCOUNTING') && (
+                      {(user.role === 'ADMIN' || user.role === 'SUPER_ADMIN' || user.role === 'ACCOUNTING' || user.role === 'DIREKTUR' || user.role === 'MANAGER') && (
                         <button 
                           onClick={() => handlePermissionClick(user)}
                           className="w-8 h-8 rounded-lg flex items-center justify-center bg-white border border-slate-200 text-amber-500 hover:bg-amber-50 hover:border-amber-200 hover:shadow-sm transition-all"
@@ -786,15 +786,15 @@ const AddUserModal = ({ isOpen, onClose, employees, departments, onSave, isPendi
                 value={formData.role}
                 onChange={(e) => setFormData({...formData, role: e.target.value})}
               >
-                <option value="EMPLOYEE">Karyawan</option>
-                <option value="MANAGER">Manager</option>
-                <option value="DIREKTUR">Direktur</option>
-                <option value="ACCOUNTING">Admin Accounting</option>
-                <option value="ADMIN">Admin</option>
-                <option value="SUPER_ADMIN">Super Admin</option>
+                <option value="EMPLOYEE">{t('users.roles.EMPLOYEE')}</option>
+                <option value="MANAGER">{t('users.roles.MANAGER')}</option>
+                <option value="DIREKTUR">{t('users.roles.DIREKTUR')}</option>
+                <option value="ACCOUNTING">{t('users.roles.ACCOUNTING')}</option>
+                <option value="ADMIN">{t('users.roles.ADMIN')}</option>
+                <option value="SUPER_ADMIN">{t('users.roles.SUPER_ADMIN')}</option>
               </select>
             </div>
-            {formData.role === 'MANAGER' || formData.role === 'ADMIN' || formData.role === 'SUPER_ADMIN' || formData.role === 'ACCOUNTING' ? (
+            {formData.role === 'MANAGER' || formData.role === 'DIREKTUR' || formData.role === 'ADMIN' || formData.role === 'SUPER_ADMIN' || formData.role === 'ACCOUNTING' ? (
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">{t('users.addModal.managedDept')}</label>
                 <select 
@@ -830,7 +830,7 @@ const AddUserModal = ({ isOpen, onClose, employees, departments, onSave, isPendi
           </div>
           <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
             <button type="button" onClick={onClose} className="px-5 py-2.5 rounded-xl font-bold text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-all">
-              Batal
+              {t('common.cancel')}
             </button>
             <button type="submit" disabled={isPending} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm px-6 py-2.5 rounded-xl shadow-sm transition-all disabled:opacity-50 flex items-center gap-2">
               {isPending && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -863,7 +863,7 @@ const EditUserModal = ({ isOpen, onClose, user, departments, onSave, isPending }
     e.preventDefault();
     const updateData = { role };
     if (password) updateData.password = password;
-    if (role === 'MANAGER') updateData.managedDeptId = managedDeptId;
+    if (role === 'MANAGER' || role === 'DIREKTUR') updateData.managedDeptId = managedDeptId;
     onSave(updateData);
   };
 
@@ -910,15 +910,15 @@ const EditUserModal = ({ isOpen, onClose, user, departments, onSave, isPending }
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
               >
-                <option value="EMPLOYEE">Karyawan</option>
-                <option value="MANAGER">Manager</option>
-                <option value="DIREKTUR">Direktur</option>
-                <option value="ACCOUNTING">Admin Accounting</option>
-                <option value="ADMIN">Admin</option>
-                <option value="SUPER_ADMIN">Super Admin</option>
+                <option value="EMPLOYEE">{t('users.roles.EMPLOYEE')}</option>
+                <option value="MANAGER">{t('users.roles.MANAGER')}</option>
+                <option value="DIREKTUR">{t('users.roles.DIREKTUR')}</option>
+                <option value="ACCOUNTING">{t('users.roles.ACCOUNTING')}</option>
+                <option value="ADMIN">{t('users.roles.ADMIN')}</option>
+                <option value="SUPER_ADMIN">{t('users.roles.SUPER_ADMIN')}</option>
               </select>
             </div>
-            {(role === 'MANAGER' || role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'ACCOUNTING') && (
+            {(role === 'MANAGER' || role === 'DIREKTUR' || role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'ACCOUNTING') && (
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">{t('users.editModal.managedDept')}</label>
                 <select 
@@ -938,7 +938,7 @@ const EditUserModal = ({ isOpen, onClose, user, departments, onSave, isPending }
           </div>
           <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
             <button type="button" onClick={onClose} className="px-5 py-2.5 rounded-xl font-bold text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-all">
-              Batal
+              {t('common.cancel')}
             </button>
             <button type="submit" disabled={isPending} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm px-6 py-2.5 rounded-xl shadow-sm transition-all disabled:opacity-50 flex items-center gap-2">
               {isPending && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -1032,7 +1032,7 @@ const PermissionModal = ({ isOpen, onClose, user, initialPermissions, onSave, is
           </div>
           <div className="mt-6 pt-4 border-t border-slate-100 flex justify-end gap-3">
             <button onClick={onClose} className="px-6 py-2.5 rounded-xl font-bold text-sm text-slate-500 hover:bg-slate-100 transition-all">
-              Batal
+              {t('common.cancel')}
             </button>
             <button onClick={handleSubmit} disabled={isPending} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm px-6 py-2.5 rounded-xl shadow-sm transition-all disabled:opacity-50 flex items-center gap-2">
               {isPending && <Loader2 className="w-4 h-4 animate-spin" />}

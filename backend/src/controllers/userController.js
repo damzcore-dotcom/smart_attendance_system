@@ -29,7 +29,7 @@ const getAll = async (req, res) => {
           username: user.username,
           role: user.role,
           employeeName: user.employee?.name || 'Admin',
-          dept: user.role === 'MANAGER' 
+          dept: (user.role === 'MANAGER' || user.role === 'DIREKTUR') 
             ? (ma?.manageAllDepts ? 'All Departments' : deptMap.get(ma?.managedDeptId) || '-')
             : user.employee?.department?.name || '-',
           managedDeptId: ma?.manageAllDepts ? 0 : ma?.managedDeptId,
@@ -62,7 +62,7 @@ const update = async (req, res) => {
       data,
     });
 
-    if (role === 'MANAGER' || role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'ACCOUNTING') {
+    if (role === 'MANAGER' || role === 'DIREKTUR' || role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'ACCOUNTING') {
       const parsedDeptId = parseInt(managedDeptId);
       const isAll = parsedDeptId === 0;
 
@@ -128,7 +128,7 @@ const create = async (req, res) => {
       },
     });
 
-    if (role === 'MANAGER' || role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'ACCOUNTING') {
+    if (role === 'MANAGER' || role === 'DIREKTUR' || role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'ACCOUNTING') {
       const parsedDeptId = parseInt(managedDeptId);
       const isAll = parsedDeptId === 0;
 
@@ -158,6 +158,11 @@ const create = async (req, res) => {
       });
     } else if (role === 'MANAGER') {
       const menus = ['dashboard', 'attendance', 'employees', 'leave-requests'];
+      await prisma.menuPermission.createMany({
+        data: menus.map(menu => ({ userId: user.id, menuKey: menu, canRead: true, canCreate: false, canUpdate: false, canDelete: false }))
+      });
+    } else if (role === 'DIREKTUR') {
+      const menus = ['dashboard', 'attendance', 'employees', 'leave-requests', 'contracts'];
       await prisma.menuPermission.createMany({
         data: menus.map(menu => ({ userId: user.id, menuKey: menu, canRead: true, canCreate: false, canUpdate: false, canDelete: false }))
       });

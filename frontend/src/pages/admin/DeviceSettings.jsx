@@ -538,7 +538,7 @@ const DeviceSettings = () => {
                   </div>
                   <button type="submit" className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-sm flex items-center justify-center gap-2 hover:bg-blue-700 transition-all active:scale-95 text-xs uppercase tracking-wider mt-2">
                     <Plus className="w-4 h-4" />
-                    Daftarkan Mesin
+                    {t('deviceSettings.btnRegisterMachine')}
                   </button>
                 </form>
               </>

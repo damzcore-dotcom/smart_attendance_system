@@ -125,7 +125,9 @@ router.get('/attendance', async (req, res) => {
         checkIn: '-',
         checkOut: '-',
         status: 'ABSENT',
-        lateMinutes: 0
+        lateMinutes: 0,
+        mode: '-',
+        source: 'manual'
       }));
 
       return res.json({ success: true, data: finalData, total, totalPages: Math.ceil(total / limit) });
@@ -154,7 +156,7 @@ router.get('/attendance', async (req, res) => {
         orderBy,
         include: {
           employee: {
-            include: { department: true }
+            include: { department: true, shift: true }
           }
         }
       }),
@@ -164,7 +166,13 @@ router.get('/attendance', async (req, res) => {
     // Standardized summary calculation to match Admin portal
     const allRecordsForSummary = await prisma.attendance.findMany({
       where,
-      select: { checkIn: true, checkOut: true, status: true, date: true, lateMinutes: true, employeeId: true, shiftStart: true, shiftEnd: true }
+      include: {
+        employee: {
+          include: {
+            shift: true
+          }
+        }
+      }
     });
 
     // Fetch working days and penalty settings
@@ -180,7 +188,10 @@ router.get('/attendance', async (req, res) => {
     const uniqueEmps = new Set();
 
     allRecordsForSummary.forEach(r => {
-      const resolved = resolveStatus(r.checkIn, r.checkOut, r.status, r.date, penaltyRules, r.shiftEnd, r.shiftStart);
+      const empShift = r.employee?.shift;
+      const shiftStart = empShift?.startTime || '08:00';
+      const shiftEnd = empShift?.endTime || '17:00';
+      const resolved = resolveStatus(r.checkIn, r.checkOut, r.status, r.date, penaltyRules, shiftEnd, shiftStart);
       if (resolved === 'PRESENT') summary.hadir++;
       else if (resolved === 'LATE') { summary.telat++; summary.totalLate += (r.lateMinutes || 0); }
       else if (resolved === 'MANGKIR') { 
@@ -201,13 +212,20 @@ router.get('/attendance', async (req, res) => {
     res.json({
       success: true,
       data: records.map(att => {
-        const resolved = resolveStatus(att.checkIn, att.checkOut, att.status, att.date, penaltyRules, att.shiftEnd, att.shiftStart);
+        const empShift = att.employee?.shift;
+        const shiftStart = empShift?.startTime || '08:00';
+        const shiftEnd = empShift?.endTime || '17:00';
+        const resolved = resolveStatus(att.checkIn, att.checkOut, att.status, att.date, penaltyRules, shiftEnd, shiftStart);
         
         let displayStatus = 'Alpa';
         if (resolved === 'PRESENT') displayStatus = 'Present';
         else if (resolved === 'LATE') displayStatus = 'Late';
         else if (resolved === 'MANGKIR') displayStatus = 'Mangkir';
         else if (resolved === 'HOLIDAY') displayStatus = 'Holiday';
+        else if (resolved === 'EARLY_DEPARTURE') displayStatus = 'Early Departure';
+        else if (resolved === 'CUTI') displayStatus = 'Leave';
+        else if (resolved === 'SAKIT') displayStatus = 'Medical';
+        else if (resolved === 'IZIN') displayStatus = 'Permit';
         else if (resolved === 'ABSENT') displayStatus = 'Alpa';
 
         return {
@@ -220,9 +238,11 @@ router.get('/attendance', async (req, res) => {
           date: att.date,
           checkIn: att.checkIn,
           checkOut: att.checkOut,
-          status: att.status, // Keep raw status for mapping
+          status: resolved,
           displayStatus: displayStatus,
           lateMinutes: att.lateMinutes,
+          mode: att.mode,
+          source: att.source,
         };
       }),
       total,
@@ -286,6 +306,7 @@ router.get('/leave', async (req, res) => {
       type: r.type,
       startDate: r.startDate,
       endDate: r.endDate,
+      duration: Math.ceil((new Date(r.endDate) - new Date(r.startDate)) / (1000*60*60*24)) + 1,
       reason: r.reason,
       status: r.status,
       reviewNote: r.reviewNote || '-',
@@ -347,13 +368,12 @@ router.get('/attendance-options', async (req, res) => {
         checkOut: true,
         status: true,
         date: true,
-        shiftStart: true,
-        shiftEnd: true,
         employee: {
           select: {
             department: { select: { id: true, name: true } },
             section: true,
-            position: true
+            position: true,
+            shift: true
           }
         }
       }
@@ -372,7 +392,10 @@ router.get('/attendance-options', async (req, res) => {
       if (r.employee.position) positions.add(r.employee.position);
       
       // Resolve status for the list
-      const s = resolveStatus(r.checkIn, r.checkOut, r.status, r.date, penaltyRules, r.shiftEnd, r.shiftStart);
+      const empShift = r.employee?.shift;
+      const shiftStart = empShift?.startTime || '08:00';
+      const shiftEnd = empShift?.endTime || '17:00';
+      const s = resolveStatus(r.checkIn, r.checkOut, r.status, r.date, penaltyRules, shiftEnd, shiftStart);
       if (s === 'PRESENT') statuses.add('Present');
       else if (s === 'LATE') statuses.add('Late');
       else if (s === 'MANGKIR') statuses.add('Mangkir');
@@ -387,6 +410,85 @@ router.get('/attendance-options', async (req, res) => {
         positions: Array.from(positions).sort(),
         statuses: ['PRESENT', 'LATE', 'MANGKIR', 'HOLIDAY', 'CUTI', 'SAKIT', 'IZIN', 'ABSENT'],
       }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/direktur/weekly-trends
+router.get('/weekly-trends', async (req, res) => {
+  try {
+    const now = new Date();
+    const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    const weekStart = new Date(now);
+    weekStart.setDate(weekStart.getDate() - 6);
+    weekStart.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(now);
+    weekEnd.setDate(weekEnd.getDate() + 1);
+    weekEnd.setHours(0, 0, 0, 0);
+
+    const records = await prisma.attendance.findMany({
+      where: { 
+        date: { gte: weekStart, lt: weekEnd },
+        employee: {
+          employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] },
+          salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] }
+        }
+      },
+      select: { date: true, status: true },
+    });
+
+    const dayMap = {};
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      dayMap[key] = { name: dayLabels[d.getDay()], present: 0, late: 0, leave: 0 };
+    }
+
+    records.forEach(r => {
+      const localD = new Date(r.date.getUTCFullYear(), r.date.getUTCMonth(), r.date.getUTCDate());
+      const key = `${localD.getFullYear()}-${localD.getMonth()}-${localD.getDate()}`;
+      if (dayMap[key]) {
+        if (r.status === 'PRESENT') dayMap[key].present++;
+        else if (r.status === 'LATE') dayMap[key].late++;
+        else if (['IZIN', 'SAKIT', 'CUTI'].includes(r.status)) dayMap[key].leave++;
+      }
+    });
+
+    res.json({ success: true, data: Object.values(dayMap) });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/direktur/recent-late
+router.get('/recent-late', async (req, res) => {
+  try {
+    const records = await prisma.attendance.findMany({
+      where: { 
+        status: 'LATE',
+        employee: {
+          employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] },
+          salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] }
+        }
+      },
+      include: { employee: { include: { department: true } } },
+      orderBy: { checkIn: 'desc' },
+      take: 5,
+    });
+
+    res.json({
+      success: true,
+      data: records.map(r => ({
+        name: r.employee.name,
+        dept: r.employee.department.name,
+        lateMinutes: r.lateMinutes,
+        checkIn: r.checkIn?.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${r.employee.name}`,
+      })),
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

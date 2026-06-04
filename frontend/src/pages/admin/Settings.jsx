@@ -416,23 +416,35 @@ const Settings = () => {
                   </div>
                   <div className="space-y-2 flex-1 w-full text-center md:text-left">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">{t('settingsPage.general.logoLabel')}</label>
-                    <input 
-                      type="file" 
-                      accept="image/png, image/jpeg, image/svg+xml"
-                      onChange={(e) => {
-                        const file = e.target.files[0];
-                        if (file) {
-                          if (file.size > 2 * 1024 * 1024) {
-                            alert(t('settingsPage.general.alerts.logoSize'));
-                            return;
+                    <div className="flex flex-wrap items-center gap-3 mt-1.5 justify-center md:justify-start">
+                      <input 
+                        type="file" 
+                        id="logo-upload"
+                        accept="image/png, image/jpeg, image/svg+xml"
+                        onChange={(e) => {
+                          const file = e.target.files[0];
+                          if (file) {
+                            if (file.size > 2 * 1024 * 1024) {
+                              alert(t('settingsPage.general.alerts.logoSize'));
+                              return;
+                            }
+                            const reader = new FileReader();
+                            reader.onloadend = () => handleInputChange('appLogo', reader.result);
+                            reader.readAsDataURL(file);
                           }
-                          const reader = new FileReader();
-                          reader.onloadend = () => handleInputChange('appLogo', reader.result);
-                          reader.readAsDataURL(file);
-                        }
-                      }}
-                      className="block w-full text-sm text-slate-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:uppercase file:tracking-wider file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-colors cursor-pointer"
-                    />
+                        }}
+                        className="hidden"
+                      />
+                      <label 
+                        htmlFor="logo-upload"
+                        className="cursor-pointer py-2.5 px-4 rounded-xl text-xs font-bold uppercase tracking-wider bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors inline-block"
+                      >
+                        {t('settingsPage.general.chooseFileBtn')}
+                      </label>
+                      <span className="text-xs text-slate-500 font-semibold">
+                        {formData.appLogo ? t('settingsPage.general.fileSelected') : t('settingsPage.general.noFileChosen')}
+                      </span>
+                    </div>
                     <p className="text-[10px] text-slate-400 mt-1">{t('settingsPage.general.logoHelp')}</p>
                   </div>
                 </div>

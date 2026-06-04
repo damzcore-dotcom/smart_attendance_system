@@ -46,7 +46,7 @@ const ManagerLayout = () => {
 
   const menuItems = [
     { name: t('navigation.dashboard'), path: '/manager', icon: LayoutDashboard },
-    { name: t('navigation.employee.leave'), path: '/manager/leave', icon: Users },
+    { name: t('navigation.employees'), path: '/manager/employees', icon: Users },
     { name: t('navigation.attendanceData'), path: '/manager/attendance', icon: CalendarCheck },
     { name: t('navigation.contracts'), path: '/manager/contracts', icon: FileText },
     { name: t('navigation.auditLog'), path: '/manager/audit-log', icon: Shield },

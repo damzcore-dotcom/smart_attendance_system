@@ -240,15 +240,13 @@ const startCronJobs = () => {
                     checkOut: mergedCheckOut,
                     status: mergedStatus,
                     lateMinutes: calcMerged.lateMinutes,
-                    mode: 'Fingerprint',
-                    shiftStart: record.shiftStart,
-                    shiftEnd: record.shiftEnd,
-                    gracePeriod: record.gracePeriod
+                    mode: 'Fingerprint'
                   }
                 });
               } else {
+                const { shiftStart, shiftEnd, gracePeriod, ...prismaRecord } = record;
                 await prisma.attendance.create({
-                  data: record
+                  data: prismaRecord
                 });
               }
               saved++;

@@ -4,7 +4,8 @@
 function checkTimezone() {
   const currentTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const expectedTz = 'Asia/Jakarta';
-  const isMatch = currentTz === expectedTz;
+  const allowedTzs = ['Asia/Jakarta', 'Asia/Bangkok', 'Asia/Ho_Chi_Minh', 'Asia/Saigon'];
+  const isMatch = allowedTzs.includes(currentTz);
 
   if (!isMatch) {
     console.warn('\n' + '='.repeat(80));

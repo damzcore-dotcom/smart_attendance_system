@@ -1,10 +1,21 @@
+import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { 
   Users, Clock, CalendarCheck, FileCheck, 
   TrendingUp, TrendingDown, UserX, ChevronRight,
-  Loader2, ShieldCheck, Banknote
+  Loader2, ShieldCheck, FileText, Shield, AlertCircle
 } from 'lucide-react';
+import { 
+  AreaChart, 
+  Area, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer 
+} from 'recharts';
 import api from '../../services/api';
 
 const StatCard = ({ title, value, sub, icon: Icon, color, trend }) => (
@@ -34,6 +45,7 @@ const StatCard = ({ title, value, sub, icon: Icon, color, trend }) => (
 
 const DirectorDashboard = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const { data: statsData, isLoading } = useQuery({
     queryKey: ['director-stats'],
@@ -41,14 +53,19 @@ const DirectorDashboard = () => {
     refetchInterval: 60000,
   });
 
-  const { data: payrollData } = useQuery({
-    queryKey: ['director-payroll'],
-    queryFn: () => api.get('/payroll/summary').then(r => r.data),
-    refetchInterval: 60000,
+  const { data: trendsData, isLoading: trendsLoading } = useQuery({
+    queryKey: ['director-weekly-trends'],
+    queryFn: () => api.get('/direktur/weekly-trends').then(r => r.data),
+  });
+
+  const { data: recentLateData, isLoading: recentLateLoading } = useQuery({
+    queryKey: ['director-recent-late'],
+    queryFn: () => api.get('/direktur/recent-late').then(r => r.data),
   });
 
   const stats = statsData?.data || {};
-  const payrollStats = payrollData?.data || {};
+  const weeklyTrends = trendsData?.data || [];
+  const recentLate = recentLateData?.data || [];
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-5 duration-500">
@@ -58,13 +75,13 @@ const DirectorDashboard = () => {
         <div className="relative">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-600 text-xs font-semibold rounded-lg mb-4 border border-blue-100">
             <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
-            Director Dashboard — Active
+            {t('directorDashboard.badgeActive')}
           </div>
           <h1 className="text-3xl font-bold text-slate-800 tracking-tight mb-2">
-            Command Center, <span className="text-blue-600">Director</span>
+            {t('directorDashboard.title').split(',')[0]}, <span className="text-blue-600">{t('directorDashboard.title').split(',')[1]?.trim() || 'Director'}</span>
           </h1>
           <p className="text-slate-500 text-sm max-w-2xl leading-relaxed">
-            Real-time operational intelligence and personnel attendance metrics.
+            {t('directorDashboard.desc')}
           </p>
         </div>
       </div>
@@ -77,46 +94,141 @@ const DirectorDashboard = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
           <StatCard 
-            title="Active Personnel" 
+            title={t('directorDashboard.activePersonnel')} 
             value={stats.totalEmployees ?? 0} 
-            sub="Registered" 
+            sub={t('directorDashboard.registered')} 
             icon={Users} 
             color="bg-blue-50 border-blue-100 text-blue-600"
             trend="up"
           />
           <StatCard 
-            title="Daily Presence" 
+            title={t('directorDashboard.dailyPresence')} 
             value={stats.presentToday ?? 0} 
-            sub={`of ${stats.totalEmployees ?? 0}`}
+            sub={`${t('directorDashboard.of')} ${stats.totalEmployees ?? 0}`}
             icon={CalendarCheck} 
-            color="bg-emerald-50 border-emerald-100 text-emerald-600"
+            color="bg-emerald-50 border-emerald-100 text-emerald-650"
             trend="up"
           />
           <StatCard 
-            title="Late Today" 
+            title={t('directorDashboard.lateToday')} 
             value={stats.lateToday ?? 0} 
-            sub="Records"
+            sub={t('directorDashboard.records')}
             icon={Clock} 
             color="bg-amber-50 border-amber-100 text-amber-600"
             trend="warn"
           />
           <StatCard 
-            title="Pending Leave" 
-            value={stats.pendingLeave ?? 0} 
-            sub="Awaiting"
-            icon={FileCheck} 
-            color="bg-violet-50 border-violet-100 text-violet-600"
-          />
-          <StatCard 
-            title="Total Payroll" 
-            value={payrollStats.currentPeriod?.totalNet ? `Rp ${(payrollStats.currentPeriod.totalNet / 1000000).toFixed(1)}M` : 'Rp 0'} 
-            sub={payrollStats.currentPeriod?.period || 'This Month'}
-            icon={Banknote} 
-            color="bg-slate-50 border-slate-200 text-slate-700"
-            trend={payrollStats.change > 0 ? "warn" : "up"}
+            title={t('directorDashboard.absentToday') || 'Mangkir Hari Ini'} 
+            value={stats.absentToday ?? 0} 
+            sub={t('directorDashboard.records')}
+            icon={UserX} 
+            color="bg-rose-50 border-rose-100 text-rose-600"
           />
         </div>
       )}
+
+      {/* Analytics Widgets */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        {/* Main Chart */}
+        <div className="bg-white p-6 xl:p-8 xl:col-span-2 border border-slate-200 shadow-sm relative overflow-hidden rounded-2xl group">
+          <div className="flex justify-between items-center mb-8 relative z-10">
+            <div>
+              <h3 className="font-extrabold text-xl text-slate-800 tracking-tight">{t('dashboard.charts.analytics') || 'Attendance Analytics'}</h3>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">{t('dashboard.charts.punctualityTrend') || '7-DAY BIOMETRIC PUNCTUALITY TREND'}</p>
+            </div>
+            <div className="flex gap-2">
+              <span className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-600 bg-white shadow-sm px-3 py-1.5 rounded-lg border border-slate-200">
+                <div className="w-2 h-2 rounded-full bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.6)] animate-pulse"></div> {t('dashboard.charts.present') || 'PRESENT'}
+              </span>
+              <span className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-600 bg-white shadow-sm px-3 py-1.5 rounded-lg border border-slate-200">
+                <div className="w-2 h-2 rounded-full bg-slate-300"></div> {t('dashboard.charts.late') || 'LATE'}
+              </span>
+            </div>
+          </div>
+          
+          <div className="h-[320px] w-full relative z-10">
+            {trendsLoading ? (
+              <div className="w-full h-full flex items-center justify-center">
+                <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={weeklyTrends} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorPresent" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#2563eb" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#2563eb" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorLate" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#94a3b8" stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor="#f8fafc" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11, fontWeight: 700}} dy={15} />
+                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11, fontWeight: 700}} dx={-10} />
+                  <Tooltip 
+                    contentStyle={{backgroundColor: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(8px)', color: '#1e293b', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', padding: '12px 20px'}}
+                    itemStyle={{color: '#2563eb', fontSize: '13px', fontWeight: '800'}}
+                  />
+                  <Area type="monotone" dataKey="present" stroke="#2563eb" strokeWidth={4} fillOpacity={1} fill="url(#colorPresent)" activeDot={{ r: 6, strokeWidth: 0, fill: '#2563eb' }} animationDuration={1500} />
+                  <Area type="monotone" dataKey="late" stroke="#94a3b8" strokeWidth={3} fillOpacity={1} fill="url(#colorLate)" activeDot={{ r: 5, strokeWidth: 0, fill: '#94a3b8' }} animationDuration={1500} />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+        {/* Recent Alerts & Live Capture Card */}
+        <div className="bg-white p-6 xl:p-8 border border-slate-200 shadow-sm flex flex-col rounded-2xl">
+          <div className="flex items-center justify-between mb-6 pb-2 border-b border-slate-100">
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">
+              {t('dashboard.alerts.lateness') || 'LATENESS'}
+            </h3>
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-rose-50 text-rose-500 border border-rose-100">
+              <AlertCircle className="w-4 h-4" />
+            </div>
+          </div>
+          
+          <div className="space-y-3 flex-1 overflow-y-auto max-h-[300px] pr-1">
+            {recentLateLoading ? (
+              <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>
+            ) : recentLate.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center space-y-4 py-10">
+                <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center">
+                  <CalendarCheck className="w-6 h-6 text-slate-300" />
+                </div>
+                <p className="text-slate-400 font-bold text-xs tracking-wide">{t('dashboard.alerts.clearSkies') || 'Clear skies!'}<br/>{t('dashboard.alerts.noLates') || 'No late check-ins today'}</p>
+              </div>
+            ) : (
+              recentLate.map((row, i) => (
+                <div key={i} className="flex items-center gap-3 group p-2.5 rounded-xl hover:bg-slate-50 transition-all duration-300 border border-transparent hover:border-slate-100">
+                  <div className="w-10 h-10 rounded-xl bg-white overflow-hidden shrink-0 border border-slate-200">
+                    <img src={row.avatar} alt="user" className="w-full h-full object-cover" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-slate-800 truncate">{row.name}</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{row.dept}</p>
+                  </div>
+                  <div className="text-right flex flex-col items-end">
+                    <div className="inline-flex items-center px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 text-[9px] font-bold border border-rose-100 mb-0.5">
+                      +{row.lateMinutes}m
+                    </div>
+                    <p className="text-[9px] font-bold text-slate-400">{row.checkIn}</p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          
+          <button
+            onClick={() => navigate('/director/attendance')}
+            className="w-full mt-4 py-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold uppercase tracking-wider rounded-xl transition-all text-center"
+          >
+            Audit Full Logs
+          </button>
+        </div>
+      </div>
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
@@ -130,8 +242,8 @@ const DirectorDashboard = () => {
                 <CalendarCheck className="w-8 h-8 text-blue-600" />
               </div>
               <div>
-                <p className="text-lg font-bold text-slate-800 group-hover:text-blue-600 transition-colors">Attendance Analytics</p>
-                <p className="text-sm text-slate-500 mt-0.5">Review comprehensive employee attendance data</p>
+                <p className="text-lg font-bold text-slate-800 group-hover:text-blue-600 transition-colors">{t('directorDashboard.attendanceAnalytics')}</p>
+                <p className="text-sm text-slate-500 mt-0.5">{t('directorDashboard.attendanceDesc')}</p>
               </div>
             </div>
             <div className="w-10 h-10 rounded-full flex items-center justify-center bg-slate-50 group-hover:bg-blue-600 group-hover:text-white text-slate-400 transition-all duration-300">
@@ -141,24 +253,60 @@ const DirectorDashboard = () => {
         </button>
 
         <button
-          onClick={() => navigate('/director/leave')}
+          onClick={() => navigate('/director/employees')}
           className="bg-white p-8 border border-slate-200 rounded-2xl hover:border-blue-300 hover:shadow-md transition-all duration-300 text-left group shadow-sm"
         >
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 text-center sm:text-left">
-              <div className="w-16 h-16 bg-violet-50 rounded-2xl flex items-center justify-center border border-violet-100 group-hover:scale-105 transition-transform shadow-sm">
-                <FileCheck className="w-8 h-8 text-violet-600" />
+              <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center border border-blue-100 group-hover:scale-105 transition-transform shadow-sm">
+                <Users className="w-8 h-8 text-blue-600" />
               </div>
               <div>
-                <p className="text-lg font-bold text-slate-800 group-hover:text-blue-600 transition-colors">Leave Review</p>
-                <p className="text-sm text-slate-500 mt-0.5">
-                  {stats.pendingLeave > 0 ? (
-                    <span className="text-amber-600 font-semibold">{stats.pendingLeave} requests awaiting review</span>
-                  ) : 'Monitor all leave protocols'}
-                </p>
+                <p className="text-lg font-bold text-slate-800 group-hover:text-blue-600 transition-colors">{t('navigation.employees')}</p>
+                <p className="text-sm text-slate-500 mt-0.5">{t('directorDashboard.employeeListDesc') || 'Kelola dan pantau data karyawan lengkap'}</p>
               </div>
             </div>
             <div className="w-10 h-10 rounded-full flex items-center justify-center bg-slate-50 group-hover:bg-blue-600 group-hover:text-white text-slate-400 transition-all duration-300">
+              <ChevronRight className="w-5 h-5" />
+            </div>
+          </div>
+        </button>
+
+        <button
+          onClick={() => navigate('/director/contracts')}
+          className="bg-white p-8 border border-slate-200 rounded-2xl hover:border-emerald-300 hover:shadow-md transition-all duration-300 text-left group shadow-sm"
+        >
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 text-center sm:text-left">
+              <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center border border-emerald-100 group-hover:scale-105 transition-transform shadow-sm">
+                <FileText className="w-8 h-8 text-emerald-650" />
+              </div>
+              <div>
+                <p className="text-lg font-bold text-slate-800 group-hover:text-emerald-600 transition-colors">{t('directorDashboard.employeeContracts')}</p>
+                <p className="text-sm text-slate-500 mt-0.5">{t('directorDashboard.contractsDesc')}</p>
+              </div>
+            </div>
+            <div className="w-10 h-10 rounded-full flex items-center justify-center bg-slate-50 group-hover:bg-emerald-600 group-hover:text-white text-slate-400 transition-all duration-300">
+              <ChevronRight className="w-5 h-5" />
+            </div>
+          </div>
+        </button>
+
+        <button
+          onClick={() => navigate('/director/audit-log')}
+          className="bg-white p-8 border border-slate-200 rounded-2xl hover:border-amber-300 hover:shadow-md transition-all duration-300 text-left group shadow-sm"
+        >
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 text-center sm:text-left">
+              <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center border border-amber-100 group-hover:scale-105 transition-transform shadow-sm">
+                <Shield className="w-8 h-8 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-lg font-bold text-slate-800 group-hover:text-amber-600 transition-colors">{t('directorDashboard.auditLogs')}</p>
+                <p className="text-sm text-slate-500 mt-0.5">{t('directorDashboard.auditDesc')}</p>
+              </div>
+            </div>
+            <div className="w-10 h-10 rounded-full flex items-center justify-center bg-slate-50 group-hover:bg-amber-600 group-hover:text-white text-slate-400 transition-all duration-300">
               <ChevronRight className="w-5 h-5" />
             </div>
           </div>
@@ -171,10 +319,9 @@ const DirectorDashboard = () => {
           <ShieldCheck className="w-6 h-6 text-blue-600" />
         </div>
         <div>
-          <h4 className="text-sm font-bold text-slate-800 mb-1">Read-Only Mode</h4>
+          <h4 className="text-sm font-bold text-slate-800 mb-1">{t('directorDashboard.readOnlyTitle')}</h4>
           <p className="text-sm text-slate-600 leading-relaxed">
-            This dashboard provides <strong>read-only oversight</strong> of organizational data. 
-            Modifications and approvals are handled by Admin and Manager roles.
+            {t('directorDashboard.readOnlyDesc')}
           </p>
         </div>
       </div>

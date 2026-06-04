@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Banknote, CheckCircle, XCircle, Search, Calendar, ChevronDown, Download } from 'lucide-react';
 import { payrollAPI } from '../../services/api';
+import { useTranslation } from 'react-i18next';
 
 const DirectorPayroll = () => {
+  const { i18n } = useTranslation();
   const [payrolls, setPayrolls] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedPayroll, setSelectedPayroll] = useState(null);
@@ -57,7 +59,7 @@ const DirectorPayroll = () => {
 
   const handleExport = async (id) => {
     try {
-      const { data, filename } = await payrollAPI.exportExcel(id);
+      const { data, filename } = await payrollAPI.exportExcel(id, i18n.language || 'id');
       const url = window.URL.createObjectURL(new Blob([data]));
       const link = document.createElement('a');
       link.href = url;

@@ -19,7 +19,7 @@ const STATUS_OPTIONS = [
 ];
 
 const DailyWorkerAttendance = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('INPUT'); // INPUT or HISTORY
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -158,31 +158,52 @@ const DailyWorkerAttendance = () => {
       return;
     }
 
+    const lang = i18n.language || 'id';
+    const isIndo = lang.startsWith('id');
+    const isKo = lang.startsWith('ko');
+    const isZh = lang.startsWith('zh');
+
+    const headers = {
+      no: isIndo ? 'No' : isKo ? '번호' : isZh ? '序号' : 'No',
+      nik: 'NIK',
+      name: isIndo ? 'Nama Karyawan' : isKo ? '사원명' : isZh ? '员工姓名' : 'Employee Name',
+      dept: isIndo ? 'Departemen' : isKo ? '부서' : isZh ? '部门' : 'Department',
+      dailyRate: isIndo ? 'Upah Harian' : isKo ? '일급' : isZh ? '日薪' : 'Daily Wage',
+      effectiveDays: isIndo ? 'Hari Efektif' : isKo ? '실근무일수' : isZh ? '实际工日' : 'Effective Days',
+      workingDays: isIndo ? 'Hadir Penuh' : isKo ? '만근' : isZh ? '全勤' : 'Full Attendance',
+      halfDays: isIndo ? 'Setengah Hari' : isKo ? '반차' : isZh ? '半天' : 'Half Days',
+      sickDays: isIndo ? 'Sakit' : isKo ? '병가' : isZh ? '病假' : 'Sick Days',
+      leaveDays: isIndo ? 'Izin' : isKo ? '공가' : isZh ? '事假' : 'Leave Days',
+      absentDays: isIndo ? 'Alpa' : isKo ? '결근' : isZh ? '缺勤' : 'Absent Days',
+      totalWage: isIndo ? 'Total Upah' : isKo ? '총 급여' : isZh ? '总薪资' : 'Total Wage'
+    };
+
     const exportData = historyData.data.map((item, idx) => ({
-      'No': idx + 1,
-      'NIK': item.employeeCode,
-      'Nama Karyawan': item.name,
-      'Departemen': item.department,
-      'Upah Harian': item.dailyRate,
-      'Hari Efektif': item.effectiveDays,
-      'Hadir Penuh': item.workingDays,
-      'Setengah Hari': item.halfDays,
-      'Sakit': item.sickDays,
-      'Izin': item.leaveDays,
-      'Alpa': item.absentDays,
-      'Total Upah': item.totalWage
+      [headers.no]: idx + 1,
+      [headers.nik]: item.employeeCode,
+      [headers.name]: item.name,
+      [headers.dept]: item.department,
+      [headers.dailyRate]: item.dailyRate,
+      [headers.effectiveDays]: item.effectiveDays,
+      [headers.workingDays]: item.workingDays,
+      [headers.halfDays]: item.halfDays,
+      [headers.sickDays]: item.sickDays,
+      [headers.leaveDays]: item.leaveDays,
+      [headers.absentDays]: item.absentDays,
+      [headers.totalWage]: item.totalWage
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Rekap Upah BHL");
+    XLSX.utils.book_append_sheet(wb, ws, isIndo ? "Rekap Upah BHL" : isKo ? "BHL 급여 요약" : isZh ? "BHL工资汇总" : "BHL Wage Summary");
     
     const wscols = [
       {wch:5}, {wch:15}, {wch:25}, {wch:20}, {wch:15}, {wch:12}, {wch:12}, {wch:15}, {wch:10}, {wch:10}, {wch:10}, {wch:20}
     ];
     ws['!cols'] = wscols;
 
-    XLSX.writeFile(wb, `Rekap_Upah_BHL_${selectedMonth}.xlsx`);
+    const filePrefix = isIndo ? 'Rekap_Upah_BHL' : isKo ? 'BHL_급여_요약' : isZh ? 'BHL_工资汇总' : 'BHL_Wage_Summary';
+    XLSX.writeFile(wb, `${filePrefix}_${selectedMonth}.xlsx`);
   };
 
   const isLoading = empLoading || attLoading;
@@ -320,40 +341,59 @@ const DailyWorkerAttendance = () => {
             return;
           }
 
+          const lang = i18n.language || 'id';
+          const isIndo = lang.startsWith('id');
+          const isKo = lang.startsWith('ko');
+          const isZh = lang.startsWith('zh');
+
+          const headers = {
+            no: isIndo ? 'No' : isKo ? '번호' : isZh ? '序号' : 'No',
+            nik: 'NIK',
+            name: isIndo ? 'Nama Lengkap' : isKo ? '성명' : isZh ? '姓名' : 'Full Name',
+            dept: isIndo ? 'Departemen' : isKo ? '부서' : isZh ? '部门' : 'Department',
+            section: isIndo ? 'Bagian / Section' : isKo ? '파트' : isZh ? '班组' : 'Section',
+            hadir: isIndo ? 'Hadir (H)' : isKo ? '출석 (출)' : isZh ? '出勤 (出)' : 'Present (P)',
+            halfDay: isIndo ? 'Setengah Hari (½)' : isKo ? '반차 (반)' : isZh ? '半天 (半)' : 'Half Day (½)',
+            sakit: isIndo ? 'Sakit (S)' : isKo ? '병가 (병)' : isZh ? '病假 (病)' : 'Sick (S)',
+            izin: isIndo ? 'Izin (I)' : isKo ? '공가 (공)' : isZh ? '事假 (事)' : 'Leave (L)',
+            alpa: isIndo ? 'Alpa (A)' : isKo ? '결근 (결)' : isZh ? '缺勤 (缺)' : 'Absent (A)',
+            effective: isIndo ? 'Hari Efektif' : isKo ? '실근무일수' : isZh ? '实际工日' : 'Effective Days'
+          };
+
           const exportRows = gridData.map((emp, idx) => {
-            const row = {
-              'No': idx + 1,
-              'NIK': emp.employeeCode,
-              'Nama Lengkap': emp.name,
-              'Departemen': emp.department,
-              'Bagian / Section': emp.section || '-'
-            };
+             const row = {
+               [headers.no]: idx + 1,
+               [headers.nik]: emp.employeeCode,
+               [headers.name]: emp.name,
+               [headers.dept]: emp.department,
+               [headers.section]: emp.section || '-'
+             };
             
             days.forEach(day => {
               const status = getDayStatus(emp, day, yearMonthStr);
               let statusChar = '-';
-              if (status === 'PRESENT' || status === 'LATE') statusChar = 'H';
-              else if (status === 'HALF_DAY') statusChar = '½';
-              else if (status === 'SAKIT') statusChar = 'S';
-              else if (status === 'IZIN') statusChar = 'I';
-              else if (status === 'ABSENT' || status === 'MANGKIR') statusChar = 'A';
+              if (status === 'PRESENT' || status === 'LATE') statusChar = isIndo ? 'H' : isKo ? '출' : isZh ? '出' : 'P';
+              else if (status === 'HALF_DAY') statusChar = isIndo ? '½' : isKo ? '반' : isZh ? '半' : '½';
+              else if (status === 'SAKIT') statusChar = isIndo ? 'S' : isKo ? '병' : isZh ? '病' : 'S';
+              else if (status === 'IZIN') statusChar = isIndo ? 'I' : isKo ? '공' : isZh ? '事' : 'L';
+              else if (status === 'ABSENT' || status === 'MANGKIR') statusChar = isIndo ? 'A' : isKo ? '결' : isZh ? '缺' : 'A';
               
-              row[`Tanggal ${day}`] = statusChar;
+              row[`${isIndo ? 'Tanggal' : isKo ? '날짜' : isZh ? '日期' : 'Date'} ${day}`] = statusChar;
             });
             
-            row['Hadir (H)'] = emp.workingDays;
-            row['Setengah Hari (½)'] = emp.halfDays;
-            row['Sakit (S)'] = emp.sickDays;
-            row['Izin (I)'] = emp.leaveDays;
-            row['Alpa (A)'] = emp.absentDays;
-            row['Hari Efektif'] = emp.effectiveDays;
+            row[headers.hadir] = emp.workingDays;
+            row[headers.halfDay] = emp.halfDays;
+            row[headers.sakit] = emp.sickDays;
+            row[headers.izin] = emp.leaveDays;
+            row[headers.alpa] = emp.absentDays;
+            row[headers.effective] = emp.effectiveDays;
             
             return row;
           });
 
           const ws = XLSX.utils.json_to_sheet(exportRows);
           const wb = XLSX.utils.book_new();
-          XLSX.utils.book_append_sheet(wb, ws, "Detail Presensi BHL");
+          XLSX.utils.book_append_sheet(wb, ws, isIndo ? "Detail Presensi BHL" : isKo ? "BHL 출석 상세" : isZh ? "BHL出勤明细" : "BHL Attendance Details");
           
           const wscols = [
             {wch: 5},
@@ -368,7 +408,8 @@ const DailyWorkerAttendance = () => {
           );
           ws['!cols'] = wscols;
 
-          XLSX.writeFile(wb, `Laporan_Kehadiran_BHL_${yearMonthStr}.xlsx`);
+          const filePrefix = isIndo ? 'Laporan_Kehadiran_BHL' : isKo ? 'BHL_출석_보고서' : isZh ? 'BHL_出勤报告' : 'BHL_Attendance_Report';
+          XLSX.writeFile(wb, `${filePrefix}_${yearMonthStr}.xlsx`);
         };
 
         const rawGridList = historyData?.data || [];

@@ -73,7 +73,7 @@ const AdminCorrections = () => {
                       : 'text-slate-500 hover:text-slate-700'
                   }`}
                 >
-                  {status}
+                  {t('corrections.statusLabels.' + status)}
                 </button>
               ))}
             </div>
@@ -145,7 +145,7 @@ const AdminCorrections = () => {
               <div className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider border ${
                 item.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'
               }`}>
-                {item.status}
+                {t('corrections.statusLabels.' + item.status)}
               </div>
             )}
           </div>

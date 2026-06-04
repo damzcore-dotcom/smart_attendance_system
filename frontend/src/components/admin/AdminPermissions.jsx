@@ -16,7 +16,7 @@ const AdminPermissions = () => {
     queryFn: () => userAPI.getAll(),
   });
 
-  const admins = usersData?.data?.filter(u => u.role === 'ADMIN' || u.role === 'ACCOUNTING') || [];
+  const admins = usersData?.data?.filter(u => u.role === 'ADMIN' || u.role === 'ACCOUNTING' || u.role === 'DIREKTUR' || u.role === 'MANAGER') || [];
 
   const handleSelectAdmin = async (adminId) => {
     setSelectedAdminId(adminId);

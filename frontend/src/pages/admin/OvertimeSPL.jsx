@@ -8,7 +8,7 @@ import {
 import * as XLSX from 'xlsx';
 
 const OvertimeSPL = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('INPUT'); // INPUT or HISTORY
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -165,18 +165,32 @@ const OvertimeSPL = () => {
       return;
     }
 
+    const lang = i18n.language || 'id';
+    const isIndo = lang.startsWith('id');
+    const isKo = lang.startsWith('ko');
+    const isZh = lang.startsWith('zh');
+
+    const headers = {
+      no: isIndo ? 'No' : isKo ? '번호' : isZh ? '序号' : 'No',
+      nik: 'NIK',
+      name: isIndo ? 'Nama Karyawan' : isKo ? '사원명' : isZh ? '员工姓名' : 'Employee Name',
+      dept: isIndo ? 'Departemen' : isKo ? '부서' : isZh ? '部门' : 'Department',
+      hours: isIndo ? 'Total Jam Lembur' : isKo ? '총 연장근로 시간' : isZh ? '总加班时长' : 'Total Overtime Hours',
+      cost: isIndo ? 'Estimasi Upah' : isKo ? '추정 수당' : isZh ? '预计加班费' : 'Estimated Cost'
+    };
+
     const exportData = historyData.data.map((item, idx) => ({
-      'No': idx + 1,
-      [t('overtimeSpl.filters.searchPlaceholder').split(' / ')[1]]: item.employeeCode,
-      [`Nama ${t('overtimeSpl.table.employee')}`]: item.name,
-      [t('overtimeSpl.table.dept')]: item.department,
-      [t('overtimeSpl.table.totalHours')]: item.totalOvertimeHours,
-      [t('overtimeSpl.table.estimatedCost')]: item.totalCost
+      [headers.no]: idx + 1,
+      [headers.nik]: item.employeeCode,
+      [headers.name]: item.name,
+      [headers.dept]: item.department,
+      [headers.hours]: item.totalOvertimeHours,
+      [headers.cost]: item.totalCost
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Rekap Lembur");
+    XLSX.utils.book_append_sheet(wb, ws, isIndo ? "Rekap Lembur" : isKo ? "연장근로 요약" : isZh ? "加班费汇总" : "Overtime Summary");
     
     // Auto size columns
     const wscols = [
@@ -184,7 +198,8 @@ const OvertimeSPL = () => {
     ];
     ws['!cols'] = wscols;
 
-    XLSX.writeFile(wb, `Rekap_Lembur_${selectedMonth}.xlsx`);
+    const filePrefix = isIndo ? 'Rekap_Lembur' : isKo ? '연장근로_요약' : isZh ? '加班费汇总' : 'Overtime_Summary';
+    XLSX.writeFile(wb, `${filePrefix}_${selectedMonth}.xlsx`);
   };
 
   const baseEmployeesForDate = (employeesData?.data || []).filter(e => {

@@ -3,5 +3,6 @@ window.APP_CONFIG = {
   API_URL: window.location.protocol + "//" + window.location.hostname + ":" + 
     ((window.location.hostname === 'localhost' || 
       window.location.hostname === '127.0.0.1' || 
+      window.location.hostname === '192.168.11.11' || 
       window.location.hostname === '192.168.13.190') ? '5000' : '5050')
 };

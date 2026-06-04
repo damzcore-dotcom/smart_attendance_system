@@ -604,6 +604,14 @@
     "adminOversight": "Administrasi Sistem",
     "dataCorrections": "Koreksi Data",
     "statusFilter": "Filter Status",
+    "statusPending": "PENDING",
+    "statusApproved": "DISETUJUI",
+    "statusRejected": "DITOLAK",
+    "statusLabels": {
+      "PENDING": "Menunggu",
+      "APPROVED": "Disetujui",
+      "REJECTED": "Ditolak"
+    },
     "noRequests": "Tidak ada pengajuan koreksi yang ditemukan.",
     "rejectBtn": "Tolak",
     "approveBtn": "Setujui",
@@ -746,6 +754,7 @@
     "titleDesc": "Direct override untuk rekayasa status absensi dan revisi lupa finger",
     "categoryAdmin": "Admin Kehadiran",
     "categoryTitle": "Koreksi Manual",
+    "btnBackToLogs": "Kembali ke Log Absensi",
     "tabs": {
       "attendance": "Koreksi Kehadiran",
       "finger": "Koreksi Lupa Finger",
@@ -771,7 +780,7 @@
       "excel": "Excel Export",
       "print": "Cetak Laporan",
       "search": "Cari Karyawan / Operator",
-      "searchPlaceholder": "NIK, Nama, Operator...",
+      "searchPlaceholder": "NIK, Name, Operator...",
       "type": "Tipe Koreksi",
       "allTypes": "Semua Tipe",
       "typeStatus": "Kehadiran (Status)",
@@ -806,7 +815,12 @@
       "type": "Tipe Koreksi",
       "changesDetail": "Detail Perubahan",
       "ip": "IP Address",
-      "noHistory": "Tidak ada riwayat koreksi ditemukan untuk kriteria bulan atau pencarian ini."
+      "noHistory": "Tidak ada riwayat koreksi ditemukan untuk kriteria bulan atau pencarian ini.",
+      "title": "Spreadsheet Koreksi Manual",
+      "showing": "Menampilkan",
+      "of": "dari",
+      "employees": "Karyawan",
+      "page": "Halaman"
     },
     "badge": {
       "notChecked": "BELUM ABSEN",
@@ -826,7 +840,9 @@
       "evidence": "Bukti Lupa Finger:",
       "viewPhoto": "Lihat Foto Bukti",
       "editSubmission": "Edit Pengajuan:",
-      "notes": "Notes:"
+      "notes": "Notes:",
+      "previous": "SEBELUMNYA",
+      "after": "SESUDAH KOREKSI"
     },
     "alert": {
       "noHistoryExport": "Tidak ada data riwayat untuk diexport.",
@@ -842,6 +858,10 @@
       "savedChanges": "Perubahan Disimpan",
       "ready": "Data Koreksi Siap",
       "execute": "Jalankan Koreksi"
+    },
+    "historyTable": {
+      "title": "Log Koreksi Manual & Lupa Finger",
+      "subtitle": "Menampilkan {{count}} Log Terkini"
     },
     "print": {
       "title": "LAPORAN KOREKSI & LUPA FINGER",
@@ -862,7 +882,13 @@
       "approved": "Mengetahui & Disetujui:",
       "manager": "Manager HRD / Pimpinan",
       "evidenceTitle": "Foto Bukti Lupa Finger",
-      "close": "Tutup"
+      "close": "Tutup",
+      "companyNameFallback": "Nama Perusahaan",
+      "companyAddressFallback": "Alamat Perusahaan",
+      "totalLogCorrection": "Total Log Koreksi",
+      "typeAttendance": "KEHADIRAN",
+      "typeFinger": "LUPA FINGER",
+      "typeRequest": "PENGAJUAN"
     }
   },
   "masterDataBhl": {
@@ -1495,6 +1521,9 @@
       "logoLabel": "Logo Aplikasi Perusahaan",
       "removeLogo": "Hapus Logo",
       "logoHelp": "Direkomendasikan: PNG transparan, maks 2MB.",
+      "chooseFileBtn": "Pilih Berkas",
+      "noFileChosen": "Tidak ada berkas dipilih",
+      "fileSelected": "Berkas dipilih",
       "companyName": "Corporate Designation (Nama)",
       "companyWebsite": "Website Utama",
       "companyEmail": "Link Administrasi (Email)",
@@ -1963,6 +1992,17 @@
   },
   "attendancePage": {
     "title": "Arsip Absensi",
+    "titleDirector": "Analisis Kehadiran",
+    "descDirector": "Pemantauan temporal seluruh perusahaan (Tampilan Direktur)",
+    "titleManager": "Catatan Kehadiran",
+    "descManager": "Pemantauan kehadiran personil (Tampilan Manajer Departemen)",
+    "tinjauAnomali": "Tinjau Anomali",
+    "hanyaAnomali": "Hanya Anomali",
+    "semua": "Semua",
+    "personalLate": "AKUMULASI KETERLAMBATAN PRIBADI",
+    "includesPenalty": "TERMASUK DENDA MANGKIR (+{{penalty}} MENIT/HARI)",
+    "employeeProfile": "PROFIL KARYAWAN",
+    "cleanValid": "Absensi Bersih & Valid",
     "categoryTitle": "Manajemen Administrasi",
     "syncCenter": "Pusat Sinkronisasi Mesin",
     "realtimeData": "Data Realtime",
@@ -1988,6 +2028,9 @@
     "btnUpload": "Upload",
     "btnExportExcel": "Ekspor Excel",
     "btnApplyFilter": "Terapkan Filter",
+    "tooltipPrintDetail": "Cetak Laporan Absensi (Individu)",
+    "tooltipExportPDF": "Ekspor Dokumen PDF",
+    "btnBulkCorrection": "Koreksi Manual (Bulk)",
     "tabDetail": "Rincian Absensi (Detail)",
     "tabDeptRecap": "Rekapitulasi Departemen & Bagian",
     "filterToday": "Hari Ini",
@@ -1995,6 +2038,7 @@
     "filterThisMonth": "Bulan Ini",
     "filterSelectDate": "Pilih Tanggal",
     "filterSearch": "Cari Karyawan",
+    "placeholderSearch": "NAMA / NIK...",
     "filterTimeRange": "Rentang Waktu",
     "filterStatus": "Status Absensi",
     "kpiTotal": "Total Data",
@@ -2032,11 +2076,68 @@
     "totalRowsExcel": "Total Baris Excel",
     "processedSuccess": "Berhasil Diproses",
     "notFound": "Tidak Ditemukan",
+    "temporalScope": "Rentang Waktu",
+    "today": "Hari Ini",
+    "week": "Minggu Ini",
+    "month": "Bulan Ini",
+    "manual": "Kustom",
+    "personnelFilter": "FILTER PERSONIL",
+    "idSequence": "NIK / NAMA...",
+    "globalArchive": "SEMUA DEPARTEMEN",
+    "commitFilters": "TERAPKAN FILTER",
+    "showing": "Menampilkan",
+    "records": "data",
     "alerts": {
       "saveSuccess": "Pengaturan disimpan!",
       "saveFail": "Gagal menyimpan: ",
       "confirmCorrect": "Apakah Anda yakin ingin menyimpan koreksi absensi ini?",
       "confirmDelete": "Apakah Anda yakin ingin menghapus data absensi ini?"
     }
+  },
+  "directorDashboard": {
+    "badgeActive": "Dashboard Direktur — Aktif",
+    "title": "Command Center, Direktur",
+    "desc": "Kecerdasan operasional waktu-nyata dan metrik kehadiran personil.",
+    "activePersonnel": "Personil Aktif",
+    "registered": "Terdaftar",
+    "dailyPresence": "Kehadiran Harian",
+    "of": "dari",
+    "lateToday": "Terlambat Hari Ini",
+    "records": "Data",
+    "absentToday": "Mangkir Hari Ini",
+    "employeeListDesc": "Pantau data profil dan berkas lengkap karyawan",
+    "pendingLeave": "Cuti Tertunda",
+    "awaiting": "Menunggu",
+    "attendanceAnalytics": "Analisis Kehadiran",
+    "attendanceDesc": "Tinjau data kehadiran karyawan yang komprehensif",
+    "leaveReview": "Tinjau Cuti",
+    "leaveAwaitingReview": "{{count}} pengajuan menunggu persetujuan",
+    "leaveDefaultDesc": "Pantau semua protokol cuti",
+    "employeeContracts": "Kontrak Kerja",
+    "contractsDesc": "Pantau perjanjian kerja karyawan (PKWT)",
+    "auditLogs": "Log Audit",
+    "auditDesc": "Lacak log operasional dan aksi sistem",
+    "readOnlyTitle": "Mode Baca-Saja",
+    "readOnlyDesc": "Dashboard ini menyediakan pengawasan baca-saja dari data organisasi. Modifikasi dan persetujuan ditangani oleh peran Admin dan Manajer."
+  },
+  "managerDashboard": {
+    "title": "Dashboard Unit",
+    "desc": "Analisis operasional waktu-nyata",
+    "totalPersonnel": "Total Personil",
+    "activeStaff": "Staf aktif",
+    "presentToday": "Hadir Hari Ini",
+    "rate": "tingkat kehadiran",
+    "lateToday": "Terlambat Hari Ini",
+    "lateArrivals": "Kedatangan terlambat",
+    "onLeave": "Cuti / Izin",
+    "absent": "mangkir/alpa",
+    "lateArrivalsTitle": "Kedatangan Terlambat",
+    "lateArrivalsDesc": "Karyawan yang datang terlambat hari ini",
+    "found": "ditemukan",
+    "lateMinutes": "{{minutes}}m terlambat",
+    "noLateArrivals": "Tidak ada kedatangan terlambat hari ini",
+    "operationalStatus": "Status Operasional",
+    "stabilityDesc": "Stabilitas unit saat ini berada dalam parameter optimal.",
+    "optimalPerformance": "Kinerja Optimal"
   }
 }

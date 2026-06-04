@@ -45,9 +45,8 @@ const DirectorLayout = () => {
 
   const menuItems = [
     { name: t('navigation.dashboard'), path: '/director', icon: LayoutDashboard },
-    { name: t('navigation.employee.leave'), path: '/director/leave', icon: Users },
+    { name: t('navigation.employees'), path: '/director/employees', icon: Users },
     { name: t('navigation.attendanceData'), path: '/director/attendance', icon: CalendarCheck },
-    { name: t('navigation.payrollProcess'), path: '/director/payroll', icon: Building2 },
     { name: t('navigation.contracts'), path: '/director/contracts', icon: FileText },
     { name: t('navigation.auditLog'), path: '/director/audit-log', icon: Shield },
   ];

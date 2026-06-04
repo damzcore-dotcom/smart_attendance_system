@@ -12,5 +12,7 @@ router.get('/attendance', managerController.getAttendance);
 router.get('/attendance-options', managerController.getAttendanceOptions);
 router.get('/leave-requests', managerController.getLeaveRequests);
 router.put('/leave-requests/:id', managerController.updateLeaveRequest);
+router.get('/weekly-trends', managerController.getWeeklyTrends);
+router.get('/recent-late', managerController.getRecentLate);
 
 module.exports = router;

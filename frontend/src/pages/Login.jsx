@@ -120,6 +120,14 @@ const Login = () => {
     }
   };
 
+  const handleCloseChangePassword = () => {
+    setShowChangePassword(false);
+    setNewPassword('');
+    setConfirmPassword('');
+    setError(null);
+    setChangingPassword(false);
+  };
+
   const doVerify = async (descriptorArray) => {
     setScanStatus('verifying');
     try {
@@ -633,7 +641,15 @@ const Login = () => {
       {/* ─── Force Password Change Modal ─── */}
       {showChangePassword && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)' }}>
-          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-8 animate-in fade-in zoom-in-95 duration-300">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-8 animate-in fade-in zoom-in-95 duration-300 relative">
+            {/* Close Button */}
+            <button 
+              onClick={handleCloseChangePassword}
+              className="absolute top-5 right-5 z-20 w-9 h-9 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 transition-all duration-200 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
             {/* Header */}
             <div className="text-center mb-6">
               <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -676,17 +692,26 @@ const Login = () => {
                 </div>
               )}
 
-              <button
-                type="submit"
-                disabled={changingPassword}
-                className="w-full bg-amber-500 hover:bg-amber-600 text-white py-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-amber-500/20 disabled:opacity-70 mt-2"
-              >
-                {changingPassword ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Menyimpan...</>
-                ) : (
-                  <><ShieldCheck className="w-4 h-4" /> Simpan Password Baru</>
-                )}
-              </button>
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleCloseChangePassword}
+                  className="flex-1 px-5 py-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition-all duration-200 cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={changingPassword}
+                  className="flex-[2] bg-amber-500 hover:bg-amber-600 text-white py-3.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-amber-500/20 disabled:opacity-70 cursor-pointer"
+                >
+                  {changingPassword ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Menyimpan...</>
+                  ) : (
+                    <><ShieldCheck className="w-4 h-4" /> Simpan</>
+                  )}
+                </button>
+              </div>
             </form>
 
             <p className="text-[10px] text-slate-400 text-center mt-4">

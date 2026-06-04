@@ -8,7 +8,6 @@ import DirectorLayout from './components/layout/DirectorLayout';
 import DirectorDashboard from './pages/director/DirectorDashboard';
 import DirectorAttendance from './pages/director/DirectorAttendance';
 import DirectorLeave from './pages/director/DirectorLeave';
-import DirectorPayroll from './pages/director/DirectorPayroll';
 import ManagerDashboard from './pages/manager/ManagerDashboard';
 import ManagerAttendance from './pages/manager/ManagerAttendance';
 import ManagerLeave from './pages/manager/ManagerLeave';
@@ -65,7 +64,7 @@ const PermissionRoute = ({ menuKey, children }) => {
 
 const DirectorRoute = ({ children }) => {
   const user = JSON.parse(localStorage.getItem('user') || '{}');
-  if (user?.role !== 'DIREKTUR' && user?.role !== 'ADMIN' && user?.role !== 'SUPER_ADMIN' && user?.role !== 'ACCOUNTING') {
+  if (user?.role !== 'DIREKTUR' && user?.role !== 'ADMIN' && user?.role !== 'SUPER_ADMIN') {
     return <Navigate to="/login" replace />;
   }
   return children;
@@ -140,8 +139,7 @@ function App() {
           <Route path="/director" element={<DirectorRoute><DirectorLayout /></DirectorRoute>}>
             <Route index element={<DirectorDashboard />} />
             <Route path="attendance" element={<DirectorAttendance />} />
-            <Route path="leave" element={<DirectorLeave />} />
-            <Route path="payroll" element={<DirectorPayroll />} />
+            <Route path="employees" element={<Employees isReadOnly={true} />} />
             <Route path="contracts" element={<EmployeeContracts isReadOnly={true} />} />
             <Route path="audit-log" element={<AuditLog />} />
           </Route>
@@ -150,7 +148,7 @@ function App() {
           <Route path="/manager" element={<ManagerRoute><ManagerLayout /></ManagerRoute>}>
             <Route index element={<ManagerDashboard />} />
             <Route path="attendance" element={<ManagerAttendance />} />
-            <Route path="leave" element={<ManagerLeave />} />
+            <Route path="employees" element={<Employees isReadOnly={true} />} />
             <Route path="contracts" element={<EmployeeContracts isReadOnly={true} />} />
             <Route path="audit-log" element={<AuditLog />} />
           </Route>

@@ -236,7 +236,7 @@ const getAttendance = async (req, res) => {
     const [records, total, allRecords] = await Promise.all([
       prisma.attendance.findMany({
         where,
-        include: { employee: { include: { department: true } } },
+        include: { employee: { include: { department: true, shift: true } } },
         orderBy,
         skip,
         take: parseInt(limit)
@@ -244,7 +244,7 @@ const getAttendance = async (req, res) => {
       prisma.attendance.count({ where }),
       prisma.attendance.findMany({ 
         where,
-        select: { status: true, lateMinutes: true, checkIn: true, checkOut: true, date: true, employeeId: true, shiftStart: true, shiftEnd: true }
+        include: { employee: { include: { shift: true } } }
       })
     ]);
 
@@ -260,7 +260,10 @@ const getAttendance = async (req, res) => {
         finalStatus = 'HOLIDAY';
       }
 
-      const resolved = resolveStatus(r.checkIn, r.checkOut, finalStatus, r.date, penaltyRules, r.shiftEnd, r.shiftStart);
+      const empShift = r.employee?.shift;
+      const shiftStart = empShift?.startTime || '08:00';
+      const shiftEnd = empShift?.endTime || '17:00';
+      const resolved = resolveStatus(r.checkIn, r.checkOut, finalStatus, r.date, penaltyRules, shiftEnd, shiftStart);
       if (resolved === 'PRESENT') summary.hadir++;
       else if (resolved === 'LATE') summary.telat++;
       else if (resolved === 'MANGKIR') summary.mangkir++;
@@ -284,7 +287,10 @@ const getAttendance = async (req, res) => {
       totalPages: Math.ceil(total / limit),
       summary,
       data: records.map(att => {
-        const resolved = resolveStatus(att.checkIn, att.checkOut, att.status, att.date, penaltyRules, att.shiftEnd, att.shiftStart);
+        const empShift = att.employee?.shift;
+        const shiftStart = empShift?.startTime || '08:00';
+        const shiftEnd = empShift?.endTime || '17:00';
+        const resolved = resolveStatus(att.checkIn, att.checkOut, att.status, att.date, penaltyRules, shiftEnd, shiftStart);
         
         let displayStatus = 'Alpa';
         if (resolved === 'PRESENT') displayStatus = 'Hadir';
@@ -294,6 +300,7 @@ const getAttendance = async (req, res) => {
         else if (resolved === 'CUTI') displayStatus = 'Cuti';
         else if (resolved === 'SAKIT') displayStatus = 'Sakit';
         else if (resolved === 'IZIN') displayStatus = 'Izin';
+        else if (resolved === 'EARLY_DEPARTURE') displayStatus = 'Pulang Cepat';
         else if (resolved === 'ABSENT') displayStatus = 'Alpa';
 
         return {
@@ -309,6 +316,7 @@ const getAttendance = async (req, res) => {
           status: displayStatus,
           lateMinutes: att.lateMinutes,
           mode: att.mode,
+          source: att.source,
         };
       }),
     });
@@ -391,4 +399,119 @@ const updateLeaveRequest = async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 };
 
-module.exports = { getDashboard, getAttendanceOptions, getAttendance, getLeaveRequests, updateLeaveRequest };
+const getWeeklyTrends = async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    const access = await prisma.$queryRaw`SELECT * FROM "ManagerAccess" WHERE "userId" = ${user.id}`;
+    const ma = access[0];
+    const isAllDepts = ma?.manageAllDepts || false;
+    const deptId = ma?.managedDeptId;
+
+    if (!isAllDepts && deptId === null && user.role === 'MANAGER') {
+      return res.status(400).json({ success: false, message: 'Account not assigned to any department.' });
+    }
+
+    const empWhere = { 
+      status: 'ACTIVE',
+      employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] },
+      salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] }
+    };
+    if (!isAllDepts) empWhere.departmentId = deptId;
+
+    const employees = await prisma.employee.findMany({ where: empWhere });
+    const employeeIds = employees.map(e => e.id);
+
+    const now = new Date();
+    const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    const weekStart = new Date(now);
+    weekStart.setDate(weekStart.getDate() - 6);
+    weekStart.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(now);
+    weekEnd.setDate(weekEnd.getDate() + 1);
+    weekEnd.setHours(0, 0, 0, 0);
+
+    const records = await prisma.attendance.findMany({
+      where: { 
+        employeeId: { in: employeeIds },
+        date: { gte: weekStart, lt: weekEnd }
+      },
+      select: { date: true, status: true },
+    });
+
+    const dayMap = {};
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      dayMap[key] = { name: dayLabels[d.getDay()], present: 0, late: 0, leave: 0 };
+    }
+
+    records.forEach(r => {
+      const localD = new Date(r.date.getUTCFullYear(), r.date.getUTCMonth(), r.date.getUTCDate());
+      const key = `${localD.getFullYear()}-${localD.getMonth()}-${localD.getDate()}`;
+      if (dayMap[key]) {
+        if (r.status === 'PRESENT') dayMap[key].present++;
+        else if (r.status === 'LATE') dayMap[key].late++;
+        else if (['IZIN', 'SAKIT', 'CUTI'].includes(r.status)) dayMap[key].leave++;
+      }
+    });
+
+    res.json({ success: true, data: Object.values(dayMap) });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const getRecentLate = async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    const access = await prisma.$queryRaw`SELECT * FROM "ManagerAccess" WHERE "userId" = ${user.id}`;
+    const ma = access[0];
+    const isAllDepts = ma?.manageAllDepts || false;
+    const deptId = ma?.managedDeptId;
+
+    if (!isAllDepts && deptId === null && user.role === 'MANAGER') {
+      return res.status(400).json({ success: false, message: 'Account not assigned to any department.' });
+    }
+
+    const empWhere = { 
+      status: 'ACTIVE',
+      employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] },
+      salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] }
+    };
+    if (!isAllDepts) empWhere.departmentId = deptId;
+
+    const employees = await prisma.employee.findMany({ where: empWhere });
+    const employeeIds = employees.map(e => e.id);
+
+    const records = await prisma.attendance.findMany({
+      where: { 
+        employeeId: { in: employeeIds },
+        status: 'LATE'
+      },
+      include: { employee: { include: { department: true } } },
+      orderBy: { checkIn: 'desc' },
+      take: 5,
+    });
+
+    res.json({
+      success: true,
+      data: records.map(r => ({
+        name: r.employee.name,
+        dept: r.employee.department.name,
+        lateMinutes: r.lateMinutes,
+        checkIn: r.checkIn?.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${r.employee.name}`,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getDashboard, getAttendanceOptions, getAttendance, getLeaveRequests, updateLeaveRequest, getWeeklyTrends, getRecentLate };

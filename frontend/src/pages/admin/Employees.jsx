@@ -25,7 +25,7 @@ const emptyEmployee = {
   status: 'Active'
 };
 
-const Employees = () => {
+const Employees = ({ isReadOnly = false }) => {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const location = useLocation();
@@ -505,41 +505,45 @@ const Employees = () => {
               {t('employees.activeDb')}
             </div>
           </h1>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <button 
-            onClick={() => {
-              setNewEmployee(emptyEmployee);
-              setActiveTab('basic');
-              setNikError('');
-              setAddModalOpen(true);
-            }} 
-            className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.98]"
-          >
-            <UserPlus className="w-4 h-4" /> {t('employees.addEmp')}
-          </button>
+              <div className="flex flex-wrap items-center gap-3">
+          {!isReadOnly && (
+            <button 
+              onClick={() => {
+                setNewEmployee(emptyEmployee);
+                setActiveTab('basic');
+                setNikError('');
+                setAddModalOpen(true);
+              }} 
+              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.98]"
+            >
+              <UserPlus className="w-4 h-4" /> {t('employees.addEmp')}
+            </button>
+          )}
           
-          <button 
-            onClick={() => setImportModalOpen(true)} 
-            className="flex items-center gap-2 bg-white hover:bg-slate-50 px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-slate-600 hover:text-slate-800 transition-all border border-slate-200 shadow-sm active:scale-95 group"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
-            {t('employees.importExcel')}
-          </button>
+          {!isReadOnly && (
+            <button 
+              onClick={() => setImportModalOpen(true)} 
+              className="flex items-center gap-2 bg-white hover:bg-slate-50 px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-slate-600 hover:text-slate-800 transition-all border border-slate-200 shadow-sm active:scale-95 group"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
+              {t('employees.importExcel')}
+            </button>
+          )}
 
-          <button 
-            onClick={handleDownloadTemplate} 
-            className="flex items-center gap-2 bg-white hover:bg-slate-50 px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-slate-600 hover:text-slate-800 transition-all border border-slate-200 shadow-sm active:scale-95 group"
-          >
-            <Download className="w-4 h-4 text-slate-500 group-hover:scale-110 transition-transform" />
-            {t('employees.excelTemplate')}
-          </button>
+          {!isReadOnly && (
+            <button 
+              onClick={handleDownloadTemplate} 
+              className="flex items-center gap-2 bg-white hover:bg-slate-50 px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-slate-600 hover:text-slate-800 transition-all border border-slate-200 shadow-sm active:scale-95 group"
+            >
+              <Download className="w-4 h-4 text-slate-500 group-hover:scale-110 transition-transform" />
+              {t('employees.excelTemplate')}
+            </button>
+          )}
         </div>
-      </div>
+      </div>    </div>
 
       {/* 2. Dashboard Information Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 px-1">
+      <div className={`grid grid-cols-1 sm:grid-cols-2 ${isReadOnly ? 'lg:grid-cols-2' : 'lg:grid-cols-4'} gap-5 px-1`}>
         {/* Card 1: Total Karyawan */}
         <div 
           onClick={() => {
@@ -571,62 +575,69 @@ const Employees = () => {
         </div>
 
         {/* Card 2: Belum Terhubung Finger */}
-        <div 
-          onClick={() => handleStatsFilterChange('noFingerprint')}
-          className={`p-5 border rounded-2xl shadow-sm flex items-center justify-between transition-all group cursor-pointer active:scale-[0.98] ${
-            selectedStatsFilter === 'noFingerprint' 
-              ? 'border-rose-500 bg-rose-50/20 ring-2 ring-rose-500/20' 
-              : 'bg-white border-slate-200 hover:border-rose-300'
-          }`}
-        >
-          <div className="space-y-1.5">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t('employees.stats.noFingerprint')}</span>
-            <div className="text-2xl font-bold text-rose-600 tracking-tight">
-              {withoutFingerCount} <span className="text-xs text-slate-500 font-medium">{t('employees.stats.people')}</span>
+        {!isReadOnly && (
+          <div 
+            onClick={() => handleStatsFilterChange('noFingerprint')}
+            className={`p-5 border rounded-2xl shadow-sm flex items-center justify-between transition-all group cursor-pointer active:scale-[0.98] ${
+              selectedStatsFilter === 'noFingerprint' 
+                ? 'border-rose-500 bg-rose-50/20 ring-2 ring-rose-500/20' 
+                : 'bg-white border-slate-200 hover:border-rose-300'
+            }`}
+          >
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t('employees.stats.noFingerprint')}</span>
+              <div className="text-2xl font-bold text-rose-600 tracking-tight">
+                {withoutFingerCount} <span className="text-xs text-slate-500 font-medium">{t('employees.stats.people')}</span>
+              </div>
+              <p className="text-[10px] text-rose-500 font-semibold uppercase tracking-wider">
+                {t('employees.stats.fingerprintReg')}
+              </p>
             </div>
-            <p className="text-[10px] text-rose-500 font-semibold uppercase tracking-wider">
-              {t('employees.stats.fingerprintReg')}
-            </p>
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center border transition-all shadow-sm ${
+              selectedStatsFilter === 'noFingerprint'
+                ? 'bg-rose-600 text-white border-rose-600'
+                : 'bg-rose-50 text-rose-600 border-rose-100 group-hover:bg-rose-600 group-hover:text-white'
+            }`}>
+              <Fingerprint className="w-5 h-5" />
+            </div>
           </div>
-          <div className={`w-12 h-12 rounded-xl flex items-center justify-center border transition-all shadow-sm ${
-            selectedStatsFilter === 'noFingerprint'
-              ? 'bg-rose-600 text-white border-rose-600'
-              : 'bg-rose-50 text-rose-600 border-rose-100 group-hover:bg-rose-600 group-hover:text-white'
-          }`}>
-            <Fingerprint className="w-5 h-5" />
-          </div>
-        </div>
+        )}
 
         {/* Card 3: Pendaftaran Wajah Tertunda */}
-        <div 
-          onClick={() => handleStatsFilterChange('noFace')}
-          className={`p-5 border rounded-2xl shadow-sm flex items-center justify-between transition-all group cursor-pointer active:scale-[0.98] ${
-            selectedStatsFilter === 'noFace' 
-              ? 'border-amber-500 bg-amber-50/20 ring-2 ring-amber-500/20' 
-              : 'bg-white border-slate-200 hover:border-amber-300'
-          }`}
-        >
-          <div className="space-y-1.5">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t('employees.stats.noFace')}</span>
-            <div className="text-2xl font-bold text-amber-600 tracking-tight">
-              {pendingBiometricsCount} <span className="text-xs text-slate-500 font-medium">{t('employees.stats.people')}</span>
+        {!isReadOnly && (
+          <div 
+            onClick={() => handleStatsFilterChange('noFace')}
+            className={`p-5 border rounded-2xl shadow-sm flex items-center justify-between transition-all group cursor-pointer active:scale-[0.98] ${
+              selectedStatsFilter === 'noFace' 
+                ? 'border-amber-500 bg-amber-50/20 ring-2 ring-amber-500/20' 
+                : 'bg-white border-slate-200 hover:border-amber-300'
+            }`}
+          >
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t('employees.stats.noFace')}</span>
+              <div className="text-2xl font-bold text-amber-600 tracking-tight">
+                {pendingBiometricsCount} <span className="text-xs text-slate-500 font-medium">{t('employees.stats.people')}</span>
+              </div>
+              <p className="text-[10px] text-amber-500 font-semibold uppercase tracking-wider">
+                {t('employees.stats.cctvReg')}
+              </p>
             </div>
-            <p className="text-[10px] text-amber-500 font-semibold uppercase tracking-wider">
-              {t('employees.stats.cctvReg')}
-            </p>
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center border transition-all shadow-sm ${
+              selectedStatsFilter === 'noFace'
+                ? 'bg-amber-600 text-white border-amber-600'
+                : 'bg-amber-50 text-amber-600 border-amber-100 group-hover:bg-amber-600 group-hover:text-white'
+            }`}>
+              <ScanFace className="w-5 h-5" />
+            </div>
           </div>
-          <div className={`w-12 h-12 rounded-xl flex items-center justify-center border transition-all shadow-sm ${
-            selectedStatsFilter === 'noFace'
-              ? 'bg-amber-600 text-white border-amber-600'
-              : 'bg-amber-50 text-amber-600 border-amber-100 group-hover:bg-amber-600 group-hover:text-white'
-          }`}>
-            <ScanFace className="w-5 h-5" />
-          </div>
-        </div>
+        )}
 
         {/* Card 4: Jatuh Tempo PKWT */}
         <div 
-          onClick={() => navigate('/admin/contracts', { state: { filter: 'critical' } })}
+          onClick={() => {
+            const prefix = window.location.pathname.startsWith('/director') ? '/director' : (window.location.pathname.startsWith('/manager') ? '/manager' : '/admin');
+            navigate(`${prefix}/contracts`, { state: { filter: 'critical' } });
+          }}
           className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm flex items-center justify-between hover:border-orange-300 transition-all group cursor-pointer active:scale-[0.98]"
         >
           <div className="space-y-1.5">
@@ -645,55 +656,57 @@ const Employees = () => {
       </div>
 
       {/* 3. Aksi Massal & Integrasi Toolbar */}
-      <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 px-5">
-        <div className="flex items-center gap-3">
-          <div className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse" />
-          <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-            {t('employees.bulk.title')}
-          </span>
-        </div>
-        
-        <div className="flex flex-wrap gap-2">
-          <button 
-            onClick={() => setQuickShiftModalOpen(true)} 
-            className="bg-white border border-slate-200 text-slate-700 hover:border-blue-300 hover:text-blue-600 font-bold py-2.5 px-4 rounded-xl flex items-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all active:scale-95 cursor-pointer group"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-blue-600 group-hover:scale-110 transition-transform" />
-            {t('employees.bulk.changeShift')}
-          </button>
+      {!isReadOnly && (
+        <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 px-5">
+          <div className="flex items-center gap-3">
+            <div className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse" />
+            <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+              {t('employees.bulk.title')}
+            </span>
+          </div>
           
-          <button 
-            onClick={() => {
-              if (filteredEmployees.length === 0) return alert('Tidak ada karyawan untuk dicetak.');
-              if (filteredEmployees.length > 50) {
-                if(!window.confirm(`Anda akan mencetak ${filteredEmployees.length} ID Card sekaligus. Lanjutkan?`)) return;
-              }
-              setPrintBulkIDCards(filteredEmployees);
-              setTimeout(() => {
-                window.print();
-                setTimeout(() => { setPrintBulkIDCards(null); }, 1000);
-              }, 1000);
-            }} 
-            className="bg-white border border-slate-200 text-slate-700 hover:border-indigo-300 hover:text-indigo-600 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all active:scale-95 cursor-pointer group"
-          >
-            <Printer className="w-3.5 h-3.5 text-indigo-500 group-hover:scale-110 transition-transform" /> 
-            {t('employees.bulk.printId')}
-          </button>
-
-          <button 
-            onClick={() => navigate('/admin/contracts')} 
-            className="bg-white border border-slate-200 text-slate-700 hover:border-orange-300 hover:text-orange-600 font-bold py-2.5 px-4 rounded-xl flex items-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all active:scale-95 cursor-pointer relative group"
-          >
-            <FileText className="w-3.5 h-3.5 text-orange-500 group-hover:scale-110 transition-transform" />
-            {t('employees.bulk.contracts')}
-            {criticalAlertsCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
-                {criticalAlertsCount}
-              </span>
-            )}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button 
+              onClick={() => setQuickShiftModalOpen(true)} 
+              className="bg-white border border-slate-200 text-slate-700 hover:border-blue-300 hover:text-blue-600 font-bold py-2.5 px-4 rounded-xl flex items-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all active:scale-95 cursor-pointer group"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-blue-600 group-hover:scale-110 transition-transform" />
+              {t('employees.bulk.changeShift')}
+            </button>
+            
+            <button 
+              onClick={() => {
+                if (filteredEmployees.length === 0) return alert('Tidak ada karyawan untuk dicetak.');
+                if (filteredEmployees.length > 50) {
+                  if(!window.confirm(`Anda akan mencetak ${filteredEmployees.length} ID Card sekaligus. Lanjutkan?`)) return;
+                }
+                setPrintBulkIDCards(filteredEmployees);
+                setTimeout(() => {
+                  window.print();
+                  setTimeout(() => { setPrintBulkIDCards(null); }, 1000);
+                }, 1000);
+              }} 
+              className="bg-white border border-slate-200 text-slate-700 hover:border-indigo-300 hover:text-indigo-600 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all active:scale-95 cursor-pointer group"
+            >
+              <Printer className="w-3.5 h-3.5 text-indigo-500 group-hover:scale-110 transition-transform" /> 
+              {t('employees.bulk.printId')}
+            </button>
+  
+            <button 
+              onClick={() => navigate('/admin/contracts')} 
+              className="bg-white border border-slate-200 text-slate-700 hover:border-orange-300 hover:text-orange-600 font-bold py-2.5 px-4 rounded-xl flex items-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all active:scale-95 cursor-pointer relative group"
+            >
+              <FileText className="w-3.5 h-3.5 text-orange-500 group-hover:scale-110 transition-transform" />
+              {t('employees.bulk.contracts')}
+              {criticalAlertsCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
+                  {criticalAlertsCount}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 2. Global Filter Matrix */}
       <div className="bg-white p-6 border border-slate-200 rounded-2xl shadow-sm mb-6">
@@ -787,11 +800,13 @@ const Employees = () => {
           <table className="w-full text-left whitespace-nowrap min-w-[2800px] border-separate border-spacing-0">
             <thead className="sticky top-0 z-20 bg-slate-50">
               <tr>
-                <th className="px-6 py-4 sticky left-0 z-30 bg-slate-50 border-b border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] text-center">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('employees.table.actions')}</span>
-                </th>
+                {!isReadOnly && (
+                  <th className="px-6 py-4 sticky left-0 z-30 bg-slate-50 border-b border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] text-center">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('employees.table.actions')}</span>
+                  </th>
+                )}
                 <th 
-                  className="px-6 py-4 sticky left-[120px] z-30 bg-slate-50 border-b border-r border-slate-200 text-center cursor-pointer hover:bg-slate-100 transition-colors group"
+                  className={`px-6 py-4 sticky ${isReadOnly ? 'left-0' : 'left-[120px]'} z-30 bg-slate-50 border-b border-r border-slate-200 text-center cursor-pointer hover:bg-slate-100 transition-colors group`}
                   onClick={() => handleSort('employeeCode')}
                 >
                   <div className="flex items-center justify-center gap-2">
@@ -807,7 +822,7 @@ const Employees = () => {
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center block">{t('employees.table.fingerprint')}</span>
                 </th>
                 <th 
-                  className="px-6 py-4 sticky left-[250px] z-30 bg-slate-50 border-b border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] cursor-pointer hover:bg-slate-100 transition-colors group"
+                  className={`px-6 py-4 sticky ${isReadOnly ? 'left-[130px]' : 'left-[250px]'} z-30 bg-slate-50 border-b border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] cursor-pointer hover:bg-slate-100 transition-colors group`}
                   onClick={() => handleSort('name')}
                 >
                   <div className="flex items-center gap-2">
@@ -953,7 +968,7 @@ const Employees = () => {
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan="34" className="text-center py-24">
+                  <td colSpan={isReadOnly ? 33 : 34} className="text-center py-24">
                     <div className="flex flex-col items-center gap-4">
                       <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
                       <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Memuat Data...</p>
@@ -962,38 +977,40 @@ const Employees = () => {
                 </tr>
               ) : filteredEmployees.map((emp) => (
                 <tr key={emp.dbId} className="group hover:bg-blue-50/50 transition-colors duration-200">
-                  <td className="px-6 py-3 sticky left-0 z-10 bg-white group-hover:bg-blue-50/50 transition-colors border-r border-slate-100 text-center shadow-[2px_0_5px_-2px_rgba(0,0,0,0.02)]">
-                    <div className="flex justify-center gap-2">
-                      <button 
-                        onClick={() => handleEditEmployee(emp)} 
-                        className="px-4 py-1.5 bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border border-blue-100 hover:border-blue-600 shadow-sm"
-                      >
-                        Ubah
-                      </button>
-                      <button 
-                        onClick={() => {
-                          setPrintIDCardEmp(emp);
-                          setTimeout(() => {
-                            window.print();
-                            setTimeout(() => { setPrintIDCardEmp(null); }, 1000);
-                          }, 500);
-                        }} 
-                        className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-600 text-emerald-600 hover:text-white rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border border-emerald-100 hover:border-emerald-600 shadow-sm flex items-center gap-1"
-                        title="Cetak Kartu ID"
-                      >
-                        <Printer className="w-3 h-3" />
-                      </button>
-                      <button 
-                        onClick={() => handleDeleteEmployee(emp)} 
-                        disabled={deleteMutation.isPending}
-                        className="px-3 py-1.5 bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border border-rose-100 hover:border-rose-600 shadow-sm flex items-center gap-1 disabled:opacity-50"
-                        title="Hapus Karyawan"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </td>
-                  <td className="px-6 py-3 sticky left-[120px] z-10 bg-white group-hover:bg-blue-50/50 transition-colors border-r border-slate-100 text-center text-xs font-semibold text-slate-700">
+                  {!isReadOnly && (
+                    <td className="px-6 py-3 sticky left-0 z-10 bg-white group-hover:bg-blue-50/50 transition-colors border-r border-slate-100 text-center shadow-[2px_0_5px_-2px_rgba(0,0,0,0.02)]">
+                      <div className="flex justify-center gap-2">
+                        <button 
+                          onClick={() => handleEditEmployee(emp)} 
+                          className="px-4 py-1.5 bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border border-blue-100 hover:border-blue-600 shadow-sm"
+                        >
+                          Ubah
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setPrintIDCardEmp(emp);
+                            setTimeout(() => {
+                              window.print();
+                              setTimeout(() => { setPrintIDCardEmp(null); }, 1000);
+                            }, 500);
+                          }} 
+                          className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-600 text-emerald-600 hover:text-white rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border border-emerald-100 hover:border-emerald-600 shadow-sm flex items-center gap-1"
+                          title="Cetak Kartu ID"
+                        >
+                          <Printer className="w-3 h-3" />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteEmployee(emp)} 
+                          disabled={deleteMutation.isPending}
+                          className="px-3 py-1.5 bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border border-rose-100 hover:border-rose-600 shadow-sm flex items-center gap-1 disabled:opacity-50"
+                          title="Hapus Karyawan"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                  <td className={`px-6 py-3 sticky ${isReadOnly ? 'left-0' : 'left-[120px]'} z-10 bg-white group-hover:bg-blue-50/50 transition-colors border-r border-slate-100 text-center text-xs font-semibold text-slate-700`}>
                     {emp.id}
                   </td>
                   <td className="px-6 py-3 border-r border-slate-100 text-center">
@@ -1005,7 +1022,7 @@ const Employees = () => {
                        <span className="text-xs font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">-</span>
                     )}
                   </td>
-                  <td className="px-6 py-3 sticky left-[250px] z-10 bg-white group-hover:bg-blue-50/50 transition-colors border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.02)]">
+                  <td className={`px-6 py-3 sticky ${isReadOnly ? 'left-[130px]' : 'left-[250px]'} z-10 bg-white group-hover:bg-blue-50/50 transition-colors border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.02)]`}>
                     <div className="flex flex-col min-w-[200px]">
                       <span className="text-sm font-bold text-slate-800 truncate">{emp.name || "Tidak Diketahui"}</span>
                       <span className="text-[10px] text-slate-400 font-medium">{emp.email || "Tidak Ada Email"}</span>

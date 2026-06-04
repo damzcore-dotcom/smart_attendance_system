@@ -41,6 +41,19 @@ const login = async (req, res) => {
       data: { refreshToken },
     });
 
+    if (user.role === 'DIREKTUR' || user.role === 'MANAGER') {
+      recordAuditLog({
+        userId: user.id,
+        username: user.username,
+        role: user.role,
+        action: 'LOGIN',
+        entity: 'User',
+        entityId: user.id,
+        details: { method: 'password' },
+        ipAddress: req.ip
+      }).catch(() => {});
+    }
+
     res.json({
       success: true,
       accessToken,
@@ -296,6 +309,19 @@ const verifyFace = async (req, res) => {
  */
 const logout = async (req, res) => {
   try {
+    const userRole = req.user?.role;
+    if (userRole === 'DIREKTUR' || userRole === 'MANAGER') {
+      recordAuditLog({
+        userId: req.user.id,
+        username: req.user.username,
+        role: req.user.role,
+        action: 'LOGOUT',
+        entity: 'User',
+        entityId: req.user.id,
+        details: { reason: 'user logout' },
+        ipAddress: req.ip
+      }).catch(() => {});
+    }
     await prisma.user.update({
       where: { id: req.user.id },
       data: { refreshToken: null },

@@ -9,7 +9,7 @@ import api, { employeeAPI, settingsAPI, payrollAPI } from '../../services/api';
 import * as XLSX from 'xlsx';
 
 export default function MasterDataBhl() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const fileInputRef = useRef(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -222,30 +222,63 @@ export default function MasterDataBhl() {
         return;
       }
       
-      const exportData = allBhl.map((item, idx) => ({
-        'No': idx + 1,
-        'NIK': item.employeeCode,
-        'Nama Lengkap': item.name,
-        'No KTP / NIK': item.idNumber || '-',
-        'Nomor HP': item.phone || '-',
-        'Departemen': item.dept || '-',
-        'Bagian / Section': item.section || '-',
-        'Jabatan / Position': item.position || '-',
-        'Tanggal Bergabung': item.joinDate ? new Date(item.joinDate).toLocaleDateString('id-ID') : '-',
-        'Upah Harian (Rp)': item.dailyRate || 0,
-        'Status Keaktifan': item.status || 'Active'
-      }));
+      const lang = i18n.language || 'id';
+      const isIndo = lang.startsWith('id');
+      const isKo = lang.startsWith('ko');
+      const isZh = lang.startsWith('zh');
+
+      const headers = {
+        no: isIndo ? 'No' : isKo ? '번호' : isZh ? '序号' : 'No',
+        nik: 'NIK',
+        name: isIndo ? 'Nama Lengkap' : isKo ? '성명' : isZh ? '姓名' : 'Full Name',
+        ktp: isIndo ? 'No KTP / NIK' : isKo ? '주민번호/KTP' : isZh ? '身份证号' : 'ID Number',
+        phone: isIndo ? 'Nomor HP' : isKo ? '전화번호' : isZh ? '电话号码' : 'Phone Number',
+        dept: isIndo ? 'Departemen' : isKo ? '부서' : isZh ? '部门' : 'Department',
+        section: isIndo ? 'Bagian / Section' : isKo ? '파트' : isZh ? '班组' : 'Section',
+        position: isIndo ? 'Jabatan / Position' : isKo ? '직급' : isZh ? '职位' : 'Position',
+        joinDate: isIndo ? 'Tanggal Bergabung' : isKo ? '입사일' : isZh ? '入职日期' : 'Join Date',
+        dailyWage: isIndo ? 'Upah Harian (Rp)' : isKo ? '일급 (Rp)' : isZh ? '日薪 (Rp)' : 'Daily Wage (Rp)',
+        status: isIndo ? 'Status Keaktifan' : isKo ? '상태' : isZh ? '状态' : 'Status'
+      };
+
+      const exportData = allBhl.map((item, idx) => {
+        let statusLabel = item.status || 'Active';
+        if (statusLabel === 'Active') {
+          statusLabel = isIndo ? 'Aktif' : isKo ? '활성' : isZh ? '激活' : 'Active';
+        } else if (statusLabel === 'On Leave') {
+          statusLabel = isIndo ? 'Cuti' : isKo ? '휴가' : isZh ? '请假' : 'On Leave';
+        } else {
+          statusLabel = isIndo ? 'Nonaktif' : isKo ? '비활성' : isZh ? '非激活' : 'Inactive';
+        }
+
+        const localeStr = isIndo ? 'id-ID' : isKo ? 'ko-KR' : isZh ? 'zh-CN' : 'en-US';
+
+        return {
+          [headers.no]: idx + 1,
+          [headers.nik]: item.employeeCode,
+          [headers.name]: item.name,
+          [headers.ktp]: item.idNumber || '-',
+          [headers.phone]: item.phone || '-',
+          [headers.dept]: item.dept || '-',
+          [headers.section]: item.section || '-',
+          [headers.position]: item.position || '-',
+          [headers.joinDate]: item.joinDate ? new Date(item.joinDate).toLocaleDateString(localeStr) : '-',
+          [headers.dailyWage]: item.dailyRate || 0,
+          [headers.status]: statusLabel
+        };
+      });
 
       const ws = XLSX.utils.json_to_sheet(exportData);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Master Data BHL");
+      XLSX.utils.book_append_sheet(wb, ws, isIndo ? "Master Data BHL" : isKo ? "BHL 마스터 데이터" : isZh ? "BHL主数据" : "Master Data BHL");
       
       const wscols = [
         {wch: 5}, {wch: 15}, {wch: 25}, {wch: 22}, {wch: 15}, {wch: 18}, {wch: 18}, {wch: 18}, {wch: 18}, {wch: 18}, {wch: 15}
       ];
       ws['!cols'] = wscols;
 
-      XLSX.writeFile(wb, `Master_Data_BHL_${new Date().toISOString().split('T')[0]}.xlsx`);
+      const filePrefix = isIndo ? 'Master_Data_BHL' : isKo ? 'BHL_마스터_데이터' : isZh ? 'BHL_主数据' : 'Master_Data_BHL';
+      XLSX.writeFile(wb, `${filePrefix}_${new Date().toISOString().split('T')[0]}.xlsx`);
     } catch (error) {
       alert(t("masterDataBhl.alerts.exportFailed") + error.message);
     }
@@ -354,7 +387,7 @@ export default function MasterDataBhl() {
             title="Download Template Excel BHL"
           >
             <Download className="w-3.5 h-3.5 text-blue-500" />
-            Template
+            {t('masterDataBhl.template')}
           </button>
 
           <button 
@@ -363,7 +396,7 @@ export default function MasterDataBhl() {
             className="px-3 py-2 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-800 border border-slate-200 rounded-xl text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
           >
             {isImporting ? <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" /> : <Upload className="w-3.5 h-3.5 text-emerald-600" />}
-            Import
+            {t('masterDataBhl.import')}
           </button>
 
           <button 
@@ -371,7 +404,7 @@ export default function MasterDataBhl() {
             className="px-3 py-2 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-800 border border-slate-200 rounded-xl text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all active:scale-95"
           >
             <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" />
-            Export
+            {t('masterDataBhl.export')}
           </button>
 
           <button 

@@ -604,6 +604,14 @@
     "adminOversight": "행정 감시",
     "dataCorrections": "데이터 정정",
     "statusFilter": "상태 필터",
+    "statusPending": "대기",
+    "statusApproved": "승인됨",
+    "statusRejected": "반려됨",
+    "statusLabels": {
+      "PENDING": "대기 중",
+      "APPROVED": "승인됨",
+      "REJECTED": "거부됨"
+    },
     "noRequests": "정정 요청을 찾을 수 없습니다.",
     "rejectBtn": "거절",
     "approveBtn": "승인",
@@ -746,6 +754,7 @@
     "titleDesc": "출근 상태 및 지문 수정 직접 재정의",
     "categoryAdmin": "근태 관리자",
     "categoryTitle": "수동 수정",
+    "btnBackToLogs": "근태 기록으로 돌아가기",
     "tabs": {
       "attendance": "근태 상태 수정",
       "finger": "지문 누락 수정",
@@ -806,7 +815,12 @@
       "type": "수정 유형",
       "changesDetail": "변경 상세",
       "ip": "IP 주소",
-      "noHistory": "선택한 조건에 맞는 수정 이력이 없습니다."
+      "noHistory": "선택한 조건에 맞는 수정 이력이 없습니다.",
+      "title": "수동 교정 스프레드시트",
+      "showing": "표시 중",
+      "of": "중",
+      "employees": "직원",
+      "page": "페이지"
     },
     "badge": {
       "notChecked": "미출근",
@@ -826,7 +840,9 @@
       "evidence": "지문 누락 증빙:",
       "viewPhoto": "증빙 사진 보기",
       "editSubmission": "신청 편집:",
-      "notes": "메모:"
+      "notes": "메모:",
+      "previous": "이전",
+      "after": "교정 후"
     },
     "alert": {
       "noHistoryExport": "내보낼 이력 데이터가 없습니다.",
@@ -842,6 +858,10 @@
       "savedChanges": "변경사항 저장됨",
       "ready": "수정 데이터 준비됨",
       "execute": "수정 실행"
+    },
+    "historyTable": {
+      "title": "수동 교정 및 지문 누락 로그",
+      "subtitle": "최신 로그 {{count}}개 표시 중"
     },
     "print": {
       "title": "수정 및 지문 누락 보고서",
@@ -862,7 +882,13 @@
       "approved": "확인 및 승인:",
       "manager": "HRD 매니저 / 부서장",
       "evidenceTitle": "지문 누락 증빙 사진",
-      "close": "닫기"
+      "close": "닫기",
+      "companyNameFallback": "회사명",
+      "companyAddressFallback": "회사 주소",
+      "totalLogCorrection": "총 수정 로그",
+      "typeAttendance": "출석",
+      "typeFinger": "지문 누락",
+      "typeRequest": "신청"
     }
   },
   "masterDataBhl": {
@@ -1495,6 +1521,9 @@
       "logoLabel": "기업 어플 로고",
       "removeLogo": "로고 삭제",
       "logoHelp": "권장: 투명 PNG, 최대 2MB.",
+      "chooseFileBtn": "파일 선택",
+      "noFileChosen": "선택된 파일 없음",
+      "fileSelected": "파일 선택됨",
       "companyName": "회사 공식명",
       "companyWebsite": "회사 웹사이트",
       "companyEmail": "공식 대표 이메일",
@@ -1969,6 +1998,13 @@
     "attendanceRate": "근태 참석률",
     "lateRatio": "지각율 비율",
     "anomalies": "근태 예외/이상",
+    "tinjauAnomali": "예외 검토",
+    "hanyaAnomali": "예외만 표시",
+    "semua": "전체",
+    "personalLate": "개인 누적 지각",
+    "includesPenalty": "무단결근 벌칙 포함 (+{{penalty}}분/일)",
+    "employeeProfile": "직원 프로필",
+    "cleanValid": "예외 없음 & 유효함",
     "presentOnTime": "정상 출근 및 준수",
     "lateArrival": "출근 지각 발생",
     "employeeName": "직원 성명",
@@ -1988,6 +2024,9 @@
     "btnUpload": "업로드",
     "btnExportExcel": "엑셀 다운로드",
     "btnApplyFilter": "필터 적용",
+    "tooltipPrintDetail": "개별 근태 보고서 인쇄",
+    "tooltipExportPDF": "PDF 문서 내보내기",
+    "btnBulkCorrection": "일괄 수동 수정",
     "tabDetail": "상세 근태 일지",
     "tabDeptRecap": "부서 및 섹션 통계 집계",
     "filterToday": "오늘",
@@ -1995,6 +2034,7 @@
     "filterThisMonth": "이번 달",
     "filterSelectDate": "날짜 지정",
     "filterSearch": "근로자 검색",
+    "placeholderSearch": "이름 / 사원번호...",
     "filterTimeRange": "검색 기간",
     "filterStatus": "근태 상태 필터",
     "kpiTotal": "총 레코드 수",
@@ -2032,11 +2072,68 @@
     "totalRowsExcel": "엑셀 총 행수",
     "processedSuccess": "정상 처리 완료",
     "notFound": "누락/검색안됨",
+    "temporalScope": "조회 기간",
+    "today": "오늘",
+    "week": "이번 주",
+    "month": "이번 달",
+    "manual": "사용자 정의",
+    "personnelFilter": "직원 필터",
+    "idSequence": "사번 / 이름...",
+    "globalArchive": "전체 아카이브",
+    "commitFilters": "필터 적용",
+    "showing": "표시 중",
+    "records": "개 기록",
     "alerts": {
       "saveSuccess": "설정이 성공적으로 저장되었습니다!",
       "saveFail": "저장 실패: ",
       "confirmCorrect": "이 근태 교정 내용을 저장하시겠습니까?",
       "confirmDelete": "이 근태 레코드를 정말 삭제하시겠습니까?"
     }
+  },
+  "directorDashboard": {
+    "badgeActive": "이사 대시보드 — 활성",
+    "title": "커맨드 센터, 이사",
+    "desc": "실시간 운영 인텔리전스 및 직원 근태 지표.",
+    "activePersonnel": "활성 직원",
+    "registered": "등록됨",
+    "dailyPresence": "일일 출근",
+    "of": "중",
+    "lateToday": "오늘 지각",
+    "records": "건",
+    "absentToday": "오늘 결근",
+    "employeeListDesc": "임직원 명부 및 세부 정보 모니터링",
+    "pendingLeave": "대기 중인 휴가",
+    "awaiting": "대기 중",
+    "attendanceAnalytics": "근태 분석",
+    "attendanceDesc": "종합적인 직원 근태 데이터 검토",
+    "leaveReview": "휴가 결재",
+    "leaveAwaitingReview": "{{count}}건의 휴가 결재 대기 중",
+    "leaveDefaultDesc": "모든 휴가 프로토콜 모니터링",
+    "employeeContracts": "근로 계약서",
+    "contractsDesc": "직원 근로 계약(PKWT) 상태 모니터링",
+    "auditLogs": "감사 로그",
+    "auditDesc": "시스템 운영 로그 및 작업 추적",
+    "readOnlyTitle": "읽기 전용 모드",
+    "readOnlyDesc": "이 대시보드들은 조직 데이터에 대한 읽기 전용 감독 기능을 제공합니다. 수정 및 승인은 관리자 및 매니저 역할에서 처리합니다."
+  },
+  "managerDashboard": {
+    "title": "부서 대시보드",
+    "desc": "실시간 운영 분석",
+    "totalPersonnel": "총 인원",
+    "activeStaff": "활성 직원",
+    "presentToday": "오늘 출근",
+    "rate": "출근율",
+    "lateToday": "오늘 지각",
+    "lateArrivals": "지각 인원",
+    "onLeave": "휴가/조퇴",
+    "absent": "무단 결근",
+    "lateArrivalsTitle": "오늘 지각자",
+    "lateArrivalsDesc": "오늘 지각 출근한 직원 목록",
+    "found": "명 찾음",
+    "lateMinutes": "{{minutes}}분 지각",
+    "noLateArrivals": "오늘 지각한 직원이 없습니다",
+    "operationalStatus": "운영 상태",
+    "stabilityDesc": "현재 부서 운영 상태는 최적의 매개변수 범위 내에 있습니다.",
+    "optimalPerformance": "최적의 성능"
   }
 }

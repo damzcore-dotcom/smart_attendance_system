@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { attendanceAPI, employeeAPI, payrollAPI, settingsAPI, getFileUrl } from '../../services/api';
 import PrintableAttendanceReport from '../../components/payroll/PrintableAttendanceReport';
-import { Edit2, LayoutDashboard, Calendar, Clock, RefreshCw, Upload, AlertCircle, CheckCircle2, XCircle, Search, Filter, Scan, X, FileSpreadsheet, Printer, FileText, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, ArrowRight, Loader2, AlertTriangle, ShieldCheck, ShieldAlert, TrendingUp, Fingerprint, Camera, Eye, Smartphone } from 'lucide-react';
+import { Edit2, LayoutDashboard, Calendar, Clock, RefreshCw, Upload, AlertCircle, CheckCircle2, XCircle, Search, Filter, Scan, X, FileSpreadsheet, Printer, FileText, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, ArrowRight, Loader2, AlertTriangle, ShieldCheck, ShieldAlert, TrendingUp, Fingerprint, Camera, Eye, Smartphone, Key } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -22,19 +22,36 @@ const STATUS_MAP = {
   'IZIN': 'Izin'
 };
 
-const formatDuration = (minutes) => {
+const formatDuration = (minutes, lang = 'id') => {
+  const isIndo = lang.startsWith('id');
+  const isKo = lang.startsWith('ko');
+  const isZh = lang.startsWith('zh');
+  
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
-  if (h === 0) return `${m} menit`;
-  if (m === 0) return `${h} jam`;
-  return `${h} jam ${m} menit`;
+  
+  const hrStr = isIndo ? 'jam' : isKo ? '시간' : isZh ? '小时' : 'hr';
+  const minStr = isIndo ? 'menit' : isKo ? '분' : isZh ? '分钟' : 'min';
+  
+  if (h === 0) return `${m} ${minStr}`;
+  if (m === 0) return `${h} ${hrStr}`;
+  return `${h} ${hrStr} ${m} ${minStr}`;
 };
 
-const getReportPeriodLabel = (filters) => {
+const getReportPeriodLabel = (filters, lang = 'id') => {
+  const isIndo = lang.startsWith('id');
+  const isKo = lang.startsWith('ko');
+  const isZh = lang.startsWith('zh');
+
   const monthsIndo = [
     'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
     'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
   ];
+  const monthsEng = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
   let dateObj = new Date();
   if (filters.startDate) {
     const parsed = new Date(filters.startDate);
@@ -47,7 +64,19 @@ const getReportPeriodLabel = (filters) => {
       dateObj = parsed;
     }
   }
-  return `${monthsIndo[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
+
+  const y = dateObj.getFullYear();
+  const m = dateObj.getMonth();
+
+  if (isIndo) {
+    return `${monthsIndo[m]} ${y}`;
+  } else if (isKo) {
+    return `${y}년 ${m + 1}월`;
+  } else if (isZh) {
+    return `${y}年 ${m + 1}月`;
+  } else {
+    return `${monthsEng[m]} ${y}`;
+  }
 };
 
 const getRowPenalty = (row, mangkirPenalty = 30) => {
@@ -222,8 +251,57 @@ const getPrintPaddedLogs = (rawLogs, emp, selectedMonth, summary) => {
   return [...padData].sort((a, b) => new Date(a.date) - new Date(b.date));
 };
 
+const translateStatus = (status, lang) => {
+  const isIndo = lang.startsWith('id');
+  const isKo = lang.startsWith('ko');
+  const isZh = lang.startsWith('zh');
+  
+  const normalized = (status || '').toUpperCase();
+  
+  const map = {
+    'PRESENT': isIndo ? 'Hadir' : isKo ? '출석' : isZh ? '出勤' : 'Present',
+    'HADIR': isIndo ? 'Hadir' : isKo ? '출석' : isZh ? '出勤' : 'Present',
+    'LATE': isIndo ? 'Terlambat' : isKo ? '지각' : isZh ? '迟到' : 'Late',
+    'TERLAMBAT': isIndo ? 'Terlambat' : isKo ? '지각' : isZh ? '迟到' : 'Late',
+    'MANGKIR': isIndo ? 'Mangkir' : isKo ? '무단결근' : isZh ? '旷工' : 'Unexcused',
+    'MISSING': isIndo ? 'Mangkir' : isKo ? '무단결근' : isZh ? '旷工' : 'Unexcused',
+    'HOLIDAY': isIndo ? 'Libur' : isKo ? '공휴일' : isZh ? '节假日' : 'Holiday',
+    'LIBUR': isIndo ? 'Libur' : isKo ? '공휴일' : isZh ? '节假日' : 'Holiday',
+    'CUTI': isIndo ? 'Cuti' : isKo ? '휴가' : isZh ? '请假' : 'Leave',
+    'LEAVE': isIndo ? 'Cuti' : isKo ? '휴가' : isZh ? '请假' : 'Leave',
+    'SAKIT': isIndo ? 'Sakit' : isKo ? '병가' : isZh ? '病假' : 'Medical',
+    'MEDICAL': isIndo ? 'Sakit' : isKo ? '병가' : isZh ? '病假' : 'Medical',
+    'IZIN': isIndo ? 'Izin' : isKo ? '외출/조퇴' : isZh ? '事假' : 'Permit',
+    'PERMIT': isIndo ? 'Izin' : isKo ? '외출/조퇴' : isZh ? '事假' : 'Permit',
+    'ABSENT': isIndo ? 'Alpa' : isKo ? '결근' : isZh ? '缺勤' : 'Absent',
+    'ALPA': isIndo ? 'Alpa' : isKo ? '결근' : isZh ? '缺勤' : 'Absent',
+    'ALPHA': isIndo ? 'Alpa' : isKo ? '결근' : isZh ? '缺勤' : 'Absent',
+    'EARLY_DEPARTURE': isIndo ? 'Pulang Cepat' : isKo ? '조기 퇴근' : isZh ? '早退' : 'Early Departure',
+    'PULANG CEPAT': isIndo ? 'Pulang Cepat' : isKo ? '조기 퇴근' : isZh ? '早退' : 'Early Departure',
+  };
+  
+  return map[normalized] || status;
+};
+
+const translateMethod = (method, lang) => {
+  const isIndo = lang.startsWith('id');
+  const isKo = lang.startsWith('ko');
+  const isZh = lang.startsWith('zh');
+  
+  const map = {
+    'Face CCTV': isIndo ? 'Face CCTV' : isKo ? '페이스 CCTV' : isZh ? '人脸CCTV' : 'Face CCTV',
+    'Face HP': isIndo ? 'Face HP' : isKo ? '페이스 HP' : isZh ? '手机人脸' : 'Face HP',
+    'Pinned': isIndo ? 'Pinned' : isKo ? 'PIN 입력' : isZh ? 'PIN密码' : 'Pinned',
+    'Fingered': isIndo ? 'Fingered' : isKo ? '지문 인식' : isZh ? '指纹打卡' : 'Fingered',
+    'Manual': isIndo ? 'Manual' : isKo ? '수동 입력' : isZh ? '手工录入' : 'Manual',
+    '-': '-'
+  };
+  
+  return map[method] || method;
+};
 
 const Attendance = () => {
+  const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
@@ -809,30 +887,54 @@ const Attendance = () => {
 
   const handleExportExcel = async () => {
     try {
+      const lang = i18n.language || 'id';
+      const isIndo = lang.startsWith('id');
+      const isKo = lang.startsWith('ko');
+      const isZh = lang.startsWith('zh');
+
       if (activeViewTab === 'REKAPITULASI') {
+        const headers = {
+          no: isIndo ? 'No' : isKo ? '번호' : isZh ? '序号' : 'No',
+          nik: isIndo ? 'NIK' : isKo ? '사원번호' : isZh ? '工号' : 'Employee ID',
+          name: isIndo ? 'Nama Karyawan' : isKo ? '사원명' : isZh ? '员工姓名' : 'Employee Name',
+          dept: isIndo ? 'Departemen' : isKo ? '부서' : isZh ? '部门' : 'Department',
+          section: isIndo ? 'Bagian / Seksi' : isKo ? '파트' : isZh ? '班组' : 'Section',
+          total: isIndo ? 'Total Jadwal (Hari-Karyawan)' : isKo ? '총 일정 (일-사원)' : isZh ? '总计划 (工日)' : 'Total Schedule (Day-Employee)',
+          present: isIndo ? 'Kehadiran (Hadir/Telat)' : isKo ? '출석 (출석/지각)' : isZh ? '出勤 (出勤/迟到)' : 'Presence (Present/Late)',
+          late: isIndo ? 'Terlambat (Hari)' : isKo ? '지각 (일)' : isZh ? '迟到 (天)' : 'Lateness (Days)',
+          early: isIndo ? 'Pulang Cepat (Hari)' : isKo ? '조기 퇴근 (일)' : isZh ? '早退 (天)' : 'Early Leave (Days)',
+          mangkir: isIndo ? 'Mangkir (Hari)' : isKo ? '무단결근 (일)' : isZh ? '旷工 (天)' : 'Unexcused (Days)',
+          absent: isIndo ? 'Alpa (Hari)' : isKo ? '결근 (일)' : isZh ? '缺勤 (天)' : 'Absent (Days)',
+          other: isIndo ? 'Lainnya (Libur/Cuti/Sakit)' : isKo ? '기타 (공휴일/휴가/병가)' : isZh ? '其他 (节假日/休假/病假)' : 'Others (Holiday/Leave/Medical)',
+          rate: isIndo ? 'Persentase Kehadiran (%)' : isKo ? '출석률 (%)' : isZh ? '出勤率 (%)' : 'Presence Rate (%)',
+          totalLate: isIndo ? 'Akumulasi Keterlambatan' : isKo ? '누적 지각 시간' : isZh ? '累计迟到时长' : 'Accumulated Lateness',
+        };
+
         const exportData = rekapData.map((g, idx) => {
           const totalExcludeOff = g.total - g.other;
           const rate = totalExcludeOff > 0 ? Math.round((g.present / totalExcludeOff) * 100) : 100;
           return {
-            'No': idx + 1,
-            'Departemen': g.dept,
-            'Bagian / Seksi': g.section,
-            'Total Jadwal (Hari-Karyawan)': g.total,
-            'Kehadiran (Hadir/Telat)': g.present,
-            'Terlambat (Hari)': g.late,
-            'Pulang Cepat (Hari)': g.pulangCepat || 0,
-            'Mangkir (Hari)': g.mangkir,
-            'Alpa (Hari)': g.absent,
-            'Lainnya (Libur/Cuti/Sakit)': g.other,
-            'Persentase Kehadiran (%)': `${rate}%`,
-            'Akumulasi Keterlambatan': formatDuration(g.totalLateMinutes)
+            [headers.no]: idx + 1,
+            [headers.nik]: g.employeeCode || '-',
+            [headers.name]: g.name || '-',
+            [headers.dept]: g.dept,
+            [headers.section]: g.section,
+            [headers.total]: g.total,
+            [headers.present]: g.present,
+            [headers.late]: g.late,
+            [headers.early]: g.pulangCepat || 0,
+            [headers.mangkir]: g.mangkir,
+            [headers.absent]: g.absent,
+            [headers.other]: g.other,
+            [headers.rate]: `${rate}%`,
+            [headers.totalLate]: formatDuration(g.totalLateMinutes, lang)
           };
         });
 
         const ws = XLSX.utils.json_to_sheet(exportData);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Rekapitulasi');
-        XLSX.writeFile(wb, `Rekap_Absensi_Per_Dept_${appliedFilters.period}_${new Date().toISOString().split('T')[0]}.xlsx`);
+        XLSX.utils.book_append_sheet(wb, ws, isIndo ? 'Rekapitulasi' : isKo ? '부서별 요약' : isZh ? '部门汇总' : 'Recapitulation');
+        XLSX.writeFile(wb, `${isIndo ? 'Rekap_Absensi_Per_Dept' : isKo ? '부서별_근태_요약' : isZh ? '部门考勤汇总' : 'Attendance_Recapitulation'}_${appliedFilters.period}_${new Date().toISOString().split('T')[0]}.xlsx`);
         return;
       }
 
@@ -849,27 +951,63 @@ const Attendance = () => {
       // Sort data ascending by date (oldest first)
       const sortedData = [...allRecords].sort((a, b) => new Date(a.date) - new Date(b.date));
 
+      const headers = {
+        nik: isIndo ? 'NIK' : isKo ? '사원번호' : isZh ? '工号' : 'Employee ID',
+        name: isIndo ? 'Nama Karyawan' : isKo ? '사원명' : isZh ? '员工姓名' : 'Employee Name',
+        dept: isIndo ? 'Departemen' : isKo ? '부서' : isZh ? '部门' : 'Department',
+        section: isIndo ? 'Bagian' : isKo ? '파트' : isZh ? '班组' : 'Section',
+        position: isIndo ? 'Jabatan' : isKo ? '직급' : isZh ? '职位' : 'Position',
+        date: isIndo ? 'Tanggal' : isKo ? '날짜' : isZh ? '日期' : 'Date',
+        checkIn: isIndo ? 'Jam Masuk' : isKo ? '출근 시간' : isZh ? '签到时间' : 'Check In',
+        checkOut: isIndo ? 'Jam Keluar' : isKo ? '퇴근 시간' : isZh ? '签退时间' : 'Check Out',
+        lateness: isIndo ? 'Menit Terlambat' : isKo ? '지각 (분)' : isZh ? '迟到 (分钟)' : 'Lateness (min)',
+        status: isIndo ? 'Status' : isKo ? '상태' : isZh ? '状态' : 'Status',
+        method: isIndo ? 'Metode' : isKo ? '인증 방식' : isZh ? '打卡方式' : 'Method',
+      };
+
       const exportData = sortedData.map(row => {
         const isMangkir = (row.status === 'MANGKIR' || row.status === 'MISSING' || row.status === 'Mangkir');
         const penalty = (isMangkir && (row.lateMinutes || 0) === 0) ? (allDataResponse?.summary?.mangkirPenalty || 30) : 0;
+        
+        let rawMethod = 'Manual';
+        const modeUpper = (row.mode || '').toUpperCase();
+        const srcUpper = (row.source || '').toUpperCase();
+
+        if (modeUpper === 'FACE CCTV' || srcUpper === 'FACE_CCTV') {
+          rawMethod = 'Face CCTV';
+        } else if (modeUpper === 'FACE ID' || modeUpper === 'FACE HP' || srcUpper === 'FACE_WEB') {
+          rawMethod = 'Face HP';
+        } else if (modeUpper === 'PINNED' || modeUpper === 'PIN') {
+          rawMethod = 'Pinned';
+        } else if (modeUpper === 'FINGERED' || modeUpper === 'FINGERPRINT' || modeUpper === 'FINGER' || srcUpper === 'FINGERPRINT') {
+          rawMethod = 'Fingered';
+        } else if (row.mode === '-') {
+          rawMethod = '-';
+        }
+
+        const transStatus = translateStatus(row.status, lang);
+        const transMethod = translateMethod(rawMethod, lang);
+
         return {
-          'Nama Karyawan': row.name,
-          'Departemen': row.dept,
-          'Bagian': row.section,
-          'Jabatan': row.position,
-          'Tanggal': row.date,
-          'Jam Masuk': row.checkIn,
-          'Jam Keluar': row.checkOut,
-          'Menit Terlambat': (row.lateMinutes || 0) + penalty,
-          'Status': getStatusLabel(row.status),
-          'Mode': row.mode
+          [headers.nik]: row.employeeCode || row.nik || '-',
+          [headers.name]: row.name,
+          [headers.dept]: row.dept,
+          [headers.section]: row.section,
+          [headers.position]: row.position,
+          [headers.date]: row.date,
+          [headers.checkIn]: row.checkIn,
+          [headers.checkOut]: row.checkOut,
+          [headers.lateness]: (row.lateMinutes || 0) + penalty,
+          [headers.status]: transStatus,
+          [headers.method]: transMethod
         };
       });
 
       const ws = XLSX.utils.json_to_sheet(exportData);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Attendance');
-      XLSX.writeFile(wb, `Attendance_Report_${appliedFilters.period}_${new Date().toISOString().split('T')[0]}.xlsx`);
+      XLSX.utils.book_append_sheet(wb, ws, isIndo ? 'Kehadiran' : isKo ? '일별 근태' : isZh ? '每日考勤' : 'Attendance');
+      const filePrefix = isIndo ? 'Laporan_Absensi' : isKo ? '근태_보고서' : isZh ? '考勤报告' : 'Attendance_Report';
+      XLSX.writeFile(wb, `${filePrefix}_${appliedFilters.period}_${new Date().toISOString().split('T')[0]}.xlsx`);
     } catch (err) {
       console.error('Export error:', err);
       alert('Gagal export data: ' + err.message);
@@ -904,6 +1042,28 @@ const Attendance = () => {
     };
 
     try {
+      const lang = i18n.language || 'id';
+      const isIndo = lang.startsWith('id');
+      const isKo = lang.startsWith('ko');
+      const isZh = lang.startsWith('zh');
+      const minStr = isIndo ? 'menit' : isKo ? '분' : isZh ? '分钟' : 'min';
+
+      const labels = {
+        titleRekap: isIndo ? 'REKAPITULASI ABSENSI' : isKo ? '부서별 근태 요약' : isZh ? '部门考勤汇总' : 'ATTENDANCE RECAPITULATION',
+        titleDetail: isIndo ? 'LAPORAN ABSENSI' : isKo ? '근태 보고서' : isZh ? '考勤报告' : 'ATTENDANCE REPORT',
+        period: isIndo ? 'Periode' : isKo ? '기간' : isZh ? '期间' : 'Period',
+        printed: isIndo ? 'Dicetak' : isKo ? '인쇄일' : isZh ? '打印时间' : 'Printed',
+        kpis: {
+          hadir: isIndo ? 'Hadir' : isKo ? '출석' : isZh ? '出勤' : 'Present',
+          sakit: isIndo ? 'Sakit' : isKo ? '병가' : isZh ? '病假' : 'Medical',
+          izin: isIndo ? 'Izin' : isKo ? '외출/조퇴' : isZh ? '事假' : 'Permit',
+          cuti: isIndo ? 'Cuti' : isKo ? '휴가' : isZh ? '请假' : 'Leave',
+          mangkir: isIndo ? 'Mangkir' : isKo ? '무단결근' : isZh ? '旷工' : 'Unexcused',
+          alpa: isIndo ? 'Alpa' : isKo ? '결근' : isZh ? '缺勤' : 'Absent',
+          totalLate: isIndo ? 'Total Jam Terlambat' : isKo ? '총 지각 시간' : isZh ? '累计迟到时长' : 'Total Lateness',
+        }
+      };
+
       // H6 FIX: Fetch ALL records from API, not just the current page
       const allParams = { ...appliedFilters, page: 1, limit: 99999 };
       const allDataResponse = await attendanceAPI.getAll(allParams);
@@ -921,12 +1081,47 @@ const Attendance = () => {
       const doc = new jsPDF('l', 'mm', 'a4');
       doc.setFontSize(20);
       doc.setTextColor(37, 99, 235);
-      doc.text(activeViewTab === 'REKAPITULASI' ? 'REKAPITULASI ABSENSI' : 'LAPORAN ABSENSI', 14, 20);
+      
+      let titleStr = activeViewTab === 'REKAPITULASI' ? labels.titleRekap : labels.titleDetail;
+      if (activeViewTab === 'REKAPITULASI') {
+        if (appliedFilters.dept) {
+          titleStr = isIndo 
+            ? `REKAP ABSENSI DEPARTEMENT ${appliedFilters.dept.toUpperCase()}` 
+            : isKo 
+            ? `${appliedFilters.dept.toUpperCase()} 부서 근태 요약` 
+            : isZh 
+            ? `${appliedFilters.dept.toUpperCase()} 部门考勤汇总` 
+            : `${appliedFilters.dept.toUpperCase()} DEPARTMENT RECAPITULATION`;
+        }
+      } else {
+        const isSingleEmployee = allDataResponse?.summary?.uniqueEmployeeCount === 1 && rawLogs.length > 0;
+        if (isSingleEmployee) {
+          const empName = rawLogs[0].name.toUpperCase();
+          titleStr = isIndo 
+            ? `LAPORAN ABSENSI ${empName}` 
+            : isKo 
+            ? `${empName} 근태 보고서` 
+            : isZh 
+            ? `${empName} 考勤报告` 
+            : `${empName} ATTENDANCE REPORT`;
+        } else if (appliedFilters.dept) {
+          titleStr = isIndo 
+            ? `LAPORAN ABSENSI DEPARTEMENT ${appliedFilters.dept.toUpperCase()}` 
+            : isKo 
+            ? `${appliedFilters.dept.toUpperCase()} 부서 근태 보고서` 
+            : isZh 
+            ? `${appliedFilters.dept.toUpperCase()} 部门考勤报告` 
+            : `${appliedFilters.dept.toUpperCase()} DEPARTMENT ATTENDANCE REPORT`;
+        }
+      }
+      doc.text(titleStr, 14, 20);
       
       doc.setFontSize(10);
       doc.setTextColor(100);
-      doc.text(`Periode: ${getReportPeriodLabel(appliedFilters)}`, 14, 28);
-      doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}`, 14, 33);
+      doc.text(`${labels.period}: ${getReportPeriodLabel(appliedFilters, lang)}`, 14, 28);
+      
+      const localeStr = isIndo ? 'id-ID' : isKo ? 'ko-KR' : isZh ? 'zh-CN' : 'en-US';
+      doc.text(`${labels.printed}: ${new Date().toLocaleString(localeStr)}`, 14, 33);
 
       const logsForKpis = activeViewTab === 'REKAPITULASI' ? (fullDataForRekap?.data || []) : rawLogs;
       const totalHadir = logsForKpis.filter(d => d.status === 'Hadir' || d.status === 'PRESENT' || d.status === 'Terlambat' || d.status === 'LATE').length;
@@ -948,19 +1143,21 @@ const Attendance = () => {
       const blockHeight = 14;
       const gap = 4.0;
 
-      drawKpiBlock(doc, 14, 37, blockWidth, blockHeight, 'Hadir', totalHadir, themes.emerald);
-      drawKpiBlock(doc, 14 + 1 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Sakit', totalSakit, themes.blue);
-      drawKpiBlock(doc, 14 + 2 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Izin', totalIzin, themes.sky);
-      drawKpiBlock(doc, 14 + 3 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Cuti', totalCuti, themes.violet);
-      drawKpiBlock(doc, 14 + 4 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Mangkir', totalMangkir, themes.amber);
-      drawKpiBlock(doc, 14 + 5 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Alpa', totalAlpa, themes.rose);
-      drawKpiBlock(doc, 14 + 6 * (blockWidth + gap), 37, blockWidth, blockHeight, 'Total Jam Terlambat', formatDuration(totalLateMinutes), themes.fuchsia);
+      drawKpiBlock(doc, 14, 37, blockWidth, blockHeight, labels.kpis.hadir, totalHadir, themes.emerald);
+      drawKpiBlock(doc, 14 + 1 * (blockWidth + gap), 37, blockWidth, blockHeight, labels.kpis.sakit, totalSakit, themes.blue);
+      drawKpiBlock(doc, 14 + 2 * (blockWidth + gap), 37, blockWidth, blockHeight, labels.kpis.izin, totalIzin, themes.sky);
+      drawKpiBlock(doc, 14 + 3 * (blockWidth + gap), 37, blockWidth, blockHeight, labels.kpis.cuti, totalCuti, themes.violet);
+      drawKpiBlock(doc, 14 + 4 * (blockWidth + gap), 37, blockWidth, blockHeight, labels.kpis.mangkir, totalMangkir, themes.amber);
+      drawKpiBlock(doc, 14 + 5 * (blockWidth + gap), 37, blockWidth, blockHeight, labels.kpis.alpa, totalAlpa, themes.rose);
+      drawKpiBlock(doc, 14 + 6 * (blockWidth + gap), 37, blockWidth, blockHeight, labels.kpis.totalLate, formatDuration(totalLateMinutes, lang), themes.fuchsia);
 
       if (activeViewTab === 'REKAPITULASI') {
         const tableData = rekapData.map((g, idx) => {
           const totalExcludeOff = g.total - g.other;
           const rate = totalExcludeOff > 0 ? Math.round((g.present / totalExcludeOff) * 100) : 100;
           return [
+            g.employeeCode || '-',
+            g.name,
             g.dept,
             g.section,
             g.total,
@@ -971,20 +1168,29 @@ const Attendance = () => {
             g.absent,
             g.other,
             `${rate}%`,
-            formatDuration(g.totalLateMinutes)
+            formatDuration(g.totalLateMinutes, lang)
           ];
         });
 
+        const rekapHead = isIndo 
+          ? [['NIK', 'Nama Karyawan', 'Departemen', 'Bagian / Seksi', 'Total', 'Hadir', 'Terlambat', 'P. Cepat', 'Mangkir', 'Alpa', 'Lainnya', 'Rasio %', 'Durasi Telat']]
+          : isKo
+          ? [['사원번호', '사원명', '부서', '파트', '총 일정', '출석', '지각', '조기 퇴근', '무단결근', '결근', '기타', '출석률 %', '지각 시간']]
+          : isZh
+          ? [['工号', '员工姓名', '部门', '班组', '总数', '出勤', '迟到', '早退', '旷工', '缺勤', '其他', '比例 %', '迟到时长']]
+          : [['NIK', 'Employee Name', 'Department', 'Section', 'Total', 'Present', 'Late', 'Early Leave', 'Unexcused', 'Absent', 'Others', 'Rate %', 'Late Duration']];
+
         autoTable(doc, {
           startY: 56,
-          head: [['Departemen', 'Bagian / Seksi', 'Total', 'Hadir', 'Terlambat', 'P. Cepat', 'Mangkir', 'Alpa', 'Lainnya', 'Rasio %', 'Durasi Telat']],
+          head: rekapHead,
           body: tableData,
           theme: 'grid',
           headStyles: { fillColor: [248, 250, 252], textColor: [15, 23, 42], fontSize: 8, halign: 'center' },
           styles: { fontSize: 8, cellPadding: 2.5, fillColor: [255, 255, 255], textColor: [51, 65, 85] }
         });
 
-        doc.save(`Rekap_Absensi_Per_Dept_${new Date().getTime()}.pdf`);
+        const filePrefix = isIndo ? 'Rekap_Absensi_Per_Dept' : isKo ? '부서별_근태_요약' : isZh ? '部门考勤汇总' : 'Attendance_Recapitulation';
+        doc.save(`${filePrefix}_${new Date().getTime()}.pdf`);
         return;
       }
 
@@ -994,6 +1200,26 @@ const Attendance = () => {
       const tableData = sortedData.map(row => {
         const isMangkir = (row.status === 'MANGKIR' || row.status === 'MISSING' || row.status === 'Mangkir');
         const penalty = (isMangkir && (row.lateMinutes || 0) === 0) ? (allDataResponse?.summary?.mangkirPenalty || displaySummary?.mangkirPenalty || 30) : 0;
+        const transStatus = translateStatus(row.status, lang);
+        
+        let rawMethod = 'Manual';
+        const modeUpper = (row.mode || '').toUpperCase();
+        const srcUpper = (row.source || '').toUpperCase();
+
+        if (modeUpper === 'FACE CCTV' || srcUpper === 'FACE_CCTV') {
+          rawMethod = 'Face CCTV';
+        } else if (modeUpper === 'FACE ID' || modeUpper === 'FACE HP' || srcUpper === 'FACE_WEB') {
+          rawMethod = 'Face HP';
+        } else if (modeUpper === 'PINNED' || modeUpper === 'PIN') {
+          rawMethod = 'Pinned';
+        } else if (modeUpper === 'FINGERED' || modeUpper === 'FINGERPRINT' || modeUpper === 'FINGER' || srcUpper === 'FINGERPRINT') {
+          rawMethod = 'Fingered';
+        } else if (row.mode === '-') {
+          rawMethod = '-';
+        }
+
+        const transMethod = translateMethod(rawMethod, lang);
+        
         return [
           row.name,
           row.dept,
@@ -1002,25 +1228,36 @@ const Attendance = () => {
           row.date,
           row.checkIn,
           row.checkOut,
-          `${(row.lateMinutes || 0) + penalty} min`,
-          getStatusLabel(row.status)
+          `${(row.lateMinutes || 0) + penalty} ${minStr}`,
+          transStatus,
+          transMethod
         ];
       });
 
+      const detailHead = isIndo
+        ? [['Karyawan', 'Dept', 'Bagian', 'Jabatan', 'Tanggal', 'Masuk', 'Keluar', 'Telat', 'Status', 'Metode']]
+        : isKo
+        ? [['사원명', '부서', '파트', '직급', '날짜', '출근', '퇴근', '지각', '상태', '인증 방식']]
+        : isZh
+        ? [['员工', '部门', '班组', '职位', '日期', '签到', '签退', '迟到', '状态', '打卡方式']]
+        : [['Employee', 'Dept', 'Section', 'Position', 'Date', 'Check In', 'Check Out', 'Lateness', 'Status', 'Method']];
+
       autoTable(doc, {
         startY: 56,
-        head: [['Karyawan', 'Dept', 'Bagian', 'Jabatan', 'Tanggal', 'Masuk', 'Keluar', 'Telat', 'Status']],
+        head: detailHead,
         body: tableData,
         theme: 'grid',
         headStyles: { fillColor: [248, 250, 252], textColor: [15, 23, 42], fontSize: 8, halign: 'center' },
         styles: { fontSize: 7, cellPadding: 2, fillColor: [255, 255, 255], textColor: [51, 65, 85] },
         columnStyles: {
           7: { halign: 'center', fontStyle: 'bold' },
-          8: { halign: 'center' }
+          8: { halign: 'center' },
+          9: { halign: 'center' }
         }
       });
 
-      doc.save(`Attendance_Report_${new Date().getTime()}.pdf`);
+      const filePrefix = isIndo ? 'Laporan_Absensi' : isKo ? '근태_보고서' : isZh ? '考勤报告' : 'Attendance_Report';
+      doc.save(`${filePrefix}_${new Date().getTime()}.pdf`);
     } catch (err) {
       console.error('Export error:', err);
       alert('Gagal export PDF: ' + err.message);
@@ -1052,17 +1289,17 @@ const Attendance = () => {
           <div className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center">
             <LayoutDashboard className="w-3 h-3 text-slate-400" />
           </div>
-          <span className="text-[10px] font-bold uppercase tracking-wider">Manajemen Administrasi</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider">{t('attendancePage.categoryTitle')}</span>
           <div className="w-1 h-1 rounded-full bg-slate-300" />
-          <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Pusat Sinkronisasi Mesin</span>
+          <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">{t('attendancePage.syncCenter')}</span>
         </div>
         
         <div className="flex flex-col md:flex-row md:items-center justify-between w-full gap-4">
           <h1 className="text-2xl xl:text-3xl font-bold text-slate-800 tracking-tight flex items-center gap-3 whitespace-nowrap">
-            <span>Arsip Absensi</span>
+            <span>{t('attendancePage.title')}</span>
             <div className="px-3 py-1 rounded-lg bg-blue-50 border border-blue-100 text-blue-600 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
-              Data Realtime
+              {t('attendancePage.realtimeData')}
             </div>
           </h1>
 
@@ -1075,21 +1312,21 @@ const Attendance = () => {
                 className="group flex items-center gap-2 bg-white px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold text-slate-600 hover:text-blue-600 hover:border-blue-200 transition-all border border-slate-200 shadow-sm active:scale-95 uppercase tracking-wider"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isRecalculating ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} /> 
-                <span>Sync</span>
+                <span>{t('attendancePage.btnSync')}</span>
               </button>
               <button 
                 onClick={() => setSwapModalOpen(true)}
                 className="group flex items-center gap-2 bg-white px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold text-slate-600 hover:text-indigo-600 hover:border-indigo-200 transition-all border border-slate-200 shadow-sm active:scale-95 uppercase tracking-wider"
               >
                 <RefreshCw className="w-3.5 h-3.5 group-hover:rotate-90 transition-transform duration-500" /> 
-                <span>Geser</span>
+                <span>{t('attendancePage.btnShift')}</span>
               </button>
               <button 
                 onClick={() => setImportOpen(true)}
                 className="group flex items-center gap-2 bg-white px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold text-slate-600 hover:text-emerald-600 hover:border-emerald-200 transition-all border border-slate-200 shadow-sm active:scale-95 uppercase tracking-wider"
               >
                 <Upload className="w-3.5 h-3.5 group-hover:-translate-y-0.5 transition-transform" /> 
-                <span>Upload</span>
+                <span>{t('attendancePage.btnUpload')}</span>
               </button>
             </div>
             
@@ -1097,14 +1334,14 @@ const Attendance = () => {
               <button 
                 onClick={openReportModal}
                 className="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-600 transition-all group shadow-sm"
-                title="Cetak Laporan Absensi (Individu)"
+                title={t('attendancePage.tooltipPrintDetail')}
               >
                 <Printer className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500 group-hover:text-emerald-600 transition-all" />
               </button>
               <button 
                 onClick={handleExportPDF}
                 className="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 transition-all group shadow-sm"
-                title="Ekspor Dokumen PDF"
+                title={t('attendancePage.tooltipExportPDF')}
               >
                 <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500 group-hover:text-rose-600 transition-all" />
               </button>
@@ -1113,7 +1350,7 @@ const Attendance = () => {
                 className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-bold uppercase tracking-wider transition-all shadow-sm active:scale-95 group"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:rotate-12 transition-transform" /> 
-                <span>Ekspor Excel</span>
+                <span>{t('attendancePage.btnExportExcel')}</span>
               </button>
               
               <button 
@@ -1127,7 +1364,7 @@ const Attendance = () => {
                 className="flex items-center gap-2 bg-rose-600 hover:bg-rose-700 text-white px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-bold uppercase tracking-wider transition-all shadow-sm active:scale-95 group cursor-pointer"
               >
                 <Edit2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:scale-110 transition-transform" /> 
-                <span>Koreksi Manual (Bulk)</span>
+                <span>{t('attendancePage.btnBulkCorrection')}</span>
               </button>
             </div>
           </div>
@@ -1150,7 +1387,7 @@ const Attendance = () => {
             {/* Widget 1: Attendance Rate Gauge */}
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between gap-6 hover:shadow-md transition-all">
               <div className="space-y-2">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Tingkat Kehadiran</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">{t('attendancePage.attendanceRate')}</span>
                 <p className="text-3xl font-black text-slate-800 tracking-tight mt-1">
                   {(() => {
                     const totalHadir = (displaySummary.hadir || 0) + (displaySummary.telat || 0);
@@ -1159,7 +1396,7 @@ const Attendance = () => {
                   })()}%
                 </p>
                 <span className="text-[9px] font-bold text-emerald-600 uppercase flex items-center gap-1.5 mt-1">
-                  <ShieldCheck className="w-3.5 h-3.5" /> Hadir Normal & Tepat Waktu
+                  <ShieldCheck className="w-3.5 h-3.5" /> {t('attendancePage.presentOnTime')}
                 </span>
               </div>
               
@@ -1193,7 +1430,7 @@ const Attendance = () => {
             {/* Widget 2: Lateness Rate Gauge */}
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between gap-6 hover:shadow-md transition-all">
               <div className="space-y-2">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Rasio Keterlambatan</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">{t('attendancePage.lateRatio')}</span>
                 <p className="text-3xl font-black text-slate-800 tracking-tight mt-1">
                   {(() => {
                     const totalLateDays = (displaySummary.telat || 0);
@@ -1202,7 +1439,7 @@ const Attendance = () => {
                   })()}%
                 </p>
                 <span className="text-[9px] font-bold text-amber-600 uppercase flex items-center gap-1.5 mt-1">
-                  <Clock className="w-3.5 h-3.5 animate-pulse" /> Terlambat Masuk Kerja
+                  <Clock className="w-3.5 h-3.5 animate-pulse" /> {t('attendancePage.lateArrival')}
                 </span>
               </div>
               
@@ -1240,20 +1477,20 @@ const Attendance = () => {
                 : 'bg-white border-slate-200'
             }`}>
               <div className="space-y-2">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Anomali Absensi</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">{t('attendancePage.anomalies')}</span>
                 <p className="text-3xl font-black text-slate-800 tracking-tight mt-1">
-                  {data?.data?.filter(isAnomaly).length} Data
+                  {data?.data?.filter(isAnomaly).length} {t('attendancePage.records', { count: data?.data?.filter(isAnomaly).length })}
                 </p>
                 {data?.data?.filter(isAnomaly).length > 0 ? (
                   <button 
                     onClick={() => setAnomalyFilter('ANOMALY')}
                     className="text-[9px] font-bold text-amber-600 hover:text-amber-800 underline uppercase flex items-center gap-1.5 transition-colors cursor-pointer mt-1"
                   >
-                    <AlertTriangle className="w-3.5 h-3.5" /> Tinjau Anomali
+                    <AlertTriangle className="w-3.5 h-3.5" /> {t('attendancePage.tinjauAnomali')}
                   </button>
                 ) : (
                   <span className="text-[9px] font-bold text-emerald-600 uppercase flex items-center gap-1.5 mt-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Absensi Bersih & Valid
+                    <CheckCircle2 className="w-3.5 h-3.5" /> {t('attendancePage.cleanValid')}
                   </span>
                 )}
               </div>
@@ -1269,28 +1506,28 @@ const Attendance = () => {
 
           <div className={`grid grid-cols-2 md:grid-cols-4 lg:grid-cols-${displaySummary.uniqueEmployeeCount === 1 ? '8' : '7'} gap-4`}>
             {[
-              { label: 'Total Data', value: displaySummary.total, color: 'blue', icon: Filter, desc: 'Semua Absen' },
-              { label: 'Hadir', value: displaySummary.hadir, color: 'emerald', icon: CheckCircle2, desc: 'Tepat Waktu' },
-              { label: 'Terlambat', value: displaySummary.telat, color: 'amber', icon: Clock, desc: 'Total Hari' },
-              { label: 'Pulang Cepat', value: displaySummary.pulangCepat || 0, color: 'purple', icon: Clock, desc: 'Indikator Blink' },
-              { label: 'Mangkir', value: displaySummary.mangkir, color: 'rose', icon: AlertCircle, desc: `Kurang Finger` },
-              { label: 'Alpa', value: displaySummary.absen, color: 'red', icon: XCircle, desc: 'Tidak Ada Finger' },
-              displaySummary.uniqueEmployeeCount === 1 && { label: 'Total Terlambat', value: formatDuration(displaySummary.totalLate || 0), color: 'rose', icon: Clock, desc: 'Akumulasi Waktu' },
-              { label: 'Lainnya', value: (displaySummary.holiday || 0) + (displaySummary.cuti || 0) + (displaySummary.sakit || 0) + (displaySummary.izin || 0), color: 'slate', icon: Calendar, desc: 'Libur/Cuti/Sakit' },
+              { key: 'Total Data', label: t('attendancePage.kpiTotal'), value: displaySummary.total, color: 'blue', icon: Filter, desc: t('attendancePage.semua') },
+              { key: 'Hadir', label: t('attendancePage.kpiPresent'), value: displaySummary.hadir, color: 'emerald', icon: CheckCircle2, desc: t('attendancePage.presentOnTime') },
+              { key: 'Terlambat', label: t('attendancePage.kpiLate'), value: displaySummary.telat, color: 'amber', icon: Clock, desc: t('attendancePage.kpiTotal') },
+              { key: 'Pulang Cepat', label: t('attendancePage.kpiEarlyDeparture'), value: displaySummary.pulangCepat || 0, color: 'purple', icon: Clock, desc: t('attendancePage.kpiEarlyDeparture') },
+              { key: 'Mangkir', label: t('attendancePage.kpiMangkir'), value: displaySummary.mangkir, color: 'rose', icon: AlertCircle, desc: t('attendancePage.kpiMangkir') },
+              { key: 'Alpa', label: t('attendancePage.kpiAbsent'), value: displaySummary.absen, color: 'red', icon: XCircle, desc: t('attendancePage.kpiAbsent') },
+              displaySummary.uniqueEmployeeCount === 1 && { key: 'Total Terlambat', label: t('attendancePage.kpiTotalLate'), value: formatDuration(displaySummary.totalLate || 0, i18n.language), color: 'rose', icon: Clock, desc: t('attendancePage.kpiTotalLate') },
+              { key: 'Lainnya', label: t('attendancePage.kpiOther'), value: (displaySummary.holiday || 0) + (displaySummary.cuti || 0) + (displaySummary.sakit || 0) + (displaySummary.izin || 0), color: 'slate', icon: Calendar, desc: t('attendancePage.kpiOther') },
             ].filter(Boolean).map((item) => {
               const isActive = 
-                (item.label === 'Total Data' && !appliedFilters.status) ||
-                (item.label === 'Hadir' && appliedFilters.status === 'PRESENT') ||
-                ((item.label === 'Terlambat' || item.label === 'Total Terlambat') && appliedFilters.status === 'LATE') ||
-                (item.label === 'Pulang Cepat' && appliedFilters.status === 'EARLY_DEPARTURE') ||
-                (item.label === 'Mangkir' && appliedFilters.status === 'MANGKIR') ||
-                (item.label === 'Alpa' && appliedFilters.status === 'ABSENT') ||
-                (item.label === 'Lainnya' && appliedFilters.status === 'HOLIDAY');
+                (item.key === 'Total Data' && !appliedFilters.status) ||
+                (item.key === 'Hadir' && appliedFilters.status === 'PRESENT') ||
+                ((item.key === 'Terlambat' || item.key === 'Total Terlambat') && appliedFilters.status === 'LATE') ||
+                (item.key === 'Pulang Cepat' && appliedFilters.status === 'EARLY_DEPARTURE') ||
+                (item.key === 'Mangkir' && appliedFilters.status === 'MANGKIR') ||
+                (item.key === 'Alpa' && appliedFilters.status === 'ABSENT') ||
+                (item.key === 'Lainnya' && appliedFilters.status === 'HOLIDAY');
 
               return (
                 <div 
-                  key={item.label} 
-                  onClick={() => handleCardClick(item.label)}
+                  key={item.key} 
+                  onClick={() => handleCardClick(item.key)}
                   className={`bg-white p-4 rounded-2xl border shadow-sm flex flex-col gap-3 hover:shadow-md hover:border-blue-300 hover:-translate-y-0.5 cursor-pointer active:scale-95 transition-all duration-200 group ${
                     isActive 
                       ? 'ring-2 ring-blue-500/50 border-blue-400 bg-blue-50/10' 
@@ -1326,15 +1563,15 @@ const Attendance = () => {
                     <Clock className="w-8 h-8 text-rose-600 animate-pulse" />
                   </div>
                   <div>
-                    <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Akumulasi Terlambat Personal</h3>
+                    <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('attendancePage.personalLate')}</h3>
                     <p className="text-3xl font-black text-slate-800 tracking-tight mt-1">
-                      {formatDuration(displaySummary.totalLate)}
+                      {formatDuration(displaySummary.totalLate, i18n.language)}
                     </p>
                   </div>
                 </div>
                 <div className="hidden lg:block h-16 w-px bg-slate-100" />
                 <div className="hidden lg:flex flex-col items-end text-right">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Profil Karyawan</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{t('attendancePage.employeeProfile')}</p>
                   <p className="text-2xl font-black text-slate-800 uppercase">{data?.data[0]?.name}</p>
                 </div>
               </div>
@@ -1355,7 +1592,7 @@ const Attendance = () => {
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            Rincian Absensi (Detail)
+            {t('attendancePage.tabDetail')}
           </button>
           <button
             onClick={() => setActiveViewTab('REKAPITULASI')}
@@ -1365,7 +1602,7 @@ const Attendance = () => {
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            Rekapitulasi Departemen & Bagian
+            {t('attendancePage.tabDeptRecap')}
           </button>
         </div>
 
@@ -1373,8 +1610,8 @@ const Attendance = () => {
           <div className="flex items-center gap-3">
             <div className="w-2 h-2 rounded-full bg-blue-600 animate-pulse shadow-[0_0_5px_rgba(37,99,235,0.5)]" />
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-              {activeViewTab === 'DETAIL' ? 'Data Absensi' : 'Laporan Rekapitulasi'} <span className="text-slate-300 mx-2">|</span> 
-              Total: <span className="text-slate-700 ml-1">{activeViewTab === 'DETAIL' ? `${displaySummary?.total || 0} Baris` : `${rekapData.length} Kelompok`}</span>
+              {activeViewTab === 'DETAIL' ? t('navigation.attendanceData') : t('attendancePage.tabDeptRecap')} <span className="text-slate-300 mx-2">|</span> 
+              Total: <span className="text-slate-700 ml-1">{activeViewTab === 'DETAIL' ? `${displaySummary?.total || 0} ${t('attendancePage.rows')}` : `${rekapData.length} ${t('attendancePage.records')}`}</span>
             </p>
           </div>
           
@@ -1389,7 +1626,7 @@ const Attendance = () => {
                      : 'text-slate-500 hover:text-slate-800'
                  }`}
                >
-                 Semua
+                 {t('attendancePage.semua')}
                </button>
                <button 
                  onClick={() => setAnomalyFilter('ANOMALY')}
@@ -1400,7 +1637,7 @@ const Attendance = () => {
                  }`}
                >
                  <AlertTriangle className="w-3.5 h-3.5" />
-                 Hanya Anomali
+                 {t('attendancePage.hanyaAnomali')}
                </button>
             </div>
           )}
@@ -1414,36 +1651,36 @@ const Attendance = () => {
                   <tr className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">
                     <th className="px-6 py-4">
                       <button onClick={() => handleSort('name')} className="flex items-center gap-2 group/btn">
-                        Nama Karyawan
+                        {t('attendancePage.employeeName')}
                         <SortIcon column="name" />
                       </button>
                     </th>
                     <th className="px-4 py-4">
                       <button onClick={() => handleSort('date')} className="flex items-center gap-2 group/btn">
-                        Tanggal
+                        {t('attendancePage.date')}
                         <SortIcon column="date" />
                       </button>
                     </th>
-                    <th className="px-4 py-4 text-center">Metode</th>
-                    <th className="px-4 py-4 text-center">Jam Masuk</th>
-                    <th className="px-4 py-4 text-center">Jam Keluar</th>
+                    <th className="px-4 py-4 text-center">{t('attendancePage.method')}</th>
+                    <th className="px-4 py-4 text-center">{t('attendancePage.checkIn')}</th>
+                    <th className="px-4 py-4 text-center">{t('attendancePage.checkOut')}</th>
                     <th className="px-6 py-4">
                       <button onClick={() => handleSort('status')} className="flex items-center gap-2 mx-auto group/btn">
-                        Status
+                        {t('attendancePage.status')}
                         <SortIcon column="status" />
                       </button>
                     </th>
-                    <th className="px-4 py-4 text-center">Terlambat</th>
-                    <th className="px-4 py-4 text-center">Lembur (Jam)</th>
+                    <th className="px-4 py-4 text-center">{t('attendancePage.late')}</th>
+                    <th className="px-4 py-4 text-center">{t('attendancePage.overtime')}</th>
                     <th className="px-4 py-4">
                       <button onClick={() => handleSort('dept')} className="flex items-center gap-2 group/btn">
-                        Departemen
+                        {t('attendancePage.department')}
                         <SortIcon column="dept" />
                       </button>
                     </th>
-                    <th className="px-4 py-4">Bagian / Seksi</th>
-                    <th className="px-4 py-4">Jabatan</th>
-                    <th className="px-4 py-4 text-center">Aksi</th>
+                    <th className="px-4 py-4">{t('attendancePage.section')}</th>
+                    <th className="px-4 py-4">{t('attendancePage.position')}</th>
+                    <th className="px-4 py-4 text-center">{t('attendancePage.actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -1452,7 +1689,7 @@ const Attendance = () => {
                       <td colSpan="12" className="text-center py-24">
                         <div className="flex flex-col items-center gap-4">
                           <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest animate-pulse">Memuat Data...</p>
+                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest animate-pulse">{t('attendancePage.msgLoading')}</p>
                         </div>
                       </td>
                     </tr>
@@ -1463,8 +1700,8 @@ const Attendance = () => {
                           <div className="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center border border-slate-100">
                             <Calendar className="w-8 h-8 text-slate-400" />
                           </div>
-                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Data Kosong</p>
-                          <p className="text-[9px] text-slate-400 uppercase font-medium">Tidak ada data absensi untuk periode ini</p>
+                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t('attendancePage.msgEmpty')}</p>
+                          <p className="text-[9px] text-slate-400 uppercase font-medium">{t('attendancePage.msgNoData')}</p>
                         </div>
                       </td>
                     </tr>
@@ -1501,25 +1738,30 @@ const Attendance = () => {
                           </div>
                         </td>
                         <td className="px-4 py-4 text-center">
-                          {row.source === 'face_cctv' ? (
-                            <span className="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-755 px-2 py-1 rounded-lg text-[10px] font-bold border border-indigo-100 shadow-sm" title="CCTV Face Detection">
+                          {(row.source === 'face_cctv' || row.mode === 'Face CCTV') ? (
+                            <span className="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 px-2 py-1 rounded-lg text-[10px] font-bold border border-indigo-100 shadow-sm" title={i18n.language.startsWith('id') ? 'Deteksi Wajah via CCTV' : 'Face Detection via CCTV'}>
                               <Camera className="w-3.5 h-3.5 text-indigo-500" />
-                              CCTV
+                              {translateMethod('Face CCTV', i18n.language)}
                             </span>
-                          ) : row.source === 'fingerprint' ? (
-                            <span className="inline-flex items-center gap-1.5 bg-sky-50 text-sky-750 px-2 py-1 rounded-lg text-[10px] font-bold border border-sky-100 shadow-sm" title="Sidik Jari (Fingerprint)">
-                              <Fingerprint className="w-3.5 h-3.5 text-sky-500" />
-                              Finger
-                            </span>
-                          ) : row.source === 'face_web' ? (
-                            <span className="inline-flex items-center gap-1.5 bg-teal-50 text-teal-700 px-2 py-1 rounded-lg text-[10px] font-bold border border-teal-100 shadow-sm" title="Face ID (HP / Browser)">
+                          ) : (row.source === 'face_web' || row.mode === 'Face ID' || row.mode === 'Face HP') ? (
+                            <span className="inline-flex items-center gap-1.5 bg-teal-50 text-teal-700 px-2 py-1 rounded-lg text-[10px] font-bold border border-teal-100 shadow-sm" title={i18n.language.startsWith('id') ? 'Deteksi Wajah via HP' : 'Face Detection via HP'}>
                               <Smartphone className="w-3.5 h-3.5 text-teal-500" />
-                              HP / Web
+                              {translateMethod('Face HP', i18n.language)}
+                            </span>
+                          ) : (row.mode === 'Pinned' || row.mode === 'Pin') ? (
+                            <span className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 px-2 py-1 rounded-lg text-[10px] font-bold border border-amber-100 shadow-sm" title={i18n.language.startsWith('id') ? 'Menggunakan PIN pada Mesin' : 'Using PIN on Device'}>
+                              <Key className="w-3.5 h-3.5 text-amber-500" />
+                              {translateMethod('Pinned', i18n.language)}
+                            </span>
+                          ) : (row.mode === 'Fingered' || row.mode === 'Fingerprint' || row.source === 'fingerprint') ? (
+                            <span className="inline-flex items-center gap-1.5 bg-sky-50 text-sky-700 px-2 py-1 rounded-lg text-[10px] font-bold border border-sky-100 shadow-sm" title={i18n.language.startsWith('id') ? 'Menggunakan Sidik Jari (Fingerprint)' : 'Using Fingerprint'}>
+                              <Fingerprint className="w-3.5 h-3.5 text-sky-500" />
+                              {translateMethod('Fingered', i18n.language)}
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1.5 bg-slate-50 text-slate-600 px-2 py-1 rounded-lg text-[10px] font-bold border border-slate-200 shadow-sm" title="Manual / Koreksi HRD">
+                            <span className="inline-flex items-center gap-1.5 bg-slate-50 text-slate-600 px-2 py-1 rounded-lg text-[10px] font-bold border border-slate-200 shadow-sm" title={i18n.language.startsWith('id') ? 'Manual / Koreksi HRD' : 'Manual / HR Correction'}>
                               <Edit2 className="w-3.5 h-3.5 text-slate-400" />
-                              Manual
+                              {translateMethod('Manual', i18n.language)}
                             </span>
                           )}
                         </td>
@@ -1539,7 +1781,7 @@ const Attendance = () => {
                                   cameraId: row.checkinCameraId
                                 })}
                                 className="p-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 hover:text-indigo-700 text-indigo-500 border border-indigo-100 transition-all hover:scale-110 active:scale-95 ml-1"
-                                title="Lihat Foto CCTV Masuk"
+                                title={i18n.language.startsWith('id') ? 'Lihat Foto CCTV Masuk' : i18n.language.startsWith('ko') ? 'CCTV 입실 사진 보기' : i18n.language.startsWith('zh') ? '查看CCTV签到照片' : 'View Check-In CCTV Photo'}
                               >
                                 <Camera className="w-3.5 h-3.5" />
                               </button>
@@ -1562,7 +1804,7 @@ const Attendance = () => {
                                   cameraId: row.checkoutCameraId
                                 })}
                                 className="p-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 hover:text-indigo-700 text-indigo-500 border border-indigo-100 transition-all hover:scale-110 active:scale-95 ml-1"
-                                title="Lihat Foto CCTV Pulang"
+                                title={i18n.language.startsWith('id') ? 'Lihat Foto CCTV Pulang' : i18n.language.startsWith('ko') ? 'CCTV 퇴실 사진 보기' : i18n.language.startsWith('zh') ? '查看CCTV签退照片' : 'View Check-Out CCTV Photo'}
                               >
                                 <Camera className="w-3.5 h-3.5" />
                               </button>
@@ -1572,7 +1814,7 @@ const Attendance = () => {
                         <td className="px-6 py-4 text-center">
                           <div className="flex flex-col items-center gap-1">
                             <span className={`inline-flex items-center px-3 py-1.5 rounded-md text-[9px] font-bold uppercase tracking-wider border transition-all ${getStatusColor(row.status)}`}>
-                              {getStatusLabel(row.status)}
+                              {translateStatus(row.status, i18n.language)}
                             </span>
                             {row.source === 'face_cctv' && (row.checkinSimilarity || row.checkoutSimilarity) && (
                               <div className="flex flex-col items-center gap-0.5 mt-0.5 text-[8px] font-black text-indigo-600 bg-indigo-50/50 border border-indigo-100/50 px-1.5 py-0.5 rounded uppercase tracking-wider">
@@ -1616,7 +1858,7 @@ const Attendance = () => {
                               }
                             }}
                             className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 text-[10px] font-bold border border-slate-200 uppercase tracking-widest hover:bg-blue-600 hover:text-white hover:border-blue-600 cursor-pointer transition-all hover:scale-105 active:scale-95 shadow-sm"
-                            title="Klik untuk memfilter departemen ini"
+                            title={i18n.language.startsWith('id') ? 'Klik untuk memfilter departemen ini' : i18n.language.startsWith('ko') ? '이 부서를 필터링하려면 클릭하십시오' : i18n.language.startsWith('zh') ? '点击筛选此部门' : 'Click to filter this department'}
                           >
                             {row.dept || 'N/A'}
                           </button>
@@ -1628,7 +1870,7 @@ const Attendance = () => {
                                 setAppliedFilters(prev => ({ ...prev, dept: row.dept || '', section: row.section, page: 1 }));
                               }}
                               className="text-[10px] font-bold text-slate-600 hover:text-blue-600 hover:underline uppercase tracking-wider cursor-pointer transition-all hover:scale-105 active:scale-95"
-                              title="Klik untuk memfilter bagian ini"
+                              title={i18n.language.startsWith('id') ? 'Klik untuk memfilter bagian ini' : i18n.language.startsWith('ko') ? '이 파트를 필터링하려면 클릭하십시오' : i18n.language.startsWith('zh') ? '点击筛选此班组' : 'Click to filter this section'}
                             >
                               {row.section}
                             </button>
@@ -1696,11 +1938,11 @@ const Attendance = () => {
               <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-                    Halaman <span className="text-slate-800 mx-1">{appliedFilters.page}</span> / <span className="text-slate-600 ml-1">{data?.totalPages || 1}</span>
+                    {t('attendancePage.page')} <span className="text-slate-800 mx-1">{appliedFilters.page}</span> / <span className="text-slate-600 ml-1">{data?.totalPages || 1}</span>
                   </p>
                   <div className="w-1 h-1 rounded-full bg-slate-300" />
                   <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-                    Total Data: <span className="text-blue-600 font-bold">{data?.total || 0}</span>
+                    {t('attendancePage.kpiTotal')}: <span className="text-blue-600 font-bold">{data?.total || 0}</span>
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1727,19 +1969,19 @@ const Attendance = () => {
             <table className="w-full text-left whitespace-nowrap">
               <thead className="sticky top-0 z-30 bg-slate-50 border-b border-slate-100 shadow-sm">
                 <tr className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">
-                  <th className="px-6 py-4 text-center">No</th>
-                  <th className="px-6 py-4">Karyawan</th>
-                  <th className="px-6 py-4">Departemen</th>
-                  <th className="px-4 py-4">Bagian / Seksi</th>
-                  <th className="px-4 py-4 text-center">Total Jadwal</th>
-                  <th className="px-4 py-4 text-center">Hadir</th>
-                  <th className="px-4 py-4 text-center">Terlambat</th>
-                  <th className="px-4 py-4 text-center">Pulang Cepat</th>
-                  <th className="px-4 py-4 text-center">Mangkir</th>
-                  <th className="px-4 py-4 text-center">Alpa</th>
-                  <th className="px-4 py-4 text-center">Cuti/Sakit/Izin</th>
-                  <th className="px-6 py-4 text-center">Tingkat Kehadiran</th>
-                  <th className="px-6 py-4 text-center">Akumulasi Terlambat</th>
+                  <th className="px-6 py-4 text-center">{t('attendancePage.no', 'No')}</th>
+                  <th className="px-6 py-4">{t('attendancePage.employeeName')}</th>
+                  <th className="px-6 py-4">{t('attendancePage.department')}</th>
+                  <th className="px-4 py-4">{t('attendancePage.section')}</th>
+                  <th className="px-4 py-4 text-center">{t('attendancePage.kpiTotal')}</th>
+                  <th className="px-4 py-4 text-center">{t('attendancePage.kpiPresent')}</th>
+                  <th className="px-4 py-4 text-center">{t('attendancePage.kpiLate')}</th>
+                  <th className="px-4 py-4 text-center">{t('attendancePage.kpiEarlyDeparture')}</th>
+                  <th className="px-4 py-4 text-center">{t('attendancePage.kpiMangkir')}</th>
+                  <th className="px-4 py-4 text-center">{t('attendancePage.kpiAbsent')}</th>
+                  <th className="px-4 py-4 text-center">{t('attendancePage.kpiOther')}</th>
+                  <th className="px-6 py-4 text-center">{t('attendancePage.attendanceRate')}</th>
+                  <th className="px-6 py-4 text-center">{t('attendancePage.kpiTotalLate')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1748,7 +1990,7 @@ const Attendance = () => {
                     <td colSpan="13" className="text-center py-24">
                       <div className="flex flex-col items-center gap-4">
                         <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest animate-pulse">Menghitung Rekapitulasi...</p>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest animate-pulse">{t('attendancePage.msgLoading')}</p>
                       </div>
                     </td>
                   </tr>
@@ -1756,11 +1998,8 @@ const Attendance = () => {
                   <tr>
                     <td colSpan="13" className="text-center py-24">
                       <div className="flex flex-col items-center gap-4 opacity-70">
-                        <div className="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center border border-slate-100">
-                          <Calendar className="w-8 h-8 text-slate-400" />
-                        </div>
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Data Kosong</p>
-                        <p className="text-[9px] text-slate-400 uppercase font-medium">Tidak ada data untuk rekapitulasi</p>
+                        <Calendar className="w-16 h-16 text-slate-300" />
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t('attendancePage.msgNoData')}</p>
                       </div>
                     </td>
                   </tr>
@@ -1770,15 +2009,15 @@ const Attendance = () => {
                     const rate = totalExcludeOff > 0 ? Math.round((row.present / totalExcludeOff) * 100) : 100;
                     
                     return (
-                      <tr key={index} className="group transition-all duration-300 hover:bg-blue-50/50">
-                        <td className="px-6 py-4 text-xs font-semibold text-slate-500 text-center">{index + 1}</td>
-                        <td className="px-6 py-4">
+                      <tr key={index} className="group transition-all duration-300 hover:bg-blue-50/50 bg-white">
+                        <td className="px-6 py-4 text-xs font-semibold text-slate-500 text-center border-b border-slate-100">{index + 1}</td>
+                        <td className="px-6 py-4 border-b border-slate-100">
                           <div className="flex flex-col">
                             <span className="text-xs font-bold text-slate-800 uppercase">{row.name}</span>
                             <span className="text-[9px] text-slate-500 font-semibold uppercase mt-0.5">{row.employeeCode}</span>
                           </div>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 border-b border-slate-100">
                           <button
                             onClick={() => {
                               if (row.dept) {
@@ -1786,19 +2025,19 @@ const Attendance = () => {
                               }
                             }}
                             className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold border border-slate-200 uppercase tracking-widest hover:bg-blue-600 hover:text-white hover:border-blue-600 cursor-pointer transition-all hover:scale-105 active:scale-95 shadow-sm"
-                            title="Klik untuk memfilter departemen ini"
+                            title={i18n.language.startsWith('id') ? 'Klik untuk memfilter departemen ini' : i18n.language.startsWith('ko') ? '이 부서를 필터링하려면 클릭하십시오' : i18n.language.startsWith('zh') ? '点击筛选此部门' : 'Click to filter this department'}
                           >
                             {row.dept}
                           </button>
                         </td>
-                        <td className="px-4 py-4">
+                        <td className="px-4 py-4 border-b border-slate-100">
                           {row.section ? (
                             <button
                               onClick={() => {
                                 setAppliedFilters(prev => ({ ...prev, dept: row.dept || '', section: row.section, page: 1 }));
                               }}
                               className="text-[10px] font-bold text-slate-700 hover:text-blue-600 hover:underline uppercase tracking-wider cursor-pointer transition-all hover:scale-105 active:scale-95"
-                              title="Klik untuk memfilter bagian ini"
+                              title={i18n.language.startsWith('id') ? 'Klik untuk memfilter bagian ini' : i18n.language.startsWith('ko') ? '이 파트를 필터링하려면 클릭하십시오' : i18n.language.startsWith('zh') ? '点击筛选此班组' : 'Click to filter this section'}
                             >
                               {row.section}
                             </button>
@@ -1806,18 +2045,19 @@ const Attendance = () => {
                             <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">—</span>
                           )}
                         </td>
-                        <td className="px-4 py-4 text-center text-xs font-bold text-slate-800">{row.total}</td>
-                        <td className="px-4 py-4 text-center text-xs font-bold text-emerald-600">{row.present}</td>
+                        <td className="px-4 py-4 text-center text-xs font-bold text-slate-800 border-b border-slate-100">{row.total}</td>
+                        <td className="px-4 py-4 text-center text-xs font-bold text-emerald-600 border-b border-slate-100">{row.present}</td>
+                        
                         {/* Terlambat Column with Tooltip */}
-                        <td className="relative group/tooltip px-4 py-4 text-center text-xs font-bold text-amber-600 cursor-help">
+                        <td className="relative group/tooltip px-4 py-4 text-center text-xs font-bold text-amber-600 cursor-help border-b border-slate-100">
                           <span className={row.late > 0 ? "underline decoration-dotted decoration-amber-450" : ""}>{row.late}</span>
                           {row.late > 0 && (
                             <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-none transition-all duration-200">
-                              <p className="font-extrabold border-b border-slate-700 pb-1 mb-1.5 text-[9px] uppercase tracking-wider text-amber-450">Detail Hari Terlambat</p>
+                              <p className="font-extrabold border-b border-slate-700 pb-1 mb-1.5 text-[9px] uppercase tracking-wider text-amber-450">{t('attendancePage.kpiLate')} (Detail)</p>
                               <div className="space-y-1 text-left max-h-[150px] overflow-y-auto custom-scrollbar">
                                 {row.lateDetails.map((d, i) => (
                                   <div key={i} className="flex items-center justify-between gap-3 py-0.5 border-b border-slate-800 last:border-0">
-                                    <span className="font-bold text-slate-200">{d.date}</span>
+                                    <span className="font-bold text-slate-250">{d.date}</span>
                                     <span className="text-slate-400 text-[9px]">IN {d.checkIn || '--:--'}</span>
                                     <span className="text-amber-400 font-extrabold text-[9px]">+{d.lateMinutes}m</span>
                                   </div>
@@ -1828,11 +2068,11 @@ const Attendance = () => {
                         </td>
                         
                         {/* Pulang Cepat Column with Tooltip */}
-                        <td className="relative group/tooltip px-4 py-4 text-center text-xs font-bold text-blue-600 cursor-help">
+                        <td className="relative group/tooltip px-4 py-4 text-center text-xs font-bold text-blue-600 cursor-help border-b border-slate-100">
                           <span className={row.pulangCepat > 0 ? "underline decoration-dotted decoration-blue-400" : ""}>{row.pulangCepat || 0}</span>
                           {row.pulangCepat > 0 && (
                             <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-none transition-all duration-200">
-                              <p className="font-extrabold border-b border-slate-700 pb-1 mb-1.5 text-[9px] uppercase tracking-wider text-blue-400">Detail Hari Pulang Cepat</p>
+                              <p className="font-extrabold border-b border-slate-700 pb-1 mb-1.5 text-[9px] uppercase tracking-wider text-blue-400">{t('attendancePage.kpiEarlyDeparture')} (Detail)</p>
                               <div className="space-y-1 text-left max-h-[150px] overflow-y-auto custom-scrollbar">
                                 {row.pulangCepatDetails.map((d, i) => (
                                   <div key={i} className="flex justify-between gap-4 py-0.5 border-b border-slate-850 last:border-0">
@@ -1846,11 +2086,11 @@ const Attendance = () => {
                         </td>
                         
                         {/* Mangkir Column with Tooltip */}
-                        <td className="relative group/tooltip px-4 py-4 text-center text-xs font-bold text-orange-600 cursor-help">
+                        <td className="relative group/tooltip px-4 py-4 text-center text-xs font-bold text-orange-600 cursor-help border-b border-slate-100">
                           <span className={row.mangkir > 0 ? "underline decoration-dotted decoration-orange-400" : ""}>{row.mangkir}</span>
                           {row.mangkir > 0 && (
                             <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-none transition-all duration-200">
-                              <p className="font-extrabold border-b border-slate-700 pb-1 mb-1.5 text-[9px] uppercase tracking-wider text-orange-400">Detail Hari Mangkir</p>
+                              <p className="font-extrabold border-b border-slate-700 pb-1 mb-1.5 text-[9px] uppercase tracking-wider text-orange-400">{t('attendancePage.kpiMangkir')} (Detail)</p>
                               <div className="space-y-1 text-left max-h-[150px] overflow-y-auto custom-scrollbar">
                                 {row.mangkirDetails.map((d, i) => (
                                   <div key={i} className="flex justify-between gap-4 py-0.5 border-b border-slate-850 last:border-0">
@@ -1864,16 +2104,16 @@ const Attendance = () => {
                         </td>
 
                         {/* Alpa Column with Tooltip */}
-                        <td className="relative group/tooltip px-4 py-4 text-center text-xs font-bold text-rose-600 cursor-help">
+                        <td className="relative group/tooltip px-4 py-4 text-center text-xs font-bold text-rose-600 cursor-help border-b border-slate-100">
                           <span className={row.absent > 0 ? "underline decoration-dotted decoration-rose-450" : ""}>{row.absent}</span>
                           {row.absent > 0 && (
                             <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-none transition-all duration-200">
-                              <p className="font-extrabold border-b border-slate-700 pb-1 mb-1.5 text-[9px] uppercase tracking-wider text-rose-400">Detail Hari Alpa</p>
+                              <p className="font-extrabold border-b border-slate-700 pb-1 mb-1.5 text-[9px] uppercase tracking-wider text-rose-450">{t('attendancePage.kpiAbsent')} (Detail)</p>
                               <div className="space-y-1 text-left max-h-[150px] overflow-y-auto custom-scrollbar">
                                 {row.absentDetails.map((d, i) => (
                                   <div key={i} className="flex justify-between gap-4 py-0.5 border-b border-slate-850 last:border-0">
                                     <span className="font-bold text-slate-250">{d.date}</span>
-                                    <span className="text-slate-450">Alpa</span>
+                                    <span className="text-rose-450">{translateStatus('ABSENT', i18n.language)}</span>
                                   </div>
                                 ))}
                               </div>
@@ -1882,24 +2122,23 @@ const Attendance = () => {
                         </td>
 
                         {/* Cuti/Sakit/Izin Column with Tooltip */}
-                        <td className="relative group/tooltip px-4 py-4 text-center text-xs font-bold text-slate-500 cursor-help">
+                        <td className="relative group/tooltip px-4 py-4 text-center text-xs font-bold text-slate-500 cursor-help border-b border-slate-100">
                           <span className={row.other > 0 ? "underline decoration-dotted decoration-slate-400" : ""}>{row.other}</span>
                           {row.other > 0 && (
                             <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-none transition-all duration-200">
-                              <p className="font-extrabold border-b border-slate-700 pb-1 mb-1.5 text-[9px] uppercase tracking-wider text-blue-400">Detail Ketidakhadiran</p>
+                              <p className="font-extrabold border-b border-slate-700 pb-1 mb-1.5 text-[9px] uppercase tracking-wider text-blue-400">{t('attendancePage.kpiOther')} (Detail)</p>
                               <div className="space-y-1 text-left max-h-[150px] overflow-y-auto custom-scrollbar">
                                 {row.otherDetails.map((d, i) => (
                                   <div key={i} className="flex justify-between gap-4 py-0.5 border-b border-slate-850 last:border-0">
                                     <span className="font-bold text-slate-250">{d.date}</span>
-                                    <span className="text-blue-400 font-extrabold uppercase text-[8px] tracking-wider bg-blue-950 px-1.5 py-0.5 rounded border border-blue-900">{getStatusLabel(d.status)}</span>
+                                    <span className="text-blue-400 font-extrabold uppercase text-[8px] tracking-wider bg-blue-950 px-1.5 py-0.5 rounded border border-blue-900">{translateStatus(d.status, i18n.language)}</span>
                                   </div>
                                 ))}
                               </div>
                             </div>
                           )}
                         </td>
-
-                        <td className="px-6 py-4 text-center">
+                        <td className="px-6 py-4 text-center border-b border-slate-100">
                           <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${
                             rate >= 95 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
                             rate >= 90 ? 'bg-blue-50 text-blue-700 border-blue-200' :
@@ -1909,8 +2148,8 @@ const Attendance = () => {
                             {rate}%
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-center text-xs font-bold text-rose-600">
-                          {row.totalLateMinutes > 0 ? formatDuration(row.totalLateMinutes) : '—'}
+                        <td className="px-6 py-4 text-center text-xs font-bold text-rose-600 border-b border-slate-100">
+                          {row.totalLateMinutes > 0 ? formatDuration(row.totalLateMinutes, i18n.language) : '—'}
                         </td>
                       </tr>
                     );
@@ -2575,7 +2814,7 @@ const Attendance = () => {
 // --- Sub-component to optimize performance ---
 
 const FilterBar = ({ onApply, isLoading, currentSearch, initialFilters }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [filterDate, setFilterDate] = useState(initialFilters?.period || 'Today');
   const [customStart, setCustomStart] = useState(initialFilters?.startDate || '');
   const [customEnd, setCustomEnd] = useState(initialFilters?.endDate || '');
@@ -2640,7 +2879,7 @@ const FilterBar = ({ onApply, isLoading, currentSearch, initialFilters }) => {
             <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
               <Calendar className="w-4 h-4 text-blue-600" />
             </div>
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Rentang Waktu:</label>
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t('attendancePage.filterTimeRange')}:</label>
           </div>
           <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-200">
             {['Today', 'This Week', 'This Month', 'Custom'].map((period) => (
@@ -2653,7 +2892,7 @@ const FilterBar = ({ onApply, isLoading, currentSearch, initialFilters }) => {
                     : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                {period === 'Today' ? 'Hari Ini' : period === 'This Week' ? 'Minggu Ini' : period === 'This Month' ? 'Bulan Ini' : 'Pilih Tanggal'}
+                {period === 'Today' ? t('attendancePage.filterToday') : period === 'This Week' ? t('attendancePage.filterThisWeek') : period === 'This Month' ? t('attendancePage.filterThisMonth') : t('attendancePage.filterSelectDate')}
               </button>
             ))}
           </div>
@@ -2679,12 +2918,12 @@ const FilterBar = ({ onApply, isLoading, currentSearch, initialFilters }) => {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 items-end bg-slate-50 p-5 rounded-2xl border border-slate-100">
           <div className="space-y-2 lg:col-span-1 xl:col-span-1">
-            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">Cari Karyawan</label>
+            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('attendancePage.filterSearch')}</label>
             <div className="relative group">
               <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
               <input 
                 type="text" 
-                placeholder="NAMA / NIK..." 
+                placeholder={t('attendancePage.placeholderSearch')} 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleApply()}
@@ -2694,10 +2933,10 @@ const FilterBar = ({ onApply, isLoading, currentSearch, initialFilters }) => {
           </div>
 
           {[
-            { label: 'Departemen', val: filterDept, setter: setFilterDept, opts: masterOptions.departments.map(d => ({ v: d.name, l: d.name })), onChg: () => { setFilterSection(''); setFilterPosition(''); } },
-            { label: 'Bagian / Seksi', val: filterSection, setter: setFilterSection, opts: masterOptions.sections.map(s => ({ v: s, l: s })) },
-            { label: 'Jabatan', val: filterPosition, setter: setFilterPosition, opts: masterOptions.positions.map(p => ({ v: p, l: p })) },
-            { label: 'Status Absensi', val: filterStatus, setter: setFilterStatus, opts: masterOptions.statuses.map(s => ({ v: s, l: STATUS_MAP[s] || s })) }
+            { label: t('attendancePage.department'), val: filterDept, setter: setFilterDept, opts: masterOptions.departments.map(d => ({ v: d.name, l: d.name })), onChg: () => { setFilterSection(''); setFilterPosition(''); } },
+            { label: t('attendancePage.section'), val: filterSection, setter: setFilterSection, opts: masterOptions.sections.map(s => ({ v: s, l: s })) },
+            { label: t('attendancePage.position'), val: filterPosition, setter: setFilterPosition, opts: masterOptions.positions.map(p => ({ v: p, l: p })) },
+            { label: t('attendancePage.filterStatus'), val: filterStatus, setter: setFilterStatus, opts: masterOptions.statuses.map(s => ({ v: s, l: translateStatus(s, i18n.language) || s })) }
           ].map((field, idx) => (
             <div key={idx} className="space-y-2">
               <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">{field.label}</label>
@@ -2707,7 +2946,7 @@ const FilterBar = ({ onApply, isLoading, currentSearch, initialFilters }) => {
                   onChange={(e) => { field.setter(e.target.value); field.onChg?.(); }}
                   className="w-full bg-white border border-slate-200 rounded-xl pl-4 pr-10 py-3 text-[10px] font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 cursor-pointer appearance-none uppercase tracking-wider transition-all shadow-sm truncate"
                 >
-                  <option value="">SEMUA</option>
+                  <option value="">{t('attendancePage.semua')}</option>
                   {field.opts.map((o, i) => <option key={i} value={o.v}>{o.l}</option>)}
                 </select>
                 <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
@@ -2723,7 +2962,7 @@ const FilterBar = ({ onApply, isLoading, currentSearch, initialFilters }) => {
               className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 active:scale-95"
             >
             {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            <span className="text-[10px] font-bold tracking-wider uppercase">Terapkan Filter</span>
+            <span className="text-[10px] font-bold tracking-wider uppercase">{t('attendancePage.btnApplyFilter')}</span>
           </button>
           </div>
         </div>

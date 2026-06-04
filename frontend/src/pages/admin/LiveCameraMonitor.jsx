@@ -113,7 +113,12 @@ const LiveCameraMonitor = () => {
 
   // WebSocket for live events
   useEffect(() => {
-    const wsUrl = import.meta.env.VITE_WS_URL || `ws://${window.location.hostname}:5000`;
+    const envWsUrl = import.meta.env.VITE_WS_URL;
+    const wsUrl = (envWsUrl && !envWsUrl.includes('localhost') && !envWsUrl.includes('127.0.0.1'))
+      ? envWsUrl
+      : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.hostname}:${
+          ['localhost', '127.0.0.1', '192.168.11.11', '192.168.13.190'].includes(window.location.hostname) ? '5000' : '5050'
+        }`;
     try {
       const ws = new WebSocket(`${wsUrl}/ws/live`);
       ws.onmessage = (msg) => {

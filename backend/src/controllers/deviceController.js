@@ -802,7 +802,8 @@ const syncAttendance = async (req, res) => {
         const [gy, gm, gd] = dateKey.split('-').map(Number);
         grouped[key] = { employeeId: emp.id, employee: emp, date: new Date(Date.UTC(gy, gm - 1, gd, 0, 0, 0, 0)), scans: [] };
       }
-      grouped[key].scans.push(recordTime);
+      const verifyMode = log.verifyMode !== undefined ? log.verifyMode : 1;
+      grouped[key].scans.push({ time: recordTime, verifyMode });
     }
 
     console.log(`[Sync] Diagnostics: ${totalLogsFromDevice} total logs, ${logsInRange} in range, ${logsMatchedEmployee} matched, ${unmatchedPins.size} unmatched PINs`);
@@ -864,10 +865,13 @@ const syncAttendance = async (req, res) => {
       }
       
       // Sort all scans chronologically
-      entry.scans.sort((a, b) => a - b);
+      entry.scans.sort((a, b) => a.time - b.time);
       
-      const earliest = entry.scans[0];
-      const latest = entry.scans[entry.scans.length - 1];
+      const earliestScan = entry.scans[0];
+      const latestScan = entry.scans[entry.scans.length - 1];
+      const earliest = earliestScan.time;
+      const latest = latestScan.time;
+      const earliestVerifyMode = earliestScan.verifyMode;
       
       let checkIn = null;
       let checkOut = null;
@@ -922,7 +926,17 @@ const syncAttendance = async (req, res) => {
       
       // Resolve status using updated logic
       const status = resolveStatus(checkIn, checkOut, calc.status, entry.date, penaltyRules, shiftEnd, shiftStart);
-
+      
+      // Determine verification mode
+      let finalMode = 'Fingered';
+      if (earliestVerifyMode === 0 || earliestVerifyMode === 3 || earliestVerifyMode === 4) {
+        finalMode = 'Pinned';
+      } else if (earliestVerifyMode === 2) {
+        finalMode = 'Carded';
+      } else if (earliestVerifyMode === 15) {
+        finalMode = 'Face Machine';
+      }
+      
       recordsToCreate.push({
         employeeId: entry.employeeId,
         date: entry.date,
@@ -930,7 +944,7 @@ const syncAttendance = async (req, res) => {
         checkOut: checkOut,
         status: status,
         lateMinutes: calc.lateMinutes,
-        mode: 'Fingerprint',
+        mode: finalMode,
         shiftStart,
         shiftEnd,
         gracePeriod
@@ -1061,7 +1075,7 @@ const syncAttendance = async (req, res) => {
             checkOut: mergedCheckOut,
             status: finalStatus,
             lateMinutes: lateMins,
-            mode: 'Fingerprint',
+            mode: record.mode,
             source: 'fingerprint'
           },
           create: {
@@ -1071,7 +1085,7 @@ const syncAttendance = async (req, res) => {
             checkOut: record.checkOut,
             status: record.status,
             lateMinutes: record.lateMinutes,
-            mode: 'Fingerprint',
+            mode: record.mode,
             source: 'fingerprint'
           }
         });

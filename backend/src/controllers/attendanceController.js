@@ -967,10 +967,18 @@ const importFromExcel = async (req, res) => {
         scanMinutes += 24 * 60; // night shift mornings scanMinutes adjust
       }
 
+      const rawVerifyCode = (colMap.verifyCode !== -1 && row[colMap.verifyCode] !== undefined) ? parseInt(row[colMap.verifyCode], 10) : 1;
+
       if (rawStatus.includes('in') || (!rawStatus.includes('out') && scanMinutes <= midpointMinutes)) {
-        if (!grouped[groupKey].checkIn || eventTime < grouped[groupKey].checkIn) grouped[groupKey].checkIn = eventTime;
+        if (!grouped[groupKey].checkIn || eventTime < grouped[groupKey].checkIn) {
+          grouped[groupKey].checkIn = eventTime;
+          grouped[groupKey].checkInVerifyCode = rawVerifyCode;
+        }
       } else {
-        if (!grouped[groupKey].checkOut || eventTime > grouped[groupKey].checkOut) grouped[groupKey].checkOut = eventTime;
+        if (!grouped[groupKey].checkOut || eventTime > grouped[groupKey].checkOut) {
+          grouped[groupKey].checkOut = eventTime;
+          grouped[groupKey].checkOutVerifyCode = rawVerifyCode;
+        }
       }
     }
     // 3. GENERATE FULL SEQUENCE (Dynamic Range from Min to Max) (C5 Optimization)
@@ -1075,6 +1083,16 @@ const importFromExcel = async (req, res) => {
           }
         }
 
+        let finalMode = 'Fingered';
+        const vCode = entry.checkInVerifyCode !== undefined ? entry.checkInVerifyCode : (entry.checkOutVerifyCode !== undefined ? entry.checkOutVerifyCode : 1);
+        if (vCode === 0 || vCode === 3 || vCode === 4) {
+          finalMode = 'Pinned';
+        } else if (vCode === 2) {
+          finalMode = 'Carded';
+        } else if (vCode === 15) {
+          finalMode = 'Face Machine';
+        }
+
         entriesToSave.push({
           employeeId: entry.employeeId,
           dateObj,
@@ -1082,7 +1100,7 @@ const importFromExcel = async (req, res) => {
           checkOut: entry.checkOut || null,
           status,
           lateMinutes,
-          mode: 'Fingerprint',
+          mode: finalMode,
           hasExisting: !!existingRecord,
           existingId: existingRecord?.id,
           key
@@ -1697,28 +1715,52 @@ const update = async (req, res) => {
       updateData.status = resolveStatus(finalIn, finalOut, lateStatus, oldRecord.date, updatePenaltyRules, shiftEnd, shiftStart);
     }
 
-    let record;
-    if (isPadded) {
-      record = await prisma.attendance.create({
-        data: {
-          employeeId: oldRecord.employee.id,
-          date: oldRecord.date,
-          status: updateData.status || 'ABSENT',
-          notes: updateData.notes || null,
-          overtimeHours: updateData.overtimeHours || 0,
-          lateMinutes: updateData.lateMinutes || 0,
-          checkIn: updateData.checkIn || null,
-          checkOut: updateData.checkOut || null,
-          photoUrl: updateData.photoUrl || null,
-          mode: 'Manual'
+    const record = await prisma.$transaction(async (tx) => {
+      const oldStatus = oldRecord.status;
+      const newStatus = updateData.status || oldRecord.status;
+
+      if (newStatus === 'CUTI' && oldStatus !== 'CUTI') {
+        const emp = await tx.employee.findUnique({
+          where: { id: oldRecord.employee.id }
+        });
+        if (!emp || emp.remainingLeave <= 0) {
+          throw new Error('Quota cuti karyawan habis atau 0, tidak dapat merubah status menjadi Cuti');
         }
-      });
-    } else {
-      record = await prisma.attendance.update({
-        where: { id: oldRecord.id },
-        data: updateData
-      });
-    }
+        await tx.employee.update({
+          where: { id: oldRecord.employee.id },
+          data: { remainingLeave: { decrement: 1 } }
+        });
+      } else if (newStatus !== 'CUTI' && oldStatus === 'CUTI') {
+        await tx.employee.update({
+          where: { id: oldRecord.employee.id },
+          data: { remainingLeave: { increment: 1 } }
+        });
+      }
+
+      let rec;
+      if (isPadded) {
+        rec = await tx.attendance.create({
+          data: {
+            employeeId: oldRecord.employee.id,
+            date: oldRecord.date,
+            status: updateData.status || 'ABSENT',
+            notes: updateData.notes || null,
+            overtimeHours: updateData.overtimeHours || 0,
+            lateMinutes: updateData.lateMinutes || 0,
+            checkIn: updateData.checkIn || null,
+            checkOut: updateData.checkOut || null,
+            photoUrl: updateData.photoUrl || null,
+            mode: 'Manual'
+          }
+        });
+      } else {
+        rec = await tx.attendance.update({
+          where: { id: oldRecord.id },
+          data: updateData
+        });
+      }
+      return rec;
+    });
 
     // Record detailed audit
     if (req.user) {
@@ -1958,6 +2000,24 @@ const manualCorrectionHRD = async (req, res) => {
             notes: 'Diupdate manual oleh HRD'
           };
           
+          const oldStatus = existing ? existing.status : 'ABSENT';
+          const newStatus = payload.status;
+
+          if (newStatus === 'CUTI' && oldStatus !== 'CUTI') {
+            if (emp.remainingLeave <= 0) {
+              throw new Error(`Quota cuti karyawan ${emp.name} habis atau 0, tidak dapat merubah status menjadi Cuti.`);
+            }
+            await tx.employee.update({
+              where: { id: employeeId },
+              data: { remainingLeave: { decrement: 1 } }
+            });
+          } else if (newStatus !== 'CUTI' && oldStatus === 'CUTI') {
+            await tx.employee.update({
+              where: { id: employeeId },
+              data: { remainingLeave: { increment: 1 } }
+            });
+          }
+
           let attendanceRecord;
           if (existing) {
             attendanceRecord = await tx.attendance.update({ where: { id: existing.id }, data: payload });
@@ -2034,6 +2094,24 @@ const manualCorrectionHRD = async (req, res) => {
           
           if (photoUrl) {
             payload.photoUrl = photoUrl;
+          }
+
+          const oldStatus = existing ? existing.status : 'ABSENT';
+          const newStatus = payload.status;
+
+          if (newStatus === 'CUTI' && oldStatus !== 'CUTI') {
+            if (emp.remainingLeave <= 0) {
+              throw new Error(`Quota cuti karyawan ${emp.name} habis atau 0, tidak dapat merubah status menjadi Cuti.`);
+            }
+            await tx.employee.update({
+              where: { id: employeeId },
+              data: { remainingLeave: { decrement: 1 } }
+            });
+          } else if (newStatus !== 'CUTI' && oldStatus === 'CUTI') {
+            await tx.employee.update({
+              where: { id: employeeId },
+              data: { remainingLeave: { increment: 1 } }
+            });
           }
 
           let attendanceRecord;

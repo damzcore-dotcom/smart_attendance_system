@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { direkturAPI } from '../../services/api';
 import * as XLSX from 'xlsx';
+import { useTranslation } from 'react-i18next';
 
 const STATUS_CONFIG = {
   PENDING:  { label: 'Pending',  color: 'bg-amber-50 text-amber-700 border-amber-200',    icon: Clock },
@@ -24,6 +25,7 @@ const LEAVE_TYPE_MAP = {
 };
 
 const DirectorLeave = () => {
+  const { t, i18n } = useTranslation();
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const [dept, setDept] = useState('');
@@ -57,21 +59,66 @@ const DirectorLeave = () => {
   };
 
   const handleExport = () => {
-    const rows = records.map(r => ({
-      'Employee ID': r.employeeCode,
-      'Name': r.name,
-      'Department': r.department,
-      'Leave Type': LEAVE_TYPE_MAP[r.type] || r.type,
-      'Start Date': new Date(r.startDate).toLocaleDateString('id-ID'),
-      'End Date': new Date(r.endDate).toLocaleDateString('id-ID'),
-      'Duration': r.duration + ' days',
-      'Reason': r.reason,
-      'Status': STATUS_CONFIG[r.status]?.label || r.status
-    }));
+    const lang = i18n.language || 'id';
+    const isIndo = lang.startsWith('id');
+    const isKo = lang.startsWith('ko');
+    const isZh = lang.startsWith('zh');
+
+    const headers = {
+      nik: 'NIK',
+      name: isIndo ? 'Nama' : isKo ? '이름' : isZh ? '姓名' : 'Name',
+      dept: isIndo ? 'Departemen' : isKo ? '부서' : isZh ? '部门' : 'Department',
+      type: isIndo ? 'Tipe Pengajuan' : isKo ? '유형' : isZh ? '申请类型' : 'Leave Type',
+      startDate: isIndo ? 'Tanggal Mulai' : isKo ? '시작일' : isZh ? '开始日期' : 'Start Date',
+      endDate: isIndo ? 'Tanggal Selesai' : isKo ? '종료일' : isZh ? '结束日期' : 'End Date',
+      duration: isIndo ? 'Durasi' : isKo ? '기간' : isZh ? '时长' : 'Duration',
+      reason: isIndo ? 'Alasan' : isKo ? '사유' : isZh ? '原因' : 'Reason',
+      status: 'Status'
+    };
+
+    const rows = records.map(r => {
+      let typeLabel = r.type;
+      if (['Cuti', 'CUTI'].includes(r.type)) {
+        typeLabel = isIndo ? 'Cuti' : isKo ? '휴가' : isZh ? '请假' : 'Leave';
+      } else if (['Sakit', 'SAKIT'].includes(r.type)) {
+        typeLabel = isIndo ? 'Sakit' : isKo ? '병가' : isZh ? '病假' : 'Sick Leave';
+      } else if (['Izin', 'IZIN'].includes(r.type)) {
+        typeLabel = isIndo ? 'Izin' : isKo ? '공가/사가' : isZh ? '事假' : 'Permit';
+      }
+
+      let statusLabel = r.status;
+      if (r.status === 'APPROVED') {
+        statusLabel = isIndo ? 'Disetujui' : isKo ? '승인됨' : isZh ? '已批准' : 'Approved';
+      } else if (r.status === 'REJECTED') {
+        statusLabel = isIndo ? 'Ditolak' : isKo ? '반려됨' : isZh ? '已拒绝' : 'Rejected';
+      } else if (r.status === 'PENDING') {
+        statusLabel = isIndo ? 'Menunggu' : isKo ? '대기중' : isZh ? '等待中' : 'Pending';
+      }
+
+      const durDays = (Math.ceil((new Date(r.endDate) - new Date(r.startDate)) / (1000*60*60*24)) + 1);
+      const durLabel = isIndo ? `${durDays} hari` : isKo ? `${durDays}일` : isZh ? `${durDays}天` : `${durDays} days`;
+
+      const localeStr = isIndo ? 'id-ID' : isKo ? 'ko-KR' : isZh ? 'zh-CN' : 'en-US';
+
+      return {
+        [headers.nik]: r.nik,
+        [headers.name]: r.name,
+        [headers.dept]: r.dept,
+        [headers.type]: typeLabel,
+        [headers.startDate]: new Date(r.startDate).toLocaleDateString(localeStr),
+        [headers.endDate]: new Date(r.endDate).toLocaleDateString(localeStr),
+        [headers.duration]: durLabel,
+        [headers.reason]: r.reason,
+        [headers.status]: statusLabel
+      };
+    });
+
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Leave Reports');
-    XLSX.writeFile(wb, `Leave_Review_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, isIndo ? 'Laporan Cuti' : isKo ? '휴가 신청 내역' : isZh ? '请假报告' : 'Leave Reports');
+    
+    const filePrefix = isIndo ? 'Laporan_Pengajuan_Cuti' : isKo ? '휴가_신청_리뷰' : isZh ? '请假审查报告' : 'Leave_Review_Report';
+    XLSX.writeFile(wb, `${filePrefix}_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   return (
@@ -215,7 +262,7 @@ const DirectorLeave = () => {
                         </div>
                         <div>
                           <p className="font-semibold text-slate-800 text-sm group-hover:text-blue-600 transition-colors">{r.name}</p>
-                          <p className="text-xs text-slate-400 mt-0.5">{r.department}</p>
+                          <p className="text-xs text-slate-400 mt-0.5">{r.dept}</p>
                         </div>
                       </div>
                     </td>
@@ -233,7 +280,7 @@ const DirectorLeave = () => {
                       </div>
                     </td>
                     <td className="px-4 py-4 text-center">
-                      <span className="text-sm font-semibold text-slate-700 bg-slate-50 px-3 py-1 rounded-lg border border-slate-200">{r.duration || 1}d</span>
+                      <span className="text-sm font-semibold text-slate-700 bg-slate-50 px-3 py-1 rounded-lg border border-slate-200">{Math.ceil((new Date(r.endDate) - new Date(r.startDate)) / (1000*60*60*24)) + 1}d</span>
                     </td>
                     <td className="px-4 py-4">
                       <p className="text-xs text-slate-500 max-w-[180px] truncate italic">"{r.reason}"</p>

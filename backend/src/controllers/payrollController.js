@@ -538,28 +538,46 @@ const exportExcel = async (req, res) => {
     });
     if (!payroll) return res.status(404).json({ success: false, message: 'Payroll not found' });
 
+    const lang = req.query.lang || 'id';
+    const isIndo = lang.startsWith('id');
+    const isKo = lang.startsWith('ko');
+    const isZh = lang.startsWith('zh');
+
     const wb = XLSX.utils.book_new();
 
     // Summary sheet
+    const summaryTitle = isIndo ? 'REKAP PAYROLL' : isKo ? '급여 요약 보고서' : isZh ? '薪资汇总表' : 'PAYROLL SUMMARY';
     const summaryData = [
-      ['REKAP PAYROLL', '', '', '', '', ''],
-      ['Periode', payroll.periodName],
-      ['Status', payroll.status],
-      ['Total Karyawan', payroll.totalEmployees],
-      ['Total Gross', payroll.totalGross],
-      ['Total Potongan', payroll.totalDeductions],
-      ['Total Lembur', payroll.totalOvertime],
-      ['Total Net', payroll.totalNet],
+      [summaryTitle, '', '', '', '', ''],
+      [isIndo ? 'Periode' : isKo ? '귀속연월' : isZh ? '期间' : 'Period', payroll.periodName],
+      [isIndo ? 'Status' : isKo ? '상태' : isZh ? '状态' : 'Status', payroll.status],
+      [isIndo ? 'Total Karyawan' : isKo ? '총 사원수' : isZh ? '总员工数' : 'Total Employees', payroll.totalEmployees],
+      [isIndo ? 'Total Gross' : isKo ? '총 지급액' : isZh ? '总应发金额' : 'Total Gross', payroll.totalGross],
+      [isIndo ? 'Total Potongan' : isKo ? '총 공제액' : isZh ? '总扣款金额' : 'Total Deductions', payroll.totalDeductions],
+      [isIndo ? 'Total Lembur' : isKo ? '총 연장근로수당' : isZh ? '总加班费' : 'Total Overtime', payroll.totalOvertime],
+      [isIndo ? 'Total Net' : isKo ? '총 실수령액' : isZh ? '总实发金额' : 'Total Net', payroll.totalNet],
       [],
     ];
     const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-    XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
+    XLSX.utils.book_append_sheet(wb, summarySheet, isIndo ? 'Ringkasan' : isKo ? '요약' : isZh ? '摘要' : 'Summary');
 
     // Detail sheet
-    const headerRow = [
+    const headerRow = isIndo ? [
       'No', 'NIK', 'Nama', 'Departemen', 'Tipe', 'Hari Kerja', 'Hadir', 'Absen',
       'Terlambat', 'Menit Telat', 'Gaji Pokok', 'Gaji Pro-Rata', 'Tunjangan',
       'Lembur (Jam)', 'Lembur (Rp)', 'Pot. Kehadiran', 'Potongan', 'Gross', 'Total Pot.', 'Net Pay'
+    ] : isKo ? [
+      '번호', '사번', '성명', '부서', '구분', '소정근로일수', '출석일수', '결근일수',
+      '지각횟수', '지각시간 (분)', '기본급', '일할계산 급여', '수당 총액',
+      '연장근로 (시간)', '연장근로수당 (원)', '근태 패널티', '기타 공제', '총 지급액', '총 공제액', '실수령액'
+    ] : isZh ? [
+      '序号', '工号', '姓名', '部门', '类型', '工作日', '出勤', '缺勤',
+      '迟到', '迟到时长 (分)', '基本工资', '按比例工资', '津贴',
+      '加班 (小时)', '加班费 (元)', '考勤扣款', '其他扣款', '应发金额', '总扣款', '实发金额'
+    ] : [
+      'No', 'NIK', 'Name', 'Department', 'Type', 'Working Days', 'Present', 'Absent',
+      'Late', 'Late Minutes', 'Base Salary', 'Pro-Rated Salary', 'Allowances',
+      'Overtime (Hours)', 'Overtime (Pay)', 'Attendance Penalty', 'Deductions', 'Gross', 'Total Deductions', 'Net Pay'
     ];
 
     const rows = payroll.details.map((d, i) => {
@@ -584,7 +602,7 @@ const exportExcel = async (req, res) => {
       { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
     ];
 
-    XLSX.utils.book_append_sheet(wb, detailSheet, 'Detail Payroll');
+    XLSX.utils.book_append_sheet(wb, detailSheet, isIndo ? 'Detail Payroll' : isKo ? '상세 급여' : isZh ? '薪资明细' : 'Payroll Details');
 
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 

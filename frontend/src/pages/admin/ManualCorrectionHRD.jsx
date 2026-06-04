@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 
 const ManualCorrectionHRD = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
@@ -148,7 +148,7 @@ const ManualCorrectionHRD = () => {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-md">
                 <div className="text-[10px] text-slate-500 font-bold bg-slate-50 border border-slate-200/60 rounded-lg p-2 flex flex-col">
-                  <span className="text-[8px] text-slate-400 tracking-wider">SEBELUMNYA</span>
+                  <span className="text-[8px] text-slate-400 tracking-wider">{t('manualCorrection.details.previous')}</span>
                   <div className="flex gap-3 mt-0.5">
                     <span>IN: <span className="text-slate-700 font-black">{data.previousCheckIn || '--:--'}</span></span>
                     <span className="text-slate-300">|</span>
@@ -156,7 +156,7 @@ const ManualCorrectionHRD = () => {
                   </div>
                 </div>
                 <div className="text-[10px] text-slate-700 font-bold bg-rose-50/40 border border-rose-100/50 rounded-lg p-2 flex flex-col">
-                  <span className="text-[8px] text-rose-500 tracking-wider">SESUDAH KOREKSI</span>
+                  <span className="text-[8px] text-rose-500 tracking-wider">{t('manualCorrection.details.after')}</span>
                   <div className="flex gap-3 mt-0.5">
                     <span>IN: <span className="text-rose-600 font-black">{data.checkIn || '--:--'}</span></span>
                     <span className="text-slate-300">|</span>
@@ -269,6 +269,25 @@ const ManualCorrectionHRD = () => {
         return alert(t('manualCorrection.alert.noHistoryExport'));
       }
       
+      const lang = i18n.language || 'id';
+      const isIndo = lang.startsWith('id');
+      const isKo = lang.startsWith('ko');
+      const isZh = lang.startsWith('zh');
+
+      const headers = {
+        no: isIndo ? 'No' : isKo ? '번호' : isZh ? '序号' : 'No',
+        actionTime: isIndo ? 'Waktu Tindakan' : isKo ? '처리 시간' : isZh ? '操作时间' : 'Action Time',
+        operator: 'Operator',
+        role: isIndo ? 'Role Operator' : isKo ? '역할' : isZh ? '操作员角色' : 'Operator Role',
+        nik: `NIK ${t('manualCorrection.table.employee')}`,
+        name: `Nama ${t('manualCorrection.table.employee')}`,
+        dept: t('manualCorrection.table.dept'),
+        position: isIndo ? 'Jabatan' : isKo ? '직급' : isZh ? '职位' : 'Position',
+        type: t('manualCorrection.table.type'),
+        details: isIndo ? 'Detail Perubahan' : isKo ? '상세 변경 내용' : isZh ? '变更细节' : 'Change Details',
+        ip: 'IP Address'
+      };
+
       const exportData = filteredHistoryLogs.map((log, index) => {
         const empDetails = getEmployeeFromLog(log);
         const employeeObj = employeesMap[empDetails.code];
@@ -284,28 +303,53 @@ const ManualCorrectionHRD = () => {
         try {
           const data = JSON.parse(log.details);
           if (log.action === 'MANUAL_CORRECTION_STATUS') {
-            detailStr = `Override Status ke ${data.status || 'ALPA'} pada tgl ${data.date} (Sebelumnya: ${data.previousStatus || '-'})`;
+            const st = data.status || 'ALPA';
+            const prevSt = data.previousStatus || '-';
+            detailStr = isIndo 
+              ? `Override Status ke ${st} pada tgl ${data.date} (Sebelumnya: ${prevSt})` 
+              : isKo 
+              ? `${data.date}에 상태를 ${st}로 재설정 (이전 상태: ${prevSt})` 
+              : isZh 
+              ? `在 ${data.date} 将状态修改为 ${st} (原状态: ${prevSt})` 
+              : `Override status to ${st} on ${data.date} (Previous: ${prevSt})`;
           } else if (log.action === 'MANUAL_CORRECTION_TIME') {
-            detailStr = `Revisi Waktu tgl ${data.date} -> IN: ${data.checkIn || '--:--'}, OUT: ${data.checkOut || '--:--'} (Sebelumnya -> IN: ${data.previousCheckIn || '--:--'}, OUT: ${data.previousCheckOut || '--:--'})`;
+            detailStr = isIndo 
+              ? `Revisi Waktu tgl ${data.date} -> IN: ${data.checkIn || '--:--'}, OUT: ${data.checkOut || '--:--'} (Sebelumnya -> IN: ${data.previousCheckIn || '--:--'}, OUT: ${data.previousCheckOut || '--:--'})` 
+              : isKo 
+              ? `${data.date} 시간 수정 -> 출근: ${data.checkIn || '--:--'}, 퇴근: ${data.checkOut || '--:--'} (이전 -> 출근: ${data.previousCheckIn || '--:--'}, 퇴근: ${data.previousCheckOut || '--:--'})` 
+              : isZh 
+              ? `修改 ${data.date} 时间 -> 签到: ${data.checkIn || '--:--'}, 签退: ${data.checkOut || '--:--'} (原时间 -> 签到: ${data.previousCheckIn || '--:--'}, 签退: ${data.previousCheckOut || '--:--'})` 
+              : `Revise time on ${data.date} -> IN: ${data.checkIn || '--:--'}, OUT: ${data.checkOut || '--:--'} (Previous -> IN: ${data.previousCheckIn || '--:--'}, OUT: ${data.previousCheckOut || '--:--'})`;
           } else if (log.action === 'CORRECTION') {
-            detailStr = `Edit Pengajuan: ${data.oldStatus || '-'} -> ${data.newStatus || '-'} (${data.notes || ''})`;
+            const oldS = data.oldStatus || '-';
+            const newS = data.newStatus || '-';
+            const notesStr = data.notes ? ` (${data.notes})` : '';
+            detailStr = isIndo 
+              ? `Edit Pengajuan: ${oldS} -> ${newS}${notesStr}` 
+              : isKo 
+              ? `신청 수정: ${oldS} -> ${newS}${notesStr}` 
+              : isZh 
+              ? `编辑申请: ${oldS} -> ${newS}${notesStr}` 
+              : `Edit application: ${oldS} -> ${newS}${notesStr}`;
           }
         } catch (e) {
           detailStr = log.details;
         }
 
+        const localeStr = isIndo ? 'id-ID' : isKo ? 'ko-KR' : isZh ? 'zh-CN' : 'en-US';
+
         return {
-          'No': index + 1,
-          'Waktu Tindakan': new Date(log.createdAt).toLocaleString('id-ID'),
-          'Operator': log.username || 'System',
-          'Role Operator': log.role || 'HRD',
-          [`NIK ${t('manualCorrection.table.employee')}`]: empDetails.code,
-          [`Nama ${t('manualCorrection.table.employee')}`]: empDetails.name,
-          [t('manualCorrection.table.dept')]: dept,
-          'Jabatan': position,
-          [t('manualCorrection.table.type')]: typeStr,
-          'Detail Perubahan': detailStr,
-          'IP Address': log.ipAddress || '-'
+          [headers.no]: index + 1,
+          [headers.actionTime]: new Date(log.createdAt).toLocaleString(localeStr),
+          [headers.operator]: log.username || 'System',
+          [headers.role]: log.role || 'HRD',
+          [headers.nik]: empDetails.code,
+          [headers.name]: empDetails.name,
+          [headers.dept]: dept,
+          [headers.position]: position,
+          [headers.type]: typeStr,
+          [headers.details]: detailStr,
+          [headers.ip]: log.ipAddress || '-'
         };
       });
 
@@ -323,7 +367,8 @@ const ManualCorrectionHRD = () => {
       });
       ws['!cols'] = Object.keys(maxLens).map(key => ({ wch: maxLens[key] + 3 }));
 
-      XLSX.writeFile(wb, `Laporan_Koreksi_HRD_${historyMonth}_${new Date().toISOString().split('T')[0]}.xlsx`);
+      const filePrefix = isIndo ? 'Laporan_Koreksi_HRD' : isKo ? 'HRD_수정_보고서' : isZh ? 'HRD_更正报告' : 'HRD_Correction_Report';
+      XLSX.writeFile(wb, `${filePrefix}_${historyMonth}_${new Date().toISOString().split('T')[0]}.xlsx`);
     } catch (err) {
       console.error('Export error:', err);
       alert(`${t('manualCorrection.alert.exportError')}${err.message}`);
@@ -443,7 +488,7 @@ const ManualCorrectionHRD = () => {
           <div className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center">
             <Edit3 className="w-3 h-3 text-rose-500" />
           </div>
-          <span className="text-[10px] font-bold uppercase tracking-wider">Attendance Admin</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider">{t('manualCorrection.categoryAdmin')}</span>
           <div className="w-1 h-1 rounded-full bg-slate-300" />
           <span className="text-[10px] font-bold text-rose-600 uppercase tracking-wider">{t('manualCorrection.categoryTitle')}</span>
         </div>
@@ -461,7 +506,7 @@ const ManualCorrectionHRD = () => {
             className="flex items-center gap-2 bg-white hover:bg-slate-50 px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-slate-600 hover:text-slate-800 transition-all border border-slate-200 shadow-sm active:scale-95 group self-start xl:self-auto cursor-pointer"
           >
             <ChevronLeft className="w-4 h-4 text-slate-400 group-hover:-translate-x-0.5 transition-transform" />
-            Kembali ke Log Absensi
+            {t('manualCorrection.btnBackToLogs')}
           </button>
         </div>
       </div>
@@ -614,7 +659,7 @@ const ManualCorrectionHRD = () => {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[9px] font-black text-slate-450 uppercase tracking-wider ml-1">Tipe Koreksi</label>
+                <label className="text-[9px] font-black text-slate-450 uppercase tracking-wider ml-1">{t('manualCorrection.historyFilters.type')}</label>
                 <div className="relative">
                   <select 
                     value={historyTypeFilter}
@@ -631,7 +676,7 @@ const ManualCorrectionHRD = () => {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[9px] font-black text-slate-450 uppercase tracking-wider ml-1">Departemen</label>
+                <label className="text-[9px] font-black text-slate-450 uppercase tracking-wider ml-1">{t('manualCorrection.historyFilters.dept')}</label>
                 <div className="relative">
                   <select 
                     value={historyDeptFilter}
@@ -670,7 +715,7 @@ const ManualCorrectionHRD = () => {
            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold transition-all uppercase tracking-wider ${activeTab === 'RIWAYAT' ? 'bg-white text-rose-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800'}`}
         >
           <History className="w-4 h-4" />
-          Riwayat Koreksi
+          {t('manualCorrection.tabs.history')}
         </button>
       </div>
 
@@ -783,11 +828,11 @@ const ManualCorrectionHRD = () => {
                                   >
                                     <option value="">{t('manualCorrection.table.noChange')}</option>
                                     <option value="PRESENT">{t('manualCorrection.table.presentNormal')}</option>
-                                    <option value="IZIN">IZIN</option>
-                                    <option value="SAKIT">SAKIT</option>
-                                    <option value="CUTI">CUTI</option>
-                                    <option value="HOLIDAY">LIBUR / OFF</option>
-                                    <option value="ABSENT">ALPA (TIDAK HADIR)</option>
+                                    <option value="IZIN">{t('manualCorrection.table.izin')}</option>
+                                    <option value="SAKIT">{t('manualCorrection.table.sakit')}</option>
+                                    <option value="CUTI">{t('manualCorrection.table.cuti')}</option>
+                                    <option value="HOLIDAY">{t('manualCorrection.table.holiday')}</option>
+                                    <option value="ABSENT">{t('manualCorrection.table.absent')}</option>
                                   </select>
                                 </td>
                               </>
@@ -860,8 +905,8 @@ const ManualCorrectionHRD = () => {
             <div className="flex items-center gap-3">
               <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                Log Koreksi Manual & Lupa Finger <span className="text-slate-300 mx-2">|</span> 
-                Menampilkan {filteredHistoryLogs.length} Log Terkini
+                {t('manualCorrection.historyTable.title')} <span className="text-slate-300 mx-2">|</span> 
+                {t('manualCorrection.historyTable.subtitle', { count: filteredHistoryLogs.length })}
               </p>
             </div>
           </div>
@@ -975,7 +1020,7 @@ const ManualCorrectionHRD = () => {
             className="bg-rose-600 hover:bg-rose-700 text-white px-8 py-3 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-lg hover:shadow-xl hover:shadow-rose-500/20 active:scale-95 transition-all outline-none"
           >
             {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            <span>{t('manualCorrection.floating.execute')} ({activeTab})</span>
+            <span>{t('manualCorrection.floating.execute')} ({activeTab === 'KEHADIRAN' ? t('manualCorrection.tabs.attendance') : t('manualCorrection.tabs.finger')})</span>
           </button>
         </div>
       )}
@@ -992,8 +1037,8 @@ const ManualCorrectionHRD = () => {
                 <div className="w-12 h-12 bg-slate-100 border border-slate-205 rounded-lg flex items-center justify-center text-slate-400 font-bold text-[10px]">LOGO</div>
               )}
               <div className="text-left">
-                <h1 className="font-extrabold text-base leading-tight uppercase tracking-tight">{companySettings?.companyName || 'Nama Perusahaan'}</h1>
-                <p className="text-[10px] text-slate-500 font-semibold">{companySettings?.companyAddress || 'Alamat Perusahaan'}</p>
+                <h1 className="font-extrabold text-base leading-tight uppercase tracking-tight">{companySettings?.companyName || t('manualCorrection.print.companyNameFallback')}</h1>
+                <p className="text-[10px] text-slate-500 font-semibold">{companySettings?.companyAddress || t('manualCorrection.print.companyAddressFallback')}</p>
               </div>
             </div>
             <div className="text-right">
@@ -1011,7 +1056,7 @@ const ManualCorrectionHRD = () => {
               <p className="text-slate-800 font-bold text-xs mt-0.5">{new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
             </div>
             <div>
-              <p className="text-slate-400 font-medium">Total Log Koreksi</p>
+              <p className="text-slate-400 font-medium">{t('manualCorrection.print.totalLogCorrection')}</p>
               <p className="text-slate-800 font-bold text-xs mt-0.5">{historyStats.total} {t('manualCorrection.print.records')}</p>
             </div>
             <div>
@@ -1041,9 +1086,9 @@ const ManualCorrectionHRD = () => {
                 const dept = employeeObj?.department?.name || employeeObj?.dept || 'UMUM';
                 
                 let typeLabel = 'UPDATE';
-                if (log.action === 'MANUAL_CORRECTION_STATUS') typeLabel = 'KEHADIRAN';
-                else if (log.action === 'MANUAL_CORRECTION_TIME') typeLabel = 'LUPA FINGER';
-                else if (log.action === 'CORRECTION') typeLabel = 'PENGAJUAN';
+                if (log.action === 'MANUAL_CORRECTION_STATUS') typeLabel = t('manualCorrection.print.typeAttendance');
+                else if (log.action === 'MANUAL_CORRECTION_TIME') typeLabel = t('manualCorrection.print.typeFinger');
+                else if (log.action === 'CORRECTION') typeLabel = t('manualCorrection.print.typeRequest');
 
                 let detailsText = '';
                 try {
