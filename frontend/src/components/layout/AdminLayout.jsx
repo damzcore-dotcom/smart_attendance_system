@@ -28,7 +28,9 @@ import {
   Camera,
   ChevronDown,
   ChevronUp,
-  FileText
+  FileText,
+  GraduationCap,
+  UserMinus
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -70,8 +72,12 @@ const AdminLayout = () => {
       items: [
         { name: t('navigation.employees'), path: '/admin/employees', icon: Users, key: 'employees' },
         { name: t('navigation.contracts'), path: '/admin/contracts', icon: FileText, key: 'contracts' },
+        { name: t('navigation.training'), path: '/admin/training', icon: GraduationCap, key: 'training' },
+        { name: t('navigation.terminated'), path: '/admin/terminated', icon: UserMinus, key: 'employees' },
         { name: t('navigation.shiftRoster'), path: '/admin/shift-roster', icon: CalendarCheck, key: 'shift-roster' },
-        { name: t('navigation.leaveRequests'), path: '/admin/leave-requests', icon: CalendarCheck, key: 'leave-requests' }
+        { name: t('navigation.leaveRequests'), path: '/admin/leave-requests', icon: CalendarCheck, key: 'leave-requests' },
+        { name: t('navigation.profileRequests'), path: '/admin/profile-requests', icon: Users, key: 'profile-requests' },
+        { name: t('navigation.kpiEvaluation'), path: '/admin/kpi', icon: Shield, key: 'kpi' }
       ]
     },
     {
@@ -88,7 +94,8 @@ const AdminLayout = () => {
       title: t('navigation.groups.payroll'),
       items: [
         { name: t('navigation.payrollProcess'), path: '/admin/payroll', icon: Banknote, key: 'payroll' },
-        { name: t('navigation.payrollSettings'), path: '/admin/payroll-settings', icon: Receipt, key: 'payroll-settings' }
+        { name: t('navigation.payrollSettings'), path: '/admin/payroll-settings', icon: Receipt, key: 'payroll-settings' },
+        { name: t('navigation.claimApproval'), path: '/admin/claims', icon: Receipt, key: 'claims' }
       ]
     },
     {
@@ -196,7 +203,7 @@ const AdminLayout = () => {
               <div className="w-full max-w-[180px] flex justify-center transition-transform duration-500 group-hover:scale-105">
                 <AppLogo className="w-full h-auto object-contain drop-shadow-sm text-slate-800" />
               </div>
-              <span className="text-xs font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-slate-500 tracking-wider uppercase text-center mt-1 drop-shadow-sm">Smart Attendance Pro</span>
+              <span className="text-xs font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-slate-500 tracking-wider uppercase text-center mt-1 drop-shadow-sm">Smart HRIS Platform</span>
             </div>
           ) : (
             <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center shrink-0 shadow-md">

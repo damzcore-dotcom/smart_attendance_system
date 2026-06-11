@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from contextlib import asynccontextmanager
 import asyncio
 import os
+import time
 
 # Force TCP transport and 5-second socket timeout (5,000,000 microseconds) globally
 # for all OpenCV/FFmpeg RTSP camera connections. This prevents offline cameras
@@ -23,6 +24,7 @@ from ai.embedding_cache import EmbeddingCache
 from attendance.recorder import AttendanceRecorder
 from bridge.client import BridgeClient
 from storage.minio_client import MinioStorage
+from ai.face_quality import FaceQualityChecker
 
 # ── Global instances ─────────────────────────────────────────────────────
 stream_manager = None
@@ -30,11 +32,24 @@ recorder = None
 face_recognizer = None
 face_detector = None
 liveness_detector = None
+face_quality_checker = None
+
+# Real-time metrics
+ai_metrics = {
+    "total_faces_detected": 0,
+    "total_faces_recognized": 0,
+    "total_faces_unknown": 0,
+    "total_spoofs_detected": 0,
+    "total_quality_filtered": 0,
+    "processing_latency_sum": 0.0,
+    "processing_latency_count": 0,
+    "fps": {}
+}
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global stream_manager, recorder, face_recognizer, face_detector, liveness_detector
+    global stream_manager, recorder, face_recognizer, face_detector, liveness_detector, face_quality_checker
 
     print("[AI Engine] Starting up...")
 
@@ -48,6 +63,7 @@ async def lifespan(app: FastAPI):
     face_detector = FaceDetector()
     face_recognizer = FaceRecognizer(device=os.getenv("AI_DEVICE", "cpu"))
     liveness_detector = LivenessDetector()
+    face_quality_checker = FaceQualityChecker()
     recorder = AttendanceRecorder(bridge=bridge, cache=cache, storage=storage)
 
     # Load embeddings from DB to Redis cache
@@ -74,12 +90,11 @@ async def lifespan(app: FastAPI):
             else:
                 print("[AI Engine] No camera config found, running in API-only mode")
                 
-        # Start frame processing loop if there are cameras
-        if len(stream_manager.get_active_cameras()) > 0:
-            asyncio.create_task(
-                process_frames_loop(stream_manager, face_detector, face_recognizer, liveness_detector, recorder)
-            )
-            print(f"[AI Engine] Camera processing started!")
+        # Start camera worker manager task to handle workers dynamically
+        asyncio.create_task(
+            camera_worker_manager(face_detector, face_recognizer, liveness_detector, recorder)
+        )
+        print(f"[AI Engine] Camera worker manager started!")
             
     except Exception as e:
         print(f"[AI Engine] Failed to initialize camera streams: {e}")
@@ -306,6 +321,11 @@ async def enroll_face(employee_id: int, file: UploadFile = File(...)):
 
     face = faces[0]
 
+    # Check quality
+    quality_result = face_quality_checker.check(face["region"], face["det_score"], face.get("kps"))
+    if not quality_result["passed"]:
+        raise HTTPException(status_code=400, detail=f"Kualitas foto kurang baik: {quality_result['reason']}")
+
     # Check liveness
     liveness_result = liveness_detector.check(face["region"])
     if liveness_result.get("is_real") is False:
@@ -352,9 +372,14 @@ async def recognize_face(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Could not extract embedding")
 
     # Match against cache
-    all_embeddings = await recorder.cache.get_all()
-    threshold = float(os.getenv("MIN_RECOGNITION_SCORE", "0.60"))
-    match = face_recognizer.match(embedding, all_embeddings, threshold=threshold)
+    db_matrix, ids = recorder.cache.get_matrix()
+    env_thresh = os.getenv("MIN_RECOGNITION_SCORE")
+    threshold = float(env_thresh) if env_thresh else None
+    
+    if db_matrix is not None:
+        match = face_recognizer.match(embedding, db_matrix=db_matrix, ids=ids, threshold=threshold)
+    else:
+        match = None
 
     if match:
         return {
@@ -369,6 +394,64 @@ async def recognize_face(file: UploadFile = File(...)):
             "matched": False,
             "message": "No matching employee found"
         }
+
+
+# ── Metrics: Get real-time AI Engine statistics ──────────────────────────
+@app.get("/metrics")
+async def get_metrics():
+    """Get real-time performance and recognition metrics."""
+    global ai_metrics, stream_manager, active_camera_workers
+    
+    avg_latency = 0.0
+    if ai_metrics["processing_latency_count"] > 0:
+        avg_latency = ai_metrics["processing_latency_sum"] / ai_metrics["processing_latency_count"]
+        
+    cam_status = {}
+    if stream_manager:
+        cam_status = stream_manager.get_status()
+        
+    return {
+        "success": True,
+        "metrics": {
+            "total_faces_detected": ai_metrics["total_faces_detected"],
+            "total_faces_recognized": ai_metrics["total_faces_recognized"],
+            "total_faces_unknown": ai_metrics["total_faces_unknown"],
+            "total_spoofs_detected": ai_metrics["total_spoofs_detected"],
+            "total_quality_filtered": ai_metrics["total_quality_filtered"],
+            "avg_processing_latency_seconds": round(avg_latency, 4),
+            "camera_frames": ai_metrics.get("camera_frames", {}),
+            "active_workers": list(active_camera_workers.keys()),
+            "camera_status": cam_status.get("cameras", {})
+        }
+    }
+
+
+# ── Re-enrollment Suggestions ───────────────────────────────────────────
+@app.get("/re-enrollment-suggestions")
+async def get_re_enrollment_suggestions():
+    """
+    Returns employees whose rolling average similarity score has dropped
+    below the threshold, indicating their face enrollment data may be
+    outdated and needs refreshing.
+    """
+    suggestions = recorder.get_re_enrollment_suggestions()
+    
+    # Enrich with employee names from cache
+    enriched = []
+    for s in suggestions:
+        emp_id = s["employee_id"]
+        name = await recorder.cache.get_name(str(emp_id))
+        enriched.append({
+            **s,
+            "employee_name": name or f"Karyawan #{emp_id}"
+        })
+    
+    return {
+        "success": True,
+        "count": len(enriched),
+        "threshold": 0.65,
+        "suggestions": enriched
+    }
 
 
 # ── Reload embeddings cache ─────────────────────────────────────────────
@@ -401,98 +484,123 @@ def load_rois() -> dict:
     return {}
 
 
-# ── Main Processing Loop ────────────────────────────────────────────────
-async def process_frames_loop(stream_manager, detector, recognizer, liveness, recorder):
-    """Main loop: grab frames from all cameras, detect + recognize faces."""
-    threshold = float(os.getenv("MIN_RECOGNITION_SCORE", "0.60"))
-    liveness_enabled = os.getenv("LIVENESS_ENABLED", "false").lower() == "true"
-    import time
+# ── Camera Worker & Manager ──────────────────────────────────────────────
+rois_config = {}
+active_camera_workers = {}
 
-    rois = load_rois()
-    last_roi_load = time.time()
 
-    while True:
-        # Reload ROI configurations every 10 seconds
-        now_time = time.time()
-        if now_time - last_roi_load > 10.0:
-            rois = load_rois()
-            last_roi_load = now_time
+async def camera_worker(cam_id: str, detector, recognizer, liveness, recorder):
+    """Async worker loop for processing a single camera stream in parallel."""
+    print(f"[AI Engine] Starting parallel worker for camera: {cam_id}")
+    global rois_config
+    
+    while stream_manager._running:
+        try:
+            frame = await stream_manager.get_frame_async(cam_id)
+            if frame is None:
+                await asyncio.sleep(0.01)
+                continue
 
-        for cam_id in stream_manager.get_active_cameras():
-            try:
-                frame = await stream_manager.get_frame_async(cam_id)
-                if frame is None:
+            env_thresh = os.getenv("MIN_RECOGNITION_SCORE")
+            threshold = float(env_thresh) if env_thresh else None
+            liveness_enabled = os.getenv("LIVENESS_ENABLED", "false").lower() == "true"
+
+            # Handle ROI (Region of Interest / Detection Zone)
+            cam_roi = rois_config.get(cam_id, {}).get("roi")
+            h, w = frame.shape[:2]
+            x1, y1, x2, y2 = 0, 0, w, h
+
+            if cam_roi and len(cam_roi) == 4:
+                ymin, xmin, ymax, xmax = cam_roi
+                x1 = max(0, int(xmin * w))
+                y1 = max(0, int(ymin * h))
+                x2 = min(w, int(xmax * w))
+                y2 = min(h, int(ymax * h))
+
+            # Crop to detection zone if it restricts the frame
+            if y1 > 0 or x1 > 0 or y2 < h or x2 < w:
+                if cam_id in stream_manager.cameras:
+                    stream_manager.cameras[cam_id]["roi_box"] = [x1, y1, x2, y2]
+                roi_frame = frame[y1:y2, x1:x2].copy()
+            else:
+                if cam_id in stream_manager.cameras:
+                    stream_manager.cameras[cam_id]["roi_box"] = None
+                roi_frame = frame
+
+            # Detect faces only in the ROI frame
+            cam_start_time = time.time()
+            faces = detector.detect(roi_frame)
+            active_detections = []
+
+            if faces:
+                ai_metrics["total_faces_detected"] += len(faces)
+
+            for face in faces:
+                # 1. Quality gate filter
+                quality_res = face_quality_checker.check(face["region"], face["det_score"], face.get("kps"))
+                if not quality_res["passed"]:
+                    ai_metrics["total_quality_filtered"] += 1
                     continue
 
-                # Handle ROI (Region of Interest / Detection Zone)
-                cam_roi = rois.get(cam_id, {}).get("roi")
-                h, w = frame.shape[:2]
-                x1, y1, x2, y2 = 0, 0, w, h
+                is_real = True
+                if liveness_enabled:
+                    liveness_result = liveness.check_v2(face["region"], face["bbox"], cam_id)
+                    is_real = liveness_result.get("is_real", True)
 
-                if cam_roi and len(cam_roi) == 4:
-                    ymin, xmin, ymax, xmax = cam_roi
-                    x1 = max(0, int(xmin * w))
-                    y1 = max(0, int(ymin * h))
-                    x2 = min(w, int(xmax * w))
-                    y2 = min(h, int(ymax * h))
+                name = "Unknown"
+                color = (0, 255, 255)  # BGR: Yellow for Unknown
 
-                # Crop to detection zone if it restricts the frame
-                if y1 > 0 or x1 > 0 or y2 < h or x2 < w:
-                    if cam_id in stream_manager.cameras:
-                        stream_manager.cameras[cam_id]["roi_box"] = [x1, y1, x2, y2]
-                    roi_frame = frame[y1:y2, x1:x2].copy()
+                if not is_real:
+                    name = "SPOOF DETECTED"
+                    color = (0, 0, 255)  # BGR: Red for spoof
+                    ai_metrics["total_spoofs_detected"] += 1
+                    await recorder.record_spoof(cam_id, face["region"])
+                    
+                    bbox = face["bbox"]
+                    face["bbox"] = [bbox[0] + x1, bbox[1] + y1, bbox[2] + x1, bbox[3] + y1]
+                    active_detections.append({
+                        "bbox": face["bbox"],
+                        "color": color,
+                        "name": name,
+                        "timestamp": time.time()
+                    })
                 else:
-                    if cam_id in stream_manager.cameras:
-                        stream_manager.cameras[cam_id]["roi_box"] = None
-                    roi_frame = frame
+                    # Extract embedding
+                    embedding = recognizer.get_embedding(face["aligned"])
+                    if embedding is not None:
+                        # Match against database (vectorized)
+                        db_matrix, ids = recorder.cache.get_matrix()
+                        if db_matrix is not None:
+                            match = recognizer.match(embedding, db_matrix=db_matrix, ids=ids, threshold=threshold)
+                        else:
+                            match = None
 
-                # Detect faces only in the ROI frame
-                faces = detector.detect(roi_frame)
-                active_detections = []
-
-                for face in faces:
-                    is_real = True
-                    if liveness_enabled:
-                        liveness_result = liveness.check(face["region"])
-                        is_real = liveness_result.get("is_real", True)
-
-                    name = "Unknown"
-                    color = (0, 255, 255)  # BGR: Yellow for Unknown
-
-                    if not is_real:
-                        name = "SPOOF DETECTED"
-                        color = (0, 0, 255)  # BGR: Red for spoof
-                        # Log spoof attempt
-                        await recorder.record_spoof(cam_id, face["region"])
-                        
-                        bbox = face["bbox"]
-                        face["bbox"] = [bbox[0] + x1, bbox[1] + y1, bbox[2] + x1, bbox[3] + y1]
-                        active_detections.append({
-                            "bbox": face["bbox"],
-                            "color": color,
-                            "name": name,
-                            "timestamp": time.time()
-                        })
-                    else:
-                        # Extract embedding
-                        embedding = recognizer.get_embedding(face["aligned"])
-                        if embedding is not None:
-                            # Match against database
-                            all_embeddings = await recorder.cache.get_all()
-                            match = recognizer.match(embedding, all_embeddings, threshold=threshold)
-
-                            if match:
-                                emp_id = match["employee_id"]
-                                db_name = await recorder.cache.get_name(str(emp_id))
-                                name = db_name if db_name else f"Employee {emp_id}"
-                                color = (0, 255, 0)  # BGR: Green for match
-                                
-                                await recorder.record(
-                                    employee_id=str(emp_id),
-                                    camera_id=cam_id,
-                                    face_snapshot=face["region"],
-                                    similarity=match["similarity"]
-                                )
+                        if match:
+                            emp_id = match["employee_id"]
+                            db_name = await recorder.cache.get_name(str(emp_id))
+                            name = db_name if db_name else f"Employee {emp_id}"
+                            color = (0, 255, 0)  # BGR: Green for match
+                            ai_metrics["total_faces_recognized"] += 1
+                            
+                            await recorder.record(
+                                employee_id=str(emp_id),
+                                camera_id=cam_id,
+                                face_snapshot=face["region"],
+                                similarity=match["similarity"]
+                            )
+                            bbox = face["bbox"]
+                            face["bbox"] = [bbox[0] + x1, bbox[1] + y1, bbox[2] + x1, bbox[3] + y1]
+                            active_detections.append({
+                                "bbox": face["bbox"],
+                                "color": color,
+                                "name": name,
+                                "timestamp": time.time()
+                            })
+                        else:
+                            detect_unknown = stream_manager.cameras.get(cam_id, {}).get("detect_unknown", True)
+                            if detect_unknown:
+                                ai_metrics["total_faces_unknown"] += 1
+                                await recorder.record_unknown(cam_id, face["region"])
                                 bbox = face["bbox"]
                                 face["bbox"] = [bbox[0] + x1, bbox[1] + y1, bbox[2] + x1, bbox[3] + y1]
                                 active_detections.append({
@@ -501,23 +609,52 @@ async def process_frames_loop(stream_manager, detector, recognizer, liveness, re
                                     "name": name,
                                     "timestamp": time.time()
                                 })
-                            else:
-                                detect_unknown = stream_manager.cameras.get(cam_id, {}).get("detect_unknown", True)
-                                if detect_unknown:
-                                    await recorder.record_unknown(cam_id, face["region"])
-                                    bbox = face["bbox"]
-                                    face["bbox"] = [bbox[0] + x1, bbox[1] + y1, bbox[2] + x1, bbox[3] + y1]
-                                    active_detections.append({
-                                        "bbox": face["bbox"],
-                                        "color": color,
-                                        "name": name,
-                                        "timestamp": time.time()
-                                    })
 
-                if cam_id in stream_manager.cameras:
-                    stream_manager.cameras[cam_id]["active_detections"] = active_detections
+            if cam_id in stream_manager.cameras:
+                stream_manager.cameras[cam_id]["active_detections"] = active_detections
 
-            except Exception as e:
-                print(f"[{cam_id}] Processing error: {e}")
+            # Track metrics latency and camera frame count
+            cam_latency = time.time() - cam_start_time
+            ai_metrics["processing_latency_sum"] += cam_latency
+            ai_metrics["processing_latency_count"] += 1
+            
+            if "camera_frames" not in ai_metrics:
+                ai_metrics["camera_frames"] = {}
+            ai_metrics["camera_frames"][cam_id] = ai_metrics["camera_frames"].get(cam_id, 0) + 1
 
-        await asyncio.sleep(0.1)
+        except Exception as e:
+            print(f"[{cam_id}] Camera worker error: {e}")
+            await asyncio.sleep(1.0)
+            
+        await asyncio.sleep(0.02)
+
+
+async def camera_worker_manager(detector, recognizer, liveness, recorder):
+    """Dynamic camera worker manager. Tracks active cameras and launches parallel tasks."""
+    global rois_config, active_camera_workers
+    print("[AI Engine] Starting camera worker manager...")
+    
+    last_roi_load = 0.0
+    
+    while stream_manager._running:
+        try:
+            # 1. Reload ROIs periodically (every 10 seconds)
+            now = time.time()
+            if now - last_roi_load > 10.0:
+                rois_config = load_rois()
+                last_roi_load = now
+            
+            # 2. Check active cameras and start new workers
+            active_cams = stream_manager.get_active_cameras()
+            for cam_id in active_cams:
+                if cam_id not in active_camera_workers or active_camera_workers[cam_id].done():
+                    task = asyncio.create_task(
+                        camera_worker(cam_id, detector, recognizer, liveness, recorder)
+                    )
+                    active_camera_workers[cam_id] = task
+                    print(f"[AI Engine] Spawned parallel worker task for camera {cam_id}")
+
+        except Exception as e:
+            print(f"[AI Engine] Camera worker manager error: {e}")
+            
+        await asyncio.sleep(5.0)

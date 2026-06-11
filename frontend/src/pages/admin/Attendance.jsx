@@ -101,6 +101,11 @@ const getPaddedRecords = (rawRecords, summary, appliedFilters, sortConfig) => {
     if (appliedFilters.period === 'This Month') {
       startDate = new Date(now.getFullYear(), now.getMonth(), 1);
       endDate = new Date(); // Show all dates up to today/print date
+    } else if (appliedFilters.period === 'This Week') {
+      const day = now.getDay();
+      const diff = now.getDate() - (day === 0 ? 6 : day - 1);
+      startDate = new Date(now.getFullYear(), now.getMonth(), diff);
+      endDate = new Date();
     } else if (appliedFilters.period === 'Custom' && appliedFilters.startDate && appliedFilters.endDate) {
       startDate = new Date(appliedFilters.startDate);
       endDate = new Date(appliedFilters.endDate);
@@ -349,6 +354,7 @@ const Attendance = () => {
     position: '',
     status: '',
     search: '',
+    locationId: '',
     sortBy: 'date',
     order: 'desc',
     excludeBhl: true
@@ -558,6 +564,12 @@ const Attendance = () => {
     }
   };
 
+  const { data: locationsData } = useQuery({
+    queryKey: ['locations'],
+    queryFn: () => settingsAPI.getLocations(),
+  });
+  const locations = locationsData?.data || [];
+
   const { data, isLoading } = useQuery({
     queryKey: ['attendance', appliedFilters],
     queryFn: () => attendanceAPI.getAll(appliedFilters),
@@ -706,7 +718,8 @@ const Attendance = () => {
   const handleCardClick = (label) => {
     let targetStatus = '';
     if (label === 'Hadir') targetStatus = 'PRESENT';
-    else if (label === 'Terlambat' || label === 'Total Terlambat') targetStatus = 'LATE';
+    else if (label === 'Terlambat') targetStatus = 'LATE';
+    else if (label === 'Total Terlambat') targetStatus = 'LATE,MANGKIR';
     else if (label === 'Pulang Cepat') targetStatus = 'EARLY_DEPARTURE';
     else if (label === 'Mangkir') targetStatus = 'MANGKIR';
     else if (label === 'Alpa') targetStatus = 'ABSENT';
@@ -1738,7 +1751,9 @@ const Attendance = () => {
                           </div>
                         </td>
                         <td className="px-4 py-4 text-center">
-                          {(row.source === 'face_cctv' || row.mode === 'Face CCTV') ? (
+                          {((!row.checkIn || row.checkIn === '--:--' || row.checkIn === '-- : --') && (!row.checkOut || row.checkOut === '--:--' || row.checkOut === '-- : --')) ? (
+                            <span className="text-slate-400">—</span>
+                          ) : (row.source === 'face_cctv' || row.mode === 'Face CCTV') ? (
                             <span className="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 px-2 py-1 rounded-lg text-[10px] font-bold border border-indigo-100 shadow-sm" title={i18n.language.startsWith('id') ? 'Deteksi Wajah via CCTV' : 'Face Detection via CCTV'}>
                               <Camera className="w-3.5 h-3.5 text-indigo-500" />
                               {translateMethod('Face CCTV', i18n.language)}
@@ -2052,7 +2067,7 @@ const Attendance = () => {
                         <td className="relative group/tooltip px-4 py-4 text-center text-xs font-bold text-amber-600 cursor-help border-b border-slate-100">
                           <span className={row.late > 0 ? "underline decoration-dotted decoration-amber-450" : ""}>{row.late}</span>
                           {row.late > 0 && (
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-none transition-all duration-200">
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-auto transition-all duration-200">
                               <p className="font-extrabold border-b border-slate-700 pb-1 mb-1.5 text-[9px] uppercase tracking-wider text-amber-450">{t('attendancePage.kpiLate')} (Detail)</p>
                               <div className="space-y-1 text-left max-h-[150px] overflow-y-auto custom-scrollbar">
                                 {row.lateDetails.map((d, i) => (
@@ -2071,7 +2086,7 @@ const Attendance = () => {
                         <td className="relative group/tooltip px-4 py-4 text-center text-xs font-bold text-blue-600 cursor-help border-b border-slate-100">
                           <span className={row.pulangCepat > 0 ? "underline decoration-dotted decoration-blue-400" : ""}>{row.pulangCepat || 0}</span>
                           {row.pulangCepat > 0 && (
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-none transition-all duration-200">
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-auto transition-all duration-200">
                               <p className="font-extrabold border-b border-slate-700 pb-1 mb-1.5 text-[9px] uppercase tracking-wider text-blue-400">{t('attendancePage.kpiEarlyDeparture')} (Detail)</p>
                               <div className="space-y-1 text-left max-h-[150px] overflow-y-auto custom-scrollbar">
                                 {row.pulangCepatDetails.map((d, i) => (
@@ -2089,7 +2104,7 @@ const Attendance = () => {
                         <td className="relative group/tooltip px-4 py-4 text-center text-xs font-bold text-orange-600 cursor-help border-b border-slate-100">
                           <span className={row.mangkir > 0 ? "underline decoration-dotted decoration-orange-400" : ""}>{row.mangkir}</span>
                           {row.mangkir > 0 && (
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-none transition-all duration-200">
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-auto transition-all duration-200">
                               <p className="font-extrabold border-b border-slate-700 pb-1 mb-1.5 text-[9px] uppercase tracking-wider text-orange-400">{t('attendancePage.kpiMangkir')} (Detail)</p>
                               <div className="space-y-1 text-left max-h-[150px] overflow-y-auto custom-scrollbar">
                                 {row.mangkirDetails.map((d, i) => (
@@ -2107,7 +2122,7 @@ const Attendance = () => {
                         <td className="relative group/tooltip px-4 py-4 text-center text-xs font-bold text-rose-600 cursor-help border-b border-slate-100">
                           <span className={row.absent > 0 ? "underline decoration-dotted decoration-rose-450" : ""}>{row.absent}</span>
                           {row.absent > 0 && (
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-none transition-all duration-200">
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-auto transition-all duration-200">
                               <p className="font-extrabold border-b border-slate-700 pb-1 mb-1.5 text-[9px] uppercase tracking-wider text-rose-450">{t('attendancePage.kpiAbsent')} (Detail)</p>
                               <div className="space-y-1 text-left max-h-[150px] overflow-y-auto custom-scrollbar">
                                 {row.absentDetails.map((d, i) => (
@@ -2125,7 +2140,7 @@ const Attendance = () => {
                         <td className="relative group/tooltip px-4 py-4 text-center text-xs font-bold text-slate-500 cursor-help border-b border-slate-100">
                           <span className={row.other > 0 ? "underline decoration-dotted decoration-slate-400" : ""}>{row.other}</span>
                           {row.other > 0 && (
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-none transition-all duration-200">
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-auto transition-all duration-200">
                               <p className="font-extrabold border-b border-slate-700 pb-1 mb-1.5 text-[9px] uppercase tracking-wider text-blue-400">{t('attendancePage.kpiOther')} (Detail)</p>
                               <div className="space-y-1 text-left max-h-[150px] overflow-y-auto custom-scrollbar">
                                 {row.otherDetails.map((d, i) => (
@@ -2822,6 +2837,7 @@ const FilterBar = ({ onApply, isLoading, currentSearch, initialFilters }) => {
   const [filterSection, setFilterSection] = useState(initialFilters?.section || '');
   const [filterPosition, setFilterPosition] = useState(initialFilters?.position || '');
   const [filterStatus, setFilterStatus] = useState(initialFilters?.status || '');
+  const [filterLocation, setFilterLocation] = useState(initialFilters?.locationId || '');
   const [searchQuery, setSearchQuery] = useState(currentSearch || '');
   const [debouncedSearch, setDebouncedSearch] = useState(currentSearch || '');
 
@@ -2834,6 +2850,7 @@ const FilterBar = ({ onApply, isLoading, currentSearch, initialFilters }) => {
       setFilterSection(initialFilters.section || '');
       setFilterPosition(initialFilters.position || '');
       setFilterStatus(initialFilters.status || '');
+      setFilterLocation(initialFilters.locationId || '');
       setSearchQuery(initialFilters.search || '');
     }
   }, [initialFilters]);
@@ -2855,7 +2872,14 @@ const FilterBar = ({ onApply, isLoading, currentSearch, initialFilters }) => {
     staleTime: 30000,
   });
 
+  const { data: locationsData } = useQuery({
+    queryKey: ['locations'],
+    queryFn: () => settingsAPI.getLocations(),
+    staleTime: 60000,
+  });
+
   const masterOptions = optionsData?.data || { departments: [], sections: [], positions: [], statuses: [] };
+  const locations = locationsData?.data || [];
 
   const handleApply = () => {
     onApply({
@@ -2867,6 +2891,7 @@ const FilterBar = ({ onApply, isLoading, currentSearch, initialFilters }) => {
       section: filterSection,
       position: filterPosition,
       status: filterStatus,
+      locationId: filterLocation,
       search: searchQuery
     });
   };
@@ -2916,7 +2941,7 @@ const FilterBar = ({ onApply, isLoading, currentSearch, initialFilters }) => {
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 items-end bg-slate-50 p-5 rounded-2xl border border-slate-100">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4 items-end bg-slate-50 p-5 rounded-2xl border border-slate-100">
           <div className="space-y-2 lg:col-span-1 xl:col-span-1">
             <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('attendancePage.filterSearch')}</label>
             <div className="relative group">
@@ -2955,6 +2980,24 @@ const FilterBar = ({ onApply, isLoading, currentSearch, initialFilters }) => {
               </div>
             </div>
           ))}
+
+          <div className="space-y-2">
+            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-1">Cabang / Lokasi</label>
+            <div className="relative">
+              <select 
+                value={filterLocation}
+                onChange={(e) => setFilterLocation(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl pl-4 pr-10 py-3 text-[10px] font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 cursor-pointer appearance-none uppercase tracking-wider transition-all shadow-sm truncate"
+              >
+                <option value="">Semua Cabang</option>
+                {locations.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+              <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                <Filter className="w-3.5 h-3.5 text-slate-400" />
+              </div>
+            </div>
+          </div>
+
           <div className="lg:col-span-1 xl:col-span-1 sm:col-span-2 lg:col-start-auto">
             <button 
               onClick={handleApply}

@@ -35,15 +35,15 @@ const getDevices = async (req, res) => {
  */
 const getDeviceStats = async (req, res) => {
   const { id } = req.params;
+  let zk = null;
   try {
     const device = await prisma.device.findUnique({ where: { id: parseInt(id) } });
     if (!device) return res.status(404).json({ success: false });
 
     // Gunakan timeout yang sangat singkat (5 detik) agar tidak memblokir UI
-    const zk = new ZKLib(device.ipAddress, device.port, 5000, 5000);
+    zk = new ZKLib(device.ipAddress, device.port, 5000, 5000);
     await zk.createSocket();
     const info = await zk.getInfo();
-    await zk.disconnect();
 
     res.json({
       success: true,
@@ -60,6 +60,12 @@ const getDeviceStats = async (req, res) => {
         logCounts: '-'
       }
     });
+  } finally {
+    if (zk) {
+      try {
+        await zk.disconnect();
+      } catch (e) {}
+    }
   }
 };
 
@@ -141,14 +147,14 @@ const deleteDevice = async (req, res) => {
  */
 const testConnection = async (req, res) => {
   const { id, ipAddress, port } = req.body;
+  let zkInstance = null;
   
   try {
-    const zkInstance = new ZKLib(ipAddress, port || 4370, 60000, 30000);
+    zkInstance = new ZKLib(ipAddress, port || 4370, 60000, 30000);
     await zkInstance.createSocket();
     
     // Test if we can read info
     const info = await zkInstance.getInfo();
-    await zkInstance.disconnect();
     
     let deviceName = 'Mesin Baru';
     if (id) {
@@ -195,6 +201,12 @@ const testConnection = async (req, res) => {
     });
     
     res.status(500).json({ success: false, message: 'Gagal menghubungi mesin. Pastikan IP dan Port benar dan mesin menyala.' });
+  } finally {
+    if (zkInstance) {
+      try {
+        await zkInstance.disconnect();
+      } catch (e) {}
+    }
   }
 };
 
@@ -345,6 +357,7 @@ async function getNextEmployeeCode() {
 const syncUsers = async (req, res) => {
   const { id } = req.params; // Device ID
   const isPreview = req.query.preview !== 'false'; // Default to preview mode
+  let zkInstance = null;
   
   try {
     const device = await prisma.device.findUnique({ where: { id: parseInt(id) } });
@@ -430,7 +443,7 @@ const syncUsers = async (req, res) => {
     // ──────────────────────────────────────────────
     // PREVIEW MODE: Scan machine, classify, return data
     // ──────────────────────────────────────────────
-    const zkInstance = new ZKLib(device.ipAddress, device.port, 60000, 30000);
+    zkInstance = new ZKLib(device.ipAddress, device.port, 60000, 30000);
     await zkInstance.createSocket();
     const users = await zkInstance.getUsers();
     
@@ -441,7 +454,13 @@ const syncUsers = async (req, res) => {
     } catch (err) {
       console.warn('[Sync Users] Failed to fetch attendances to filter inactive users:', err.message);
     }
-    await zkInstance.disconnect();
+    
+    try {
+      await zkInstance.disconnect();
+    } catch (e) {
+      console.warn('[Sync Users] Failed to disconnect socket:', e.message);
+    }
+    zkInstance = null; // Reset so finally block won't call it again
 
     // Map of deviceUserId -> latest scan date
     const latestScanMap = {};
@@ -492,6 +511,16 @@ const syncUsers = async (req, res) => {
       }
     });
 
+    // OPTIMIZATION: Preload all active employees with fingerPrintId from DB to avoid N+1 queries in the loop
+    const allDbEmployees = await prisma.employee.findMany({
+      where: { fingerPrintId: { not: null } },
+      select: { id: true, name: true, fingerPrintId: true }
+    });
+    const dbEmpByFpMap = new Map();
+    allDbEmployees.forEach(e => {
+      dbEmpByFpMap.set(String(e.fingerPrintId).trim(), e);
+    });
+
     // Hitung ambang batas 60 hari dari aktivitas TERAKHIR di mesin
     const thresholdDate = globalLatestScan.getTime() > 0 ? new Date(globalLatestScan) : new Date();
     thresholdDate.setDate(thresholdDate.getDate() - 60);
@@ -500,8 +529,8 @@ const syncUsers = async (req, res) => {
       const fingerPrintId = String(u.userId).trim();
       const machineName = (u.name || '').trim();
       
-      // 1. Cek apakah sudah ada karyawan dengan fingerPrintId ini
-      let existing = await prisma.employee.findFirst({ where: { fingerPrintId } });
+      // OPTIMIZED: Use Map lookup instead of prisma.employee.findFirst 979 times
+      let existing = dbEmpByFpMap.get(fingerPrintId);
       
       if (existing) {
         alreadyLinkedCount++;
@@ -592,6 +621,15 @@ const syncUsers = async (req, res) => {
       });
     } catch (e) {}
     res.status(500).json({ success: false, message: err.message });
+  } finally {
+    if (zkInstance) {
+      try {
+        await zkInstance.disconnect();
+        console.log('[Sync Users] Socket disconnected in finally block.');
+      } catch (e) {
+        console.error('[Sync Users] Failed to disconnect ZK socket in finally block:', e.message);
+      }
+    }
   }
 };
 
@@ -1428,6 +1466,7 @@ const commitAttendance = async (req, res) => {
  */
 const clearDeviceLogs = async (req, res) => {
   const { id } = req.params;
+  let zkInstance = null;
 
   try {
     const device = await prisma.device.findUnique({ where: { id: parseInt(id) } });
@@ -1435,10 +1474,9 @@ const clearDeviceLogs = async (req, res) => {
 
     console.log(`[Device] Clearing attendance logs for device ${device.name}...`);
 
-    const zkInstance = new ZKLib(device.ipAddress, device.port, 15000, 15000);
+    zkInstance = new ZKLib(device.ipAddress, device.port, 15000, 15000);
     await zkInstance.createSocket();
     await zkInstance.clearAttendanceLog();
-    await zkInstance.disconnect();
 
     await recordAuditLog({
       userId: req.user.id,
@@ -1459,6 +1497,12 @@ const clearDeviceLogs = async (req, res) => {
   } catch (err) {
     console.error('[Device] clearDeviceLogs error:', err);
     res.status(500).json({ success: false, message: 'Gagal menghapus log mesin: ' + err.message });
+  } finally {
+    if (zkInstance) {
+      try {
+        await zkInstance.disconnect();
+      } catch (e) {}
+    }
   }
 };
 

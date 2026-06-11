@@ -51,7 +51,7 @@ function getUTCYesterday() {
 function getUTCStartOfWeek(localDate) {
   const d = localDate || new Date();
   const day = d.getDay();
-  const diff = d.getDate() - day;
+  const diff = d.getDate() - (day === 0 ? 6 : day - 1);
   return new Date(Date.UTC(d.getFullYear(), d.getMonth(), diff, 0, 0, 0, 0));
 }
 

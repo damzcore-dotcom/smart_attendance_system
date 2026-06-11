@@ -140,6 +140,8 @@ model Employee {
   bankAccountNumber String?    // Nomor Rekening
   salaryCategory    String?    @default("UMK/UMR")
   status        EmpStatus  @default(ACTIVE)
+  terminationDate   DateTime?
+  terminationReason String?
   faceStatus    FaceStatus @default(PENDING)
   profilePhoto  String?
   faceEmbeddingV2 Json?     // InsightFace 512-dim vector for CCTV recognition
@@ -161,8 +163,27 @@ model Employee {
   user          User?
   salary         EmployeeSalary?
   payrollDetails PayrollDetail[]
+  documents     EmployeeDocument[]
+  claims        ReimbursementClaim[]
+  profileRequests ProfileUpdateRequest[]
+  kpis          EmployeeKPI[]
+  pushTokens    PushToken[]
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
+}
+
+model EmployeeDocument {
+  id              Int              @id @default(autoincrement())
+  employeeId      Int
+  employee        Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  name            String           // e.g. "KTP", "KK", "Kontrak PKWT"
+  fileUrl         String           // Path to file
+  expiryDate      DateTime?        // For documents like PKWT contracts
+  physicalLocator String?          // Location in physical files (e.g., "Rak A, Baris 2, Map 15")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([employeeId])
 }
 
 model Department {
@@ -444,6 +465,7 @@ model Payroll {
   rejectionNote   String?
   notes           String?
   details         PayrollDetail[]
+  claims          ReimbursementClaim[]
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 }
@@ -577,4 +599,80 @@ model NlpKeywordConfig {
 
   @@unique([intent, keyword])
   @@index([intent])
+}
+
+enum ClaimCategory {
+  MEDICAL
+  TRAVEL
+  MEAL
+  OPERATIONAL
+  OTHER
+}
+
+model ReimbursementClaim {
+  id           Int           @id @default(autoincrement())
+  employeeId   Int
+  employee     Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  title        String
+  category     ClaimCategory
+  amount       Float
+  receiptUrl   String
+  status       ReqStatus     @default(PENDING)
+  reviewNote   String?
+  payrollId    Int?
+  payroll      Payroll?      @relation(fields: [payrollId], references: [id], onDelete: SetNull)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([employeeId])
+  @@index([payrollId])
+  @@index([status])
+}
+
+model ProfileUpdateRequest {
+  id          Int       @id @default(autoincrement())
+  employeeId  Int
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  fieldName   String
+  oldValue    String?
+  newValue    String
+  documentUrl String?
+  status      ReqStatus @default(PENDING)
+  reviewNote  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([employeeId])
+  @@index([status])
+}
+
+model EmployeeKPI {
+  id            Int       @id @default(autoincrement())
+  employeeId    Int
+  employee      Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  period        String    // e.g. "2026-Q1"
+  targetKPI     Json      // [{kpiName, weight, target, actual, score}]
+  finalScore    Float?
+  reviewNote    String?
+  evaluatedBy   String
+  status        ReqStatus @default(PENDING)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([employeeId, period])
+  @@index([employeeId])
+  @@index([status])
+  @@index([period])
+}
+
+model PushToken {
+  id          Int      @id @default(autoincrement())
+  employeeId  Int
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  token       String   @db.Text
+  platform    String   // "web" | "android" | "ios"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([employeeId])
 }

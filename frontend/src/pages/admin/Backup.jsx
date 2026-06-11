@@ -18,9 +18,13 @@ const Backup = () => {
   const { t } = useTranslation();
   const [isRestoring, setIsRestoring] = useState(false);
   const [restoreStatus, setRestoreStatus] = useState(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportStatus, setExportStatus] = useState(null);
   const user = authAPI.getStoredUser();
 
   const handleExport = async () => {
+    setIsExporting(true);
+    setExportStatus(t('backup.statusGeneratingBackup') || 'Generating database backup snapshot...');
     try {
       const data = await backupAPI.export();
       
@@ -39,6 +43,9 @@ const Backup = () => {
       URL.revokeObjectURL(url);
     } catch (err) {
       alert(t('backup.alertExportFailed', { message: err.message }));
+    } finally {
+      setIsExporting(false);
+      setExportStatus(null);
     }
   };
 
@@ -115,10 +122,20 @@ const Backup = () => {
             </p>
             <button 
               onClick={handleExport}
-              className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-sm hover:bg-blue-700 transition-all flex items-center justify-center gap-3 active:scale-95"
+              disabled={isExporting}
+              className={`w-full py-3.5 bg-blue-600 text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-sm hover:bg-blue-700 transition-all flex items-center justify-center gap-3 active:scale-95 ${isExporting ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              {t('backup.downloadJsonBackup')}
-              <ArrowRight className="w-4 h-4" />
+              {isExporting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  {t('backup.processing') || 'Processing...'}
+                </>
+              ) : (
+                <>
+                  {t('backup.downloadJsonBackup')}
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -165,6 +182,25 @@ const Backup = () => {
           </p>
         </div>
       </div>
+
+      {/* Export Progress Modal */}
+      {isExporting && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" />
+          <div className="bg-white rounded-3xl p-10 max-w-sm w-full relative z-10 text-center space-y-6 shadow-2xl animate-in fade-in zoom-in-95 duration-300">
+            <div className="w-20 h-20 bg-blue-50 border border-blue-100 rounded-2xl flex items-center justify-center mx-auto shadow-sm">
+              <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-slate-800">{t('backup.exportingDataTitle') || 'Mengekspor Data'}</h3>
+              <p className="text-xs text-slate-500 mt-2 font-medium">{exportStatus}</p>
+            </div>
+            <div className="p-3 bg-slate-50 rounded-xl text-[10px] text-slate-400 font-bold uppercase tracking-wider border border-slate-100">
+              {t('backup.exportingDataWarn') || 'Harap jangan tutup jendela ini atau menyegarkan halaman.'}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Restore Progress Modal */}
       {isRestoring && (

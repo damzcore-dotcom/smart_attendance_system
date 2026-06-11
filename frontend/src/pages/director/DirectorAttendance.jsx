@@ -290,6 +290,21 @@ const DirectorAttendance = () => {
     setAppliedFilters(prev => ({ ...prev, ...newFilters, page: 1 }));
   };
 
+  const handleCardClick = (label) => {
+    let targetStatus = '';
+    if (label === 'Hadir') targetStatus = 'PRESENT';
+    else if (label === 'Terlambat') targetStatus = 'LATE';
+    else if (label === 'Total Terlambat') targetStatus = 'LATE,MANGKIR';
+    else if (label === 'Pulang Cepat') targetStatus = 'EARLY_DEPARTURE';
+    else if (label === 'Mangkir') targetStatus = 'MANGKIR';
+    else if (label === 'Alpa') targetStatus = 'ABSENT';
+    else if (label === 'Lainnya') targetStatus = 'HOLIDAY';
+    
+    setAppliedFilters(prev => ({ ...prev, status: targetStatus, page: 1 }));
+    setActiveViewTab('DETAIL');
+    setShowOnlyAnomalies(false);
+  };
+
   const handleSort = (key) => {
     const newOrder = appliedFilters.sortBy === key && appliedFilters.order === 'asc' ? 'desc' : 'asc';
     setAppliedFilters(prev => ({ ...prev, sortBy: key, order: newOrder, page: 1 }));
@@ -442,6 +457,7 @@ const DirectorAttendance = () => {
         onApply={handleApplyFilters} 
         isLoading={isLoading} 
         currentSearch={appliedFilters.search}
+        currentStatus={appliedFilters.status}
       />
 
       {/* Summary Matrix */}
@@ -558,6 +574,57 @@ const DirectorAttendance = () => {
                 <AlertCircle className="w-8 h-8 text-amber-600" />
               </div>
             </div>
+          </div>
+
+          {/* KPI Cards Grid */}
+          <div className={`grid grid-cols-2 md:grid-cols-4 lg:grid-cols-${summary.uniqueEmployeeCount === 1 ? '8' : '7'} gap-4`}>
+            {[
+              { key: 'Total Data', label: t('attendancePage.kpiTotal'), value: summary.total || 0, color: 'blue', icon: Filter, desc: t('attendancePage.semua') },
+              { key: 'Hadir', label: t('attendancePage.kpiPresent'), value: summary.hadir || 0, color: 'emerald', icon: CheckCircle2, desc: t('attendancePage.presentOnTime') },
+              { key: 'Terlambat', label: t('attendancePage.kpiLate'), value: summary.telat || 0, color: 'amber', icon: Clock, desc: t('attendancePage.kpiTotal') },
+              { key: 'Pulang Cepat', label: t('attendancePage.kpiEarlyDeparture'), value: summary.earlyDeparture || summary.pulangCepat || 0, color: 'purple', icon: Clock, desc: t('attendancePage.kpiEarlyDeparture') },
+              { key: 'Mangkir', label: t('attendancePage.kpiMangkir'), value: summary.mangkir || 0, color: 'rose', icon: AlertCircle, desc: t('attendancePage.kpiMangkir') },
+              { key: 'Alpa', label: t('attendancePage.kpiAbsent'), value: summary.absen || 0, color: 'red', icon: XCircle, desc: t('attendancePage.kpiAbsent') },
+              summary.uniqueEmployeeCount === 1 && { key: 'Total Terlambat', label: t('attendancePage.kpiTotalLate'), value: formatLateAccumulation(summary.totalLate || 0, i18n.language), color: 'rose', icon: Clock, desc: t('attendancePage.kpiTotalLate') },
+              { key: 'Lainnya', label: t('attendancePage.kpiOther'), value: (summary.holiday || 0) + (summary.cuti || 0) + (summary.sakit || 0) + (summary.izin || 0), color: 'slate', icon: Calendar, desc: t('attendancePage.kpiOther') },
+            ].filter(Boolean).map((item) => {
+              const isActive = 
+                (item.key === 'Total Data' && !appliedFilters.status) ||
+                (item.key === 'Hadir' && appliedFilters.status === 'PRESENT') ||
+                ((item.key === 'Terlambat' || item.key === 'Total Terlambat') && appliedFilters.status === 'LATE') ||
+                (item.key === 'Pulang Cepat' && appliedFilters.status === 'EARLY_DEPARTURE') ||
+                (item.key === 'Mangkir' && appliedFilters.status === 'MANGKIR') ||
+                (item.key === 'Alpa' && appliedFilters.status === 'ABSENT') ||
+                (item.key === 'Lainnya' && appliedFilters.status === 'HOLIDAY');
+
+              return (
+                <div 
+                  key={item.key} 
+                  onClick={() => handleCardClick(item.key)}
+                  className={`bg-white p-4 rounded-2xl border shadow-sm flex flex-col gap-3 hover:shadow-md hover:border-blue-300 hover:-translate-y-0.5 cursor-pointer active:scale-95 transition-all duration-200 group ${
+                    isActive 
+                      ? 'ring-2 ring-blue-500/50 border-blue-400 bg-blue-50/10' 
+                      : 'border-slate-200'
+                  }`}
+                >
+                  <div className="flex justify-between items-start">
+                    <div className={`w-8 h-8 rounded-xl bg-${item.color}-50 flex items-center justify-center border border-${item.color}-100 transition-transform group-hover:scale-110 group-hover:-rotate-3`}>
+                      <item.icon className={`w-4 h-4 text-${item.color}-600`} />
+                    </div>
+                    {isActive && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping shadow-[0_0_5px_rgba(37,99,235,0.5)]" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{item.label}</p>
+                    <p className="text-lg font-bold text-slate-800 leading-tight">{item.value}</p>
+                  </div>
+                  <div className="pt-2 border-t border-slate-50">
+                    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{item.desc}</p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           {/* Personal Accumulation Card */}
@@ -766,7 +833,9 @@ const DirectorAttendance = () => {
                          </span>
                       </td>
                       <td className="px-4 py-2 text-center">
-                        {(r.mode === 'Face CCTV' || r.source === 'face_cctv') ? (
+                        {(!r.checkIn && !r.checkOut) ? (
+                          <span className="text-slate-400">—</span>
+                        ) : (r.mode === 'Face CCTV' || r.source === 'face_cctv') ? (
                           <span className="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-lg text-[10px] font-bold border border-indigo-100 shadow-sm" title="Face Detection via CCTV">
                             <Camera className="w-3 h-3 text-indigo-500" />
                             Face CCTV
@@ -889,7 +958,7 @@ const DirectorAttendance = () => {
                         <td className="relative group/tooltip px-4 py-3 text-center text-xs font-bold text-amber-600 cursor-help border-b border-slate-100">
                           <span className={row.late > 0 ? "underline decoration-dotted decoration-amber-450" : ""}>{row.late}</span>
                           {row.late > 0 && (
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-none transition-all duration-200">
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-auto transition-all duration-200">
                               <p className="font-extrabold border-b border-slate-700 pb-1 mb-1.5 text-[9px] uppercase tracking-wider text-amber-450">{tooltipLabels.lateTitle}</p>
                               <div className="space-y-1 text-left max-h-[150px] overflow-y-auto custom-scrollbar">
                                 {row.lateDetails.map((d, i) => (
@@ -908,7 +977,7 @@ const DirectorAttendance = () => {
                         <td className="relative group/tooltip px-4 py-3 text-center text-xs font-bold text-blue-600 cursor-help border-b border-slate-100">
                           <span className={row.pulangCepat > 0 ? "underline decoration-dotted decoration-blue-400" : ""}>{row.pulangCepat || 0}</span>
                           {row.pulangCepat > 0 && (
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-none transition-all duration-200">
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-auto transition-all duration-200">
                               <p className="font-extrabold border-b border-slate-700 pb-1 mb-1.5 text-[9px] uppercase tracking-wider text-blue-400">{tooltipLabels.earlyTitle}</p>
                               <div className="space-y-1 text-left max-h-[150px] overflow-y-auto custom-scrollbar">
                                 {row.pulangCepatDetails.map((d, i) => (
@@ -926,7 +995,7 @@ const DirectorAttendance = () => {
                         <td className="relative group/tooltip px-4 py-3 text-center text-xs font-bold text-orange-600 cursor-help border-b border-slate-100">
                           <span className={row.mangkir > 0 ? "underline decoration-dotted decoration-orange-400" : ""}>{row.mangkir}</span>
                           {row.mangkir > 0 && (
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-none transition-all duration-200">
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-auto transition-all duration-200">
                               <p className="font-extrabold border-b border-slate-700 pb-1 mb-1.5 text-[9px] uppercase tracking-wider text-orange-400">{tooltipLabels.mangkirTitle}</p>
                               <div className="space-y-1 text-left max-h-[150px] overflow-y-auto custom-scrollbar">
                                 {row.mangkirDetails.map((d, i) => (
@@ -944,7 +1013,7 @@ const DirectorAttendance = () => {
                         <td className="relative group/tooltip px-4 py-3 text-center text-xs font-bold text-rose-600 cursor-help border-b border-slate-100">
                           <span className={row.absent > 0 ? "underline decoration-dotted decoration-rose-450" : ""}>{row.absent}</span>
                           {row.absent > 0 && (
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-none transition-all duration-200">
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-auto transition-all duration-200">
                               <p className="font-extrabold border-b border-slate-700 pb-1 mb-1.5 text-[9px] uppercase tracking-wider text-rose-400">{tooltipLabels.absentTitle}</p>
                               <div className="space-y-1 text-left max-h-[150px] overflow-y-auto custom-scrollbar">
                                 {row.absentDetails.map((d, i) => (
@@ -962,7 +1031,7 @@ const DirectorAttendance = () => {
                         <td className="relative group/tooltip px-4 py-3 text-center text-xs font-bold text-slate-500 cursor-help border-b border-slate-100">
                           <span className={row.other > 0 ? "underline decoration-dotted decoration-slate-400" : ""}>{row.other}</span>
                           {row.other > 0 && (
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-none transition-all duration-200">
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-slate-900/95 backdrop-blur text-white text-[10px] p-3 rounded-xl shadow-xl border border-slate-700 z-50 min-w-[220px] pointer-events-auto transition-all duration-200">
                               <p className="font-extrabold border-b border-slate-700 pb-1 mb-1.5 text-[9px] uppercase tracking-wider text-blue-400">{tooltipLabels.otherTitle}</p>
                               <div className="space-y-1 text-left max-h-[150px] overflow-y-auto custom-scrollbar">
                                 {row.otherDetails.map((d, i) => (
@@ -1004,7 +1073,7 @@ const DirectorAttendance = () => {
 
 // ─── Sub-component FilterBar ─────────────────────────────────
 
-const FilterBar = ({ onApply, isLoading, currentSearch }) => {
+const FilterBar = ({ onApply, isLoading, currentSearch, currentStatus }) => {
   const { t } = useTranslation();
   const [filterDate, setFilterDate] = useState('Today');
   const [customStart, setCustomStart] = useState('');
@@ -1018,6 +1087,10 @@ const FilterBar = ({ onApply, isLoading, currentSearch }) => {
   useEffect(() => {
     if (currentSearch !== undefined) setSearchQuery(currentSearch);
   }, [currentSearch]);
+
+  useEffect(() => {
+    if (currentStatus !== undefined) setFilterStatus(currentStatus);
+  }, [currentStatus]);
 
   const { data: optionsData } = useQuery({
     queryKey: ['director-att-options-reactive', { period: filterDate, startDate: customStart, endDate: customEnd, dept: filterDept, search: searchQuery }],

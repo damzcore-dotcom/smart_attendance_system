@@ -502,8 +502,8 @@ const formatResult = (intent, data, isEnglish, queryParams) => {
   switch (intent) {
     case 'greeting':
       return isEnglish 
-        ? "👋 **Hello!** I am the Smart Attendance AI Assistant (Offline Mode). How can I assist you with employee database, attendance records, leaves, or shift rosters today? Type *'help'* to see what I can do!"
-        : "👋 **Halo!** Saya adalah Asisten AI Smart Attendance (Mode Offline). Bagaimana saya bisa membantu Anda mengelola data karyawan, absensi, cuti/izin, atau jadwal shift hari ini? Ketik *'bantuan'* untuk melihat kemampuan saya!";
+        ? "👋 **Hello!** I am the Smart HRIS AI Assistant (Offline Mode). How can I assist you with employee database, attendance records, leaves, or shift rosters today? Type *'help'* to see what I can do!"
+        : "👋 **Halo!** Saya adalah Asisten AI Smart HRIS (Mode Offline). Bagaimana saya bisa membantu Anda mengelola data karyawan, absensi, cuti/izin, atau jadwal shift hari ini? Ketik *'bantuan'* untuk melihat kemampuan saya!";
 
     case 'help':
       if (isEnglish) {

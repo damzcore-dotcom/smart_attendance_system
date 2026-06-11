@@ -13,7 +13,7 @@ const { recordAuditLog } = require('./auditLogController');
  */
 const getAll = async (req, res) => {
   try {
-    const { search, dept, section, position, status, date, period, startDate, endDate, sortBy, order } = req.query;
+    const { search, dept, section, position, status, date, period, startDate, endDate, sortBy, order, locationId } = req.query;
 
     // Fetch Global Settings (Working Days & Penalties)
     const settingsList = await prisma.settings.findMany();
@@ -23,6 +23,18 @@ const getAll = async (req, res) => {
     const mangkirPenalty = penaltyRules.rule1Minutes; // Fallback / default
 
     const where = {};
+
+    if (locationId && locationId !== 'All' && locationId !== '') {
+      where.employee = {
+        ...where.employee,
+        OR: [
+          { locationId: { equals: locationId } },
+          { locationId: { startsWith: `${locationId},` } },
+          { locationId: { endsWith: `,${locationId}` } },
+          { locationId: { contains: `,${locationId},` } }
+        ]
+      };
+    }
 
     // Date filtering
     const now = new Date();
@@ -68,7 +80,12 @@ const getAll = async (req, res) => {
       };
     }
     if (status && status !== 'All') {
-      where.status = status;
+      const statusValues = status.split(',').map(s => s.trim());
+      if (statusValues.length === 1) {
+        where.status = statusValues[0];
+      } else {
+        where.status = { in: statusValues };
+      }
     }
 
     // BHL Isolation Filters
@@ -398,11 +415,20 @@ const checkIn = async (req, res) => {
         }
       }
 
-      const locations = await prisma.location.findMany();
+      const assignedIds = (employee.locationId || '').split(',').map(s => s.trim()).filter(Boolean);
+      let targetLocations = [];
+      if (assignedIds.length > 0) {
+        targetLocations = await prisma.location.findMany({
+          where: { id: { in: assignedIds.map(Number) } }
+        });
+      } else {
+        targetLocations = await prisma.location.findMany();
+      }
+
       let isInside = false;
       let nearestDist = Infinity;
 
-      for (const loc of locations) {
+      for (const loc of targetLocations) {
         const dist = getDistance(parseFloat(lat), parseFloat(lng), loc.lat, loc.lng);
         if (dist <= loc.radius) {
           isInside = true;
@@ -967,7 +993,16 @@ const importFromExcel = async (req, res) => {
         scanMinutes += 24 * 60; // night shift mornings scanMinutes adjust
       }
 
-      const rawVerifyCode = (colMap.verifyCode !== -1 && row[colMap.verifyCode] !== undefined) ? parseInt(row[colMap.verifyCode], 10) : 1;
+      let rawVerifyCode = 1;
+      if (colMap.verifyCode !== -1 && row[colMap.verifyCode] !== undefined) {
+        const val = row[colMap.verifyCode];
+        const num = parseInt(val, 10);
+        if (!isNaN(num)) {
+          rawVerifyCode = num;
+        } else {
+          rawVerifyCode = String(val).trim();
+        }
+      }
 
       if (rawStatus.includes('in') || (!rawStatus.includes('out') && scanMinutes <= midpointMinutes)) {
         if (!grouped[groupKey].checkIn || eventTime < grouped[groupKey].checkIn) {
@@ -1085,12 +1120,19 @@ const importFromExcel = async (req, res) => {
 
         let finalMode = 'Fingered';
         const vCode = entry.checkInVerifyCode !== undefined ? entry.checkInVerifyCode : (entry.checkOutVerifyCode !== undefined ? entry.checkOutVerifyCode : 1);
-        if (vCode === 0 || vCode === 3 || vCode === 4) {
-          finalMode = 'Pinned';
-        } else if (vCode === 2) {
-          finalMode = 'Carded';
-        } else if (vCode === 15) {
-          finalMode = 'Face Machine';
+        if (typeof vCode === 'string') {
+          const str = vCode.toLowerCase().trim();
+          if ((str.includes('pass') || str.includes('pw')) && !str.includes('fp/pw/rf/face')) {
+            finalMode = 'Pinned';
+          } else {
+            finalMode = 'Fingered';
+          }
+        } else {
+          if (vCode === 0 || vCode === 3 || vCode === 4) {
+            finalMode = 'Pinned';
+          } else {
+            finalMode = 'Fingered';
+          }
         }
 
         entriesToSave.push({

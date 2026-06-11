@@ -63,6 +63,7 @@ const Scan = () => {
 
   const user = authAPI.getStoredUser();
   const empId = user?.employee?.id;
+  const isGeofenceBlocked = !isCheckOut && geofenceStatus.checked && !geofenceStatus.isInside;
 
   const getGuideMessage = () => {
     if (faceGuideStatus !== 'detected') return 'Arahkan wajah ke lingkaran';
@@ -76,7 +77,7 @@ const Scan = () => {
 
     try {
       let pending = [];
-      const secret = localStorage.getItem('accessToken') || 'fallback-secret';
+      const secret = sessionStorage.getItem('accessToken') || 'fallback-secret';
       try {
         const decryptedStr = await decryptData(rawPending, secret);
         pending = JSON.parse(decryptedStr);
@@ -193,13 +194,39 @@ const Scan = () => {
   // Geofence check
   useEffect(() => {
     if (gpsReady && coordsRef.current) {
-      settingsAPI.getLocations()
-        .then(res => {
-          const locations = res.data || [];
+      Promise.all([
+        settingsAPI.getLocations(),
+        authAPI.getMe().catch(() => null)
+      ])
+        .then(([locRes, meRes]) => {
+          let locations = locRes.data || [];
+          const currentUser = meRes?.user || user;
+          
           if (locations.length === 0) {
             setGeofenceStatus({ checked: true, isInside: true, distance: 0, name: 'Tanpa batas', radius: 0 });
             return;
           }
+          
+          // Filter locations based on employee's assigned branches (locationId)
+          const assignedLocationIds = currentUser?.employee?.locationId
+            ? currentUser.employee.locationId.split(',').map(x => x.trim()).filter(Boolean)
+            : [];
+            
+          if (assignedLocationIds.length > 0) {
+            locations = locations.filter(loc => assignedLocationIds.includes(String(loc.id)));
+          }
+          
+          if (locations.length === 0) {
+            setGeofenceStatus({ 
+              checked: true, 
+              isInside: false, 
+              distance: Infinity, 
+              name: 'Cabang ditugaskan tidak ditemukan', 
+              radius: 0 
+            });
+            return;
+          }
+
           let isInside = false;
           let nearestDist = Infinity;
           let matchedLoc = null;
@@ -244,7 +271,7 @@ const Scan = () => {
       if (!navigator.onLine) {
         const rawPending = localStorage.getItem('pending_sync');
         let pending = [];
-        const secret = localStorage.getItem('accessToken') || 'fallback-secret';
+        const secret = sessionStorage.getItem('accessToken') || 'fallback-secret';
 
         if (rawPending) {
           try {
@@ -361,7 +388,7 @@ const Scan = () => {
 
   // Real-time face guide: active blink liveness check + auto-capture
   useEffect(() => {
-    if (scanStatus !== 'ready' || !modelsReady) {
+    if (scanStatus !== 'ready' || !modelsReady || isGeofenceBlocked) {
       if (faceGuideRef.current) clearInterval(faceGuideRef.current);
       faceGuideRef.current = null;
       return;
@@ -503,7 +530,7 @@ const Scan = () => {
     return () => {
       if (faceGuideRef.current) clearInterval(faceGuideRef.current);
     };
-  }, [scanStatus, modelsReady, capture]);
+  }, [scanStatus, modelsReady, capture, isGeofenceBlocked]);
 
   const resetScan = () => {
     setScanStatus('ready');
@@ -554,7 +581,7 @@ const Scan = () => {
       {/* Camera Area - fills remaining space */}
       <div className="flex-1 relative">
         {/* Webcam - always try to render when camera should be active */}
-        {cameraActive && (
+        {cameraActive && !isGeofenceBlocked && (
           <Webcam
             audio={false}
             ref={webcamRef}
@@ -563,6 +590,22 @@ const Scan = () => {
             videoConstraints={{ facingMode: "user", width: 640, height: 480, frameRate: 30 }}
             className="absolute inset-0 w-full h-full object-cover"
           />
+        )}
+
+        {isGeofenceBlocked && (
+          <div className="absolute inset-0 bg-slate-950 flex flex-col items-center justify-center p-6 text-center space-y-4 z-30">
+            <div className="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center border border-rose-500/20 text-rose-500">
+              <XCircle className="w-8 h-8" />
+            </div>
+            <h3 className="text-white font-bold text-lg">Di Luar Radius Absensi</h3>
+            <p className="text-slate-400 text-sm max-w-xs leading-relaxed">
+              Jarak Anda saat ini adalah <span className="text-rose-400 font-bold">{geofenceStatus.distance}m</span> dari <span className="text-white font-semibold">{geofenceStatus.name}</span>.<br />
+              Batas radius absensi adalah <span className="text-slate-200 font-semibold">{geofenceStatus.radius}m</span>.
+            </p>
+            <p className="text-slate-500 text-xs italic">
+              Harap mendekat ke lokasi kantor untuk melakukan check-in.
+            </p>
+          </div>
         )}
 
         {/* Loading state */}
@@ -577,14 +620,14 @@ const Scan = () => {
         )}
 
         {/* Dark overlay with circular cutout */}
-        {cameraActive && (
+        {cameraActive && !isGeofenceBlocked && (
           <div className="absolute inset-0 pointer-events-none" style={{
             background: 'radial-gradient(circle at 50% 45%, transparent 28%, rgba(0,0,0,0.7) 65%)'
           }}></div>
         )}
 
         {/* Face Target Circle */}
-        {cameraActive && (
+        {cameraActive && !isGeofenceBlocked && (
           <div className={`absolute top-[45%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-56 h-56 border-[3px] rounded-full transition-all duration-500 pointer-events-none ${getBorderColor()}`}></div>
         )}
 

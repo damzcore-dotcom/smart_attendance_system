@@ -1,4 +1,5 @@
 const prisma = require('../prismaClient');
+const { sendWAMessage } = require('../services/whatsappService');
 
 /**
  * POST /api/leave
@@ -206,6 +207,50 @@ const review = async (req, res) => {
         message: `Your ${leave.type} request for ${leave.startDate.toLocaleDateString()} to ${leave.endDate.toLocaleDateString()} has been ${status.toLowerCase()}. ${reviewNote ? `Note: ${reviewNote}` : ''}`
       }
     });
+
+    // Send Push Notification
+    try {
+      const pushService = require('../services/pushNotificationService');
+      const statusText = status === 'APPROVED' ? 'Disetujui' : 'Ditolak';
+      const noteText = reviewNote ? ` Catatan: ${reviewNote}` : '';
+      const formattedStart = new Date(leave.startDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+      const formattedEnd = new Date(leave.endDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+      const dateStr = formattedStart === formattedEnd ? formattedStart : `${formattedStart} - ${formattedEnd}`;
+      
+      await pushService.sendPushNotification(
+        leave.employeeId,
+        `Pengajuan Cuti ${statusText}`,
+        `Pengajuan ${leave.type} Anda (${dateStr}) telah ${statusText.toLowerCase()}.${noteText}`
+      );
+    } catch (pushErr) {
+      console.error('[Push Notification Error] Failed to send push in leave review:', pushErr);
+    }
+
+    // Kirim notifikasi WhatsApp
+    if (leave.employee && leave.employee.phone) {
+      const formatDate = (dateStr) => {
+        const d = new Date(dateStr);
+        return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
+      };
+      
+      const startStr = formatDate(leave.startDate);
+      const endStr = formatDate(leave.endDate);
+      const dateRange = startStr === endStr ? startStr : `${startStr} s.d. ${endStr}`;
+      
+      const waMsg = `*Smart HRIS Platform - Leave Request Update*\n\n` +
+        `Halo ${leave.employee.name},\n\n` +
+        `Pengajuan cuti/izin Anda:\n` +
+        `• Jenis: ${leave.type}\n` +
+        `• Tanggal: ${dateRange}\n` +
+        `• Alasan: ${leave.reason}\n` +
+        `• Status: *${status === 'APPROVED' ? 'DISETUJUI' : 'DITOLAK'}*\n` +
+        (reviewNote ? `• Catatan Peninjau: ${reviewNote}\n` : '') +
+        `\nTerima kasih,\nTim HRD Smart HRIS Platform`;
+      
+      sendWAMessage(leave.employee.phone, waMsg).catch(err => {
+        console.error('[LeaveController] Failed to send WA notification:', err);
+      });
+    }
 
     res.json({ success: true, message: `Request ${status.toLowerCase()} successfully`, data: updated });
   } catch (err) {

@@ -331,40 +331,44 @@ const Login = () => {
   const isBusy = scanStatus === 'detecting' || scanStatus === 'verifying' || scanStatus === 'success';
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 md:p-8 relative overflow-hidden font-sans bg-gradient-to-br from-blue-50 via-white to-slate-50">
+    <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 md:p-8 relative overflow-hidden font-sans bg-[#f8fafc] text-slate-800">
       
-      {/* Language Selector at the top right */}
+      {/* Light & Vibrant background glowing blobs */}
+      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-sky-400/15 rounded-full blur-[130px] animate-pulse pointer-events-none" style={{ animationDuration: '8s' }} />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-indigo-400/15 rounded-full blur-[140px] animate-pulse pointer-events-none" style={{ animationDuration: '12s' }} />
+      <div className="absolute top-[30%] left-[-5%] w-[35%] h-[35%] bg-emerald-300/10 rounded-full blur-[110px] animate-pulse pointer-events-none" style={{ animationDuration: '10s' }} />
+      
+      {/* Light tech-grid pattern */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#e2e8f0_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f0_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] opacity-40 -z-10" />
+
+      {/* Language Selector at the top right of the viewport */}
       <div className="absolute top-6 right-6 z-50">
         <LanguageSelector />
       </div>
 
-      {/* Decorative background elements */}
-      <div className="absolute top-0 right-0 w-96 h-96 bg-blue-100/50 rounded-full blur-[120px] -translate-y-1/2 translate-x-1/3 pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-80 h-80 bg-blue-50 rounded-full blur-[100px] translate-y-1/3 -translate-x-1/4 pointer-events-none" />
-      
-      {/* Main Container */}
-      <div className="w-full max-w-[440px] bg-white rounded-3xl flex flex-col overflow-hidden z-10 p-6 sm:p-8 md:p-10 relative shadow-xl shadow-slate-200/50 border border-slate-100">
+      {/* Centered Glassmorphic Card */}
+      <div className="w-full max-w-[450px] bg-white/90 backdrop-blur-2xl border border-slate-200/60 rounded-[2.5rem] p-8 sm:p-10 md:p-12 shadow-[0_20px_50px_-12px_rgba(15,23,42,0.08)] z-10 relative">
+        <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-slate-200/50 to-transparent" />
         
         <div className="relative z-10 w-full">
-          {/* Logo */}
-          <div className="mb-6 flex flex-col items-center text-center w-full gap-4">
-            <div className="flex justify-center items-center w-full max-w-[240px] sm:max-w-[280px] mx-auto transition-transform hover:scale-105 duration-500">
-              <AppLogo className="w-full h-auto max-h-[100px] object-contain drop-shadow-md" />
+          {/* Logo Section */}
+          <div className="flex flex-col items-center mb-8">
+            <div className="w-[180px] h-[70px] flex items-center justify-center mb-4 p-1 hover:scale-105 duration-300 transition-transform">
+              <AppLogo className="w-full h-full object-contain filter drop-shadow-sm" />
             </div>
-            <div className="flex flex-col items-center gap-1">
-              <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-br from-slate-800 to-slate-600 tracking-tight leading-tight">{publicSettings.companyName}</h1>
-              <p className="text-blue-600 text-[10px] font-black uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full border border-blue-100 shadow-sm inline-block relative z-10">{t('login.subtitle')}</p>
-            </div>
+            <h1 className="text-xl sm:text-2xl font-black text-slate-800 text-center tracking-tight leading-tight max-w-[320px]">{publicSettings.companyName}</h1>
+            <span className="text-[10px] font-black tracking-widest text-blue-600 uppercase bg-blue-50/60 px-3 py-1 rounded-full border border-blue-100/50 mt-2.5 backdrop-blur-sm">{t('login.subtitle')}</span>
           </div>
 
           {/* Segmented Control Tabs */}
-          <div className="flex p-1 bg-slate-100 rounded-xl mb-8">
+          <div className="flex p-1 bg-slate-200/40 border border-slate-300/20 rounded-2xl mb-8 relative backdrop-blur-sm">
             <button
               onClick={() => setLoginMode('credentials')}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-xs font-semibold transition-all duration-300 cursor-pointer ${
+              type="button"
+              className={`flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl text-xs font-bold transition-all duration-300 cursor-pointer ${
                 loginMode === 'credentials' 
-                  ? 'bg-white text-blue-600 shadow-sm' 
-                  : 'text-slate-500 hover:text-slate-700'
+                  ? 'bg-white text-blue-600 shadow-sm border border-slate-200/10' 
+                  : 'text-slate-500 hover:text-slate-800'
               }`}
             >
               <LogIn className="w-4 h-4" />
@@ -376,10 +380,11 @@ const Login = () => {
                 setIsScanning(false);
                 setError(null);
               }}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-xs font-semibold transition-all duration-300 cursor-pointer ${
+              type="button"
+              className={`flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl text-xs font-bold transition-all duration-300 cursor-pointer ${
                 loginMode === 'face' 
-                  ? 'bg-white text-blue-600 shadow-sm' 
-                  : 'text-slate-500 hover:text-slate-700'
+                  ? 'bg-white text-blue-600 shadow-sm border border-slate-200/10' 
+                  : 'text-slate-500 hover:text-slate-800'
               }`}
             >
               <ScanFace className="w-4 h-4" />
@@ -392,9 +397,9 @@ const Login = () => {
             <form onSubmit={handleCredentialLogin} className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
               <div className="space-y-5">
                 <div className="group">
-                  <label className="block text-xs font-semibold text-slate-500 mb-2 ml-1">{t('login.username')}</label>
+                  <label className="block text-xs font-bold text-slate-500 mb-2 ml-1">{t('login.username')}</label>
                   <div className="relative">
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors duration-300">
                       <User className="w-5 h-5" />
                     </div>
                     <input
@@ -403,15 +408,15 @@ const Login = () => {
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
                       required
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-12 pr-4 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-slate-800 placeholder:text-slate-400 transition-all"
+                      className="w-full bg-white/60 hover:bg-white/80 focus:bg-white border border-slate-200/80 focus:border-blue-500 rounded-2xl pl-12 pr-4 py-4 focus:outline-none focus:ring-4 focus:ring-blue-500/10 text-slate-800 placeholder:text-slate-400/80 transition-all duration-300 shadow-sm"
                     />
                   </div>
                 </div>
 
                 <div className="group">
-                  <label className="block text-xs font-semibold text-slate-500 mb-2 ml-1">{t('login.password')}</label>
+                  <label className="block text-xs font-bold text-slate-500 mb-2 ml-1">{t('login.password')}</label>
                   <div className="relative">
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors duration-300">
                       <ShieldCheck className="w-5 h-5" />
                     </div>
                     <input
@@ -420,15 +425,15 @@ const Login = () => {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-12 pr-4 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-slate-800 placeholder:text-slate-400 tracking-widest transition-all"
+                      className="w-full bg-white/60 hover:bg-white/80 focus:bg-white border border-slate-200/80 focus:border-blue-500 rounded-2xl pl-12 pr-4 py-4 focus:outline-none focus:ring-4 focus:ring-blue-500/10 text-slate-800 placeholder:text-slate-400/80 tracking-widest transition-all duration-300 shadow-sm"
                     />
                   </div>
                 </div>
 
                 {error && (
-                  <div className="p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm font-medium flex items-center gap-3 animate-in fade-in zoom-in-95 duration-300">
-                    <AlertCircle className="w-5 h-5 shrink-0" />
-                    {error}
+                  <div className="p-4 bg-red-50 border border-red-200 text-red-600 rounded-2xl text-sm font-semibold flex items-center gap-3 animate-in fade-in zoom-in-95 duration-300 shadow-sm">
+                    <AlertCircle className="w-5 h-5 shrink-0 text-red-500" />
+                    <span>{error}</span>
                   </div>
                 )}
               </div>
@@ -437,7 +442,7 @@ const Login = () => {
                 <button
                   type="submit"
                   disabled={isLoggingIn}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-600/20 active:scale-[0.98] disabled:opacity-70 cursor-pointer"
+                  className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 hover:-translate-y-0.5 active:translate-y-0 text-white py-4 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all duration-300 shadow-lg shadow-blue-500/20 hover:shadow-blue-500/35 disabled:opacity-75 disabled:pointer-events-none cursor-pointer"
                 >
                   {isLoggingIn ? (
                     <><Loader2 className="w-4 h-4 animate-spin" /> {t('login.loggingIn')}</>
@@ -449,7 +454,7 @@ const Login = () => {
                   <button 
                     type="button" 
                     onClick={handleForgotPassword}
-                    className="text-slate-400 hover:text-blue-600 text-xs font-medium transition-colors cursor-pointer"
+                    className="text-slate-400 hover:text-blue-600 text-xs font-bold transition-colors duration-200 cursor-pointer"
                   >
                     {t('login.forgotPassword')}
                   </button>
@@ -457,21 +462,26 @@ const Login = () => {
               </div>
             </form>
           ) : (
-              <div className="p-10 bg-blue-50 rounded-2xl border border-blue-100 group hover:border-blue-300 transition-all duration-500 text-center">
-                <div className="w-20 h-20 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-105 transition-transform duration-500">
-                  <ScanFace className="w-10 h-10" />
-                </div>
-                <h3 className="text-xl font-bold text-slate-800 mb-2">{t('login.biometricTitle')}</h3>
-                <p className="text-sm text-slate-500 mb-8 leading-relaxed">{t('login.biometricDesc')}</p>
-                <button
-                  onClick={() => setIsScanning(true)}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-semibold text-sm shadow-lg shadow-blue-600/20 transition-all flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer"
-                >
-                  <Camera className="w-4 h-4" /> {t('login.initScanner')}
-                </button>
+            <div className="p-8 bg-blue-50/40 border border-blue-100/60 rounded-3xl group hover:border-blue-300/60 transition-all duration-500 text-center shadow-sm backdrop-blur-sm">
+              <div className="w-20 h-20 bg-blue-100/70 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-105 transition-transform duration-500 shadow-inner">
+                <ScanFace className="w-10 h-10" />
               </div>
+              <h3 className="text-lg font-bold text-slate-800 mb-2">{t('login.biometricTitle')}</h3>
+              <p className="text-sm text-slate-500 mb-8 leading-relaxed max-w-[280px] mx-auto">{t('login.biometricDesc')}</p>
+              <button
+                onClick={() => setIsScanning(true)}
+                type="button"
+                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 hover:-translate-y-0.5 active:translate-y-0 text-white py-4 rounded-2xl font-bold text-sm shadow-md shadow-blue-600/10 hover:shadow-blue-500/30 transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Camera className="w-4 h-4" /> {t('login.initScanner')}
+              </button>
+            </div>
           )}
 
+          {/* Copyright footer */}
+          <p className="text-center text-[10px] text-slate-500 mt-8 pt-4 border-t border-slate-200/50">
+            {t('login.copyright')}
+          </p>
         </div>
       </div>
 

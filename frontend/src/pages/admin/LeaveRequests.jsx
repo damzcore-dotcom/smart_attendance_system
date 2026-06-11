@@ -136,7 +136,7 @@ const AdminLeaveRequests = () => {
                       : 'text-slate-500 hover:text-slate-700'
                   }`}
                 >
-                  {status}
+                  {t(`leave.status${status.charAt(0) + status.slice(1).toLowerCase()}`)}
                 </button>
               ))}
             </div>
@@ -270,7 +270,7 @@ const AdminLeaveRequests = () => {
                       <span className={`inline-flex items-center px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${
                         item.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-rose-50 text-rose-600 border-rose-200'
                       }`}>
-                        {item.status}
+                        {t(`leave.status${item.status.charAt(0) + item.status.slice(1).toLowerCase()}`)}
                       </span>
                     )}
                   </td>

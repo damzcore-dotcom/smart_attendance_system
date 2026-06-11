@@ -8,8 +8,19 @@ import numpy as np
 
 class FaceRecognizer:
     def __init__(self, device: str = "cpu", model_root: str = "/app/models"):
-        ctx_id = 0 if device == "cuda" else -1
         import os
+        import onnxruntime as ort
+        device = device.lower()
+        
+        ctx_id = -1
+        if device == "cuda":
+            providers = ort.get_available_providers()
+            if "CUDAExecutionProvider" in providers:
+                ctx_id = 0
+                print("[FaceRecognizer] GPU CUDA is available and will be used.")
+            else:
+                print("[FaceRecognizer] WARNING: CUDA requested but CUDAExecutionProvider not found. Falling back to CPU.")
+
         size_str = os.getenv("DETECTION_SIZE", "640,640")
         try:
             w, h = map(int, size_str.split(","))
@@ -22,7 +33,7 @@ class FaceRecognizer:
             root=model_root
         )
         self.model.prepare(ctx_id=ctx_id, det_size=det_size)
-        print(f"[FaceRecognizer] Model loaded on {'GPU' if device == 'cuda' else 'CPU'} with det_size={det_size}")
+        print(f"[FaceRecognizer] Model loaded on {'GPU' if ctx_id == 0 else 'CPU'} with det_size={det_size}")
 
     def get_embedding(self, frame: np.ndarray) -> np.ndarray | None:
         """Extract 512-dim face embedding from a frame/aligned face crop."""
@@ -56,44 +67,98 @@ class FaceRecognizer:
             print(f"[FaceRecognizer] Embedding extraction error: {e}")
         return None
 
-    def match(self, embedding: np.ndarray, database: dict, threshold: float = 0.60) -> dict | None:
+    def match(
+        self,
+        embedding: np.ndarray,
+        database: dict = None,
+        db_matrix: np.ndarray = None,
+        ids: list = None,
+        threshold: float = None,
+        use_adaptive: bool = True
+    ) -> dict | None:
         """
         Match an embedding against the database of enrolled employees.
-        
-        Args:
-            embedding: 512-dim normalized vector
-            database: dict of {employee_id: embedding_vector}
-            threshold: minimum cosine similarity (0.0 - 1.0)
-            
-        Returns:
-            dict with employee_id and similarity, or None if no match
+        Supports both fast NumPy vectorized matching and dict fallback.
+        Applies adaptive thresholds depending on the number of embeddings.
         """
+        # Ensure query embedding is normalized
+        emb_norm = np.linalg.norm(embedding)
+        if emb_norm > 0:
+            embedding = embedding / emb_norm
+
+        # 1. Vectorized Matching (NumPy Matrix Multiplication) - Extremely Fast
+        if db_matrix is not None and ids is not None and len(ids) > 0:
+            similarities = db_matrix @ embedding  # Dot product of all embeddings at once
+            best_idx = int(np.argmax(similarities))
+            best_score = float(similarities[best_idx])
+            best_id = ids[best_idx]
+
+            # Determine adaptive threshold
+            if threshold is not None:
+                active_thresh = threshold
+            elif use_adaptive:
+                # Count enrolled embeddings for this employee
+                emb_count = ids.count(best_id)
+                if emb_count <= 1:
+                    active_thresh = 0.62
+                elif emb_count <= 3:
+                    active_thresh = 0.55
+                else:
+                    active_thresh = 0.50
+            else:
+                active_thresh = 0.60
+
+            if best_score >= active_thresh:
+                return {
+                    "employee_id": best_id,
+                    "similarity": round(best_score, 4)
+                }
+            return None
+
+        # 2. Fallback Dictionary Scan (Slow, but backward compatible)
         if not database:
             return None
 
         best_id = None
         best_score = 0.0
+        best_count = 1
 
-        for emp_id, db_embed in database.items():
-            db_embed = np.array(db_embed, dtype=np.float32)
-            
-            # Normalize db embedding if not already
-            db_norm = np.linalg.norm(db_embed)
-            if db_norm > 0:
-                db_embed = db_embed / db_norm
+        for emp_id, db_val in database.items():
+            if isinstance(db_val, list) and len(db_val) > 0 and isinstance(db_val[0], list):
+                embeddings_list = db_val
+            else:
+                embeddings_list = [db_val]
 
-            # Cosine similarity
-            score = float(np.dot(embedding, db_embed))
+            for db_embed in embeddings_list:
+                db_embed = np.array(db_embed, dtype=np.float32)
+                db_norm = np.linalg.norm(db_embed)
+                if db_norm > 0:
+                    db_embed = db_embed / db_norm
 
-            if score > best_score:
-                best_score = score
-                best_id = emp_id
+                score = float(np.dot(embedding, db_embed))
+                if score > best_score:
+                    best_score = score
+                    best_id = emp_id
+                    best_count = len(embeddings_list)
 
-        if best_score >= threshold and best_id is not None:
-            return {
-                "employee_id": best_id,
-                "similarity": round(best_score, 4)
-            }
+        if best_id is not None:
+            if threshold is not None:
+                active_thresh = threshold
+            elif use_adaptive:
+                if best_count <= 1:
+                    active_thresh = 0.62
+                elif best_count <= 3:
+                    active_thresh = 0.55
+                else:
+                    active_thresh = 0.50
+            else:
+                active_thresh = 0.60
+
+            if best_score >= active_thresh:
+                return {
+                    "employee_id": best_id,
+                    "similarity": round(best_score, 4)
+                }
 
         return None
 

@@ -143,26 +143,28 @@ const create = async (req, res) => {
 
     if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
       const menus = [
-        'dashboard', 'announcements', 'employees', 'contracts', 'shift-roster', 'leave-requests', 
+        'dashboard', 'announcements', 'employees', 'contracts', 'training', 'shift-roster', 'leave-requests', 
+        'profile-requests', 'kpi',
         'attendance', 'overtime-spl', 'daily-workers', 'manual-correction', 'corrections', 
-        'payroll', 'payroll-settings', 'face-check', 'devices', 'fingerprint', 
-        'users', 'backup', 'settings'
+        'payroll', 'payroll-settings', 'claims',
+        'face-check', 'devices', 'fingerprint', 
+        'users', 'backup', 'settings', 'audit-log'
       ];
       await prisma.menuPermission.createMany({
         data: menus.map(menu => ({ userId: user.id, menuKey: menu, canRead: true, canCreate: true, canUpdate: true, canDelete: true }))
       });
     } else if (role === 'ACCOUNTING') {
-      const menus = ['dashboard', 'payroll', 'payroll-settings', 'employees', 'attendance', 'overtime-spl', 'daily-workers'];
+      const menus = ['dashboard', 'payroll', 'payroll-settings', 'claims', 'employees', 'attendance', 'overtime-spl', 'daily-workers'];
       await prisma.menuPermission.createMany({
         data: menus.map(menu => ({ userId: user.id, menuKey: menu, canRead: true, canCreate: true, canUpdate: true, canDelete: true }))
       });
     } else if (role === 'MANAGER') {
-      const menus = ['dashboard', 'attendance', 'employees', 'leave-requests'];
+      const menus = ['dashboard', 'attendance', 'employees', 'leave-requests', 'kpi'];
       await prisma.menuPermission.createMany({
         data: menus.map(menu => ({ userId: user.id, menuKey: menu, canRead: true, canCreate: false, canUpdate: false, canDelete: false }))
       });
     } else if (role === 'DIREKTUR') {
-      const menus = ['dashboard', 'attendance', 'employees', 'leave-requests', 'contracts'];
+      const menus = ['dashboard', 'attendance', 'employees', 'leave-requests', 'contracts', 'kpi', 'audit-log'];
       await prisma.menuPermission.createMany({
         data: menus.map(menu => ({ userId: user.id, menuKey: menu, canRead: true, canCreate: false, canUpdate: false, canDelete: false }))
       });

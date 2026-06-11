@@ -53,6 +53,8 @@ try {
   fs.copyFileSync(path.join(rootDir, 'generate-license.js'), path.join(releaseDir, 'generate-license.js'));
   fs.copyFileSync(path.join(rootDir, 'PANDUAN_INSTALASI.txt'), path.join(releaseDir, 'PANDUAN_INSTALASI.txt'));
   fs.copyFileSync(path.join(rootDir, 'backend', '.env.example'), path.join(releaseDir, 'backend', '.env.example'));
+  fs.copyFileSync(path.join(rootDir, 'app-launcher.js'), path.join(releaseDir, 'app-launcher.js'));
+  fs.copyFileSync(path.join(rootDir, 'launcher-ui.html'), path.join(releaseDir, 'launcher-ui.html'));
   if (fs.existsSync(path.join(rootDir, 'frontend', '.env.example'))) {
     fs.copyFileSync(path.join(rootDir, 'frontend', '.env.example'), path.join(releaseDir, 'frontend', '.env.example'));
   }
@@ -76,7 +78,7 @@ try {
 title Smart Attendance Pro
 color 0A
 echo ===================================================
-echo    Smart Attendance Pro - Installer
+echo    Smart Attendance Pro - Launcher
 echo ===================================================
 echo.
 
@@ -102,17 +104,15 @@ echo [3/4] Menginstall modul frontend...
 call npm install serve --quiet
 
 cd ..
-echo [4/4] Memulai sistem...
-start "Backend" cmd /k "cd backend && npm run start:prod"
-start "Frontend" cmd /k "cd frontend && npm start"
+echo [4/4] Memulai GUI Launcher...
+start "Smart Attendance Launcher" /min cmd /c "node app-launcher.js"
 
 echo.
 echo ===================================================
-echo   Sistem berhasil dijalankan!
-echo   Buka browser dan akses alamat di bawah ini.
-echo   (Port sesuai konfigurasi .env)
+echo   GUI Launcher berhasil dijalankan!
+echo   Layanan absensi dapat dikontrol dari jendela Launcher.
 echo ===================================================
-pause
+timeout /t 5 >nul
 `;
   fs.writeFileSync(path.join(releaseDir, 'START_APP.bat'), batContent);
 

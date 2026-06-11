@@ -48,7 +48,7 @@ const NotFound = () => {
 
         {/* Footer */}
         <p className="text-[10px] text-slate-400 mt-12 uppercase tracking-widest font-medium">
-          Smart Attendance Pro
+          Smart HRIS Platform
         </p>
       </div>
     </div>

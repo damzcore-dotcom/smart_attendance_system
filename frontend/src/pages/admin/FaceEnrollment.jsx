@@ -192,21 +192,16 @@ const FaceEnrollment = () => {
     setEnrollmentStatus('processing');
 
     try {
-      const avgEmbedding = allEmbeddings[0].map((_, idx) => {
-        const sum = allEmbeddings.reduce((acc, emb) => acc + emb[idx], 0);
-        return sum / allEmbeddings.length;
-      });
-
       const dbIdVal = selectedEmployee.dbId || selectedEmployee.id;
 
       await api.put(`/employees/${dbIdVal}`, {
-        faceEmbeddingV2: avgEmbedding,
+        faceEmbeddingV2: allEmbeddings,
         faceSamples: allEmbeddings.length,
         faceStatus: 'ENROLLED',
       });
 
       setEnrollmentStatus('success');
-      setSelectedEmployee(prev => ({ ...prev, faceEmbeddingV2: avgEmbedding, faceStatus: 'ENROLLED' }));
+      setSelectedEmployee(prev => ({ ...prev, faceEmbeddingV2: allEmbeddings, faceStatus: 'ENROLLED' }));
       queryClient.invalidateQueries({ queryKey: ['employees-enrollment'] });
       queryClient.invalidateQueries({ queryKey: ['employees'] });
     } catch (err) {

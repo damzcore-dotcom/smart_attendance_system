@@ -48,7 +48,10 @@ router.get('/attendance', async (req, res) => {
       const end = new Date(now); end.setHours(23,59,59,999);
       dateFilter = { gte: start, lte: end };
     } else if (period === 'week') {
-      const start = new Date(now); start.setDate(now.getDate() - now.getDay());  start.setHours(0,0,0,0);
+      const day = now.getDay();
+      const diff = now.getDate() - (day === 0 ? 6 : day - 1);
+      const start = new Date(now.getFullYear(), now.getMonth(), diff);
+      start.setHours(0,0,0,0);
       const end = new Date(now); end.setHours(23,59,59,999);
       dateFilter = { gte: start, lte: end };
     } else if (period === 'month') {
@@ -133,22 +136,38 @@ router.get('/attendance', async (req, res) => {
       return res.json({ success: true, data: finalData, total, totalPages: Math.ceil(total / limit) });
     }
 
-    const statusMap = {
-      'Present': 'PRESENT',
-      'Late': 'LATE',
-      'Mangkir': 'MANGKIR',
-      'Missing': 'MANGKIR',
-      'Absent': 'ABSENT',
-      'Holiday': 'HOLIDAY',
-    };
-
     const where = {
       ...(Object.keys(dateFilter).length && { date: dateFilter }),
-      ...(status && statusMap[status] && { status: statusMap[status] }),
       employee: empWhere
     };
 
-    const [records, total] = await Promise.all([
+    if (status) {
+      const statusMap = {
+        'Present': 'PRESENT',
+        'Late': 'LATE',
+        'Mangkir': 'MANGKIR',
+        'Missing': 'MANGKIR',
+        'Absent': 'ABSENT',
+        'Alpa': 'ABSENT',
+        'Holiday': 'HOLIDAY',
+        'Cuti': 'CUTI',
+        'Sakit': 'SAKIT',
+        'Izin': 'IZIN',
+        'Early Departure': 'EARLY_DEPARTURE',
+        'Pulang Cepat': 'EARLY_DEPARTURE'
+      };
+      const statusValues = status.split(',').map(s => {
+        const trimmed = s.trim();
+        return statusMap[trimmed] || trimmed.toUpperCase();
+      });
+      if (statusValues.length === 1) {
+        where.status = statusValues[0];
+      } else {
+        where.status = { in: statusValues };
+      }
+    }
+
+    const [records, total, calendarOverrides, rosterOverrides] = await Promise.all([
       prisma.attendance.findMany({
         where,
         skip,
@@ -160,8 +179,52 @@ router.get('/attendance', async (req, res) => {
           }
         }
       }),
-      prisma.attendance.count({ where })
+      prisma.attendance.count({ where }),
+      prisma.companyCalendar.findMany({
+        where: where.date ? { date: where.date } : {}
+      }),
+      prisma.employeeShiftOverride.findMany({
+        where: where.date ? {
+          startDate: { lte: where.date.lt || where.date.lte || now },
+          endDate: { gte: where.date.gte || now }
+        } : {},
+        select: {
+          employeeId: true,
+          startDate: true,
+          endDate: true,
+          shift: {
+            select: {
+              id: true,
+              startTime: true,
+              endTime: true,
+              saturdayType: true,
+              saturdayEndTime: true,
+              gracePeriod: true
+            }
+          }
+        }
+      })
     ]);
+
+    const overrideMap = {};
+    if (calendarOverrides) {
+      calendarOverrides.forEach(c => {
+        overrideMap[c.date.toISOString().split('T')[0]] = c;
+      });
+    }
+
+    const rosterMap = new Map();
+    if (rosterOverrides) {
+      for (const ov of rosterOverrides) {
+        let d = new Date(ov.startDate);
+        const endD = new Date(ov.endDate);
+        while (d <= endD) {
+          const dStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+          rosterMap.set(`${ov.employeeId}_${dStr}`, ov.shift);
+          d.setUTCDate(d.getUTCDate() + 1);
+        }
+      }
+    }
 
     // Standardized summary calculation to match Admin portal
     const allRecordsForSummary = await prisma.attendance.findMany({
@@ -180,9 +243,12 @@ router.get('/attendance', async (req, res) => {
     const { penaltyRules } = parsePenaltySettings(settings);
     const workingDaysSetting = settings.find(s => s.key === 'workingDays');
     const workingDays = workingDaysSetting ? JSON.parse(workingDaysSetting.value) : [1, 2, 3, 4, 5];
+    const isSaturdayHalfDay = settings.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
+    const satCheckoutTime = settings.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
 
     const summary = {
-      hadir: 0, telat: 0, mangkir: 0, absen: 0, holiday: 0, cuti: 0, sakit: 0, izin: 0, totalLate: 0, uniqueEmployeeCount: 0
+      total: allRecordsForSummary.length,
+      hadir: 0, telat: 0, mangkir: 0, absen: 0, holiday: 0, cuti: 0, sakit: 0, izin: 0, earlyDeparture: 0, totalLate: 0, uniqueEmployeeCount: 0
     };
 
     const uniqueEmps = new Set();
@@ -190,8 +256,44 @@ router.get('/attendance', async (req, res) => {
     allRecordsForSummary.forEach(r => {
       const empShift = r.employee?.shift;
       const shiftStart = empShift?.startTime || '08:00';
-      const shiftEnd = empShift?.endTime || '17:00';
-      const resolved = resolveStatus(r.checkIn, r.checkOut, r.status, r.date, penaltyRules, shiftEnd, shiftStart);
+      let shiftEnd = empShift?.endTime || '17:00';
+      const recordDay = r.date.getUTCDay();
+      
+      // Apply Saturday shift end time override
+      if (recordDay === 6) {
+        const satType = empShift?.saturdayType || (isSaturdayHalfDay ? 'HALF_DAY' : 'FULL_DAY');
+        if (satType === 'HALF_DAY') {
+          shiftEnd = empShift?.saturdayEndTime || satCheckoutTime;
+        }
+      }
+
+      let resolved = resolveStatus(r.checkIn, r.checkOut, r.status, r.date, penaltyRules, shiftEnd, shiftStart);
+
+      // Apply HOLIDAY override logic
+      if (resolved === 'MANGKIR' || resolved === 'ABSENT' || resolved === 'HOLIDAY') {
+        const dateStr = r.date.toISOString().split('T')[0];
+        const override = overrideMap[dateStr];
+        
+        const rosterShift = rosterMap.get(`${r.employeeId}_${dateStr}`);
+        const effectiveShift = rosterShift || r.employee?.shift || null;
+        
+        let isLibur = false;
+        if (override) {
+           if (override.type === 'HOLIDAY') isLibur = true;
+           if (override.type === 'WORKDAY') isLibur = false;
+        } else {
+           if (recordDay === 6 && effectiveShift) {
+             isLibur = effectiveShift.saturdayType === 'OFF';
+           } else {
+             isLibur = !workingDays.includes(recordDay);
+           }
+        }
+        
+        if (isLibur) {
+           resolved = 'HOLIDAY';
+        }
+      }
+
       if (resolved === 'PRESENT') summary.hadir++;
       else if (resolved === 'LATE') { summary.telat++; summary.totalLate += (r.lateMinutes || 0); }
       else if (resolved === 'MANGKIR') { 
@@ -203,6 +305,7 @@ router.get('/attendance', async (req, res) => {
       else if (resolved === 'CUTI') summary.cuti++;
       else if (resolved === 'SAKIT') summary.sakit++;
       else if (resolved === 'IZIN') summary.izin++;
+      else if (resolved === 'EARLY_DEPARTURE') { summary.earlyDeparture++; summary.totalLate += (r.lateMinutes || 0); }
       else summary.absen++;
       
       uniqueEmps.add(r.employeeId);
@@ -214,8 +317,44 @@ router.get('/attendance', async (req, res) => {
       data: records.map(att => {
         const empShift = att.employee?.shift;
         const shiftStart = empShift?.startTime || '08:00';
-        const shiftEnd = empShift?.endTime || '17:00';
-        const resolved = resolveStatus(att.checkIn, att.checkOut, att.status, att.date, penaltyRules, shiftEnd, shiftStart);
+        let shiftEnd = empShift?.endTime || '17:00';
+        const recordDay = att.date.getUTCDay();
+
+        // Apply Saturday shift end time override
+        if (recordDay === 6) {
+          const satType = empShift?.saturdayType || (isSaturdayHalfDay ? 'HALF_DAY' : 'FULL_DAY');
+          if (satType === 'HALF_DAY') {
+            shiftEnd = empShift?.saturdayEndTime || satCheckoutTime;
+          }
+        }
+
+        let resolved = resolveStatus(att.checkIn, att.checkOut, att.status, att.date, penaltyRules, shiftEnd, shiftStart);
+
+        // Apply HOLIDAY override logic
+        if (resolved === 'MANGKIR' || resolved === 'ABSENT' || resolved === 'HOLIDAY') {
+          const dateStr = att.date.toISOString().split('T')[0];
+          const override = overrideMap[dateStr];
+          
+          const rosterShift = rosterMap.get(`${att.employee.id}_${dateStr}`);
+          const effectiveShift = rosterShift || att.employee?.shift || null;
+          
+          let isLibur = false;
+          if (override) {
+             if (override.type === 'HOLIDAY') isLibur = true;
+             if (override.type === 'WORKDAY') isLibur = false;
+          } else {
+             if (recordDay === 6 && effectiveShift) {
+               isLibur = effectiveShift.saturdayType === 'OFF';
+             } else {
+               isLibur = !workingDays.includes(recordDay);
+             }
+          }
+          
+          if (isLibur) {
+             resolved = 'HOLIDAY';
+             att.lateMinutes = 0;
+          }
+        }
         
         let displayStatus = 'Alpa';
         if (resolved === 'PRESENT') displayStatus = 'Present';
@@ -360,6 +499,8 @@ router.get('/attendance-options', async (req, res) => {
 
     const settingsList = await prisma.settings.findMany();
     const { penaltyRules } = parsePenaltySettings(settingsList);
+    const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
+    const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
 
     const records = await prisma.attendance.findMany({
       where: { ...where, employee: employeeWhere },
@@ -394,7 +535,17 @@ router.get('/attendance-options', async (req, res) => {
       // Resolve status for the list
       const empShift = r.employee?.shift;
       const shiftStart = empShift?.startTime || '08:00';
-      const shiftEnd = empShift?.endTime || '17:00';
+      let shiftEnd = empShift?.endTime || '17:00';
+      const recordDay = r.date.getUTCDay();
+
+      // Apply Saturday shift end time override
+      if (recordDay === 6) {
+        const satType = empShift?.saturdayType || (isSaturdayHalfDay ? 'HALF_DAY' : 'FULL_DAY');
+        if (satType === 'HALF_DAY') {
+          shiftEnd = empShift?.saturdayEndTime || satCheckoutTime;
+        }
+      }
+
       const s = resolveStatus(r.checkIn, r.checkOut, r.status, r.date, penaltyRules, shiftEnd, shiftStart);
       if (s === 'PRESENT') statuses.add('Present');
       else if (s === 'LATE') statuses.add('Late');

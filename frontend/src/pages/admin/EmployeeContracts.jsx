@@ -40,10 +40,12 @@ const EmployeeContracts = ({ isReadOnly = false }) => {
   });
   const departments = optionsData?.data?.departments || [];
 
-  // Filter only contract employees (KONTRAK or PKWT)
+  // Filter only contract employees (KONTRAK or PKWT) who are not terminated
   const contractEmployees = allEmployees.filter(e => {
-    const status = (e.employmentStatus || '').toUpperCase();
-    return status.includes('KONTRAK') || status.includes('PKWT');
+    const empStatus = (e.employmentStatus || '').toUpperCase();
+    const isContract = empStatus.includes('KONTRAK') || empStatus.includes('PKWT');
+    const isTerminated = e.status === 'Terminated' || e.status === 'TERMINATED';
+    return isContract && !isTerminated;
   });
 
   const now = new Date();
@@ -104,7 +106,7 @@ const EmployeeContracts = ({ isReadOnly = false }) => {
 
   const handleNavigateToEdit = (employeeCode) => {
     // Navigate to Employees page with state to auto-trigger the edit modal
-    navigate('/admin/employees', { state: { editEmployeeCode: employeeCode } });
+    navigate('/admin/employees', { state: { editEmployeeCode: employeeCode, cameFrom: '/admin/contracts' } });
   };
 
   const getAlertBadgeStyles = (level) => {

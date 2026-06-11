@@ -5,7 +5,7 @@ const { recordAuditLog } = require('./auditLogController');
 
 const getAll = async (req, res) => {
   try {
-    const { search, dept, section, position, status, empStatus, page = 1, limit = 20, sortBy = 'createdAt', order = 'desc' } = req.query;
+    const { search, dept, section, position, status, empStatus, page = 1, limit = 20, sortBy = 'createdAt', order = 'desc', locationId } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const where = {};
@@ -25,6 +25,17 @@ const getAll = async (req, res) => {
     if (position && position !== 'All') where.position = position;
     if (status && status !== 'All') where.status = status;
     if (empStatus && empStatus !== 'All') where.employmentStatus = empStatus;
+
+    if (locationId && locationId !== 'All' && locationId !== '') {
+      conditions.push({
+        OR: [
+          { locationId: { equals: locationId } },
+          { locationId: { startsWith: `${locationId},` } },
+          { locationId: { endsWith: `,${locationId}` } },
+          { locationId: { contains: `,${locationId},` } }
+        ]
+      });
+    }
 
     if (req.query.excludeBhl === 'true') {
       where.employmentStatus = { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] };
@@ -116,6 +127,8 @@ const getAll = async (req, res) => {
           contractDuration: emp.contractDuration,
           joinDate: emp.joinDate,
           contractEnd: emp.contractEnd,
+          terminationDate: emp.terminationDate,
+          terminationReason: emp.terminationReason,
           fingerPrintId: emp.fingerPrintId,
           faceId: emp.faceId,
           faceIdDisplay: emp.faceId || (emp.faceStatus === 'ENROLLED' ? 'Enrolled' : 'Pending'),
@@ -268,6 +281,8 @@ const create = async (req, res) => {
       joinDate: rest.joinDate ? new Date(rest.joinDate) : null,
       contractEnd: rest.contractEnd ? new Date(rest.contractEnd) : null,
       birthDate: rest.birthDate ? new Date(rest.birthDate) : null,
+      terminationDate: rest.terminationDate ? new Date(rest.terminationDate) : null,
+      terminationReason: rest.terminationReason || null,
       leaveQuota: rest.leaveQuota ? parseInt(rest.leaveQuota) : 12,
       remainingLeave: rest.remainingLeave ? parseInt(rest.remainingLeave) : 12,
       status: rest.status ? (rest.status.toUpperCase() === 'TERMINATED' ? 'TERMINATED' : rest.status.toUpperCase() === 'ON_LEAVE' ? 'ON_LEAVE' : 'ACTIVE') : 'ACTIVE',
@@ -315,6 +330,7 @@ const update = async (req, res) => {
     if ('joinDate' in data) data.joinDate = data.joinDate ? new Date(data.joinDate) : null;
     if ('contractEnd' in data) data.contractEnd = data.contractEnd ? new Date(data.contractEnd) : null;
     if ('birthDate' in data) data.birthDate = data.birthDate ? new Date(data.birthDate) : null;
+    if ('terminationDate' in data) data.terminationDate = data.terminationDate ? new Date(data.terminationDate) : null;
     if (faceDescriptor) {
       data.faceDescriptor = [JSON.parse(faceDescriptor)];
       data.faceStatus = 'ENROLLED';
@@ -409,12 +425,19 @@ const importExcel = async (req, res) => {
     const rawData = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
     let employeesImported = 0;
-    let employeesSkipped = 0;
+    let employeesUpdated = 0;
     const totalRows = rawData.length;
 
     // PRE-FETCH DATA: Optimization to avoid N+1 Query problem (O(1) lookups)
-    const existingEmployees = await prisma.employee.findMany({ select: { employeeCode: true } });
-    const existingNikSet = new Set(existingEmployees.map(e => e.employeeCode.trim()));
+    const existingEmployees = await prisma.employee.findMany({ select: { id: true, employeeCode: true } });
+    const existingNikMap = new Map(existingEmployees.map(e => [e.employeeCode.trim(), e.id]));
+
+    // Pre-fetch existing usernames to prevent unique constraint violations
+    const existingUsers = await prisma.user.findMany({ select: { username: true } });
+    const existingUsernameSet = new Set(existingUsers.map(u => u.username.trim()));
+
+    // Track NIK yang sudah diproses dalam file ini (mencegah duplikat dalam 1 file)
+    const processedInFile = new Set();
 
     const existingDepts = await prisma.department.findMany();
     const deptMap = new Map();
@@ -423,138 +446,145 @@ const importExcel = async (req, res) => {
     const bhlWageSetting = await prisma.settings.findUnique({ where: { key: 'bhlDefaultDailyWage' } });
     const defaultBhlWage = bhlWageSetting ? parseFloat(bhlWageSetting.value) || 150000 : 150000;
 
+    const errors = [];
+
+    // Helper: konversi Excel Serial Number ke Date
+    const parseExcelDate = (val) => {
+      if (!val) return null;
+      if (typeof val === 'number') {
+        const jsDate = new Date((val - 25569) * 86400000);
+        return isNaN(jsDate.getTime()) ? null : jsDate;
+      }
+      const str = String(val).trim();
+      if (!str) return null;
+      const ddmmyyyy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+      if (ddmmyyyy) {
+        const d = new Date(`${ddmmyyyy[3]}-${ddmmyyyy[2].padStart(2,'0')}-${ddmmyyyy[1].padStart(2,'0')}`);
+        return isNaN(d.getTime()) ? null : d;
+      }
+      const d = new Date(str);
+      return isNaN(d.getTime()) ? null : d;
+    };
+
     for (let i = 0; i < totalRows; i++) {
       const row = rawData[i];
-      // Update progress
       if (jobId && i % 5 === 0) {
         global.importProgress[jobId] = Math.round((i / totalRows) * 100);
       }
 
-      // Support both NIK and No. headers
       const empCode = String(row['NIK'] || row['No.'] || row['Employee ID'] || '').trim();
       const name = String(row['Nama'] || row['Name'] || '').trim();
       
       if (!empCode || !name) continue;
 
-      // Logic 1: Pengecekan NIK tunggal untuk menghindari duplikasi via Memory Set
-      if (existingNikSet.has(empCode)) {
-        employeesSkipped++;
+      // Cegah duplikat dalam 1 file
+      if (processedInFile.has(empCode)) continue;
+      processedInFile.add(empCode);
+
+      try {
+        // Resolve department
+        let deptName = String(row['Departemen'] || row['Department'] || 'General').trim();
+        let deptKey = deptName.toLowerCase();
+        let departmentId = deptMap.get(deptKey);
+        if (!departmentId) {
+          const newDept = await prisma.department.create({ data: { name: deptName } });
+          departmentId = newDept.id;
+          deptMap.set(deptKey, departmentId);
+        }
+
+        const ns = (val) => { const s = String(val || '').trim(); return s || null; };
+        const empStatusStr = ns(row['Status Kerja']);
+        const isHarian = ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'].includes(empStatusStr);
+
+        // Build data object (shared for both create & update)
+        const empData = {
+          name,
+          departmentId,
+          grade: ns(row['Grade']),
+          position: ns(row['Jabatan'] || row['Position']),
+          section: ns(row['Bagian']),
+          employmentStatus: empStatusStr,
+          contractDuration: ns(row['Lama Kontrak']),
+          bpjsTk: ns(row['BPJS TK']),
+          bpjsKesehatan: ns(row['BPJS Kesehatan']),
+          npwp: ns(row['NPWP']),
+          ptkpStatus: ns(row['Status PTKP (Pajak)']),
+          kkNumber: ns(row['No Kartu Keluarga']),
+          idNumber: ns(row['NIK KTP'] || row['ID Number']),
+          birthPlace: ns(row['Tempat Lahir']),
+          address: ns(row['Alamat']),
+          education: ns(row['Pendidikan Terakhir']),
+          major: ns(row['Jurusan']),
+          religion: ns(row['Agama']),
+          phone: ns(row['No HP']),
+          numberOfChildren: row['Jumlah Anak'] ? parseInt(row['Jumlah Anak']) : null,
+          fatherName: ns(row['Nama Ayah Kandung']),
+          motherName: ns(row['Nama Ibu Kandung']),
+          spouseName: ns(row['Nama Suami/Istri']),
+          emergencyContact: ns(row['KONTAK DARURAT']),
+          notes: ns(row['Keterangan']),
+          gender: ns(row['Jenis Kelamin']),
+          bankName: ns(row['Nama Bank']),
+          bankAccountNumber: ns(row['Nomor Rekening']),
+          salaryCategory: isHarian ? 'HARIAN' : (ns(row['Kategori Gaji']) || 'UMK/UMR'),
+        };
+
+        const joinDate = parseExcelDate(row['Tanggal Masuk']);
+        const contractEnd = parseExcelDate(row['Sisa Tanggal Kontrak']);
+        const birthDate = parseExcelDate(row['Tanggal Lahir']);
+
+        if (joinDate) empData.joinDate = joinDate;
+        if (contractEnd) empData.contractEnd = contractEnd;
+        if (birthDate) empData.birthDate = birthDate;
+
+        // ── CHECK: NIK sudah ada di database? ──
+        const existingId = existingNikMap.get(empCode);
+
+        if (existingId) {
+          // ═══ UPDATE existing employee ═══
+          await prisma.employee.update({
+            where: { id: existingId },
+            data: empData
+          });
+          employeesUpdated++;
+        } else {
+          // ═══ CREATE new employee ═══
+          empData.employeeCode = empCode;
+          empData.email = ns(row['Email']) || `${empCode.toLowerCase()}@company.com`;
+          empData.fingerPrintId = null;
+
+          const newEmployee = await prisma.employee.create({ data: empData });
+          existingNikMap.set(empCode, newEmployee.id);
+          
+          if (isHarian) {
+            const rawWage = row['Upah Harian'] || row['Gaji Harian'] || row['Daily Rate'] || row['Daily Wage'] || row['Upah'];
+            const dailyRateVal = rawWage ? parseFloat(String(rawWage).replace(/[^\d]/g, '')) || defaultBhlWage : defaultBhlWage;
+            await prisma.employeeSalary.create({
+              data: {
+                employeeId: newEmployee.id,
+                employmentType: 'HARIAN',
+                salaryType: 'DAILY',
+                dailyRate: dailyRateVal,
+                baseSalary: dailyRateVal
+              }
+            });
+          } else {
+            if (!existingUsernameSet.has(empCode)) {
+              const hashedPassword = await bcrypt.hash('password123', 10);
+              await prisma.user.create({
+                data: { username: empCode, password: hashedPassword, role: 'EMPLOYEE', employeeId: newEmployee.id, mustChangePassword: true }
+              });
+              existingUsernameSet.add(empCode);
+            }
+          }
+          
+          employeesImported++;
+        }
+      } catch (rowErr) {
+        console.error(`[Import] Error on row ${i + 2} (NIK: ${empCode}):`, rowErr.message);
+        errors.push({ row: i + 2, nik: empCode, name, error: rowErr.message });
         continue;
       }
-      
-      // Tambahkan ke Set agar data duplikat di file yang sama juga diabaikan
-      existingNikSet.add(empCode);
-
-      // Jika data baru, lanjutkan pendaftaran
-      let deptName = String(row['Departemen'] || row['Department'] || 'General').trim();
-      let deptKey = deptName.toLowerCase();
-      
-      let departmentId = deptMap.get(deptKey);
-      if (!departmentId) {
-        const newDept = await prisma.department.create({ data: { name: deptName } });
-        departmentId = newDept.id;
-        deptMap.set(deptKey, departmentId);
-      }
-
-      // Helper to convert empty strings to null for optional fields
-      const ns = (val) => { const s = String(val || '').trim(); return s || null; };
-
-      const empStatusStr = ns(row['Status Kerja']);
-      const isHarian = ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'].includes(empStatusStr);
-
-      const createData = {
-        employeeCode: empCode,
-        name,
-        departmentId: departmentId,
-        grade: ns(row['Grade']),
-        position: ns(row['Jabatan'] || row['Position']),
-        section: ns(row['Bagian']),
-        employmentStatus: empStatusStr,
-        contractDuration: ns(row['Lama Kontrak']),
-        bpjsTk: ns(row['BPJS TK']),
-        bpjsKesehatan: ns(row['BPJS Kesehatan']),
-        npwp: ns(row['NPWP']),
-        ptkpStatus: ns(row['Status PTKP (Pajak)']),
-        kkNumber: ns(row['No Kartu Keluarga']),
-        idNumber: ns(row['NIK KTP'] || row['ID Number']),
-        birthPlace: ns(row['Tempat Lahir']),
-        address: ns(row['Alamat']),
-        education: ns(row['Pendidikan Terakhir']),
-        major: ns(row['Jurusan']),
-        religion: ns(row['Agama']),
-        phone: ns(row['No HP']),
-        numberOfChildren: row['Jumlah Anak'] ? parseInt(row['Jumlah Anak']) : null,
-        fatherName: ns(row['Nama Ayah Kandung']),
-        motherName: ns(row['Nama Ibu Kandung']),
-        spouseName: ns(row['Nama Suami/Istri']),
-        emergencyContact: ns(row['KONTAK DARURAT']),
-        email: ns(row['Email']) || `${empCode.toLowerCase()}@company.com`,
-        notes: ns(row['Keterangan']),
-        gender: ns(row['Jenis Kelamin']),
-        bankName: ns(row['Nama Bank']),
-        bankAccountNumber: ns(row['Nomor Rekening']),
-        salaryCategory: isHarian ? 'HARIAN' : (ns(row['Kategori Gaji']) || 'UMK/UMR'),
-      };
-      
-      // Helper: konversi Excel Serial Number ke Date
-      // Excel menyimpan tanggal sebagai angka (hari sejak 1 Jan 1900)
-      // Contoh: 45600 = 4 November 2024
-      const parseExcelDate = (val) => {
-        if (!val) return null;
-        if (typeof val === 'number') {
-          // Excel serial number → JavaScript Date
-          const jsDate = new Date((val - 25569) * 86400000);
-          return isNaN(jsDate.getTime()) ? null : jsDate;
-        }
-        // String format fallback (dd/mm/yyyy, yyyy-mm-dd, etc.)
-        const str = String(val).trim();
-        if (!str) return null;
-        // Coba format dd/mm/yyyy atau dd-mm-yyyy
-        const ddmmyyyy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-        if (ddmmyyyy) {
-          const d = new Date(`${ddmmyyyy[3]}-${ddmmyyyy[2].padStart(2,'0')}-${ddmmyyyy[1].padStart(2,'0')}`);
-          return isNaN(d.getTime()) ? null : d;
-        }
-        // Fallback: coba parse langsung
-        const d = new Date(str);
-        return isNaN(d.getTime()) ? null : d;
-      };
-
-      const joinDate = parseExcelDate(row['Tanggal Masuk']);
-      const contractEnd = parseExcelDate(row['Sisa Tanggal Kontrak']);
-      const birthDate = parseExcelDate(row['Tanggal Lahir']);
-
-      if (joinDate) createData.joinDate = joinDate;
-      if (contractEnd) createData.contractEnd = contractEnd;
-      if (birthDate) createData.birthDate = birthDate;
-
-      // Pastikan fingerPrintId diset null (bukan undefined) agar fuzzy matching sync bisa mendeteksinya
-      createData.fingerPrintId = null;
-
-      const newEmployee = await prisma.employee.create({
-        data: createData
-      });
-      
-      if (isHarian) {
-        const rawWage = row['Upah Harian'] || row['Gaji Harian'] || row['Daily Rate'] || row['Daily Wage'] || row['Upah'];
-        const dailyRateVal = rawWage ? parseFloat(String(rawWage).replace(/[^\d]/g, '')) || defaultBhlWage : defaultBhlWage;
-        await prisma.employeeSalary.create({
-          data: {
-            employeeId: newEmployee.id,
-            employmentType: 'HARIAN',
-            salaryType: 'DAILY',
-            dailyRate: dailyRateVal,
-            baseSalary: dailyRateVal
-          }
-        });
-      } else {
-        const hashedPassword = await bcrypt.hash('password123', 10);
-        await prisma.user.create({
-          data: { username: empCode, password: hashedPassword, role: 'EMPLOYEE', employeeId: newEmployee.id }
-        });
-      }
-      
-      employeesImported++;
     }
 
     if (jobId) {
@@ -562,13 +592,19 @@ const importExcel = async (req, res) => {
       setTimeout(() => delete global.importProgress[jobId], 10000);
     }
 
+    const parts = [];
+    if (employeesImported > 0) parts.push(`${employeesImported} karyawan baru ditambahkan`);
+    if (employeesUpdated > 0) parts.push(`${employeesUpdated} karyawan diperbarui`);
+    if (errors.length > 0) parts.push(`${errors.length} baris gagal`);
+    const errMsg = errors.length > 0 ? ` ${errors.length} baris gagal.` : '';
     res.json({ 
       success: true, 
-      message: `Import selesai: ${employeesImported} karyawan baru ditambahkan, ${employeesSkipped} diabaikan (sudah terdaftar).`,
+      message: `Import selesai: ${parts.join(', ')}.`,
       data: {
         imported: employeesImported,
-        skipped: employeesSkipped,
-        total: totalRows
+        updated: employeesUpdated,
+        total: totalRows,
+        errors: errors.slice(0, 20)
       }
     });
   } catch (err) {

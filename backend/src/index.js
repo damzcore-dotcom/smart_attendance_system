@@ -1,3 +1,4 @@
+// Trigger nodemon restart to load node-zklib socket fixes
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -44,7 +45,28 @@ process.on('uncaughtException', (err) => {
 
 // Middleware
 app.use(cors({
-  origin: (process.env.CORS_ORIGINS || 'http://localhost:5173').split(',').map(s => s.trim()),
+  origin: function(origin, callback) {
+    // Allow requests with no origin (server-to-server, mobile apps, curl)
+    if (!origin) return callback(null, true);
+
+    // Check explicit whitelist from env
+    const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173').split(',').map(s => s.trim());
+    if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+      return callback(null, true);
+    }
+
+    // Auto-allow any host accessing on common frontend dev ports (5173, 3000)
+    // This enables access via public IP, LAN IP, or any hostname without manual config.
+    // Security is enforced by JWT authentication, not CORS origin restrictions.
+    try {
+      const url = new URL(origin);
+      if (url.port === '5173' || url.port === '3000') {
+        return callback(null, true);
+      }
+    } catch (e) { /* invalid origin URL, fall through to reject */ }
+
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
 }));
 
@@ -61,10 +83,20 @@ app.use(express.urlencoded({ extended: true }));
 const path = require('path');
 const fs = require('fs');
 // Auto-create uploads directory on startup
-const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'profiles');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-  console.log('📁 Created uploads directory:', uploadsDir);
+const profilesDir = path.join(process.cwd(), 'public', 'uploads', 'profiles');
+if (!fs.existsSync(profilesDir)) {
+  fs.mkdirSync(profilesDir, { recursive: true });
+  console.log('📁 Created uploads directory:', profilesDir);
+}
+const documentsDir = path.join(process.cwd(), 'public', 'uploads', 'documents');
+if (!fs.existsSync(documentsDir)) {
+  fs.mkdirSync(documentsDir, { recursive: true });
+  console.log('📁 Created documents directory:', documentsDir);
+}
+const receiptsDir = path.join(process.cwd(), 'public', 'uploads', 'receipts');
+if (!fs.existsSync(receiptsDir)) {
+  fs.mkdirSync(receiptsDir, { recursive: true });
+  console.log('📁 Created receipts directory:', receiptsDir);
 }
 app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
 
@@ -106,7 +138,7 @@ app.get('/api/health', (req, res) => {
   const tz = checkTimezone();
   res.json({
     status: 'OK',
-    message: 'Smart Attendance Pro API is running',
+    message: 'Smart HRIS Platform API is running',
     timestamp: new Date(),
     timezone: {
       current: tz.current,
@@ -126,9 +158,21 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Rate limiting for file upload endpoints (disk space exhaustion protection)
+const uploadLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 10, // limit each IP to 10 uploads per window
+  message: { success: false, message: 'Terlalu banyak unggahan file. Silakan coba lagi dalam 10 menit.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Routes
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/verify-face', authLimiter);
+app.post('/api/claims', uploadLimiter);
+app.post('/api/profile-updates', uploadLimiter);
+app.post('/api/employees/:id/documents', uploadLimiter);
 app.use('/api/auth', authRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/attendance', attendanceRoutes);
@@ -150,6 +194,9 @@ app.use('/api/payroll', require('./routes/payrollRoutes'));
 app.use('/api/calendar', require('./routes/calendar'));
 app.use('/api/bridge', require('./routes/bridgeRoutes'));
 app.use('/api/chat', require('./routes/chatRoutes'));
+app.use('/api/claims', require('./routes/claimRoutes'));
+app.use('/api/profile-updates', require('./routes/profileUpdateRoutes'));
+app.use('/api/kpi', require('./routes/kpiRoutes'));
 // Global error handler — production-safe (no stack traces leaked)
 app.use((err, req, res, next) => {
   console.error('❌ Error:', err.message, err.stack);
@@ -168,7 +215,7 @@ app.use((req, res) => {
 // Start server only if not in production/vercel
 if (process.env.NODE_ENV !== 'production') {
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`\n🚀 Smart Attendance Pro API`);
+    console.log(`\n🚀 Smart HRIS Platform API`);
     console.log(`   Server running on http://localhost:${PORT}`);
     console.log(`   Health check: http://localhost:${PORT}/api/health\n`);
   });

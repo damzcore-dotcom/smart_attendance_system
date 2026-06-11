@@ -9,7 +9,7 @@ const patchZipPath = path.join(rootDir, 'Patch_Update.zip');
 
 console.log('');
 console.log('╔═══════════════════════════════════════════════════════════╗');
-console.log('║  📦  SMART ATTENDANCE PRO — PATCH BUILDER               ║');
+console.log('║  📦  SMART HRIS PLATFORM — PATCH BUILDER                 ║');
 console.log('║      Membuat file ZIP ringan untuk update ke client       ║');
 console.log('╚═══════════════════════════════════════════════════════════╝');
 console.log('');
@@ -37,6 +37,53 @@ console.log('');
     
     fs.cpSync(path.join(rootDir, 'frontend', 'dist'), path.join(patchDir, 'frontend', 'dist'), { recursive: true });
 
+    // Copy GUI Launcher files
+    fs.copyFileSync(path.join(rootDir, 'app-launcher.js'), path.join(patchDir, 'app-launcher.js'));
+    fs.copyFileSync(path.join(rootDir, 'launcher-ui.html'), path.join(patchDir, 'launcher-ui.html'));
+
+    // Create START_APP.bat inside patch
+    const clientBatContent = `@echo off
+title Smart HRIS Platform
+color 0A
+echo ===================================================
+echo    Smart HRIS Platform - Launcher
+echo ===================================================
+echo.
+
+REM Check if .env exists
+if not exist "backend\\.env" (
+  echo [!] File backend\\.env belum ada!
+  echo     Jalankan setup terlebih dahulu:
+  echo     node setup-client.js
+  echo.
+  pause
+  exit /b
+)
+
+cd backend
+echo [1/4] Menginstall modul backend...
+call npm install --production --quiet
+echo [2/4] Menyiapkan database...
+call npx prisma generate
+call npx prisma db push
+
+cd ../frontend
+echo [3/4] Menginstall modul frontend...
+call npm install serve --quiet
+
+cd ..
+echo [4/4] Memulai GUI Launcher...
+start "Smart HRIS Launcher" /min cmd /c "node app-launcher.js"
+
+echo.
+echo ===================================================
+echo   GUI Launcher berhasil dijalankan!
+echo   Layanan absensi dapat dikontrol dari jendela Launcher.
+echo ===================================================
+timeout /t 5 >nul
+`;
+    fs.writeFileSync(path.join(patchDir, 'START_APP.bat'), clientBatContent);
+
     // Include AI Engine & Docker Compose for Face Recognition
     if (fs.existsSync(path.join(rootDir, 'ai_bridge'))) {
       fs.cpSync(path.join(rootDir, 'ai_bridge'), path.join(patchDir, 'ai_bridge'), { 
@@ -50,10 +97,10 @@ console.log('');
 
     // Create START_AI_ENGINE.bat in patch
     const aiBatContent = `@echo off
-title Smart Attendance Pro - AI Engine Launcher
+title Smart HRIS Platform - AI Engine Launcher
 color 0E
 echo ===================================================
-echo    Smart Attendance Pro - AI Engine Launcher
+echo    Smart HRIS Platform - AI Engine Launcher
 echo ===================================================
 echo.
 
@@ -86,10 +133,10 @@ pause
 
     // Create STOP_AI_ENGINE.bat in patch
     const aiStopBatContent = `@echo off
-title Smart Attendance Pro - AI Engine Stopper
+title Smart HRIS Platform - AI Engine Stopper
 color 0C
 echo ===================================================
-echo    Smart Attendance Pro - AI Engine Stopper
+echo    Smart HRIS Platform - AI Engine Stopper
 echo ===================================================
 echo.
 echo Menghentikan semua kontainer AI Face Recognition...
@@ -106,7 +153,7 @@ pause
 
     // Create PANDUAN_AKTIVASI_AI_CCTV.txt in patch
     const aiGuideContent = `══════════════════════════════════════════════════════════════════════
-  🏢 SMART ATTENDANCE PRO — PANDUAN AKTIVASI AI CCTV FACE RECOGNITION
+  🏢 SMART HRIS PLATFORM — PANDUAN AKTIVASI AI CCTV FACE RECOGNITION
 ══════════════════════════════════════════════════════════════════════
 
 Fitur AI Face Recognition (pengenalan wajah melalui kamera CCTV) adalah
@@ -134,13 +181,13 @@ Langkah-langkah untuk mengaktifkannya di server klien:
    - Proses pertama kali membutuhkan koneksi internet untuk mengunduh base image Docker.
 
 4. MENGHUBUNGKAN DENGAN APLIKASI UTAMA
-   - Buka browser dan login ke web Smart Attendance Pro (http://localhost:5173).
+   - Buka browser dan login ke web Smart HRIS Platform (http://localhost:5173).
    - Masuk ke menu Settings -> CCTV & Cameras.
    - Tambahkan IP kamera CCTV dan tentukan arah deteksi (Masuk/Keluar).
    - Indikator "AI Engine" di header dashboard Command Center akan otomatis berubah menjadi "Online".
 
 ══════════════════════════════════════════════════════════════════════
-© 2026 Adam Rizky — Smart Attendance Pro
+© 2026 Adam Rizky — Smart HRIS Platform
 `;
     fs.writeFileSync(path.join(patchDir, 'PANDUAN_AKTIVASI_AI_CCTV.txt'), aiGuideContent);
 

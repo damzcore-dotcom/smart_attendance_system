@@ -12,7 +12,9 @@ import {
   Building2,
   Users,
   Shield,
-  FileText
+  FileText,
+  GraduationCap,
+  UserMinus
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -48,7 +50,10 @@ const DirectorLayout = () => {
     { name: t('navigation.employees'), path: '/director/employees', icon: Users },
     { name: t('navigation.attendanceData'), path: '/director/attendance', icon: CalendarCheck },
     { name: t('navigation.contracts'), path: '/director/contracts', icon: FileText },
+    { name: t('navigation.training'), path: '/director/training', icon: GraduationCap },
+    { name: t('navigation.terminated'), path: '/director/terminated', icon: UserMinus },
     { name: t('navigation.auditLog'), path: '/director/audit-log', icon: Shield },
+    { name: t('navigation.kpiEvaluation'), path: '/director/kpi', icon: Shield },
   ];
 
 
@@ -90,7 +95,7 @@ const DirectorLayout = () => {
               <div className="w-full max-w-[180px] flex justify-center transition-transform duration-500 group-hover:scale-105">
                 <AppLogo className="w-full h-auto object-contain drop-shadow-sm text-slate-800" />
               </div>
-              <span className="text-xs font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-slate-500 tracking-wider uppercase text-center mt-1 drop-shadow-sm">Smart Attendance Pro</span>
+              <span className="text-xs font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-slate-500 tracking-wider uppercase text-center mt-1 drop-shadow-sm">Smart HRIS Platform</span>
             </div>
           ) : (
             <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center shrink-0 shadow-md">

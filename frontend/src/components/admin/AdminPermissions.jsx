@@ -30,10 +30,12 @@ const AdminPermissions = () => {
       const res = await userAPI.getPermissions(adminId);
       const permMap = {};
       const menus = [
-        'dashboard', 'announcements', 'employees', 'contracts', 'shift-roster', 'leave-requests', 
+        'dashboard', 'announcements', 'employees', 'contracts', 'training', 'shift-roster', 'leave-requests', 
+        'profile-requests', 'kpi',
         'attendance', 'overtime-spl', 'daily-workers', 'manual-correction', 'corrections', 
-        'payroll', 'payroll-settings', 'face-check', 'devices', 'fingerprint', 
-        'users', 'backup', 'settings',
+        'payroll', 'payroll-settings', 'claims',
+        'face-check', 'devices', 'fingerprint', 
+        'users', 'backup', 'settings', 'audit-log',
         'settings-company-profile',
         'settings-geofencing',
         'settings-shift-rules',
@@ -130,8 +132,11 @@ const AdminPermissions = () => {
       'announcements': 'navigation.announcements',
       'employees': 'navigation.employees',
       'contracts': 'navigation.contracts',
+      'training': 'navigation.training',
       'shift-roster': 'navigation.shiftRoster',
       'leave-requests': 'navigation.leaveRequests',
+      'profile-requests': 'navigation.profileRequests',
+      'kpi': 'navigation.kpiEvaluation',
       'attendance': 'navigation.attendanceData',
       'overtime-spl': 'navigation.overtimeSpl',
       'daily-workers': 'navigation.dailyWorkers',
@@ -139,12 +144,14 @@ const AdminPermissions = () => {
       'corrections': 'navigation.corrections',
       'payroll': 'navigation.payrollProcess',
       'payroll-settings': 'navigation.payrollSettings',
+      'claims': 'navigation.claimApproval',
       'face-check': 'navigation.faceCheck',
       'devices': 'navigation.devices',
       'fingerprint': 'navigation.fingerprintData',
       'users': 'navigation.users',
       'backup': 'navigation.backup',
-      'settings': 'navigation.settings'
+      'settings': 'navigation.settings',
+      'audit-log': 'navigation.auditLog'
     };
     const transKey = mapping[menuKey];
     return transKey ? t(transKey) : menuKey;

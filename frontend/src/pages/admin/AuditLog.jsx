@@ -21,7 +21,7 @@ const ACTION_ICONS = {
 
 const AuditLog = () => {
   const { t } = useTranslation();
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const user = JSON.parse(sessionStorage.getItem('user') || '{}');
   const [filters, setFilters] = useState({
     page: 1,
     action: '',

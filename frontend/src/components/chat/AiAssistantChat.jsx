@@ -20,7 +20,7 @@ const AiAssistantChat = () => {
   const [messages, setMessages] = useState([
     {
       role: 'model',
-      text: 'Halo! Saya adalah Asisten AI Smart Attendance Pro. Ada yang bisa saya bantu terkait data karyawan, absensi, BHL (Buruh Harian Lepas), cuti, atau info statistik lainnya?'
+      text: 'Halo! Saya adalah Asisten AI Smart HRIS Platform. Ada yang bisa saya bantu terkait data karyawan, absensi, BHL (Buruh Harian Lepas), cuti, atau info statistik lainnya?'
     }
   ]);
   const [input, setInput] = useState('');
@@ -37,8 +37,8 @@ const AiAssistantChat = () => {
         {
           role: 'model',
           text: isEnglish 
-            ? 'Hello! I am the Smart Attendance Pro AI Assistant. How can I help you with employee data, attendance logs, daily workers (BHL), leaves, or other statistical analysis?'
-            : 'Halo! Saya adalah Asisten AI Smart Attendance Pro. Ada yang bisa saya bantu terkait data karyawan, absensi, BHL (Buruh Harian Lepas), cuti, atau info statistik lainnya?'
+            ? 'Hello! I am the Smart HRIS Platform AI Assistant. How can I help you with employee data, attendance logs, daily workers (BHL), leaves, or other statistical analysis?'
+            : 'Halo! Saya adalah Asisten AI Smart HRIS Platform. Ada yang bisa saya bantu terkait data karyawan, absensi, BHL (Buruh Harian Lepas), cuti, atau info statistik lainnya?'
         }
       ]);
     }

@@ -724,7 +724,7 @@ const handleMockChat = async (message, history) => {
     }
   } else {
     mockReply = "**[MOCK AI - API KEY BELUM DIKONFIGURASI]**\n" +
-      "Halo! Saya adalah AI Agent Smart Attendance.\n" +
+      "Halo! Saya adalah AI Agent Smart HRIS.\n" +
       "Untuk mengaktifkan seluruh kemampuan analisis saya (membaca database, membuat visualisasi, menjawab pertanyaan tentang data karyawan, absensi, BHL, dll.), silakan masukkan Google Gemini API Key Anda di file **`.env`** backend server dengan parameter:\n\n" +
       "```env\n" +
       "GEMINI_API_KEY=\"AIzaSyYourGeminiApiKeyHere...\"\n" +
@@ -749,7 +749,7 @@ const runAiChat = async (message, chatHistory, userContext) => {
     const model = genAI.getGenerativeModel({
       model: 'gemini-2.5-flash',
       tools: [{ functionDeclarations: toolDeclarations }],
-      systemInstruction: `Anda adalah Smart Attendance AI Assistant (Asisten AI Absensi Pintar), sebuah agen cerdas yang terintegrasi secara langsung ke database sistem Smart Attendance Pro.
+      systemInstruction: `Anda adalah Smart HRIS AI Assistant (Asisten AI Smart HRIS), sebuah agen cerdas yang terintegrasi secara langsung ke database sistem Smart HRIS Platform.
       
       User yang berbicara dengan Anda adalah personil berwenang dengan detail berikut:
       - Nama: ${userContext.username}

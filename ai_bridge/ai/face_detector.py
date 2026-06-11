@@ -24,13 +24,26 @@ class FaceDetector:
     def _ensure_model(self):
         if self._model is None:
             try:
+                import os
+                import onnxruntime as ort
+                device = os.getenv("AI_DEVICE", "cpu").lower()
+                
+                ctx_id = -1
+                if device == "cuda":
+                    providers = ort.get_available_providers()
+                    if "CUDAExecutionProvider" in providers:
+                        ctx_id = 0
+                        print("[FaceDetector] GPU CUDA is available and will be used.")
+                    else:
+                        print("[FaceDetector] WARNING: CUDA requested but CUDAExecutionProvider not found. Falling back to CPU.")
+
                 self._model = insightface.app.FaceAnalysis(
                     name='buffalo_l',
                     allowed_modules=['detection'],
                     root=self.model_root
                 )
-                self._model.prepare(ctx_id=-1, det_size=self.det_size)
-                print(f"[FaceDetector] Model loaded successfully with det_size={self.det_size}")
+                self._model.prepare(ctx_id=ctx_id, det_size=self.det_size)
+                print(f"[FaceDetector] Model loaded successfully on {'GPU' if ctx_id == 0 else 'CPU'} with det_size={self.det_size}")
             except Exception as e:
                 print(f"[FaceDetector] Failed to load model: {e}")
                 raise
@@ -70,7 +83,8 @@ class FaceDetector:
                 "region": region,
                 "aligned": aligned if aligned is not None else region,
                 "bbox": [int(x1), int(y1), int(x2), int(y2)],
-                "det_score": float(face.det_score) if hasattr(face, 'det_score') else 0.0
+                "det_score": float(face.det_score) if hasattr(face, 'det_score') else 0.0,
+                "kps": face.kps if hasattr(face, 'kps') else None
             })
 
         return results

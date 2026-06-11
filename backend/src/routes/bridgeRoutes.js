@@ -102,7 +102,7 @@ router.get('/employee/:id', verifyBridgeKey, async (req, res) => {
 // ── Record Check-In from CCTV ───────────────────────────────────────────
 router.post('/checkin', verifyBridgeKey, async (req, res) => {
   try {
-    const { employeeId, date, timestamp, cameraId, similarity, photoUrl, status, source } = req.body;
+    const { employeeId, date, timestamp, cameraId, similarity, photoUrl, status, source, notes } = req.body;
 
     const attendanceDate = new Date(date);
     attendanceDate.setHours(0, 0, 0, 0);
@@ -187,49 +187,57 @@ router.post('/checkin', verifyBridgeKey, async (req, res) => {
       where: { employeeId_date: { employeeId, date: attendanceDate } }
     });
 
-    let checkinData = existing ? existing.checkIn : null;
-    let checkoutData = existing ? existing.checkOut : null;
+    const isCameraIn = camera.direction === 'IN' || camera.direction === 'BOTH';
+    const isCameraOut = camera.direction === 'OUT' || camera.direction === 'BOTH';
 
-    if (!existing && isCheckInPeriod) {
-      // First check in
-      const attendance = await prisma.attendance.create({
-        data: {
-          employeeId,
-          date: attendanceDate,
-          checkIn: eventTime,
-          status: status === 'LATE' ? 'LATE' : 'PRESENT',
-          lateMinutes,
-          mode: 'Face CCTV',
-          source: source || 'face_cctv',
-          checkinPhotoUrl: photoUrl,
-          checkinSimilarity: similarity,
-          checkinCameraId: cameraId,
-        }
-      });
-      return res.json({ success: true, data: attendance, type: 'CHECKIN' });
+    if (!existing) {
+      // First check in - only allowed on IN or BOTH camera during check-in period
+      if (isCheckInPeriod && isCameraIn) {
+        const attendance = await prisma.attendance.create({
+          data: {
+            employeeId,
+            date: attendanceDate,
+            checkIn: eventTime,
+            status: status === 'LATE' ? 'LATE' : 'PRESENT',
+            lateMinutes,
+            mode: 'Face CCTV',
+            source: source || 'face_cctv',
+            checkinPhotoUrl: photoUrl,
+            checkinSimilarity: similarity,
+            checkinCameraId: cameraId,
+            notes: notes || null
+          }
+        });
+        return res.json({ success: true, data: attendance, type: 'CHECKIN' });
+      } else {
+        return res.json({ success: true, ignored: true, message: 'Outside check-in period or camera does not support IN direction' });
+      }
     }
 
     if (existing) {
       const updateData = {};
       let type = 'UPDATE';
       
-      // Jika masih masa check-in period dan belum pernah check-in
-      if (isCheckInPeriod && !existing.checkIn) {
+      // Jika belum pernah check-in, dan ini adalah kamera IN pada masa check-in
+      if (!existing.checkIn && isCheckInPeriod && isCameraIn) {
         updateData.checkIn = eventTime;
         updateData.status = status === 'LATE' ? 'LATE' : 'PRESENT';
         updateData.lateMinutes = lateMinutes;
         updateData.checkinPhotoUrl = photoUrl;
         updateData.checkinSimilarity = similarity;
         updateData.checkinCameraId = cameraId;
+        updateData.notes = notes || existing.notes;
         type = 'CHECKIN_RECOVERY';
       }
       
-      // Jika masa check-out period
-      if (isCheckOutPeriod) {
+      // Jika sudah pernah check-in, dan ini adalah kamera OUT pada masa check-out
+      // OR jika dia sudah check-in dan dideteksi di kamera OUT (selalu anggap check-out)
+      if (existing.checkIn && isCheckOutPeriod && isCameraOut) {
         updateData.checkOut = eventTime;
         updateData.checkoutPhotoUrl = photoUrl;
         updateData.checkoutSimilarity = similarity;
         updateData.checkoutCameraId = cameraId;
+        updateData.notes = notes ? (existing.notes ? `${existing.notes} | ${notes}` : notes) : existing.notes;
         type = 'CHECKOUT';
       }
 
@@ -298,23 +306,85 @@ router.post('/alert/unknown', verifyBridgeKey, async (req, res) => {
 // ── Save Face Enrollment ────────────────────────────────────────────────
 router.post('/enrollment/save', verifyBridgeKey, async (req, res) => {
   try {
-    const { employeeId, embedding, samplesCount } = req.body;
+    const { employeeId, embedding, slot, samplesCount } = req.body;
 
     if (!embedding || !Array.isArray(embedding)) {
       return res.status(400).json({ success: false, message: 'Invalid embedding data' });
     }
 
+    const empId = parseInt(employeeId);
+    
+    // Fetch existing employee
+    const employee = await prisma.employee.findUnique({
+      where: { id: empId },
+      select: { faceEmbeddingV2: true }
+    });
+
+    let newEmbeddingsList = [];
+    
+    if (slot !== undefined) {
+      const slotIdx = parseInt(slot) - 1;
+      if (slotIdx < 0 || slotIdx >= 5) {
+        return res.status(400).json({ success: false, message: 'Slot must be between 1 and 5' });
+      }
+
+      let existingList = [];
+      if (employee && employee.faceEmbeddingV2) {
+        try {
+          const parsed = typeof employee.faceEmbeddingV2 === 'string'
+            ? JSON.parse(employee.faceEmbeddingV2)
+            : employee.faceEmbeddingV2;
+          
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            if (Array.isArray(parsed[0])) {
+              existingList = parsed;
+            } else {
+              existingList = [parsed];
+            }
+          }
+        } catch (e) {
+          console.error('Failed to parse existing embeddings:', e);
+        }
+      }
+
+      while (existingList.length < 5) {
+        existingList.push(null);
+      }
+
+      existingList[slotIdx] = embedding;
+      newEmbeddingsList = existingList;
+    } else {
+      if (Array.isArray(embedding[0])) {
+        newEmbeddingsList = embedding;
+      } else {
+        newEmbeddingsList = [embedding];
+      }
+    }
+
+    const actualSamples = newEmbeddingsList.filter(Boolean).length;
+
     const updated = await prisma.employee.update({
-      where: { id: employeeId },
+      where: { id: empId },
       data: {
-        faceEmbeddingV2: embedding,
+        faceEmbeddingV2: newEmbeddingsList,
         faceEnrolledAt: new Date(),
-        faceSamples: samplesCount || 1,
+        faceSamples: samplesCount || actualSamples,
         faceStatus: 'ENROLLED',
       }
     });
 
-    res.json({ success: true, data: { id: updated.id, faceStatus: updated.faceStatus } });
+    // Invalidate AI Engine cache (fire-and-forget)
+    const aiHost = process.env.AI_ENGINE_URL || 'http://127.0.0.1:8002';
+    fetch(`${aiHost}/cache/reload`, { method: 'POST' }).catch(() => {});
+
+    res.json({ 
+      success: true, 
+      data: { 
+        id: updated.id, 
+        faceStatus: updated.faceStatus,
+        faceSamples: updated.faceSamples 
+      } 
+    });
   } catch (err) {
     console.error('[Bridge] Save enrollment error:', err.message);
     res.status(500).json({ success: false, message: err.message });
@@ -634,6 +704,33 @@ router.delete('/alerts/unknown', verifyToken, requireAdmin, async (req, res) => 
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ── Re-enrollment Suggestions (proxy to AI Engine) ──────────────────────
+router.get('/re-enrollment-suggestions', verifyToken, async (req, res) => {
+  try {
+    const aiHost = process.env.AI_ENGINE_URL || 'http://127.0.0.1:8002';
+    const response = await fetch(`${aiHost}/re-enrollment-suggestions`);
+    
+    if (!response.ok) {
+      return res.status(response.status).json({ 
+        success: false, 
+        message: 'AI Engine returned an error' 
+      });
+    }
+    
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    // AI Engine unreachable — return empty suggestions (non-fatal)
+    res.json({ 
+      success: true, 
+      count: 0, 
+      threshold: 0.65, 
+      suggestions: [],
+      offline: true 
+    });
   }
 });
 

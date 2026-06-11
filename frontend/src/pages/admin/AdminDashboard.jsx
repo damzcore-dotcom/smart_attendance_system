@@ -68,10 +68,11 @@ const StatCard = ({ title, value, change, icon: Icon, color, delay, onClick }) =
 );
 
 const AdminDashboard = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [time, setTime] = useState(new Date());
   const [activeAlertTab, setActiveAlertTab] = useState('late'); // 'late' | 'live'
   const [liveEvents, setLiveEvents] = useState([]);
+  const [showAllAlerts, setShowAllAlerts] = useState(false);
   const wsRef = useRef(null);
 
   useEffect(() => {
@@ -150,6 +151,12 @@ const AdminDashboard = () => {
     queryKey: ['devices-summary'],
     queryFn: () => deviceAPI.getAll().then(r => r.data),
     refetchInterval: 20000
+  });
+
+  const { data: contractAlertsData } = useQuery({
+    queryKey: ['contract-alerts'],
+    queryFn: employeeAPI.getContractAlerts,
+    refetchInterval: 60000
   });
 
   const { data: aiStatus } = useQuery({
@@ -325,27 +332,27 @@ const AdminDashboard = () => {
             <div className="flex flex-wrap items-center gap-3">
               <div className="px-3 py-1 rounded-full bg-white/10 border border-white/20 backdrop-blur-md text-[10px] font-bold text-blue-200 uppercase tracking-widest flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full ${aiStatus?.status === 'ok' ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-rose-500'}`} />
-                AI Engine: {aiStatus?.status === 'ok' ? t('common.online') : t('common.offline')}
+                {t('dashboard.header.aiEngine')}: {aiStatus?.status === 'ok' ? t('common.online') : t('common.offline')}
               </div>
               <div className="px-3 py-1 rounded-full bg-white/10 border border-white/20 backdrop-blur-md text-[10px] font-bold text-blue-200 uppercase tracking-widest flex items-center gap-2">
                 <Video className="w-3.5 h-3.5 text-blue-300" />
-                CCTV: {cameras.filter(c => c.active).length}/{cameras.length} {t('common.online')}
+                {t('dashboard.header.cctv')}: {cameras.filter(c => c.active).length}/{cameras.length} {t('common.online')}
               </div>
               <div className="px-3 py-1 rounded-full bg-white/10 border border-white/20 backdrop-blur-md text-[10px] font-bold text-blue-200 uppercase tracking-widest flex items-center gap-2">
                 <Clock className="w-3.5 h-3.5 text-blue-300" />
-                Fingerprint: {devices.length} {t('navigation.devices')}
+                {t('dashboard.header.fingerprint')}: {devices.length} {t('dashboard.header.devices')}
               </div>
               <div className="px-3 py-1 rounded-full bg-white/5 border border-white/10 backdrop-blur-md text-[10px] font-bold text-slate-300 uppercase tracking-widest">
-                {time.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}
+                {time.toLocaleDateString(i18n.language || 'en-US', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}
               </div>
             </div>
             
             <div className="flex items-baseline gap-4">
               <h1 className="text-4xl xl:text-5xl font-extrabold text-white tracking-tight">
-                Command Center
+                {t('dashboard.title')}
               </h1>
               <span className="text-2xl font-light text-blue-200/80">
-                {time.toLocaleTimeString('en-US', { hour12: false })}
+                {time.toLocaleTimeString(i18n.language || 'en-US', { hour12: false })}
               </span>
             </div>
             <p className="text-blue-100/60 font-medium max-w-xl">
@@ -371,6 +378,48 @@ const AdminDashboard = () => {
         </div>
 
       </div>
+
+      {/* Contract Expiration Alert Banner */}
+      {contractAlertsData?.data?.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-3xl p-6 flex flex-col md:flex-row items-start md:items-center gap-4 shadow-sm animate-in slide-in-from-top-4 duration-500">
+          <div className="w-12 h-12 bg-amber-100 rounded-2xl flex items-center justify-center text-amber-700 shrink-0 border border-amber-200">
+            <AlertCircle className="w-6 h-6 animate-pulse" />
+          </div>
+          <div className="flex-1 space-y-1">
+            <h4 className="font-extrabold text-amber-900 text-sm uppercase tracking-wider">Perhatian: Kontrak Kerja (PKWT) Segera Berakhir</h4>
+            <p className="text-xs text-amber-700 font-semibold leading-relaxed">
+              Ada <span className="font-bold text-amber-900">{contractAlertsData.data.length} karyawan</span> yang kontrak kerjanya akan berakhir dalam waktu kurang dari 30 hari. Harap segera lakukan evaluasi perpanjangan kontrak.
+            </p>
+            <div className="pt-2">
+              <div className={`flex flex-wrap gap-2 transition-all duration-300 ${showAllAlerts ? 'max-h-48 overflow-y-auto pr-2' : ''}`}>
+                {(showAllAlerts ? contractAlertsData.data : contractAlertsData.data.slice(0, 10)).map(alert => (
+                  <div key={alert.id} className="bg-white/70 border border-amber-200/50 px-3 py-1 rounded-lg text-[10px] font-bold text-amber-900 flex items-center gap-1.5 shadow-sm hover:bg-white transition-all">
+                    <span className="uppercase">{alert.name}</span> ({alert.department})
+                    <span className="bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded text-[9px] font-extrabold">H-{alert.daysRemaining} hari</span>
+                  </div>
+                ))}
+                
+                {contractAlertsData.data.length > 10 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllAlerts(!showAllAlerts)}
+                    className="bg-amber-200/60 hover:bg-amber-200 text-amber-900 border border-amber-300/50 px-3 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition-all active:scale-95 shadow-sm cursor-pointer"
+                  >
+                    {showAllAlerts ? 'Sembunyikan' : `+ ${contractAlertsData.data.length - 10} Lainnya`}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+          <button 
+            type="button"
+            onClick={() => navigate('/admin/employees')}
+            className="bg-amber-600 hover:bg-amber-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all active:scale-95 shrink-0 shadow-sm cursor-pointer"
+          >
+            Kelola Karyawan
+          </button>
+        </div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -627,6 +676,9 @@ const AdminDashboard = () => {
                 } else if (n.title.toLowerCase().includes("correction") || n.title.toLowerCase().includes("koreksi")) {
                   badgeClass = "bg-pink-50 text-pink-600 border-pink-150";
                   path = "/admin/corrections";
+                } else if (n.title.toLowerCase().includes("kontrak") || n.title.toLowerCase().includes("pkwt")) {
+                  badgeClass = "bg-rose-50 text-rose-600 border-rose-150 font-bold";
+                  path = "/admin/employees";
                 }
 
                 return (
@@ -638,7 +690,7 @@ const AdminDashboard = () => {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border ${badgeClass}`}>
-                          {n.title.toLowerCase().includes("face") ? "Wajah" : n.title.toLowerCase().includes("leave") ? "Izin" : "Koreksi"}
+                          {n.title.toLowerCase().includes("face") ? "Wajah" : n.title.toLowerCase().includes("leave") ? "Izin" : n.title.toLowerCase().includes("kontrak") || n.title.toLowerCase().includes("pkwt") ? "PKWT" : "Koreksi"}
                         </span>
                         <p className="text-xs font-bold text-slate-700 truncate group-hover/item:text-blue-650 transition-colors">
                           {n.desc}

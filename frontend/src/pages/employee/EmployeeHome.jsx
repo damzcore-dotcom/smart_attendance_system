@@ -314,18 +314,24 @@ const EmployeeHome = () => {
         </div>
 
         {/* Secondary Actions */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-2">
           <button 
             onClick={() => navigate('/employee/correction')}
-            className="bg-white py-3.5 rounded-xl font-semibold text-slate-500 hover:text-blue-600 hover:border-blue-200 transition-all flex items-center justify-center gap-2 border border-slate-200 text-sm shadow-sm"
+            className="bg-white py-3 px-1 rounded-xl font-semibold text-slate-500 hover:text-blue-600 hover:border-blue-200 transition-all flex flex-col items-center justify-center gap-1 border border-slate-200 text-xs shadow-sm"
           >
             Correction
           </button>
           <button 
             onClick={() => navigate('/employee/leave')}
-            className="bg-white py-3.5 rounded-xl font-semibold text-slate-500 hover:text-blue-600 hover:border-blue-200 transition-all flex items-center justify-center gap-2 border border-slate-200 text-sm shadow-sm"
+            className="bg-white py-3 px-1 rounded-xl font-semibold text-slate-500 hover:text-blue-600 hover:border-blue-200 transition-all flex flex-col items-center justify-center gap-1 border border-slate-200 text-xs shadow-sm"
           >
             Leave Request
+          </button>
+          <button 
+            onClick={() => navigate('/employee/claims')}
+            className="bg-white py-3 px-1 rounded-xl font-semibold text-slate-500 hover:text-blue-600 hover:border-blue-200 transition-all flex flex-col items-center justify-center gap-1 border border-slate-200 text-xs shadow-sm"
+          >
+            My Claims
           </button>
         </div>
 

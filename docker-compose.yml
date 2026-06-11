@@ -62,7 +62,7 @@ services:
       - SMART_ATTENDANCE_URL=http://host.docker.internal:5000
       - BRIDGE_API_KEY=${INTERNAL_BRIDGE_KEY}
       - AI_DEVICE=${AI_DEVICE:-cpu}
-      - MIN_RECOGNITION_SCORE=${MIN_RECOGNITION_SCORE:-0.60}
+      - MIN_RECOGNITION_SCORE=${MIN_RECOGNITION_SCORE}
       - MINIO_ENDPOINT=minio
       - MINIO_PORT=9000
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
@@ -70,7 +70,7 @@ services:
       - CAMERA_CONFIG=/app/config/cameras.yaml
       - OPENCV_FFMPEG_CAPTURE_OPTIONS=rtsp_transport;tcp|stimeout;5000000
       - PYTHONUNBUFFERED=1
-      - LIVENESS_ENABLED=false
+      - LIVENESS_ENABLED=true
       - TZ=Asia/Jakarta
       - DETECTION_SIZE=960,960
       - FRAME_SKIP=10
@@ -83,14 +83,50 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
-    # Uncomment block below if you have NVIDIA GPU:
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
+
+  # ── GPU AI Face Recognition Engine (NVIDIA/CUDA Profile) ─────────────
+  ai-engine-gpu:
+    profiles:
+      - gpu
+    build:
+      context: ./ai_bridge
+      dockerfile: Dockerfile.gpu
+    container_name: sa_ai_engine_gpu
+    ports:
+      - "8002:8001"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - SMART_ATTENDANCE_URL=http://host.docker.internal:5000
+      - BRIDGE_API_KEY=${INTERNAL_BRIDGE_KEY}
+      - AI_DEVICE=cuda
+      - MIN_RECOGNITION_SCORE=${MIN_RECOGNITION_SCORE}
+      - MINIO_ENDPOINT=minio
+      - MINIO_PORT=9000
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin123}
+      - CAMERA_CONFIG=/app/config/cameras.yaml
+      - OPENCV_FFMPEG_CAPTURE_OPTIONS=rtsp_transport;tcp|stimeout;5000000
+      - PYTHONUNBUFFERED=1
+      - LIVENESS_ENABLED=true
+      - TZ=Asia/Jakarta
+      - DETECTION_SIZE=960,960
+      - FRAME_SKIP=10
+    volumes:
+      - ./ai_bridge/models:/app/models
+      - ./ai_bridge/config:/app/config
+    depends_on:
+      - redis
+      - minio
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
   # ── NEW: MinIO (Object Storage for face snapshots) ───────────────────
   minio:

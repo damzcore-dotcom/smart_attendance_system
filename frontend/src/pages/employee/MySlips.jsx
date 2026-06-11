@@ -12,6 +12,11 @@ const MySlips = () => {
   const [printReport, setPrintReport] = useState(null);
   const [printLogs, setPrintLogs] = useState([]);
   const [companySettings, setCompanySettings] = useState({});
+  const [expandedSlips, setExpandedSlips] = useState({});
+  
+  const toggleExpand = (id) => {
+    setExpandedSlips(prev => ({ ...prev, [id]: !prev[id] }));
+  };
   const [slipConfig, setSlipConfig] = useState(null);
   const [attendanceReportConfig, setAttendanceReportConfig] = useState(null);
 
@@ -152,6 +157,59 @@ const MySlips = () => {
                     <p className="font-bold text-red-500">-Rp {slip.totalDeduction?.toLocaleString('id-ID')}</p>
                   </div>
                 </div>
+
+                <div className="px-4 pb-3 text-center border-t border-slate-100/50 pt-2">
+                   <button 
+                     onClick={() => toggleExpand(slip.id)}
+                     className="text-[10px] font-bold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1 py-1"
+                   >
+                     {expandedSlips[slip.id] ? 'Sembunyikan Rincian' : 'Lihat Rincian Gaji'}
+                   </button>
+                 </div>
+
+                 {expandedSlips[slip.id] && (
+                   <div className="px-4 pb-4 pt-3 border-t border-slate-100 bg-slate-50/50 space-y-3 text-xs animate-in slide-in-from-top-2 duration-200">
+                     <div>
+                       <p className="font-bold text-slate-700 border-b border-slate-200 pb-1 mb-1.5 uppercase text-[9px] tracking-wider">Rincian Pendapatan</p>
+                       <div className="space-y-1">
+                         <div className="flex justify-between text-slate-600">
+                           <span>Gaji Pokok {slip.proRatedSalary < slip.baseSalary ? '(Pro-Rata)' : ''}</span>
+                           <span className="font-semibold text-slate-800">Rp {slip.proRatedSalary?.toLocaleString('id-ID')}</span>
+                         </div>
+                         {slip.allowances?.map((allow, idx) => (
+                           <div key={idx} className="flex justify-between text-slate-600">
+                             <span>{allow.name}</span>
+                             <span className="font-semibold text-slate-800">Rp {allow.value?.toLocaleString('id-ID')}</span>
+                           </div>
+                         ))}
+                         {slip.overtimePay > 0 && (
+                           <div className="flex justify-between text-slate-600">
+                             <span>Lembur ({slip.overtimeHours} jam)</span>
+                             <span className="font-semibold text-slate-800">Rp {slip.overtimePay?.toLocaleString('id-ID')}</span>
+                           </div>
+                         )}
+                       </div>
+                     </div>
+
+                     <div>
+                       <p className="font-bold text-slate-700 border-b border-slate-200 pb-1 mb-1.5 uppercase text-[9px] tracking-wider">Rincian Potongan</p>
+                       <div className="space-y-1">
+                         {slip.deductions?.map((deduct, idx) => (
+                           <div key={idx} className="flex justify-between text-slate-600">
+                             <span>{deduct.name}</span>
+                             <span className="font-semibold text-red-500">-Rp {deduct.value?.toLocaleString('id-ID')}</span>
+                           </div>
+                         ))}
+                         {slip.attendancePenalty > 0 && (
+                           <div className="flex justify-between text-slate-600">
+                             <span>Potongan Terlambat</span>
+                             <span className="font-semibold text-red-500">-Rp {slip.attendancePenalty?.toLocaleString('id-ID')}</span>
+                           </div>
+                         )}
+                       </div>
+                     </div>
+                   </div>
+                 )}
 
                 <div className="p-4 border-t border-slate-100 bg-white grid grid-cols-2 gap-3">
                   <button 

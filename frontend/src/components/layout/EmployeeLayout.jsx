@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { LanguageSelector } from '../common/LanguageSelector';
@@ -35,6 +36,79 @@ const EmployeeLayout = () => {
   });
 
   const unreadCount = notificationsData?.data?.filter(n => n.unread).length || 0;
+
+  // Web Push PWA Notification Subscription
+  useEffect(() => {
+    if (!empId) return;
+
+    const registerPushNotifications = async () => {
+      try {
+        if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+          console.warn('[Web Push] Service Worker or Push Notifications are not supported in this browser.');
+          return;
+        }
+
+        // 1. Register service worker
+        const registration = await navigator.serviceWorker.register('/sw.js');
+        console.log('[Web Push] Service Worker registered successfully:', registration);
+
+        // 2. Request permission if not already granted
+        let permission = Notification.permission;
+        if (permission === 'default') {
+          permission = await Notification.requestPermission();
+        }
+
+        if (permission !== 'granted') {
+          console.log('[Web Push] Notification permission was not granted:', permission);
+          return;
+        }
+
+        // 3. Get VAPID Public Key from backend
+        const keyRes = await notificationAPI.getPublicKey();
+        if (!keyRes.success || !keyRes.publicKey) {
+          console.error('[Web Push] Failed to fetch VAPID public key.');
+          return;
+        }
+
+        // Helper function to convert URL-safe base64 to Uint8Array VAPID key
+        const urlBase64ToUint8Array = (base64String) => {
+          const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+          const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+          const rawData = window.atob(base64);
+          const outputArray = new Uint8Array(rawData.length);
+          for (let i = 0; i < rawData.length; ++i) {
+            outputArray[i] = rawData.charCodeAt(i);
+          }
+          return outputArray;
+        };
+
+        const convertedVapidKey = urlBase64ToUint8Array(keyRes.publicKey);
+
+        // 4. Subscribe to push manager
+        let subscription = await registration.pushManager.getSubscription();
+        
+        if (!subscription) {
+          subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: convertedVapidKey
+          });
+          console.log('[Web Push] New subscription created:', subscription);
+        } else {
+          console.log('[Web Push] Existing subscription found:', subscription);
+        }
+
+        // 5. Register subscription on backend
+        await notificationAPI.registerToken(subscription, 'web');
+        console.log('[Web Push] Subscription successfully registered on backend.');
+      } catch (err) {
+        console.error('[Web Push] Error during push notification registration:', err);
+      }
+    };
+
+    // Delay registration slightly to avoid delaying page load
+    const timer = setTimeout(registerPushNotifications, 1000);
+    return () => clearTimeout(timer);
+  }, [empId]);
 
   const navItems = [
     { name: t('navigation.employee.home'), path: '/employee', icon: Home },

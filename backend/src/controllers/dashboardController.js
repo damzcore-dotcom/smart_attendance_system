@@ -273,6 +273,36 @@ const getAdminNotifications = async (req, res) => {
       });
     });
 
+    // 4. Expiring PKWT Contracts (within 30 days)
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const limitDate = new Date();
+    limitDate.setDate(today.getDate() + 30);
+    limitDate.setHours(23,59,59,999);
+
+    const expiringContracts = await prisma.employee.findMany({
+      where: {
+        status: 'ACTIVE',
+        contractEnd: {
+          not: null,
+          gte: today,
+          lte: limitDate
+        }
+      },
+      take: 5,
+      orderBy: { contractEnd: 'asc' }
+    });
+
+    expiringContracts.forEach(emp => {
+      notifications.push({
+        id: idCounter++,
+        title: 'Kontrak PKWT Segera Berakhir',
+        desc: `${emp.name} (PKWT) berakhir pada ${new Date(emp.contractEnd).toLocaleDateString()}`,
+        time: 'Evaluasi Diperlukan',
+        type: 'warning'
+      });
+    });
+
     // Sort by id just to keep them somewhat organized, though they are categorized
     res.json({ success: true, data: notifications });
   } catch (err) {

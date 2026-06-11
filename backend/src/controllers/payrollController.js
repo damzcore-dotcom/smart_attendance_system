@@ -26,7 +26,107 @@ const formatRupiah = (num) => {
   return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(num);
 };
 
+
+// ─── Helper: Calculate BPJS and PPh 21 ─────────────
+
+const calculateBPJS = (baseSalary, emp) => {
+  const maxBpjsKesSalary = 12000000;
+  const maxJpSalary = 10022900;
+
+  const hasBPJSKes = !!(emp.bpjsKesehatan && emp.bpjsKesehatan.trim());
+  const hasBPJSTk = !!(emp.bpjsTk && emp.bpjsTk.trim());
+
+  const bpjsKesSalaryBase = Math.min(baseSalary, maxBpjsKesSalary);
+  const jpSalaryBase = Math.min(baseSalary, maxJpSalary);
+
+  const bpjsKesEmployee = hasBPJSKes ? Math.round(bpjsKesSalaryBase * 0.01) : 0;
+  const bpjsKesEmployer = hasBPJSKes ? Math.round(bpjsKesSalaryBase * 0.04) : 0;
+
+  const jhtEmployee = hasBPJSTk ? Math.round(baseSalary * 0.02) : 0;
+  const jhtEmployer = hasBPJSTk ? Math.round(baseSalary * 0.037) : 0;
+
+  const jpEmployee = hasBPJSTk ? Math.round(jpSalaryBase * 0.01) : 0;
+  const jpEmployer = hasBPJSTk ? Math.round(jpSalaryBase * 0.02) : 0;
+
+  const jkkEmployer = hasBPJSTk ? Math.round(baseSalary * 0.0024) : 0;
+  const jkmEmployer = hasBPJSTk ? Math.round(baseSalary * 0.003) : 0;
+
+  return {
+    bpjsKesEmployee,
+    bpjsKesEmployer,
+    jhtEmployee,
+    jhtEmployer,
+    jpEmployee,
+    jpEmployer,
+    jkkEmployer,
+    jkmEmployer,
+  };
+};
+
+const calculatePPh21 = (baseSalary, proRatedSalary, totalAllowances, overtimePay, bpjsResults, emp) => {
+  const ptkpMap = {
+    'TK/0': 54000000,
+    'TK/1': 58500000,
+    'TK/2': 63000000,
+    'TK/3': 67500000,
+    'K/0': 58500000,
+    'K/1': 63000000,
+    'K/2': 67500000,
+    'K/3': 72000000,
+  };
+
+  const status = (emp.ptkpStatus || 'TK/0').toUpperCase().replace(/\s+/g, '');
+  const ptkp = ptkpMap[status] || ptkpMap['TK/0'];
+
+  const grossIncome = proRatedSalary + totalAllowances + overtimePay +
+    bpjsResults.bpjsKesEmployer + bpjsResults.jkkEmployer + bpjsResults.jkmEmployer;
+
+  const biayaJabatan = Math.min(grossIncome * 0.05, 500000);
+  const totalDeductions = biayaJabatan + bpjsResults.jhtEmployee + bpjsResults.jpEmployee;
+
+  const netMonthlyIncome = Math.max(0, grossIncome - totalDeductions);
+  const netAnnualIncome = netMonthlyIncome * 12;
+
+  const pkp = Math.max(0, netAnnualIncome - ptkp);
+  const roundedPkp = Math.floor(pkp / 1000) * 1000;
+
+  let tax = 0;
+  let remainingPkp = roundedPkp;
+
+  if (remainingPkp > 0) {
+    const tier1 = Math.min(remainingPkp, 60000000);
+    tax += tier1 * 0.05;
+    remainingPkp -= tier1;
+  }
+  if (remainingPkp > 0) {
+    const tier2 = Math.min(remainingPkp, 190000000);
+    tax += tier2 * 0.15;
+    remainingPkp -= tier2;
+  }
+  if (remainingPkp > 0) {
+    const tier3 = Math.min(remainingPkp, 250000000);
+    tax += tier3 * 0.25;
+    remainingPkp -= tier3;
+  }
+  if (remainingPkp > 0) {
+    const tier4 = Math.min(remainingPkp, 4500000000);
+    tax += tier4 * 0.30;
+    remainingPkp -= tier4;
+  }
+  if (remainingPkp > 0) {
+    tax += remainingPkp * 0.35;
+  }
+
+  const hasNpwp = !!(emp.npwp && emp.npwp.trim());
+  if (!hasNpwp) {
+    tax = tax * 1.2;
+  }
+
+  return Math.round(tax / 12);
+};
+
 // ─── Helper: Month Names ─────────────────────────
+
 
 const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 
@@ -172,6 +272,15 @@ const generate = async (req, res) => {
     const components = await prisma.salaryComponent.findMany({ where: { isActive: true }, orderBy: { sortOrder: 'asc' } });
     const positionAllowances = await prisma.positionAllowance.findMany();
 
+    // Fetch all approved reimbursement claims that haven't been processed in payroll yet
+    const approvedClaims = await prisma.reimbursementClaim.findMany({
+      where: {
+        employeeId: { in: employees.map(e => e.id) },
+        status: 'APPROVED',
+        payrollId: null
+      }
+    });
+
     // PRE-FETCH ALL ATTENDANCE (O(1) lookup map to avoid N+1 queries)
     const allAttendances = await prisma.attendance.findMany({
       where: {
@@ -195,6 +304,10 @@ const generate = async (req, res) => {
 
       // Get attendance for this employee in the period from Memory Map (O(1))
       const attendanceRecords = attendanceMap[emp.id] || [];
+
+      // Calculate claims reimbursement if any
+      const empClaims = approvedClaims.filter(c => c.employeeId === emp.id);
+      const totalClaimsAmount = empClaims.reduce((sum, c) => sum + c.amount, 0);
 
       // Calculate attendance stats
       let daysPresent = 0, daysAbsent = 0, daysLate = 0, totalLateMinutes = 0;
@@ -273,27 +386,22 @@ const generate = async (req, res) => {
         return finalValue;
       };
 
-      // If employee has custom components, use those; otherwise use matrix/defaults
+      // 1. Calculate Allowances
       if (empComponents.length > 0) {
         empComponents.forEach(c => {
           const compDef = components.find(comp => comp.name === c.name);
-          if (!compDef) return;
+          if (!compDef || compDef.type !== 'ALLOWANCE') return;
 
           let value = c.isFixed !== false ? (c.value || 0) : (baseSalary * (c.value || 0) / 100);
           value = applyComponentLogic(compDef, value);
-
-          if (c.type === 'ALLOWANCE') {
-            allowanceList.push({ name: c.name, value });
-          } else {
-            deductionList.push({ name: c.name, value });
-          }
+          allowanceList.push({ name: c.name, value });
         });
       } else {
-        // Use default components, overridden by Position Allowance Matrix if exists
         components.forEach(c => {
+          if (c.type !== 'ALLOWANCE') return;
           let nominalValue = c.isFixed ? c.defaultValue : (baseSalary * c.defaultValue / 100);
           
-          if (c.type === 'ALLOWANCE' && emp.position) {
+          if (emp.position) {
             const matrixOverride = positionAllowances.find(pa => pa.position === emp.position && pa.salaryComponentId === c.id);
             if (matrixOverride) {
               nominalValue = matrixOverride.nominal;
@@ -301,32 +409,15 @@ const generate = async (req, res) => {
           }
 
           const finalValue = applyComponentLogic(c, nominalValue);
-
-          if (c.type === 'ALLOWANCE') {
-            allowanceList.push({ name: c.name, value: finalValue });
-          } else {
-            deductionList.push({ name: c.name, value: finalValue });
-          }
+          allowanceList.push({ name: c.name, value: finalValue });
         });
       }
 
-      const totalAllowances = allowanceList.reduce((sum, a) => sum + a.value, 0);
-      const totalDeductionComponents = deductionList.reduce((sum, d) => sum + d.value, 0);
-
-      // Attendance penalty (potongan keterlambatan)
-      let attendancePenalty = 0;
-      if (attendancePenaltyEnabled && totalLateMinutes > 0 && penaltyPerMinute > 0) {
-        attendancePenalty = totalLateMinutes * penaltyPerMinute;
-      }
-
-      // Overtime pay calculation
+      // 2. Pre-calculate Overtime Pay (needed for tax calculation)
       let overtimePay = 0;
       if (overtimeEnabled && overtimeHoursTotal > 0 && baseSalary > 0) {
-        // Hourly rate = baseSalary / 173 (standard monthly hours)
         const hourlyRate = baseSalary / 173;
-
         if (overtimeRules.length > 0) {
-          // Apply tiered overtime rules
           let remainingHours = overtimeHoursTotal;
           for (const rule of overtimeRules) {
             const tierHours = Math.max(0, rule.hourTo - rule.hourFrom);
@@ -339,9 +430,71 @@ const generate = async (req, res) => {
             if (remainingHours <= 0) break;
           }
         } else {
-          // Default: 1.5x for all OT hours
           overtimePay = overtimeHoursTotal * hourlyRate * 1.5;
         }
+      }
+
+      // 3. Calculate BPJS and PPh 21
+      const bpjsResults = calculateBPJS(baseSalary, emp);
+      const totalAllowancesExcludingReimbursement = allowanceList.reduce((sum, a) => sum + a.value, 0);
+      const pph21Value = calculatePPh21(baseSalary, proRatedSalary, totalAllowancesExcludingReimbursement, overtimePay, bpjsResults, emp);
+
+      // 4. Calculate Deductions
+      if (empComponents.length > 0) {
+        empComponents.forEach(c => {
+          const compDef = components.find(comp => comp.name === c.name);
+          if (!compDef || compDef.type !== 'DEDUCTION') return;
+
+          let value = 0;
+          if (c.name === 'BPJS Kesehatan') {
+            value = bpjsResults.bpjsKesEmployee;
+          } else if (c.name === 'BPJS Ketenagakerjaan (JHT)') {
+            value = bpjsResults.jhtEmployee;
+          } else if (c.name === 'BPJS Ketenagakerjaan (JP)') {
+            value = bpjsResults.jpEmployee;
+          } else if (c.name === 'PPh 21') {
+            value = pph21Value;
+          } else {
+            value = c.isFixed !== false ? (c.value || 0) : (baseSalary * (c.value || 0) / 100);
+            value = applyComponentLogic(compDef, value);
+          }
+
+          deductionList.push({ name: c.name, value });
+        });
+      } else {
+        components.forEach(c => {
+          if (c.type !== 'DEDUCTION') return;
+
+          let value = 0;
+          if (c.name === 'BPJS Kesehatan') {
+            value = bpjsResults.bpjsKesEmployee;
+          } else if (c.name === 'BPJS Ketenagakerjaan (JHT)') {
+            value = bpjsResults.jhtEmployee;
+          } else if (c.name === 'BPJS Ketenagakerjaan (JP)') {
+            value = bpjsResults.jpEmployee;
+          } else if (c.name === 'PPh 21') {
+            value = pph21Value;
+          } else {
+            let nominalValue = c.isFixed ? c.defaultValue : (baseSalary * c.defaultValue / 100);
+            value = applyComponentLogic(c, nominalValue);
+          }
+
+          deductionList.push({ name: c.name, value });
+        });
+      }
+
+      // Append reimbursement to allowances if any
+      if (totalClaimsAmount > 0) {
+        allowanceList.push({ name: 'Reimbursement', value: totalClaimsAmount });
+      }
+
+      const totalAllowances = allowanceList.reduce((sum, a) => sum + a.value, 0);
+      const totalDeductionComponents = deductionList.reduce((sum, d) => sum + d.value, 0);
+
+      // Attendance penalty (potongan keterlambatan)
+      let attendancePenalty = 0;
+      if (attendancePenaltyEnabled && totalLateMinutes > 0 && penaltyPerMinute > 0) {
+        attendancePenalty = totalLateMinutes * penaltyPerMinute;
       }
 
       const grossPay = proRatedSalary + totalAllowances + overtimePay;
@@ -380,6 +533,7 @@ const generate = async (req, res) => {
 
     // Delete existing cancelled payroll if any
     if (existing && existing.status === 'CANCELLED') {
+      await prisma.reimbursementClaim.updateMany({ where: { payrollId: existing.id }, data: { payrollId: null } });
       await prisma.payrollDetail.deleteMany({ where: { payrollId: existing.id } });
       await prisma.payroll.delete({ where: { id: existing.id } });
     }
@@ -403,6 +557,18 @@ const generate = async (req, res) => {
       },
       include: { details: true },
     });
+
+    // Link the processed claims to this payroll
+    if (approvedClaims.length > 0) {
+      await prisma.reimbursementClaim.updateMany({
+        where: {
+          id: { in: approvedClaims.map(c => c.id) }
+        },
+        data: {
+          payrollId: payroll.id
+        }
+      });
+    }
 
     res.status(201).json({
       success: true,
@@ -522,6 +688,12 @@ const cancel = async (req, res) => {
       data: { status: 'CANCELLED' },
     });
 
+    // Unlink any reimbursement claims associated with this cancelled payroll
+    await prisma.reimbursementClaim.updateMany({
+      where: { payrollId: parseInt(req.params.id) },
+      data: { payrollId: null }
+    });
+
     res.json({ success: true, message: 'Payroll cancelled', data: updated });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -565,29 +737,36 @@ const exportExcel = async (req, res) => {
     const headerRow = isIndo ? [
       'No', 'NIK', 'Nama', 'Departemen', 'Tipe', 'Hari Kerja', 'Hadir', 'Absen',
       'Terlambat', 'Menit Telat', 'Gaji Pokok', 'Gaji Pro-Rata', 'Tunjangan',
-      'Lembur (Jam)', 'Lembur (Rp)', 'Pot. Kehadiran', 'Potongan', 'Gross', 'Total Pot.', 'Net Pay'
+      'Lembur (Jam)', 'Lembur (Rp)', 'Pot. Kehadiran', 'BPJS Kes', 'BPJS JHT', 'BPJS JP', 'PPh 21', 'Pot. Lain', 'Gross', 'Total Pot.', 'Net Pay'
     ] : isKo ? [
       '번호', '사번', '성명', '부서', '구분', '소정근로일수', '출석일수', '결근일수',
       '지각횟수', '지각시간 (분)', '기본급', '일할계산 급여', '수당 총액',
-      '연장근로 (시간)', '연장근로수당 (원)', '근태 패널티', '기타 공제', '총 지급액', '총 공제액', '실수령액'
+      '연장근로 (시간)', '연장근로수당 (원)', '근태 패널티', '국민건강보험', '국민연금 (JHT)', '퇴직연금 (JP)', '소득세 (PPh 21)', '기타 공제', '총 지급액', '총 공제액', '실수령액'
     ] : isZh ? [
       '序号', '工号', '姓名', '部门', '类型', '工作日', '出勤', '缺勤',
       '迟到', '迟到时长 (分)', '基本工资', '按比例工资', '津贴',
-      '加班 (小时)', '加班费 (元)', '考勤扣款', '其他扣款', '应发金额', '总扣款', '实发金额'
+      '加班 (小时)', '加班费 (元)', '考勤扣款', '医疗保险', '养老保险 (JHT)', '年金 (JP)', '个人所得税 (PPh 21)', '其他扣款', '应发金额', '总扣款', '实发金额'
     ] : [
       'No', 'NIK', 'Name', 'Department', 'Type', 'Working Days', 'Present', 'Absent',
       'Late', 'Late Minutes', 'Base Salary', 'Pro-Rated Salary', 'Allowances',
-      'Overtime (Hours)', 'Overtime (Pay)', 'Attendance Penalty', 'Deductions', 'Gross', 'Total Deductions', 'Net Pay'
+      'Overtime (Hours)', 'Overtime (Pay)', 'Attendance Penalty', 'BPJS Health', 'BPJS JHT', 'BPJS JP', 'PPh 21', 'Other Deductions', 'Gross', 'Total Deductions', 'Net Pay'
     ];
 
     const rows = payroll.details.map((d, i) => {
       const totalAllowances = (d.allowances || []).reduce((sum, a) => sum + a.value, 0);
-      const totalDeductComp = (d.deductions || []).reduce((sum, a) => sum + a.value, 0);
+      const deductionsArray = d.deductions || [];
+      const bpjsKes = deductionsArray.find(x => x.name === 'BPJS Kesehatan')?.value || 0;
+      const bpjsJht = deductionsArray.find(x => x.name === 'BPJS Ketenagakerjaan (JHT)')?.value || 0;
+      const bpjsJp = deductionsArray.find(x => x.name === 'BPJS Ketenagakerjaan (JP)')?.value || 0;
+      const pph21 = deductionsArray.find(x => x.name === 'PPh 21')?.value || 0;
+      const otherDeduct = deductionsArray.filter(x => !['BPJS Kesehatan', 'BPJS Ketenagakerjaan (JHT)', 'BPJS Ketenagakerjaan (JP)', 'PPh 21'].includes(x.name)).reduce((sum, a) => sum + a.value, 0);
+
       return [
         i + 1, d.employeeCode, d.employeeName, d.department, d.employmentType,
         d.workingDays, d.daysPresent, d.daysAbsent, d.daysLate, d.totalLateMinutes,
         d.baseSalary, d.proRatedSalary, totalAllowances,
-        d.overtimeHours, d.overtimePay, d.attendancePenalty, totalDeductComp,
+        d.overtimeHours, d.overtimePay, d.attendancePenalty,
+        bpjsKes, bpjsJht, bpjsJp, pph21, otherDeduct,
         d.grossPay, d.totalDeduction, d.netPay,
       ];
     });
@@ -600,6 +779,7 @@ const exportExcel = async (req, res) => {
       { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 },
       { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 14 },
       { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
+      { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
     ];
 
     XLSX.utils.book_append_sheet(wb, detailSheet, isIndo ? 'Detail Payroll' : isKo ? '상세 급여' : isZh ? '薪资明细' : 'Payroll Details');

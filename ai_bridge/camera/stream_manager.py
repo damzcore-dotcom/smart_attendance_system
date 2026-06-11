@@ -72,8 +72,31 @@ class HikvisionStreamManager:
                     
                     # Process every Nth frame for AI recognition
                     if frame_count % self.frame_skip == 0:
-                        if not self.frame_queues[cam_id].full():
-                            self.frame_queues[cam_id].put(frame)
+                        # Convert to gray and blur for noise reduction
+                        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                        gray = cv2.GaussianBlur(gray, (21, 21), 0)
+                        
+                        has_motion = True
+                        prev_gray = self.cameras[cam_id].get("prev_gray")
+                        if prev_gray is not None:
+                            # Check size compatibility (in case of dynamic stream resolution changes)
+                            if prev_gray.shape == gray.shape:
+                                # Calculate absolute difference
+                                frame_delta = cv2.absdiff(prev_gray, gray)
+                                thresh = cv2.threshold(frame_delta, 20, 255, cv2.THRESH_BINARY)[1]
+                                motion_pixels = cv2.countNonZero(thresh)
+                                total_pixels = gray.shape[0] * gray.shape[1]
+                                motion_ratio = motion_pixels / total_pixels
+                                
+                                # If motion is below 0.3% of the frame area, skip AI processing
+                                if motion_ratio < 0.003:
+                                    has_motion = False
+                        
+                        self.cameras[cam_id]["prev_gray"] = gray
+                        
+                        if has_motion:
+                            if not self.frame_queues[cam_id].full():
+                                self.frame_queues[cam_id].put(frame)
                     
                     # Draw and encode to JPEG only if there are active viewers
                     viewers = self.cameras[cam_id].get("viewers", 0)

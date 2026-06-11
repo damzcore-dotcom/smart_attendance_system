@@ -1,3 +1,4 @@
+import React, { Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -14,6 +15,8 @@ import ManagerLeave from './pages/manager/ManagerLeave';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import Employees from './pages/admin/Employees';
 import EmployeeContracts from './pages/admin/EmployeeContracts';
+import EmployeeTraining from './pages/admin/EmployeeTraining';
+import EmployeeTerminated from './pages/admin/EmployeeTerminated';
 import Announcements from './pages/admin/Announcements';
 import AdminFaceCheck from './pages/admin/FaceCheck';
 import AdminLeaveRequests from './pages/admin/LeaveRequests';
@@ -49,12 +52,35 @@ import Login from './pages/Login';
 import NotFound from './pages/NotFound';
 import ErrorBoundary from './components/ErrorBoundary';
 
+// New HRIS modules imports
+const Claims = React.lazy(() => import('./pages/employee/Claims'));
+const AdminClaims = React.lazy(() => import('./pages/admin/Claims'));
+const AdminProfileRequests = React.lazy(() => import('./pages/admin/AdminProfileRequests'));
+const KPIEvaluation = React.lazy(() => import('./pages/manager/KPIEvaluation'));
+
 import { usePermission } from './hooks/usePermission';
+import { authAPI } from './services/api';
 
 const queryClient = new QueryClient();
 
+const AdminRoute = ({ children }) => {
+  const isLoggedIn = authAPI.isLoggedIn();
+  const user = JSON.parse(sessionStorage.getItem('user') || '{}');
+  const role = user?.role;
+  
+  if (!isLoggedIn || (role !== 'ADMIN' && role !== 'SUPER_ADMIN' && role !== 'ACCOUNTING')) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+};
+
 const PermissionRoute = ({ menuKey, children }) => {
+  const isLoggedIn = authAPI.isLoggedIn();
   const { canRead, isLoading } = usePermission(menuKey);
+  
+  if (!isLoggedIn) {
+    return <Navigate to="/login" replace />;
+  }
   
   if (isLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   if (!canRead) return <Navigate to="/admin" replace />;
@@ -63,16 +89,24 @@ const PermissionRoute = ({ menuKey, children }) => {
 };
 
 const DirectorRoute = ({ children }) => {
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-  if (user?.role !== 'DIREKTUR' && user?.role !== 'ADMIN' && user?.role !== 'SUPER_ADMIN') {
+  const isLoggedIn = authAPI.isLoggedIn();
+  const user = JSON.parse(sessionStorage.getItem('user') || '{}');
+  const role = user?.role;
+  
+  if (!isLoggedIn || (role !== 'DIREKTUR' && role !== 'ADMIN' && role !== 'SUPER_ADMIN')) {
     return <Navigate to="/login" replace />;
   }
   return children;
 };
 
 const EmployeeRoute = ({ children }) => {
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const isLoggedIn = authAPI.isLoggedIn();
+  const user = JSON.parse(sessionStorage.getItem('user') || '{}');
   const role = user?.role;
+  
+  if (!isLoggedIn) {
+    return <Navigate to="/login" replace />;
+  }
   
   if (role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'ACCOUNTING') {
     return <Navigate to="/admin" replace />;
@@ -82,12 +116,21 @@ const EmployeeRoute = ({ children }) => {
     return <Navigate to="/director" replace />;
   }
   
+  if (role !== 'EMPLOYEE') {
+    return <Navigate to="/login" replace />;
+  }
+  
   return children;
 };
 
 const ManagerRoute = ({ children }) => {
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const isLoggedIn = authAPI.isLoggedIn();
+  const user = JSON.parse(sessionStorage.getItem('user') || '{}');
   const role = user?.role;
+  
+  if (!isLoggedIn) {
+    return <Navigate to="/login" replace />;
+  }
   
   if (role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'ACCOUNTING') {
     return <Navigate to="/admin" replace />;
@@ -95,6 +138,10 @@ const ManagerRoute = ({ children }) => {
     return <Navigate to="/employee" replace />;
   } else if (role === 'DIREKTUR') {
     return <Navigate to="/director" replace />;
+  }
+  
+  if (role !== 'MANAGER') {
+    return <Navigate to="/login" replace />;
   }
   
   return children;
@@ -105,14 +152,17 @@ function App() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <Router>
-          <Routes>
-            <Route path="/login" element={<Login />} />
+          <Suspense fallback={<div className="h-screen flex items-center justify-center bg-[#f7f8fc]"><Loader2 className="animate-spin text-blue-600 w-10 h-10" /></div>}>
+            <Routes>
+              <Route path="/login" element={<Login />} />
           
           {/* Admin Routes */}
-          <Route path="/admin" element={<AdminLayout />}>
+          <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
             <Route index element={<PermissionRoute menuKey="dashboard"><AdminDashboard /></PermissionRoute>} />
             <Route path="employees" element={<PermissionRoute menuKey="employees"><Employees /></PermissionRoute>} />
             <Route path="contracts" element={<PermissionRoute menuKey="contracts"><EmployeeContracts /></PermissionRoute>} />
+            <Route path="training" element={<PermissionRoute menuKey="training"><EmployeeTraining /></PermissionRoute>} />
+            <Route path="terminated" element={<PermissionRoute menuKey="employees"><EmployeeTerminated /></PermissionRoute>} />
             <Route path="users" element={<PermissionRoute menuKey="users"><Users /></PermissionRoute>} />
             <Route path="attendance" element={<PermissionRoute menuKey="attendance"><Attendance /></PermissionRoute>} />
             <Route path="overtime-spl" element={<PermissionRoute menuKey="overtime-spl"><OvertimeSPL /></PermissionRoute>} />
@@ -133,6 +183,11 @@ function App() {
             <Route path="face-enrollment" element={<PermissionRoute menuKey="face-check"><FaceEnrollment /></PermissionRoute>} />
             <Route path="cameras" element={<PermissionRoute menuKey="face-check"><LiveCameraMonitor /></PermissionRoute>} />
             <Route path="unknown-alerts" element={<PermissionRoute menuKey="face-check"><UnknownAlerts /></PermissionRoute>} />
+            
+            {/* New HRIS Routes */}
+            <Route path="claims" element={<PermissionRoute menuKey="payroll"><AdminClaims /></PermissionRoute>} />
+            <Route path="profile-requests" element={<PermissionRoute menuKey="employees"><AdminProfileRequests /></PermissionRoute>} />
+            <Route path="kpi" element={<PermissionRoute menuKey="employees"><KPIEvaluation /></PermissionRoute>} />
           </Route>
 
           {/* Director Routes */}
@@ -141,7 +196,10 @@ function App() {
             <Route path="attendance" element={<DirectorAttendance />} />
             <Route path="employees" element={<Employees isReadOnly={true} />} />
             <Route path="contracts" element={<EmployeeContracts isReadOnly={true} />} />
+            <Route path="training" element={<EmployeeTraining isReadOnly={true} />} />
+            <Route path="terminated" element={<EmployeeTerminated isReadOnly={true} />} />
             <Route path="audit-log" element={<AuditLog />} />
+            <Route path="kpi" element={<KPIEvaluation />} />
           </Route>
 
           {/* Manager Routes */}
@@ -150,7 +208,10 @@ function App() {
             <Route path="attendance" element={<ManagerAttendance />} />
             <Route path="employees" element={<Employees isReadOnly={true} />} />
             <Route path="contracts" element={<EmployeeContracts isReadOnly={true} />} />
+            <Route path="training" element={<EmployeeTraining isReadOnly={true} />} />
+            <Route path="terminated" element={<EmployeeTerminated isReadOnly={true} />} />
             <Route path="audit-log" element={<AuditLog />} />
+            <Route path="kpi" element={<KPIEvaluation />} />
           </Route>
 
           {/* Employee Routes */}
@@ -166,6 +227,7 @@ function App() {
             <Route path="leave" element={<Leave />} />
             <Route path="slips" element={<MySlips />} />
             <Route path="calendar" element={<Calendar />} />
+            <Route path="claims" element={<Claims />} />
           </Route>
 
           {/* Redirects */}
@@ -173,8 +235,9 @@ function App() {
           
           {/* 404 Catch-all */}
           <Route path="*" element={<NotFound />} />
-        </Routes>
-      </Router>
+            </Routes>
+          </Suspense>
+        </Router>
     </QueryClientProvider>
     </ErrorBoundary>
   );

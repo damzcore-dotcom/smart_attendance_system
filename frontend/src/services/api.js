@@ -18,27 +18,27 @@ export const getFileUrl = (path) => {
 
 // ─── Token Management ────────────────────────────
 
-const getAccessToken = () => localStorage.getItem('accessToken');
-const getRefreshToken = () => localStorage.getItem('refreshToken');
+const getAccessToken = () => sessionStorage.getItem('accessToken');
+const getRefreshToken = () => sessionStorage.getItem('refreshToken');
 
 const setTokens = (accessToken, refreshToken) => {
-  localStorage.setItem('accessToken', accessToken);
-  if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
+  sessionStorage.setItem('accessToken', accessToken);
+  if (refreshToken) sessionStorage.setItem('refreshToken', refreshToken);
 };
 
 const clearTokens = () => {
-  localStorage.removeItem('accessToken');
-  localStorage.removeItem('refreshToken');
-  localStorage.removeItem('user');
+  sessionStorage.removeItem('accessToken');
+  sessionStorage.removeItem('refreshToken');
+  sessionStorage.removeItem('user');
 };
 
 const getStoredUser = () => {
-  const u = localStorage.getItem('user');
+  const u = sessionStorage.getItem('user');
   return u ? JSON.parse(u) : null;
 };
 
 const setStoredUser = (user) => {
-  localStorage.setItem('user', JSON.stringify(user));
+  sessionStorage.setItem('user', JSON.stringify(user));
 };
 
 // ─── Core Fetch Wrapper ──────────────────────────
@@ -168,7 +168,7 @@ export const employeeAPI = {
     formData.append('file', file);
     
     // Use API_BASE to ensure request goes to backend, not frontend
-    const token = localStorage.getItem('accessToken');
+    const token = getAccessToken();
     const res = await fetch(`${API_BASE}/employees/import?jobId=${jobId || ''}`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` },
@@ -180,7 +180,7 @@ export const employeeAPI = {
     return data;
   },
   getImportProgress: async (jobId) => {
-    const token = localStorage.getItem('accessToken');
+    const token = getAccessToken();
     const res = await fetch(`${API_BASE}/employees/import-progress?jobId=${jobId}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
@@ -194,6 +194,26 @@ export const employeeAPI = {
   },
   batchUpdateShift: (data) => apiFetch('/employees/batch-shift', { method: 'PUT', body: JSON.stringify(data) }),
   batchUpdateSalaryCategory: (data) => apiFetch('/employees/batch-salary-category', { method: 'PUT', body: JSON.stringify(data) }),
+  uploadDocument: async (id, file, name, expiryDate, physicalLocator) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('name', name);
+    if (expiryDate) formData.append('expiryDate', expiryDate);
+    if (physicalLocator) formData.append('physicalLocator', physicalLocator);
+
+    const token = getAccessToken();
+    const res = await fetch(`${API_BASE}/employees/${id}/documents`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Gagal mengunggah dokumen');
+    return data;
+  },
+  getDocuments: (id) => apiFetch(`/employees/${id}/documents`),
+  deleteDocument: (docId) => apiFetch(`/employees/documents/${docId}`, { method: 'DELETE' }),
+  getContractAlerts: () => apiFetch('/employees/alerts/contracts'),
 };
 
 // ─── Attendance API ──────────────────────────────
@@ -219,7 +239,7 @@ export const attendanceAPI = {
   importExcel: async (file, jobId) => {
     const formData = new FormData();
     formData.append('file', file);
-    const token = localStorage.getItem('accessToken');
+    const token = getAccessToken();
     const res = await fetch(`${API_BASE}/attendance/import${jobId ? `?jobId=${jobId}` : ''}`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` },
@@ -230,14 +250,14 @@ export const attendanceAPI = {
     return data;
   },
   getImportProgress: async (jobId) => {
-    const token = localStorage.getItem('accessToken');
+    const token = getAccessToken();
     const res = await fetch(`${API_BASE}/attendance/import-progress?jobId=${jobId}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     return await res.json();
   },
   getTemplate: async () => {
-    const token = localStorage.getItem('accessToken');
+    const token = getAccessToken();
     const res = await fetch(`${API_BASE}/attendance/template`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
@@ -351,6 +371,11 @@ export const fingerprintAPI = {
 export const notificationAPI = {
   getByEmployee: (empId) => apiFetch(`/notifications/${empId}`),
   markAsRead: (id) => apiFetch(`/notifications/${id}/read`, { method: 'PUT' }),
+  getPublicKey: () => apiFetch('/notifications/vapid-public-key'),
+  registerToken: (subscription, platform = 'web') => apiFetch('/notifications/register-token', {
+    method: 'POST',
+    body: JSON.stringify({ subscription, platform })
+  }),
 };
 
 // ─── Announcement API ────────────────────────────
@@ -466,7 +491,7 @@ export const payrollAPI = {
   finalize: (id) => apiFetch(`/payroll/${id}/finalize`, { method: 'PUT' }),
   cancel: (id) => apiFetch(`/payroll/${id}/cancel`, { method: 'PUT' }),
   exportExcel: async (id, lang = 'id') => {
-    const token = localStorage.getItem('accessToken');
+    const token = getAccessToken();
     const res = await fetch(`${API_BASE}/payroll/${id}/export-excel?lang=${lang}`, {
       headers: { 'Authorization': `Bearer ${token}` },
     });
@@ -503,6 +528,79 @@ export const calendarAPI = {
   },
   upsert: (data) => apiFetch('/calendar/upsert', { method: 'POST', body: JSON.stringify(data) }),
   remove: (id) => apiFetch(`/calendar/${id}`, { method: 'DELETE' }),
+};
+
+// ─── Claims / Reimbursement API ──────────────────
+export const claimAPI = {
+  create: async (title, category, amount, file) => {
+    const formData = new FormData();
+    formData.append('title', title);
+    formData.append('category', category);
+    formData.append('amount', amount);
+    formData.append('receipt', file);
+
+    const token = getAccessToken();
+    const res = await fetch(`${API_BASE}/claims`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Gagal mengirim pengajuan klaim');
+    return data;
+  },
+  getAll: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return apiFetch(`/claims${q ? `?${q}` : ''}`);
+  },
+  review: (id, status, reviewNote) => apiFetch(`/claims/${id}/review`, {
+    method: 'PUT',
+    body: JSON.stringify({ status, reviewNote })
+  }),
+  remove: (id) => apiFetch(`/claims/${id}`, { method: 'DELETE' })
+};
+
+// ─── ESS Profile Updates API ─────────────────────
+export const profileUpdateAPI = {
+  submit: async (fieldName, newValue, file) => {
+    const formData = new FormData();
+    formData.append('fieldName', fieldName);
+    formData.append('newValue', newValue);
+    if (file) formData.append('document', file);
+
+    const token = getAccessToken();
+    const res = await fetch(`${API_BASE}/profile-updates`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Gagal mengirim pengajuan pembaruan profil');
+    return data;
+  },
+  getAll: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return apiFetch(`/profile-updates${q ? `?${q}` : ''}`);
+  },
+  review: (id, status, reviewNote) => apiFetch(`/profile-updates/${id}/review`, {
+    method: 'PUT',
+    body: JSON.stringify({ status, reviewNote })
+  })
+};
+
+// ─── KPI Evaluation API ──────────────────────────
+export const kpiAPI = {
+  submit: (data) => apiFetch('/kpi', { method: 'POST', body: JSON.stringify(data) }),
+  getAll: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return apiFetch(`/kpi${q ? `?${q}` : ''}`);
+  },
+  getStats: (period) => apiFetch(`/kpi/stats?period=${period}`),
+  getAttendancePercentage: (employeeId, period) => apiFetch(`/kpi/attendance-percentage?employeeId=${employeeId}&period=${period}`),
+  review: (id, status, reviewNote) => apiFetch(`/kpi/${id}/review`, {
+    method: 'PUT',
+    body: JSON.stringify({ status, reviewNote })
+  })
 };
 
 export default api;

@@ -20,6 +20,10 @@ async function fixSequences() {
       }
     }
     console.log('[System] Database sequences synchronized successfully.');
+    
+    // Seed default salary components
+    const seedComponents = require('./seedComponents');
+    await seedComponents();
   } catch (error) {
     console.error('[System] Error synchronizing sequences:', error);
   }
