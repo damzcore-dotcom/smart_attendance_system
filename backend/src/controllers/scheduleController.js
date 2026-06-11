@@ -1,5 +1,6 @@
 const prisma = require('../prismaClient');
 
+const { handleControllerError } = require('../middleware/validate');
 /**
  * GET /api/shifts
  */
@@ -21,7 +22,7 @@ const getAll = async (req, res) => {
     });
     res.json({ success: true, data: shifts });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'scheduleController');
   }
 };
 
@@ -45,7 +46,7 @@ const create = async (req, res) => {
     });
     res.status(201).json({ success: true, data: shift });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'scheduleController');
   }
 };
 
@@ -68,7 +69,7 @@ const getEmployeeShift = async (req, res) => {
       data: employee.shift || { name: 'No Shift Assigned', startTime: '--', endTime: '--' },
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'scheduleController');
   }
 };
 
@@ -94,7 +95,7 @@ const update = async (req, res) => {
     });
     res.json({ success: true, data: shift });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'scheduleController');
   }
 };
 
@@ -107,7 +108,7 @@ const remove = async (req, res) => {
     await prisma.shift.delete({ where: { id: parseInt(id) } });
     res.json({ success: true, message: 'Shift deleted' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'scheduleController');
   }
 };
 /**
@@ -124,7 +125,7 @@ const getOverrides = async (req, res) => {
     });
     res.json({ success: true, data: overrides });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'scheduleController');
   }
 };
 
@@ -218,7 +219,7 @@ const createOverrides = async (req, res) => {
 
     res.status(201).json({ success: true, message: `${employeeIds.length} Data roster berhasil disimpan` });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'scheduleController');
   }
 };
 
@@ -346,7 +347,7 @@ const bulkGenerateOverrides = async (req, res) => {
     });
 
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'scheduleController');
   }
 };
 
@@ -358,7 +359,7 @@ const deleteOverride = async (req, res) => {
     await prisma.employeeShiftOverride.delete({ where: { id: parseInt(req.params.id) } });
     res.json({ success: true, message: 'Data roster dihapus' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'scheduleController');
   }
 };
 

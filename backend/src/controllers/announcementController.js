@@ -1,5 +1,6 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
+const { handleControllerError } = require('../middleware/validate');
 
 // Get all announcements
 exports.getAll = async (req, res) => {
@@ -14,7 +15,7 @@ exports.getAll = async (req, res) => {
     
     res.json({ success: true, data: announcements });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    handleControllerError(res, error, 'announcementController.getAll');
   }
 };
 
@@ -33,7 +34,7 @@ exports.create = async (req, res) => {
     });
     res.status(201).json({ success: true, data: announcement });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    handleControllerError(res, error, 'announcementController.create');
   }
 };
 
@@ -48,7 +49,7 @@ exports.update = async (req, res) => {
     });
     res.json({ success: true, data: announcement });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    handleControllerError(res, error, 'announcementController.update');
   }
 };
 
@@ -61,6 +62,6 @@ exports.delete = async (req, res) => {
     });
     res.json({ success: true, message: 'Announcement deleted successfully' });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    handleControllerError(res, error, 'announcementController.delete');
   }
 };

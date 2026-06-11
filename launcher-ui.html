@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart HRIS Platform — Kontrol Panel</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: radial-gradient(circle at top right, #eef2f7 0%, #cbd5e1 100%);
+      overflow: hidden;
+    }
+    .glass-card {
+      background: rgba(255, 255, 255, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.4);
+    }
+    .terminal-scroll::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .terminal-scroll::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    .terminal-scroll::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+    .glow-green {
+      box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+    }
+    .glow-red {
+      box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+    }
+  </style>
+</head>
+<body class="w-screen h-screen flex flex-col p-6 text-slate-700 select-none">
+
+  <!-- Warning Overlay for direct local file double-click (file:// protocol) -->
+  <div id="protocol-warning" class="hidden fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-6 text-center">
+    <div class="bg-white rounded-3xl p-8 max-w-md shadow-2xl border border-slate-100 flex flex-col items-center gap-5">
+      <div class="w-16 h-16 rounded-full bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-500 animate-bounce">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-8 h-8">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+        </svg>
+      </div>
+      <div>
+        <h2 class="text-xl font-bold text-slate-800">Launcher Dibuka Secara Manual</h2>
+        <p class="text-sm text-slate-500 mt-2 leading-relaxed">
+          Anda membuka file HTML ini secara langsung. Tombol kendali dan pemantau server tidak dapat berfungsi tanpa server Node.js aktif di latar belakang.
+        </p>
+        <div class="mt-4 p-4 bg-slate-50 rounded-2xl text-xs font-semibold text-slate-600 text-left border border-slate-200">
+          <span class="font-bold text-slate-800">👉 Cara yang benar untuk menjalankan:</span>
+          <ul class="list-decimal list-inside mt-2 space-y-1">
+            <li>Tutup tab browser ini.</li>
+            <li>Double-klik berkas <code class="bg-slate-200 px-1 rounded font-mono text-[10px]">START_APP.bat</code> (di folder klien) atau <code class="bg-slate-200 px-1.5 py-0.5 rounded font-mono text-[10px]">START_SYSTEM.bat</code> (di folder dev).</li>
+            <li>Jendela Launcher yang sesungguhnya akan terbuka secara otomatis di browser Anda.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 1. Header Section -->
+  <div class="glass-card rounded-3xl p-5 mb-5 flex items-center justify-between shadow-sm relative overflow-hidden">
+    <div class="absolute -right-20 -top-20 w-48 h-48 bg-blue-400/10 rounded-full blur-[40px] pointer-events-none"></div>
+    <div class="absolute -left-20 -bottom-20 w-48 h-48 bg-indigo-400/10 rounded-full blur-[40px] pointer-events-none"></div>
+    
+    <div class="flex items-center gap-4 relative z-10">
+      <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-md">
+        <!-- Logo Icon -->
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-6 h-6">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.746 3.746 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z" />
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-xl font-extrabold text-slate-800 tracking-tight">Smart HRIS Platform</h1>
+        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Sistem Kontrol Panel & Launcher</p>
+      </div>
+    </div>
+    
+    <div class="flex items-center gap-6 relative z-10">
+      <!-- Local Time -->
+      <div class="text-right font-mono">
+        <div id="local-time" class="text-xl font-bold text-slate-800">00:00:00</div>
+        <div id="local-date" class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Jumat, 5 Juni 2026</div>
+      </div>
+      
+      <!-- Main Status Badge -->
+      <div id="system-status-badge" class="px-4 py-2 rounded-2xl bg-rose-50 border border-rose-100 text-rose-600 text-xs font-black uppercase tracking-wider flex items-center gap-2 glow-red transition-all duration-500">
+        <span class="w-2.5 h-2.5 rounded-full bg-rose-600 block animate-pulse"></span>
+        Sistem Nonaktif
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Main content area -->
+  <div class="grid grid-cols-12 gap-5 flex-1 min-h-0 mb-5">
+    
+    <!-- Left Column: Status cards -->
+    <div class="col-span-5 flex flex-col gap-4">
+      <!-- Database Card -->
+      <div class="glass-card rounded-2xl p-4 flex items-center justify-between shadow-sm">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center border border-slate-200">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75M3.75 10.125v3.75m16.5 0v3.75m-16.5-3.75v3.75" />
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-xs font-black text-slate-800 uppercase tracking-wider">Database PostgreSQL</h3>
+            <p id="db-port-label" class="text-[10px] text-slate-400 font-semibold mt-0.5">Port 5432</p>
+          </div>
+        </div>
+        <span id="status-db" class="px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-100 text-[10px] font-black uppercase text-rose-600 flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-rose-600 block"></span> Offline
+        </span>
+      </div>
+
+      <!-- Backend Server Card -->
+      <div class="glass-card rounded-2xl p-4 flex items-center justify-between shadow-sm">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center border border-slate-200">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 0 1-3-3m3 3a3 3 0 1 0 0 6h13.5a3 3 0 1 0 0-6m-16.5-3a3 3 0 0 1 3-3h13.5a3 3 0 0 1 3 3m-19.5 0a3 3 0 1 1 0-6h13.5a3 3 0 1 1 0 6M16.5 7.5h.008v.008H16.5V7.5Zm0 9h.008v.008H16.5v-.008Z" />
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-xs font-black text-slate-800 uppercase tracking-wider">Backend API Server</h3>
+            <p id="backend-port-label" class="text-[10px] text-slate-400 font-semibold mt-0.5">Port 5000</p>
+          </div>
+        </div>
+        <span id="status-backend" class="px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-100 text-[10px] font-black uppercase text-rose-600 flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-rose-600 block"></span> Offline
+        </span>
+      </div>
+
+      <!-- Frontend Client Card -->
+      <div class="glass-card rounded-2xl p-4 flex items-center justify-between shadow-sm">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center border border-slate-200">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0V12a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 12V5.25" />
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-xs font-black text-slate-800 uppercase tracking-wider">Frontend Client Portal</h3>
+            <p id="frontend-port-label" class="text-[10px] text-slate-400 font-semibold mt-0.5">Port 5173</p>
+          </div>
+        </div>
+        <span id="status-frontend" class="px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-100 text-[10px] font-black uppercase text-rose-600 flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-rose-600 block"></span> Offline
+        </span>
+      </div>
+
+      <!-- AI CCTV Engine Card -->
+      <div class="glass-card rounded-2xl p-4 flex items-center justify-between shadow-sm">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center border border-slate-200">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-xs font-black text-slate-800 uppercase tracking-wider">AI CCTV Face Engine</h3>
+            <p id="ai-port-label" class="text-[10px] text-slate-400 font-semibold mt-0.5">Port 8002</p>
+          </div>
+        </div>
+        <span id="status-ai" class="px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-100 text-[10px] font-black uppercase text-rose-600 flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-rose-600 block"></span> Offline
+        </span>
+      </div>
+    </div>
+    
+    <!-- Right Column: Control switch and shortcuts -->
+    <div class="col-span-7 flex flex-col gap-5">
+      <!-- Master Switch Console -->
+      <div class="glass-card rounded-3xl p-6 flex-1 flex flex-col items-center justify-center shadow-sm relative overflow-hidden">
+        <div id="glow-bg" class="absolute -right-36 -bottom-36 w-80 h-80 bg-rose-400/5 rounded-full blur-[60px] pointer-events-none transition-colors duration-1000"></div>
+        
+        <div class="text-center mb-6 z-10">
+          <p class="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Master Kontrol Aplikasi</p>
+          <h2 id="master-title" class="text-2xl font-extrabold text-slate-800 tracking-tight mt-1">Nyalakan Layanan Absensi</h2>
+          <p id="master-subtitle" class="text-xs text-slate-500 font-medium max-w-sm mt-2">
+            Klik tombol di bawah ini untuk memulai seluruh servis (Backend, Database push, dan Frontend) secara bersamaan.
+          </p>
+        </div>
+        
+        <!-- Toggle Button -->
+        <button 
+          id="btn-master-toggle" 
+          onclick="toggleSystem()"
+          class="relative w-44 h-44 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 hover:from-emerald-450 hover:to-teal-550 active:scale-95 text-white flex flex-col items-center justify-center gap-2 transition-all duration-300 shadow-lg shadow-emerald-500/20 z-10 cursor-pointer group"
+        >
+          <!-- Power Icon -->
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-12 h-12 animate-pulse group-hover:scale-110 transition-transform">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5.636 5.636a9 9 0 1 0 12.728 0M12 3v9" />
+          </svg>
+          <span id="btn-master-text" class="text-xs font-black uppercase tracking-widest">Start System</span>
+        </button>
+        
+        <!-- Open Web App Shortcut -->
+        <button 
+          id="btn-open-app"
+          disabled
+          onclick="openPortal()"
+          class="mt-6 flex items-center justify-center gap-2 bg-slate-200/50 hover:bg-blue-600 text-slate-400 hover:text-white disabled:opacity-40 disabled:hover:bg-slate-200/50 disabled:hover:text-slate-400 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all duration-300 active:scale-95 shadow-sm border border-slate-200/30 cursor-pointer z-10"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-4 h-4">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+          </svg>
+          Buka Portal Absensi
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 3. Terminal Log section -->
+  <div class="glass-card rounded-3xl p-5 h-64 flex flex-col shadow-sm relative z-10">
+    <div class="flex items-center justify-between pb-3 border-b border-slate-200/60 mb-3">
+      <div class="flex items-center gap-4">
+        <span class="text-xs font-black uppercase tracking-widest text-slate-400">Terminal Output Logs</span>
+        
+        <!-- Log Tabs -->
+        <div class="flex gap-2">
+          <button onclick="switchTab('system')" id="tab-system" class="px-3 py-1 text-[10px] font-black uppercase tracking-wider rounded-lg bg-blue-600 text-white shadow-sm border border-blue-600 transition-all">System</button>
+          <button onclick="switchTab('backend')" id="tab-backend" class="px-3 py-1 text-[10px] font-black uppercase tracking-wider rounded-lg bg-slate-200 text-slate-600 border border-slate-200 hover:bg-slate-300 transition-all">Backend</button>
+          <button onclick="switchTab('frontend')" id="tab-frontend" class="px-3 py-1 text-[10px] font-black uppercase tracking-wider rounded-lg bg-slate-200 text-slate-600 border border-slate-200 hover:bg-slate-300 transition-all">Frontend</button>
+        </div>
+      </div>
+      
+      <button onclick="clearConsole()" class="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-rose-600 transition-colors">Clear Console</button>
+    </div>
+    
+    <!-- Log Output Container -->
+    <div id="terminal-box" class="flex-1 bg-slate-950 rounded-2xl p-4 font-mono text-xs text-emerald-400 overflow-y-auto terminal-scroll whitespace-pre-wrap select-text leading-relaxed">
+[Launcher] System control console initialized.
+[Launcher] Waiting for commands...
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script>
+    // Show warning overlay if page is opened via file:// protocol directly
+    if (window.location.protocol === 'file:') {
+      window.onload = function() {
+        document.getElementById('protocol-warning').classList.remove('hidden');
+      };
+    }
+
+    let activeTab = 'system';
+    let systemIsActive = false;
+    let configPorts = { dbPort: 5432, backendPort: 5000, frontendPort: 5173, aiPort: 8002 };
+
+    // Format Clock
+    function updateClock() {
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const seconds = String(now.getSeconds()).padStart(2, '0');
+      document.getElementById('local-time').textContent = `${hours}:${minutes}:${seconds}`;
+      
+      const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+      document.getElementById('local-date').textContent = now.toLocaleDateString('id-ID', options);
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // Fetch Status from local launcher API
+    async function updateStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        
+        configPorts = data.config || configPorts;
+        
+        // Update Ports labels
+        document.getElementById('db-port-label').textContent = `Port ${configPorts.dbPort}`;
+        document.getElementById('backend-port-label').textContent = `Port ${configPorts.backendPort}`;
+        document.getElementById('frontend-port-label').textContent = `Port ${configPorts.frontendPort}`;
+        document.getElementById('ai-port-label').textContent = `Port ${configPorts.aiPort}`;
+
+        // Database status
+        const dbSpan = document.getElementById('status-db');
+        if (data.database === 'online') {
+          dbSpan.className = "px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-100 text-[10px] font-black uppercase text-emerald-600 flex items-center gap-1.5";
+          dbSpan.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-600 block"></span> Terhubung';
+        } else {
+          dbSpan.className = "px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-100 text-[10px] font-black uppercase text-rose-600 flex items-center gap-1.5";
+          dbSpan.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-rose-600 block"></span> Offline';
+        }
+
+        // Backend status
+        const backendSpan = document.getElementById('status-backend');
+        if (data.backend === 'online') {
+          backendSpan.className = "px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-100 text-[10px] font-black uppercase text-emerald-600 flex items-center gap-1.5";
+          backendSpan.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-600 block"></span> Online';
+        } else {
+          backendSpan.className = "px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-100 text-[10px] font-black uppercase text-rose-600 flex items-center gap-1.5";
+          backendSpan.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-rose-600 block"></span> Offline';
+        }
+
+        // Frontend status
+        const frontendSpan = document.getElementById('status-frontend');
+        const openAppBtn = document.getElementById('btn-open-app');
+        if (data.frontend === 'online') {
+          frontendSpan.className = "px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-100 text-[10px] font-black uppercase text-emerald-600 flex items-center gap-1.5";
+          frontendSpan.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-600 block"></span> Online';
+          openAppBtn.disabled = false;
+        } else {
+          frontendSpan.className = "px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-100 text-[10px] font-black uppercase text-rose-600 flex items-center gap-1.5";
+          frontendSpan.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-rose-600 block"></span> Offline';
+          openAppBtn.disabled = true;
+        }
+
+        // AI Engine status
+        const aiSpan = document.getElementById('status-ai');
+        if (data.aiEngine === 'online') {
+          aiSpan.className = "px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-100 text-[10px] font-black uppercase text-emerald-600 flex items-center gap-1.5";
+          aiSpan.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-600 block"></span> Online';
+        } else {
+          aiSpan.className = "px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-100 text-[10px] font-black uppercase text-rose-600 flex items-center gap-1.5";
+          aiSpan.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-rose-600 block"></span> Offline';
+        }
+
+        // Master UI update
+        systemIsActive = data.systemActive;
+        const mainBadge = document.getElementById('system-status-badge');
+        const masterTitle = document.getElementById('master-title');
+        const masterSub = document.getElementById('master-subtitle');
+        const masterBtn = document.getElementById('btn-master-toggle');
+        const masterBtnText = document.getElementById('btn-master-text');
+        const glowBg = document.getElementById('glow-bg');
+
+        if (systemIsActive) {
+          mainBadge.className = "px-4 py-2 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-600 text-xs font-black uppercase tracking-wider flex items-center gap-2 glow-green transition-all duration-500";
+          mainBadge.innerHTML = '<span class="w-2.5 h-2.5 rounded-full bg-emerald-600 block animate-pulse"></span> Sistem Aktif';
+          
+          masterTitle.textContent = "Sistem Sedang Beroperasi";
+          masterSub.textContent = "Semua servis frontend & backend absensi berhasil diluncurkan. Klik Buka Portal untuk masuk.";
+          
+          masterBtn.className = "relative w-44 h-44 rounded-full bg-gradient-to-br from-rose-500 to-red-650 hover:from-rose-450 hover:to-red-550 active:scale-95 text-white flex flex-col items-center justify-center gap-2 transition-all duration-300 shadow-lg shadow-rose-500/20 z-10 cursor-pointer group";
+          masterBtnText.textContent = "Stop System";
+          
+          glowBg.className = "absolute -right-36 -bottom-36 w-80 h-80 bg-emerald-400/10 rounded-full blur-[60px] pointer-events-none transition-colors duration-1000";
+        } else {
+          mainBadge.className = "px-4 py-2 rounded-2xl bg-rose-50 border border-rose-100 text-rose-600 text-xs font-black uppercase tracking-wider flex items-center gap-2 glow-red transition-all duration-500";
+          mainBadge.innerHTML = '<span class="w-2.5 h-2.5 rounded-full bg-rose-600 block animate-pulse"></span> Sistem Nonaktif';
+          
+          masterTitle.textContent = "Nyalakan Layanan Absensi";
+          masterSub.textContent = "Klik tombol di bawah ini untuk memulai seluruh servis (Backend, Database push, dan Frontend) secara bersamaan.";
+          
+          masterBtn.className = "relative w-44 h-44 rounded-full bg-gradient-to-br from-emerald-500 to-teal-650 hover:from-emerald-450 hover:to-teal-550 active:scale-95 text-white flex flex-col items-center justify-center gap-2 transition-all duration-300 shadow-lg shadow-emerald-500/20 z-10 cursor-pointer group";
+          masterBtnText.textContent = "Start System";
+          
+          glowBg.className = "absolute -right-36 -bottom-36 w-80 h-80 bg-rose-400/5 rounded-full blur-[60px] pointer-events-none transition-colors duration-1000";
+        }
+
+      } catch (e) {}
+    }
+    setInterval(updateStatus, 2000);
+    updateStatus();
+
+    // Toggle Start / Stop via APIs
+    async function toggleSystem() {
+      const url = systemIsActive ? '/api/stop' : '/api/start';
+      try {
+        await fetch(url);
+        updateStatus();
+      } catch (e) {}
+    }
+
+    function openPortal() {
+      window.open(`http://localhost:${configPorts.frontendPort}`);
+    }
+
+    // Fetch and Display Logs
+    async function updateLogs() {
+      try {
+        const res = await fetch('/api/logs');
+        const data = await res.json();
+        
+        const term = document.getElementById('terminal-box');
+        const oldScrollHeight = term.scrollHeight;
+        const oldScrollTop = term.scrollTop;
+        const isAtBottom = (term.clientHeight + oldScrollTop >= oldScrollHeight - 10);
+
+        if (activeTab === 'system') {
+          term.textContent = data.system || '[Launcher] Menunggu log sistem...\n';
+        } else if (activeTab === 'backend') {
+          term.textContent = data.backend || '[Backend] Server belum menyala atau belum menghasilkan output log.\n';
+        } else if (activeTab === 'frontend') {
+          term.textContent = data.frontend || '[Frontend] Server belum menyala atau belum menghasilkan output log.\n';
+        }
+
+        // Auto scroll only if user was already at the bottom
+        if (isAtBottom) {
+          term.scrollTop = term.scrollHeight;
+        }
+      } catch (e) {}
+    }
+    setInterval(updateLogs, 1000);
+    updateLogs();
+
+    // Switch log tabs
+    function switchTab(tab) {
+      activeTab = tab;
+      
+      const tabs = ['system', 'backend', 'frontend'];
+      tabs.forEach(t => {
+        const btn = document.getElementById(`tab-${t}`);
+        if (t === tab) {
+          btn.className = "px-3 py-1 text-[10px] font-black uppercase tracking-wider rounded-lg bg-blue-600 text-white shadow-sm border border-blue-600 transition-all";
+        } else {
+          btn.className = "px-3 py-1 text-[10px] font-black uppercase tracking-wider rounded-lg bg-slate-200 text-slate-600 border border-slate-200 hover:bg-slate-300 transition-all";
+        }
+      });
+      
+      updateLogs();
+    }
+
+    // Clear Screen Console
+    async function clearConsole() {
+      // For visual only, call api to clear would be overkill
+      const term = document.getElementById('terminal-box');
+      term.textContent = `[Console Cleared] Logs cleared at ${new Date().toLocaleTimeString('id-ID')}\n`;
+    }
+  </script>
+</body>
+</html>

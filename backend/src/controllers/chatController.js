@@ -8,6 +8,7 @@
 
 const aiAgentService = require('../services/aiAgentService');
 const prisma = require('../prismaClient');
+const { handleControllerError } = require('../middleware/validate');
 
 /**
  * POST /api/chat
@@ -73,11 +74,7 @@ const handleChat = async (req, res) => {
       chatLogId // Frontend can use this ID to submit feedback
     });
   } catch (error) {
-    console.error('Error in chat controller:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Gagal memproses pesan asisten AI: ' + error.message
-    });
+    handleControllerError(res, error, 'chatController.handleChat');
   }
 };
 
@@ -122,8 +119,7 @@ const handleFeedback = async (req, res) => {
       data: { id: updated.id, feedback: updated.feedback }
     });
   } catch (error) {
-    console.error('Error handling feedback:', error);
-    res.status(500).json({ success: false, message: 'Failed to submit feedback.' });
+    handleControllerError(res, error, 'chatController.handleFeedback');
   }
 };
 

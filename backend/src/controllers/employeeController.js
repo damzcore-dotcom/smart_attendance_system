@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const xlsx = require('xlsx');
 const { recordAuditLog } = require('./auditLogController');
 
+const { handleControllerError } = require('../middleware/validate');
 const getAll = async (req, res) => {
   try {
     const { search, dept, section, position, status, empStatus, page = 1, limit = 20, sortBy = 'createdAt', order = 'desc', locationId } = req.query;
@@ -166,7 +167,7 @@ const getAll = async (req, res) => {
       totalPages: Math.ceil(total / parseInt(limit)),
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'employeeController');
   }
 };
 
@@ -179,7 +180,7 @@ const getById = async (req, res) => {
     if (!employee) return res.status(404).json({ success: false, message: 'Employee not found' });
     res.json({ success: true, data: employee });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'employeeController');
   }
 };
 
@@ -299,13 +300,28 @@ const create = async (req, res) => {
 
     res.status(201).json({ success: true, message: 'Employee created successfully', data: employee });
 
+    // Update face cache if face is enrolled
+    if (employee.faceStatus === 'ENROLLED' && employee.faceDescriptor) {
+      prisma.employee.findUnique({
+        where: { id: employee.id },
+        include: { department: true, shift: true, user: true }
+      }).then(freshEmp => {
+        if (freshEmp && freshEmp.user) {
+          const { updateCachedFace } = require('../utils/faceCache');
+          updateCachedFace(freshEmp.id, freshEmp.faceDescriptor, freshEmp);
+        }
+      }).catch(cacheErr => {
+        console.error('Failed to update face cache on employee create:', cacheErr.message);
+      });
+    }
+
     // Audit log (fire-and-forget)
     if (req.user) {
       recordAuditLog({ userId: req.user.id, username: req.user.username, role: req.user.role, action: 'CREATE', entity: 'Employee', entityId: employee.id, details: { name, employeeCode, dept }, ipAddress: req.ip });
     }
   } catch (err) {
     if (err.code === 'P2002') return res.status(400).json({ success: false, message: 'Email or ID already exists' });
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'employeeController');
   }
 };
 
@@ -388,12 +404,30 @@ const update = async (req, res) => {
 
     res.json({ success: true, message: 'Employee updated', data: employee });
 
+    // Update face cache if face is enrolled or removed
+    if (employee.faceStatus === 'ENROLLED' && employee.faceDescriptor) {
+      prisma.employee.findUnique({
+        where: { id: employee.id },
+        include: { department: true, shift: true, user: true }
+      }).then(freshEmp => {
+        if (freshEmp && freshEmp.user) {
+          const { updateCachedFace } = require('../utils/faceCache');
+          updateCachedFace(freshEmp.id, freshEmp.faceDescriptor, freshEmp);
+        }
+      }).catch(cacheErr => {
+        console.error('Failed to update face cache on employee update:', cacheErr.message);
+      });
+    } else {
+      const { removeCachedFace } = require('../utils/faceCache');
+      removeCachedFace(employee.id);
+    }
+
     // Audit log (fire-and-forget)
     if (req.user) {
       recordAuditLog({ userId: req.user.id, username: req.user.username, role: req.user.role, action: 'UPDATE', entity: 'Employee', entityId: employee.id, details: { name: employee.name, updatedFields: Object.keys(data) }, ipAddress: req.ip });
     }
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'employeeController');
   }
 };
 
@@ -402,12 +436,15 @@ const remove = async (req, res) => {
     await prisma.employee.delete({ where: { id: parseInt(req.params.id) } });
     res.json({ success: true, message: 'Employee deleted' });
 
+    const { removeCachedFace } = require('../utils/faceCache');
+    removeCachedFace(parseInt(req.params.id));
+
     // Audit log (fire-and-forget)
     if (req.user) {
       recordAuditLog({ userId: req.user.id, username: req.user.username, role: req.user.role, action: 'DELETE', entity: 'Employee', entityId: parseInt(req.params.id), details: null, ipAddress: req.ip });
     }
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'employeeController');
   }
 };
 
@@ -608,7 +645,7 @@ const importExcel = async (req, res) => {
       }
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'employeeController');
   }
 };
 
@@ -647,7 +684,7 @@ const getMasterOptions = async (req, res) => {
       }
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'employeeController');
   }
 };
 
@@ -681,7 +718,7 @@ const batchUpdateShift = async (req, res) => {
       data: result 
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'employeeController');
   }
 };
 
@@ -693,7 +730,7 @@ const checkDuplicate = async (req, res) => {
     const count = await prisma.employee.count({ where: { employeeCode: String(nik) } });
     res.json({ success: true, isDuplicate: count > 0 });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'employeeController');
   }
 };
 
@@ -724,7 +761,7 @@ const getNextFingerId = async (req, res) => {
     const nextId = maxId > 0 ? maxId + 1 : 10001;
     res.json({ success: true, nextFingerId: String(nextId) });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'employeeController');
   }
 };
 
@@ -753,7 +790,7 @@ const batchUpdateSalaryCategory = async (req, res) => {
       data: result 
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'employeeController');
   }
 };
 

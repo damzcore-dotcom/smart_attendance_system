@@ -142,6 +142,7 @@ export const authAPI = {
   }),
 
   getMe: () => apiFetch('/auth/me'),
+  getMeStats: () => apiFetch('/auth/me/stats'),
 
   logout: async () => {
     try { await apiFetch('/auth/logout', { method: 'POST' }); } catch {}

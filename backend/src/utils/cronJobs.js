@@ -3,9 +3,9 @@ const prisma = require('../prismaClient');
 const ZKLib = require('node-zklib');
 const { calculateLateness, resolveStatus, parsePenaltySettings } = require('./lateCalculator');
 
-// Runs every minute to check if any device needs auto-sync
+// Runs every 5 minutes to check if any device needs auto-sync
 const startCronJobs = () => {
-  cron.schedule('* * * * *', async () => {
+  cron.schedule('*/5 * * * *', async () => {
     try {
       const now = new Date();
       const currentHourStr = now.getHours().toString().padStart(2, '0');

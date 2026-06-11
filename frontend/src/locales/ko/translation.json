@@ -1364,6 +1364,8 @@
       "passwordPlaceholder": "변경하지 않으려면 비워두세요...",
       "role": "권한",
       "managedDept": "관리 부서",
+      "selectDept": "부서 선택...",
+      "allDepts": "-- 모든 부서 --",
       "cancel": "취소",
       "submitting": "저장 중...",
       "submit": "변경사항 저장"

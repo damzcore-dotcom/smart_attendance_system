@@ -4,6 +4,7 @@ const { recordAuditLog } = require('./auditLogController');
 const { parsePenaltySettings } = require('../utils/lateCalculator');
 
 
+const { handleControllerError } = require('../middleware/validate');
 // ─── Helper: Calculate Overtime Hours ────────────
 
 const calculateOvertimeHours = (checkIn, checkOut, shiftEndTime) => {
@@ -147,7 +148,7 @@ const getAll = async (req, res) => {
 
     res.json({ success: true, data: payrolls });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollController');
   }
 };
 
@@ -167,7 +168,7 @@ const getById = async (req, res) => {
     if (!payroll) return res.status(404).json({ success: false, message: 'Payroll not found' });
     res.json({ success: true, data: payroll });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollController');
   }
 };
 
@@ -586,7 +587,7 @@ const generate = async (req, res) => {
     }
   } catch (err) {
     console.error('Payroll generate error:', err);
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollController');
   }
 };
 
@@ -605,7 +606,7 @@ const submitForApproval = async (req, res) => {
 
     res.json({ success: true, message: 'Payroll submitted for director approval', data: updated });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollController');
   }
 };
 
@@ -628,7 +629,7 @@ const approve = async (req, res) => {
 
     res.json({ success: true, message: 'Payroll approved', data: updated });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollController');
   }
 };
 
@@ -652,7 +653,7 @@ const reject = async (req, res) => {
 
     res.json({ success: true, message: 'Payroll rejected', data: updated });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollController');
   }
 };
 
@@ -671,7 +672,7 @@ const finalize = async (req, res) => {
 
     res.json({ success: true, message: 'Payroll finalized', data: updated });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollController');
   }
 };
 
@@ -696,7 +697,7 @@ const cancel = async (req, res) => {
 
     res.json({ success: true, message: 'Payroll cancelled', data: updated });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollController');
   }
 };
 
@@ -790,7 +791,7 @@ const exportExcel = async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename=Payroll_${payroll.period}.xlsx`);
     res.send(buffer);
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollController');
   }
 };
 
@@ -829,7 +830,7 @@ const getSlip = async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollController');
   }
 };
 
@@ -856,7 +857,7 @@ const getMySlips = async (req, res) => {
 
     res.json({ success: true, data: slips });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollController');
   }
 };
 
@@ -895,7 +896,7 @@ const getPayrollSummary = async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollController');
   }
 };
 

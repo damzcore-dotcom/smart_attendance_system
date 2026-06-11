@@ -1,5 +1,19 @@
 const prisma = require('../prismaClient');
 const { sendWAMessage } = require('../services/whatsappService');
+const { uploadBase64ToMinio } = require('../utils/minioHelper');
+const { handleControllerError } = require('../middleware/validate');
+
+const mapLeaveRequest = (r) => {
+  if (!r) return r;
+  let attachmentUrl = r.medicalAttachment;
+  if (attachmentUrl && attachmentUrl.startsWith('leave-attachments/')) {
+    attachmentUrl = `/minio/${attachmentUrl}`;
+  }
+  return {
+    ...r,
+    medicalAttachment: attachmentUrl
+  };
+};
 
 /**
  * POST /api/leave
@@ -17,6 +31,15 @@ const create = async (req, res) => {
       return res.status(400).json({ success: false, message: 'End date cannot be earlier than start date' });
     }
 
+    let attachmentPath = null;
+    if (req.body.medicalAttachment) {
+      try {
+        attachmentPath = await uploadBase64ToMinio('leave-attachments', req.body.medicalAttachment, `emp_${employeeId}`);
+      } catch (uploadErr) {
+        return res.status(400).json({ success: false, message: 'Gagal mengunggah lampiran medis: ' + uploadErr.message });
+      }
+    }
+
     const leave = await prisma.leaveRequest.create({
       data: {
         employeeId: parseInt(employeeId),
@@ -24,13 +47,13 @@ const create = async (req, res) => {
         endDate: new Date(endDate),
         type,
         reason,
-        medicalAttachment: req.body.medicalAttachment || null
+        medicalAttachment: attachmentPath
       }
     });
 
-    res.json({ success: true, message: 'Leave request submitted successfully', data: leave });
+    res.json({ success: true, message: 'Leave request submitted successfully', data: mapLeaveRequest(leave) });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'leaveController');
   }
 };
 
@@ -60,7 +83,7 @@ const getAll = async (req, res) => {
 
     res.json({
       success: true,
-      data: requests.map(r => ({
+      data: requests.map(r => mapLeaveRequest({
         ...r,
         employeeName: r.employee.name,
         employeeCode: r.employee.employeeCode,
@@ -68,7 +91,7 @@ const getAll = async (req, res) => {
       }))
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'leaveController');
   }
 };
 
@@ -83,9 +106,9 @@ const getByEmployee = async (req, res) => {
       where: { employeeId: empId },
       orderBy: { createdAt: 'desc' }
     });
-    res.json({ success: true, data: requests });
+    res.json({ success: true, data: requests.map(mapLeaveRequest) });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'leaveController');
   }
 };
 
@@ -252,9 +275,9 @@ const review = async (req, res) => {
       });
     }
 
-    res.json({ success: true, message: `Request ${status.toLowerCase()} successfully`, data: updated });
+    res.json({ success: true, message: `Request ${status.toLowerCase()} successfully`, data: mapLeaveRequest(updated) });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'leaveController');
   }
 };
 
@@ -346,7 +369,7 @@ const massApply = async (req, res) => {
     res.json({ success: true, message: `Mass leave applied to ${employees.length} employees.` });
   } catch (err) {
     console.error('Mass leave error:', err);
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'leaveController');
   }
 };
 
@@ -361,7 +384,7 @@ const getMassLeaves = async (req, res) => {
     });
     res.json({ success: true, data: list });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'leaveController');
   }
 };
 
@@ -392,9 +415,9 @@ const cancelLeave = async (req, res) => {
       data: { status: 'CANCELLED' },
     });
 
-    res.json({ success: true, message: 'Leave request cancelled successfully', data: updated });
+    res.json({ success: true, message: 'Leave request cancelled successfully', data: mapLeaveRequest(updated) });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'leaveController');
   }
 };
 

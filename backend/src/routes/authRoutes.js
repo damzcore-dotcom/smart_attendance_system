@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const { login, refresh, verifyFace, logout, getMe, changePassword } = require('../controllers/authController');
+const { login, refresh, verifyFace, logout, getMe, getMeStats, changePassword } = require('../controllers/authController');
 const { verifyToken } = require('../middleware/auth');
 
 const rateLimit = require('express-rate-limit');
@@ -15,6 +15,7 @@ router.post('/refresh', refresh);
 router.post('/verify-face', faceVerifyLimiter, verifyFace);
 router.post('/logout', verifyToken, logout);
 router.get('/me', verifyToken, getMe);
+router.get('/me/stats', verifyToken, getMeStats);
 router.post('/change-password', verifyToken, changePassword);
 
 module.exports = router;

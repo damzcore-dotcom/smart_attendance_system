@@ -170,6 +170,12 @@ model Employee {
   pushTokens    PushToken[]
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
+
+  @@index([departmentId])
+  @@index([status])
+  @@index([employmentStatus])
+  @@index([status, departmentId])
+  @@index([locationId])
 }
 
 model EmployeeDocument {
@@ -268,6 +274,9 @@ model CorrectionRequest {
   status     ReqStatus @default(PENDING)
   reviewNote String?
   createdAt  DateTime  @default(now())
+
+  @@index([employeeId])
+  @@index([status])
 }
 
 model Settings {
@@ -299,6 +308,9 @@ model LeaveRequest {
   medicalAttachment String? // Base64 compressed image of doctor's note
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
+
+  @@index([employeeId])
+  @@index([status])
 }
 
 model Announcement {

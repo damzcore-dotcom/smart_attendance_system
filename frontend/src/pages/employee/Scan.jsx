@@ -412,7 +412,10 @@ const Scan = () => {
 
         const img = new Image();
         img.src = screenshot;
-        await new Promise(resolve => img.onload = resolve);
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = () => reject(new Error('Failed to load image'));
+        });
 
         // Fetch face with landmarks to calculate Eye Aspect Ratio (EAR)
         const detection = await faceapi

@@ -1353,6 +1353,8 @@
       "passwordPlaceholder": "如无需修改请留空...",
       "role": "角色",
       "managedDept": "管辖部门",
+      "selectDept": "选择部门...",
+      "allDepts": "-- 所有部门 --",
       "cancel": "取消",
       "submitting": "正在保存...",
       "submit": "保存更改"

@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { generateAccessToken, generateRefreshToken } = require('../middleware/auth');
 const { recordAuditLog } = require('./auditLogController');
+const { handleControllerError } = require('../middleware/validate');
 
 /**
  * POST /api/auth/login
@@ -78,7 +79,7 @@ const login = async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'authController.login');
   }
 };
 
@@ -116,7 +117,7 @@ const refresh = async (req, res) => {
 
     res.json({ success: true, accessToken: newAccessToken, refreshToken: newRefreshToken });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'authController.refresh');
   }
 };
 
@@ -155,20 +156,10 @@ const verifyFace = async (req, res) => {
     const settingsMap = {};
     settings.forEach(s => settingsMap[s.key] = s.value);
 
-    // Fetch all employees with enrolled faces and valid users
-    const employees = await prisma.employee.findMany({
-      where: { 
-        faceStatus: 'ENROLLED',
-        faceDescriptor: { not: null },
-        user: { isNot: null }
-      },
-      include: { 
-        department: true, 
-        user: { include: { permissions: true } } 
-      },
-    });
+    const { getFaceCache } = require('../utils/faceCache');
+    const faceCache = getFaceCache();
 
-    if (employees.length === 0) {
+    if (faceCache.size === 0) {
       return res.status(404).json({ success: false, message: 'No registered face accounts found' });
     }
 
@@ -181,29 +172,14 @@ const verifyFace = async (req, res) => {
     const THRESHOLD = 0.7 - ((clampedThreshold - 50) / 50) * 0.35; // 50%→0.7, 75%→0.525, 85%→0.455, 100%→0.35
     let minDistance = 1.0;
 
-    for (const emp of employees) {
-      try {
-        const storedData = Array.isArray(emp.faceDescriptor) 
-          ? emp.faceDescriptor 
-          : JSON.parse(emp.faceDescriptor);
-        
-        if (!storedData || !Array.isArray(storedData) || storedData.length === 0) continue;
-
-        // Support both old format (single flat array) and new format (array of arrays)
-        const isMultiDescriptor = Array.isArray(storedData[0]);
-        const descriptorsToTest = isMultiDescriptor ? storedData : [storedData];
-
-        // Find the absolute closest distance among all stored descriptors for this employee
-        for (const storedDesc of descriptorsToTest) {
-          const distance = getDistance(descriptor, storedDesc);
-          if (distance < minDistance) {
-            minDistance = distance;
-            bestMatch = emp;
-          }
+    for (const [empId, cached] of faceCache.entries()) {
+      const { descriptors, employee } = cached;
+      for (const storedDesc of descriptors) {
+        const distance = getDistance(descriptor, storedDesc);
+        if (distance < minDistance) {
+          minDistance = distance;
+          bestMatch = employee;
         }
-      } catch (err) {
-        console.error(`Failed to parse descriptor for employee ${emp.id}:`, err.message);
-        continue;
       }
     }
 
@@ -265,10 +241,12 @@ const verifyFace = async (req, res) => {
           existingDesc = existingDesc.slice(-5);
         }
 
-        await prisma.employee.update({
+        const updatedEmp = await prisma.employee.update({
           where: { id: bestMatch.id },
           data: { faceDescriptor: JSON.stringify(existingDesc) }
         });
+        const { updateCachedFace } = require('../utils/faceCache');
+        updateCachedFace(bestMatch.id, existingDesc, { ...bestMatch, faceDescriptor: updatedEmp.faceDescriptor });
       } catch (e) {
         console.error('Auto-enrollment update failed:', e.message);
       }
@@ -301,7 +279,7 @@ const verifyFace = async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'authController.verifyFace');
   }
 };
 
@@ -329,7 +307,7 @@ const logout = async (req, res) => {
     });
     res.json({ success: true, message: 'Logged out successfully' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'authController.logout');
   }
 };
 
@@ -380,33 +358,16 @@ const getMe = async (req, res) => {
           joinDate: user.employee.joinDate,
           employmentStatus: user.employee.employmentStatus,
           avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.employee.name}`,
-          stats: {
-            lateFrequency: await prisma.attendance.count({
-              where: {
-                employeeId: user.employee.id,
-                status: 'LATE',
-                date: { gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) }
-              }
-            }),
-            totalLateMinutes: (await prisma.attendance.aggregate({
-              _sum: { lateMinutes: true },
-              where: {
-                employeeId: user.employee.id,
-                status: 'LATE',
-                date: { gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) }
-              }
-            }))._sum.lateMinutes || 0,
-            recentActivity: await prisma.attendance.findMany({
-              where: { employeeId: user.employee.id },
-              orderBy: { date: 'desc' },
-              take: 5
-            })
-          }
         } : null,
       },
     });
+
+    // Lazy-load stats only if user has an employee record (separate from main query)
+    if (res.locals && user.employee) {
+      // This data will be fetched by a dedicated /api/auth/me/stats endpoint or lazy-loaded by frontend
+    }
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'authController.getMe');
   }
 };
 
@@ -448,8 +409,53 @@ const changePassword = async (req, res) => {
 
     res.json({ success: true, message: 'Password changed successfully' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'authController.changePassword');
   }
 };
 
-module.exports = { login, refresh, verifyFace, logout, getMe, changePassword };
+/**
+ * GET /api/auth/me/stats
+ * Separate endpoint for employee stats to avoid N+1 on /me
+ */
+const getMeStats = async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { employeeId: true }
+    });
+
+    if (!user || !user.employeeId) {
+      return res.status(404).json({ success: false, message: 'No employee record' });
+    }
+
+    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+
+    const [lateCount, lateSum, recentActivity] = await Promise.all([
+      prisma.attendance.count({
+        where: { employeeId: user.employeeId, status: 'LATE', date: { gte: monthStart } }
+      }),
+      prisma.attendance.aggregate({
+        _sum: { lateMinutes: true },
+        where: { employeeId: user.employeeId, status: 'LATE', date: { gte: monthStart } }
+      }),
+      prisma.attendance.findMany({
+        where: { employeeId: user.employeeId },
+        orderBy: { date: 'desc' },
+        take: 5
+      })
+    ]);
+
+    res.json({
+      success: true,
+      stats: {
+        lateFrequency: lateCount,
+        totalLateMinutes: lateSum._sum.lateMinutes || 0,
+        recentActivity
+      }
+    });
+  } catch (err) {
+    handleControllerError(res, err, 'authController.getMeStats');
+  }
+};
+
+module.exports = { login, refresh, verifyFace, logout, getMe, getMeStats, changePassword };

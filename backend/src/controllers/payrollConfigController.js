@@ -1,6 +1,7 @@
 const prisma = require('../prismaClient');
 const { recordAuditLog } = require('./auditLogController');
 
+const { handleControllerError } = require('../middleware/validate');
 // ─── Payroll Config (Key-Value) ──────────────────
 
 const getConfig = async (req, res) => {
@@ -10,7 +11,7 @@ const getConfig = async (req, res) => {
     configs.forEach(c => { obj[c.key] = c.value; });
     res.json({ success: true, data: obj });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollConfigController');
   }
 };
 
@@ -26,7 +27,7 @@ const updateConfig = async (req, res) => {
     }
     res.json({ success: true, message: 'Payroll config updated' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollConfigController');
   }
 };
 
@@ -39,7 +40,7 @@ const getComponents = async (req, res) => {
     });
     res.json({ success: true, data: components });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollConfigController');
   }
 };
 
@@ -62,7 +63,7 @@ const createComponent = async (req, res) => {
     res.status(201).json({ success: true, data: component });
   } catch (err) {
     if (err.code === 'P2002') return res.status(400).json({ success: false, message: 'Component name already exists' });
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollConfigController');
   }
 };
 
@@ -85,7 +86,7 @@ const updateComponent = async (req, res) => {
     });
     res.json({ success: true, data: component });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollConfigController');
   }
 };
 
@@ -94,7 +95,7 @@ const deleteComponent = async (req, res) => {
     await prisma.salaryComponent.delete({ where: { id: parseInt(req.params.id) } });
     res.json({ success: true, message: 'Component deleted' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollConfigController');
   }
 };
 
@@ -107,7 +108,7 @@ const getOvertimeRules = async (req, res) => {
     });
     res.json({ success: true, data: rules });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollConfigController');
   }
 };
 
@@ -127,7 +128,7 @@ const createOvertimeRule = async (req, res) => {
     });
     res.status(201).json({ success: true, data: rule });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollConfigController');
   }
 };
 
@@ -148,7 +149,7 @@ const updateOvertimeRule = async (req, res) => {
     });
     res.json({ success: true, data: rule });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollConfigController');
   }
 };
 
@@ -157,7 +158,7 @@ const deleteOvertimeRule = async (req, res) => {
     await prisma.overtimeRule.delete({ where: { id: parseInt(req.params.id) } });
     res.json({ success: true, message: 'Overtime rule deleted' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollConfigController');
   }
 };
 
@@ -228,7 +229,7 @@ const getEmployeeSalaries = async (req, res) => {
 
     res.json({ success: true, data: result, total, page: parseInt(page), totalPages: Math.ceil(total / parseInt(limit)) });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollConfigController');
   }
 };
 
@@ -252,7 +253,7 @@ const getEmployeeSalary = async (req, res) => {
 
     res.json({ success: true, data: { employee: salary.employee, salary } });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollConfigController');
   }
 };
 
@@ -306,7 +307,7 @@ const setEmployeeSalary = async (req, res) => {
       });
     }
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollConfigController');
   }
 };
 
@@ -339,7 +340,7 @@ const batchSetSalary = async (req, res) => {
 
     res.json({ success: true, message: `Salary updated for ${updated} employees` });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollConfigController');
   }
 };
 
@@ -387,7 +388,7 @@ const getPkwtAlerts = async (req, res) => {
 
     res.json({ success: true, data: alerts });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollConfigController');
   }
 };
 
@@ -406,7 +407,7 @@ const getPositionAllowances = async (req, res) => {
     });
     res.json({ success: true, data });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollConfigController');
   }
 };
 
@@ -443,7 +444,7 @@ const getPositionAllowanceMatrix = async (req, res) => {
 
     res.json({ success: true, data: { positions: uniquePositions, components, matrix, existing } });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollConfigController');
   }
 };
 
@@ -470,7 +471,7 @@ const upsertPositionAllowance = async (req, res) => {
     });
     res.json({ success: true, data });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollConfigController');
   }
 };
 
@@ -502,7 +503,7 @@ const batchUpsertPositionAllowances = async (req, res) => {
 
     res.json({ success: true, message: `Updated ${count} position allowances` });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollConfigController');
   }
 };
 
@@ -511,7 +512,7 @@ const deletePositionAllowance = async (req, res) => {
     await prisma.positionAllowance.delete({ where: { id: parseInt(req.params.id) } });
     res.json({ success: true, message: 'Position allowance deleted' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'payrollConfigController');
   }
 };
 

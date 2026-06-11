@@ -8,6 +8,7 @@ const path = require('path');
 const { recordAuditLog } = require('./auditLogController');
 
 
+const { handleControllerError } = require('../middleware/validate');
 /**
  * GET /api/attendance
  */
@@ -351,7 +352,7 @@ const getAll = async (req, res) => {
       }),
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'attendanceController');
   }
 };
 
@@ -521,7 +522,7 @@ const checkIn = async (req, res) => {
       data: attendance,
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'attendanceController');
   }
 };
 
@@ -662,7 +663,7 @@ const checkOut = async (req, res) => {
 
     res.json({ success: true, message: 'Checked out successfully', data: updated });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'attendanceController');
   }
 };
 
@@ -699,7 +700,7 @@ const getSummary = async (req, res) => {
       data: { totalEmployees, present, late, mangkir, absent, avgLateMinutes },
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'attendanceController');
   }
 };
 
@@ -749,7 +750,7 @@ const getHistory = async (req, res) => {
       })),
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'attendanceController');
   }
 };
 
@@ -1232,7 +1233,7 @@ const importFromExcel = async (req, res) => {
     }, 30000);
   } catch (err) {
     console.error('Import attendance error:', err);
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'attendanceController');
   }
 };
 
@@ -1322,7 +1323,7 @@ const recalculate = async (req, res) => {
       data: { totalChecked: records.length, updated: updatedCount }
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'attendanceController');
   }
 };
 
@@ -1461,7 +1462,7 @@ const swapDays = async (req, res) => {
     });
   } catch (err) {
     console.error('Swap Days Error:', err);
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'attendanceController');
   }
 };
 
@@ -1560,7 +1561,7 @@ const getMasterOptions = async (req, res) => {
     });
   } catch (err) {
     console.error('Error fetching attendance options:', err);
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'attendanceController');
   }
 };
 
@@ -1595,7 +1596,7 @@ const createManual = async (req, res) => {
 
     res.json({ success: true, message: 'Attendance record created/updated manually', data: record });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'attendanceController');
   }
 };
 
@@ -1617,7 +1618,7 @@ const downloadTemplate = async (req, res) => {
     res.send(buffer);
   } catch (err) {
     console.error('Download error:', err.message);
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'attendanceController');
   }
 };
 
@@ -1830,7 +1831,7 @@ const update = async (req, res) => {
 
     res.json({ success: true, message: 'Data absensi berhasil dikoreksi HRD', data: record });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'attendanceController');
   }
 };
 
@@ -1895,7 +1896,7 @@ const bulkUpdateOvertime = async (req, res) => {
 
     res.json({ success: true, message: `Berhasil meng-update jam lembur manual untuk ${updatedCount} karyawan.`, updatedCount });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'attendanceController');
   }
 };
 
@@ -1979,7 +1980,7 @@ const bulkUpdateDailyWorkers = async (req, res) => {
 
     res.json({ success: true, message: `Berhasil memproses absen Harian/BHL untuk ${updatedCount} karyawan.`, updatedCount });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'attendanceController');
   }
 };
 
@@ -2196,7 +2197,7 @@ const manualCorrectionHRD = async (req, res) => {
 
     res.json({ success: true, message: `Berhasil memproses koreksi untuk ${updatedCount} karyawan.`, updatedCount });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'attendanceController');
   }
 };
 
@@ -2278,7 +2279,7 @@ const getOvertimeSummary = async (req, res) => {
       }
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'attendanceController');
   }
 };
 
@@ -2354,7 +2355,7 @@ const getBhlSummary = async (req, res) => {
       }
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'attendanceController');
   }
 };
 
@@ -2377,7 +2378,7 @@ const getCorrectionHistory = async (req, res) => {
 
     res.json({ success: true, data: logs });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'attendanceController');
   }
 };
 

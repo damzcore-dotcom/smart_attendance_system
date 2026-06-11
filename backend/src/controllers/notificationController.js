@@ -1,5 +1,6 @@
 const prisma = require('../prismaClient');
 
+const { handleControllerError } = require('../middleware/validate');
 /**
  * GET /api/notifications/:employeeId
  */
@@ -13,7 +14,7 @@ const getByEmployee = async (req, res) => {
 
     res.json({ success: true, data: notifications });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'notificationController');
   }
 };
 
@@ -28,7 +29,7 @@ const markAsRead = async (req, res) => {
     });
     res.json({ success: true, message: 'Marked as read' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'notificationController');
   }
 };
 

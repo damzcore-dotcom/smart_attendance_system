@@ -1365,6 +1365,8 @@
       "passwordPlaceholder": "Kosongkan jika tidak ingin mengubah...",
       "role": "Peran",
       "managedDept": "Departemen Dikelola",
+      "selectDept": "Pilih Departemen...",
+      "allDepts": "-- SEMUA DEPARTEMEN --",
       "cancel": "Batal",
       "submitting": "Menyimpan...",
       "submit": "Simpan Perubahan"

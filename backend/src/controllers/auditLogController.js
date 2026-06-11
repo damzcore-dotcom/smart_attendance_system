@@ -1,5 +1,6 @@
 const prisma = require('../prismaClient');
 
+const { handleControllerError } = require('../middleware/validate');
 /**
  * Utility: Record an audit log entry
  * Called from other controllers or middleware to log admin actions
@@ -79,7 +80,7 @@ const getAll = async (req, res) => {
     });
   } catch (err) {
     console.error('AuditLog getAll error:', err.message);
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'auditLogController');
   }
 };
 
@@ -119,7 +120,7 @@ const getStats = async (req, res) => {
       }
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'auditLogController');
   }
 };
 

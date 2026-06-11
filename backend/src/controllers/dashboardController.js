@@ -1,5 +1,6 @@
 const prisma = require('../prismaClient');
 
+const { handleControllerError } = require('../middleware/validate');
 /**
  * GET /api/dashboard/stats
  */
@@ -78,7 +79,7 @@ const getStats = async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'dashboardController');
   }
 };
 
@@ -132,7 +133,7 @@ const getWeeklyTrends = async (req, res) => {
 
     res.json({ success: true, data: Object.values(dayMap) });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'dashboardController');
   }
 };
 
@@ -171,7 +172,7 @@ const getDeptLateness = async (req, res) => {
 
     res.json({ success: true, data });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'dashboardController');
   }
 };
 
@@ -204,7 +205,7 @@ const getRecentLate = async (req, res) => {
       })),
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'dashboardController');
   }
 };
 
@@ -306,7 +307,7 @@ const getAdminNotifications = async (req, res) => {
     // Sort by id just to keep them somewhat organized, though they are categorized
     res.json({ success: true, data: notifications });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'dashboardController');
   }
 };
 

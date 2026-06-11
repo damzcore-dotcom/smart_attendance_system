@@ -1365,6 +1365,8 @@
       "passwordPlaceholder": "Leave blank if you don't want to change...",
       "role": "Role",
       "managedDept": "Managed Department",
+      "selectDept": "Select Department...",
+      "allDepts": "-- ALL DEPARTMENTS --",
       "cancel": "Cancel",
       "submitting": "Saving...",
       "submit": "Save Changes"

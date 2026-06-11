@@ -1,6 +1,7 @@
 const prisma = require('../prismaClient');
 const crypto = require('crypto');
 
+const { handleControllerError } = require('../middleware/validate');
 const MASTER_SECRET = process.env.LICENSE_SECRET || 'd94795ad7e96949a882a1f45a4206a69184172efc14f226f4c49def1bf9bdfc1';
 
 /**
@@ -19,7 +20,7 @@ const getPublicInfo = async (req, res) => {
     settings.forEach(s => { obj[s.key] = s.value; });
     res.json({ success: true, data: obj });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'settingsController');
   }
 };
 
@@ -30,7 +31,7 @@ const getAll = async (req, res) => {
     settings.forEach(s => { obj[s.key] = s.value; });
     res.json({ success: true, data: obj });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'settingsController');
   }
 };
 
@@ -49,7 +50,7 @@ const update = async (req, res) => {
     }
     res.json({ success: true, message: 'Settings saved successfully' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'settingsController');
   }
 };
 
@@ -60,7 +61,7 @@ const getLocations = async (req, res) => {
     const locations = await prisma.location.findMany();
     res.json({ success: true, data: locations });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'settingsController');
   }
 };
 
@@ -72,7 +73,7 @@ const createLocation = async (req, res) => {
     });
     res.status(201).json({ success: true, data: location });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'settingsController');
   }
 };
 
@@ -85,7 +86,7 @@ const updateLocation = async (req, res) => {
     });
     res.json({ success: true, data: location });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'settingsController');
   }
 };
 
@@ -94,7 +95,7 @@ const deleteLocation = async (req, res) => {
     await prisma.location.delete({ where: { id: parseInt(req.params.id) } });
     res.json({ success: true, message: 'Location deleted' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'settingsController');
   }
 };
 

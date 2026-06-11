@@ -1,6 +1,7 @@
 const prisma = require('../prismaClient');
 const { recordAuditLog } = require('./auditLogController');
 
+const { handleControllerError } = require('../middleware/validate');
 // Unified list of models in order of dependency resolution (independents first, children later)
 const models = [
   // Independent tables
@@ -83,7 +84,7 @@ const exportData = async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename=backup_${new Date().toISOString().split('T')[0]}.json`);
     res.send(JSON.stringify(backup, null, 2));
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'backupController');
   }
 };
 
@@ -199,7 +200,7 @@ const restoreData = async (req, res) => {
     res.json({ success: true, message: 'Database restored successfully' });
   } catch (err) {
     console.error('Restore Error:', err);
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'backupController');
   }
 };
 

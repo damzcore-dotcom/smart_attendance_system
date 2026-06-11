@@ -6,6 +6,7 @@
  */
 
 const prisma = require('../prismaClient');
+const { handleControllerError } = require('../middleware/validate');
 
 // Valid intents for keyword configuration
 const VALID_INTENTS = [
@@ -40,8 +41,7 @@ const getKeywords = async (req, res) => {
       validIntents: VALID_INTENTS
     });
   } catch (error) {
-    console.error('Error fetching NLP keywords:', error);
-    res.status(500).json({ success: false, message: 'Failed to fetch keyword configurations.' });
+    handleControllerError(res, error, 'nlpConfigController.getKeywords');
   }
 };
 
@@ -89,8 +89,7 @@ const addKeyword = async (req, res) => {
 
     res.status(201).json({ success: true, data: created, message: 'Keyword added successfully.' });
   } catch (error) {
-    console.error('Error adding NLP keyword:', error);
-    res.status(500).json({ success: false, message: 'Failed to add keyword.' });
+    handleControllerError(res, error, 'nlpConfigController.addKeyword');
   }
 };
 
@@ -124,8 +123,7 @@ const updateKeyword = async (req, res) => {
 
     res.json({ success: true, data: updated, message: 'Keyword updated successfully.' });
   } catch (error) {
-    console.error('Error updating NLP keyword:', error);
-    res.status(500).json({ success: false, message: 'Failed to update keyword.' });
+    handleControllerError(res, error, 'nlpConfigController.updateKeyword');
   }
 };
 
@@ -150,8 +148,7 @@ const deleteKeyword = async (req, res) => {
 
     res.json({ success: true, message: `Keyword "${existing.keyword}" deleted from intent "${existing.intent}".` });
   } catch (error) {
-    console.error('Error deleting NLP keyword:', error);
-    res.status(500).json({ success: false, message: 'Failed to delete keyword.' });
+    handleControllerError(res, error, 'nlpConfigController.deleteKeyword');
   }
 };
 
@@ -197,8 +194,7 @@ const getChatLogs = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching chat logs:', error);
-    res.status(500).json({ success: false, message: 'Failed to fetch chat logs.' });
+    handleControllerError(res, error, 'nlpConfigController.getChatLogs');
   }
 };
 
@@ -279,8 +275,7 @@ const getChatStats = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching chat stats:', error);
-    res.status(500).json({ success: false, message: 'Failed to fetch chat statistics.' });
+    handleControllerError(res, error, 'nlpConfigController.getChatStats');
   }
 };
 

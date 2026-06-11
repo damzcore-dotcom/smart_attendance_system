@@ -7,6 +7,7 @@ const prisma = require('../prismaClient');
 const zkHelper = require('../utils/zkHelper');
 const { recordAuditLog } = require('./auditLogController');
 
+const { handleControllerError } = require('../middleware/validate');
 // ============================================================
 // GET DEVICE DETAIL (Users on device + info)
 // ============================================================
@@ -77,7 +78,7 @@ const getDeviceDetail = async (req, res) => {
     });
   } catch (err) {
     console.error('[FP] getDeviceDetail error:', err);
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'fingerprintController');
   }
 };
 
@@ -186,7 +187,7 @@ const pushUsersToDevice = async (req, res) => {
     });
   } catch (err) {
     console.error('[FP] pushUsersToDevice error:', err);
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'fingerprintController');
   }
 };
 
@@ -292,7 +293,7 @@ const pullTemplatesFromDevice = async (req, res) => {
     });
   } catch (err) {
     console.error('[FP] pullTemplatesFromDevice error:', err);
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'fingerprintController');
   }
 };
 
@@ -336,7 +337,7 @@ const deleteUserFromDevice = async (req, res) => {
     res.json({ success: true, message: `User uid ${uid} berhasil dihapus dari mesin` });
   } catch (err) {
     console.error('[FP] deleteUserFromDevice error:', err);
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'fingerprintController');
   }
 };
 
@@ -366,7 +367,7 @@ const getEmployeeTemplates = async (req, res) => {
       }
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'fingerprintController');
   }
 };
 
@@ -404,7 +405,7 @@ const getEmployeesWithFPStatus = async (req, res) => {
 
     res.json({ success: true, data: employees });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'fingerprintController');
   }
 };
 
@@ -536,7 +537,7 @@ const linkUserToEmployee = async (req, res) => {
     });
   } catch (err) {
     console.error('[FP] linkUserToEmployee error:', err);
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'fingerprintController');
   }
 };
 
@@ -616,8 +617,7 @@ const startDeviceEnrollment = async (req, res) => {
       data: { uid, acNo: pinStr }
     });
   } catch (err) {
-    console.error('[FP] startDeviceEnrollment error:', err);
-    res.status(500).json({ success: false, message: 'Gagal memulai registrasi sidik jari: ' + err.message });
+    handleControllerError(res, err, 'fingerprintController.startDeviceEnrollment');
   }
 };
 
@@ -708,8 +708,7 @@ const verifyAndSaveEnrollment = async (req, res) => {
       message: `Sidik jari karyawan ${employee.name} berhasil diverifikasi dan disimpan ke database.`
     });
   } catch (err) {
-    console.error('[FP] verifyAndSaveEnrollment error:', err);
-    res.status(500).json({ success: false, message: 'Gagal memverifikasi sidik jari: ' + err.message });
+    handleControllerError(res, err, 'fingerprintController.verifyAndSaveEnrollment');
   }
 };
 

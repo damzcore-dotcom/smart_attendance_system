@@ -3,6 +3,7 @@ const ZKLib = require('node-zklib');
 const crypto = require('crypto');
 const { recordAuditLog } = require('./auditLogController');
 
+const { handleControllerError } = require('../middleware/validate');
 // Short-lived cache for attendance sync preview data
 const attendanceSyncCache = new Map();
 const CACHE_TIMEOUT = 15 * 60 * 1000; // 15 minutes
@@ -26,7 +27,7 @@ const getDevices = async (req, res) => {
 
     res.json({ success: true, data: devicesWithLocation });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'deviceController');
   }
 };
 
@@ -110,7 +111,7 @@ const addDevice = async (req, res) => {
 
     res.json({ success: true, data: device });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'deviceController');
   }
 };
 
@@ -138,7 +139,7 @@ const deleteDevice = async (req, res) => {
 
     res.json({ success: true, message: 'Device deleted' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'deviceController');
   }
 };
 
@@ -620,7 +621,7 @@ const syncUsers = async (req, res) => {
         data: { status: 'OFFLINE' }
       });
     } catch (e) {}
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'deviceController');
   } finally {
     if (zkInstance) {
       try {
@@ -1162,7 +1163,6 @@ const syncAttendance = async (req, res) => {
       employeeCount: savedEmployees.size
     });
   } catch (err) {
-    console.error(err);
     // Tandai offline jika gagal
     try {
       await prisma.device.update({
@@ -1170,7 +1170,7 @@ const syncAttendance = async (req, res) => {
         data: { status: 'OFFLINE' }
       });
     } catch (e) {}
-    res.status(500).json({ success: false, message: 'Gagal menarik absen: ' + err.message });
+    handleControllerError(res, err, 'deviceController.syncAttendance');
   }
 };
 
@@ -1236,7 +1236,7 @@ const updateDevice = async (req, res) => {
     
     res.json({ success: true, message: 'Device updated successfully', data: device });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'deviceController');
   }
 };
 
@@ -1456,8 +1456,7 @@ const commitAttendance = async (req, res) => {
       message: `Sinkronisasi Absen berhasil. ${saved} record absen disimpan${failed > 0 ? `, ${failed} gagal` : ''}.`
     });
   } catch (err) {
-    console.error('[Commit] Error:', err);
-    res.status(500).json({ success: false, message: 'Gagal menyimpan data absen: ' + err.message });
+    handleControllerError(res, err, 'deviceController.commitAttendance');
   }
 };
 
@@ -1495,8 +1494,7 @@ const clearDeviceLogs = async (req, res) => {
 
     res.json({ success: true, message: `Seluruh data log absensi di mesin ${device.name} berhasil dihapus.` });
   } catch (err) {
-    console.error('[Device] clearDeviceLogs error:', err);
-    res.status(500).json({ success: false, message: 'Gagal menghapus log mesin: ' + err.message });
+    handleControllerError(res, err, 'deviceController.clearDeviceLogs');
   } finally {
     if (zkInstance) {
       try {
@@ -1539,7 +1537,7 @@ const getDeviceSyncLogs = async (req, res) => {
     
     res.json({ success: true, data: parsedLogs });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'deviceController');
   }
 };
 

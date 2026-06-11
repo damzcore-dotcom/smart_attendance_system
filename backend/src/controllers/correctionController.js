@@ -1,6 +1,7 @@
 const prisma = require('../prismaClient');
 const { calculateLateness, resolveStatus, parsePenaltySettings } = require('../utils/lateCalculator');
 
+const { handleControllerError } = require('../middleware/validate');
 /**
  * POST /api/corrections
  */
@@ -24,7 +25,7 @@ const create = async (req, res) => {
 
     res.status(201).json({ success: true, message: 'Correction request submitted', data: correction });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'correctionController');
   }
 };
 
@@ -58,7 +59,7 @@ const getAll = async (req, res) => {
       })),
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'correctionController');
   }
 };
 
@@ -176,7 +177,7 @@ const review = async (req, res) => {
 
     res.json({ success: true, message: `Correction ${status.toLowerCase()}`, data: updatedCorrection });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'correctionController');
   }
 };
 
@@ -205,7 +206,7 @@ const getByEmployee = async (req, res) => {
       })),
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'correctionController');
   }
 };
 

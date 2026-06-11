@@ -1,6 +1,7 @@
 const prisma = require('../prismaClient');
 const { resolveStatus } = require('../utils/lateCalculator');
 
+const { handleControllerError } = require('../middleware/validate');
 /**
  * GET /api/manager/dashboard
  */
@@ -78,7 +79,7 @@ const getDashboard = async (req, res) => {
         lateEmployees: late.map(a => ({ name: a.employee.name, employeeCode: a.employee.employeeCode, checkIn: a.checkIn, lateMinutes: a.lateMinutes }))
       }
     });
-  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+  } catch (err) { handleControllerError(res, err, 'managerController'); }
 };
 
 /**
@@ -113,7 +114,7 @@ const getAttendanceOptions = async (req, res) => {
     const statuses = ['PRESENT', 'LATE', 'MANGKIR', 'HOLIDAY', 'CUTI', 'SAKIT', 'IZIN', 'ABSENT'];
 
     res.json({ success: true, data: { departments, sections, positions, statuses } });
-  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+  } catch (err) { handleControllerError(res, err, 'managerController'); }
 };
 
 /**
@@ -450,7 +451,7 @@ const getAttendance = async (req, res) => {
         };
       }),
     });
-  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+  } catch (err) { handleControllerError(res, err, 'managerController'); }
 };
 
 /**
@@ -494,7 +495,7 @@ const getLeaveRequests = async (req, res) => {
         medicalAttachment: r.medicalAttachment
       }))
     });
-  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+  } catch (err) { handleControllerError(res, err, 'managerController'); }
 };
 
 const updateLeaveRequest = async (req, res) => {
@@ -526,7 +527,7 @@ const updateLeaveRequest = async (req, res) => {
     });
 
     res.json({ success: true, message: 'Leave request updated successfully', data: updated });
-  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+  } catch (err) { handleControllerError(res, err, 'managerController'); }
 };
 
 const getWeeklyTrends = async (req, res) => {
@@ -591,7 +592,7 @@ const getWeeklyTrends = async (req, res) => {
 
     res.json({ success: true, data: Object.values(dayMap) });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'managerController');
   }
 };
 
@@ -640,7 +641,7 @@ const getRecentLate = async (req, res) => {
       })),
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'managerController');
   }
 };
 

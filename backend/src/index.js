@@ -3,6 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
+const prisma = require('./prismaClient');
 
 const authRoutes = require('./routes/authRoutes');
 const employeeRoutes = require('./routes/employeeRoutes');
@@ -33,14 +34,22 @@ fixSequences();
 const checkTimezone = require('./utils/timezoneCheck');
 checkTimezone();
 
+// Initialize Web Face Verification Cache in RAM on startup
+const { initializeFaceCache } = require('./utils/faceCache');
+initializeFaceCache();
+
 // Global safety shield to prevent crashes from external libraries
 process.on('unhandledRejection', (reason, promise) => {
   console.error('⚠️ Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
 process.on('uncaughtException', (err) => {
-  console.error('❌ Uncaught Exception:', err.message);
-  // Keep server alive instead of exiting
+  console.error('❌ Uncaught Exception:', err.message, err.stack);
+  // Graceful shutdown: stop accepting new requests, then exit so PM2/systemd can restart
+  console.error('🔄 Server akan restart dalam 3 detik...');
+  setTimeout(() => {
+    process.exit(1);
+  }, 3000);
 });
 
 // Middleware
@@ -110,7 +119,7 @@ app.get(/^\/minio\/([^/]+)\/(.+)$/, (req, res) => {
   }
 
   // Only allow known buckets
-  const allowedBuckets = ['face-snapshots', 'unknown-faces'];
+  const allowedBuckets = ['face-snapshots', 'unknown-faces', 'leave-attachments'];
   if (!allowedBuckets.includes(bucket)) {
     return res.status(403).json({ success: false, message: 'Bucket not allowed' });
   }
@@ -132,7 +141,7 @@ app.get(/^\/minio\/([^/]+)\/(.+)$/, (req, res) => {
   });
 });
 
-// Health check
+// Health check (basic)
 app.get('/api/health', (req, res) => {
   const checkTimezone = require('./utils/timezoneCheck');
   const tz = checkTimezone();
@@ -148,6 +157,53 @@ app.get('/api/health', (req, res) => {
     }
   });
 });
+
+// Deep health check — verifies DB connectivity, memory, uptime
+app.get('/api/health/deep', async (req, res) => {
+  const results = { status: 'OK', checks: {} };
+  
+  // 1. Database connectivity
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    results.checks.database = { status: 'OK' };
+  } catch (err) {
+    results.checks.database = { status: 'FAIL', error: err.message };
+    results.status = 'DEGRADED';
+  }
+  
+  // 2. Memory usage
+  const memUsage = process.memoryUsage();
+  const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
+  const heapTotalMB = Math.round(memUsage.heapTotal / 1024 / 1024);
+  const heapPercent = Math.round((memUsage.heapUsed / memUsage.heapTotal) * 100);
+  results.checks.memory = {
+    status: heapPercent > 90 ? 'WARNING' : 'OK',
+    heapUsed: `${heapUsedMB}MB`,
+    heapTotal: `${heapTotalMB}MB`,
+    heapPercent: `${heapPercent}%`
+  };
+  
+  // 3. Uptime
+  results.checks.uptime = {
+    status: 'OK',
+    seconds: Math.round(process.uptime()),
+    human: `${Math.floor(process.uptime() / 3600)}h ${Math.floor((process.uptime() % 3600) / 60)}m`
+  };
+  
+  const httpStatus = results.status === 'OK' ? 200 : 503;
+  res.status(httpStatus).json(results);
+});
+
+// Global rate limiter — prevent API abuse (100 requests per minute per IP)
+const globalLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 100,
+  message: { success: false, message: 'Terlalu banyak permintaan. Silakan coba lagi dalam 1 menit.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.path === '/api/health' // Don't rate-limit health checks
+});
+app.use('/api', globalLimiter);
 
 // Rate limiting for auth endpoints (brute-force protection)
 const authLimiter = rateLimit({

@@ -1,6 +1,7 @@
 const prisma = require('../prismaClient');
 const { recordAuditLog } = require('./auditLogController');
 
+const { handleControllerError } = require('../middleware/validate');
 const getAll = async (req, res) => {
   try {
     const { year, month } = req.query;
@@ -28,7 +29,7 @@ const getAll = async (req, res) => {
 
     res.json({ success: true, data: calendars });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'calendarController');
   }
 };
 
@@ -63,7 +64,7 @@ const upsert = async (req, res) => {
 
     res.json({ success: true, message: 'Calendar updated successfully', data: calendar });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'calendarController');
   }
 };
 
@@ -87,7 +88,7 @@ const remove = async (req, res) => {
 
     res.json({ success: true, message: 'Calendar entry deleted' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'calendarController');
   }
 };
 

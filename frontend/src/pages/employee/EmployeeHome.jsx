@@ -52,6 +52,12 @@ const EmployeeHome = () => {
     queryFn: () => authAPI.getMe(),
   });
 
+  const { data: statsData } = useQuery({
+    queryKey: ['me-stats'],
+    queryFn: () => authAPI.getMeStats(),
+    enabled: !!empId,
+  });
+
   const { data: attendanceData, isLoading: attLoading } = useQuery({
     queryKey: ['today-attendance', empId],
     queryFn: () => attendanceAPI.getAll({ period: 'Today', search: user?.employee?.name }),
@@ -257,17 +263,17 @@ const EmployeeHome = () => {
             <div className="flex flex-col">
               <div className="flex justify-between mb-2">
                 <span className="text-xs text-slate-500 font-medium">Lateness</span>
-                <span className="text-xs font-bold text-blue-600">{userData?.user?.employee?.stats?.lateFrequency || 0} days</span>
+                <span className="text-xs font-bold text-blue-600">{statsData?.stats?.lateFrequency || 0} days</span>
               </div>
               <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-blue-600 rounded-full" 
-                  style={{ width: `${Math.min(((userData?.user?.employee?.stats?.lateFrequency || 0) / 5) * 100, 100)}%` }}
+                  style={{ width: `${Math.min(((statsData?.stats?.lateFrequency || 0) / 5) * 100, 100)}%` }}
                 ></div>
               </div>
               <div className="mt-3 flex items-center gap-1.5">
                 <AlertCircle className="w-3 h-3 text-slate-400" />
-                <span className="text-[10px] text-slate-400 font-medium">Total: {userData?.user?.employee?.stats?.totalLateMinutes || 0} min</span>
+                <span className="text-[10px] text-slate-400 font-medium">Total: {statsData?.stats?.totalLateMinutes || 0} min</span>
               </div>
             </div>
             <div className="border-l border-slate-100 pl-6 flex flex-col justify-between">

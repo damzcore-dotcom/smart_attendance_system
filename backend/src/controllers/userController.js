@@ -1,6 +1,7 @@
 const prisma = require('../prismaClient');
 const bcrypt = require('bcryptjs');
 
+const { handleControllerError } = require('../middleware/validate');
 /**
  * GET /api/users
  */
@@ -38,7 +39,7 @@ const getAll = async (req, res) => {
       }),
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'userController');
   }
 };
 
@@ -82,7 +83,7 @@ const update = async (req, res) => {
 
     res.json({ success: true, message: 'User updated successfully' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'userController');
   }
 };
 
@@ -96,7 +97,7 @@ const remove = async (req, res) => {
     });
     res.json({ success: true, message: 'User deleted successfully' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'userController');
   }
 };
 
@@ -172,7 +173,7 @@ const create = async (req, res) => {
 
     res.status(201).json({ success: true, message: 'User created successfully' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    handleControllerError(res, err, 'userController');
   }
 };
 
@@ -193,15 +194,32 @@ const updateBiometrics = async (req, res) => {
     } else {
       await prisma.employee.update({ where: { id: employeeId }, data: { faceStatus: 'ENROLLED', facePhoto, faceDescriptor: JSON.parse(faceDescriptor) } });
     }
+
+    // Update face cache
+    try {
+      const freshEmp = await prisma.employee.findUnique({
+        where: { id: employeeId },
+        include: { department: true, shift: true, user: true }
+      });
+      if (freshEmp && freshEmp.user) {
+        const { updateCachedFace } = require('../utils/faceCache');
+        updateCachedFace(freshEmp.id, freshEmp.faceDescriptor, freshEmp);
+      }
+    } catch (cacheErr) {
+      console.error('Failed to update face cache on user updateBiometrics:', cacheErr.message);
+    }
+
     res.json({ success: true, message: 'Biometrics updated successfully' });
-  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+  } catch (err) {
+    handleControllerError(res, err, 'userController');
+  }
 };
 
 const getPermissions = async (req, res) => {
   try {
     const permissions = await prisma.menuPermission.findMany({ where: { userId: parseInt(req.params.id) } });
     res.json({ success: true, data: permissions });
-  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+  } catch (err) { handleControllerError(res, err, 'userController'); }
 };
 
 const updatePermissions = async (req, res) => {
@@ -214,21 +232,21 @@ const updatePermissions = async (req, res) => {
         create: { userId, menuKey: p.menuKey, canRead: p.canRead, canCreate: p.canCreate, canUpdate: p.canUpdate, canDelete: p.canDelete }
     })));
     res.json({ success: true, message: 'Permissions updated successfully' });
-  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+  } catch (err) { handleControllerError(res, err, 'userController'); }
 };
 
 const getEmployeeOptions = async (req, res) => {
   try {
     const employees = await prisma.employee.findMany({ select: { id: true, name: true, employeeCode: true } });
     res.json({ success: true, data: employees });
-  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+  } catch (err) { handleControllerError(res, err, 'userController'); }
 };
 
 const getDepartmentOptions = async (req, res) => {
   try {
     const departments = await prisma.department.findMany({ orderBy: { name: 'asc' } });
     res.json({ success: true, data: departments });
-  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+  } catch (err) { handleControllerError(res, err, 'userController'); }
 };
 
 module.exports = { getAll, create, update, remove, updateBiometrics, getPermissions, updatePermissions, getEmployeeOptions, getDepartmentOptions };

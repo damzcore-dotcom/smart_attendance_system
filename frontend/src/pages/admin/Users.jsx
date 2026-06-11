@@ -268,7 +268,10 @@ const Users = () => {
 
         const img = new Image();
         img.src = screenshot;
-        await new Promise(resolve => img.onload = resolve);
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = () => reject(new Error('Failed to load image'));
+        });
 
         const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.2 }));
         
@@ -308,25 +311,28 @@ const Users = () => {
     try {
       const img = new Image();
       img.src = imageSrc;
-      img.onload = async () => {
-        const detection = await faceapi
-          .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.15 }))
-          .withFaceLandmarks()
-          .withFaceDescriptor();
-        
-        setIsCapturing(false);
-        setScanStatus('ready');
-        if (detection) {
-          setFaceData({ photo: imageSrc, descriptor: Array.from(detection.descriptor) });
-          setTimeout(() => alert(t('users.alerts.faceSuccess')), 150);
-        } else {
-          setTimeout(() => alert(t('users.alerts.faceFailed')), 150);
-        }
-      };
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = () => reject(new Error('Image failed to load'));
+      });
+
+      const detection = await faceapi
+        .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.15 }))
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+      
+      if (detection) {
+        setFaceData({ photo: imageSrc, descriptor: Array.from(detection.descriptor) });
+        setTimeout(() => alert(t('users.alerts.faceSuccess')), 150);
+      } else {
+        setTimeout(() => alert(t('users.alerts.faceFailed')), 150);
+      }
     } catch (err) {
+      console.error('Error processing face:', err);
+      setTimeout(() => alert(t('users.alerts.faceProcessFailed')), 150);
+    } finally {
       setIsCapturing(false);
       setScanStatus('ready');
-      setTimeout(() => alert(t('users.alerts.faceProcessFailed')), 150);
     }
   };
 
@@ -588,7 +594,6 @@ const Users = () => {
                 </div>
               </div>
               <button onClick={() => {
-                if (livenessIntervalRef.current) clearInterval(livenessIntervalRef.current);
                 if (faceGuideRef.current) clearInterval(faceGuideRef.current);
                 setScanStatus('ready');
                 setIsCapturing(false);
@@ -607,14 +612,6 @@ const Users = () => {
                 ) : (
                   <>
                     <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg" screenshotQuality={0.92} className="w-full h-full object-cover" videoConstraints={{ facingMode: "user", width: 640, height: 480, frameRate: { ideal: 30 } }} />
-                    {scanStatus === 'liveness' && (
-                      <div className="absolute inset-0 bg-indigo-500/10 flex flex-col items-center justify-center backdrop-blur-[1px] z-20">
-                         <div className="bg-indigo-600 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-lg mb-4">
-                           Blink: {blinkCount} / 2
-                         </div>
-                         <div className="w-20 h-20 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-                      </div>
-                    )}
                   </>
                 )}
                 {(isLoadingModels || (!modelsLoaded && !faceData.photo)) && (
@@ -688,7 +685,6 @@ const Users = () => {
               <div className="pt-2 flex gap-3">
                 <button 
                   onClick={() => {
-                    if (livenessIntervalRef.current) clearInterval(livenessIntervalRef.current);
                     if (faceGuideRef.current) clearInterval(faceGuideRef.current);
                     setScanStatus('ready');
                     setIsCapturing(false);
