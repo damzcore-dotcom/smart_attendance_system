@@ -38,6 +38,7 @@ import {
 } from 'recharts';
 import { useQuery } from '@tanstack/react-query';
 import api, { dashboardAPI, employeeAPI, attendanceAPI, deviceAPI } from '../../services/api';
+import { getAiEngineUrl } from '../../utils/aiEngine';
 
 
 const StatCard = ({ title, value, change, icon: Icon, color, delay, onClick }) => (
@@ -163,10 +164,7 @@ const AdminDashboard = () => {
     queryKey: ['ai-engine-status-dashboard'],
     queryFn: async () => {
       try {
-        const envUrl = import.meta.env.VITE_AI_ENGINE_URL;
-        const aiUrl = (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1'))
-          ? envUrl
-          : `${window.location.protocol}//${window.location.hostname}:8002`;
+        const aiUrl = getAiEngineUrl();
         const r = await fetch(`${aiUrl}/health`);
         return await r.json();
       } catch {

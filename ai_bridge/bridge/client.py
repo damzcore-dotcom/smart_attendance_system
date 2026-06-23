@@ -61,18 +61,6 @@ class BridgeClient:
             r.raise_for_status()
             return r.json()
 
-    async def save_enrollment(self, payload: dict) -> dict:
-        """Save face embedding from enrollment to the DB."""
-        async with httpx.AsyncClient() as client:
-            r = await client.post(
-                f"{self.base_url}/api/bridge/enrollment/save",
-                headers=self.headers,
-                json=payload,
-                timeout=5.0
-            )
-            r.raise_for_status()
-            return r.json()
-
     async def get_all_embeddings(self) -> list:
         """Get all employees that have face embeddings enrolled."""
         async with httpx.AsyncClient() as client:

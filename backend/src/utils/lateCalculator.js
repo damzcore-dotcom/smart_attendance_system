@@ -11,8 +11,8 @@ function isEarlyDeparture(checkOutTime, shiftEndTime, shiftStartTime = '08:00') 
   
   const checkOut = new Date(checkOutTime);
   const [endHour, endMinute] = shiftEndTime.split(':').map(Number);
-  const checkOutHour = checkOut.getHours();
-  const checkOutMinute = checkOut.getMinutes();
+  const { getJakartaTime } = require('./dateHelper');
+  const { hour: checkOutHour, minute: checkOutMinute } = getJakartaTime(checkOut);
   
   let shiftEndMins = endHour * 60 + endMinute;
   let checkOutMins = checkOutHour * 60 + checkOutMinute;
@@ -55,8 +55,8 @@ function isShiftStillActive(date, shiftEndTime, shiftStartTime = '08:00') {
   
   // If it's today, check if current time is before the shift end time
   const [endHour, endMinute] = shiftEndTime.split(':').map(Number);
-  const nowHour = today.getHours();
-  const nowMinute = today.getMinutes();
+  const { getJakartaTime } = require('./dateHelper');
+  const { hour: nowHour, minute: nowMinute } = getJakartaTime(today);
   
   let shiftEndMins = endHour * 60 + endMinute;
   let nowMins = nowHour * 60 + nowMinute;
@@ -90,7 +90,8 @@ function calculateLateness(
   shiftStartTime, 
   gracePeriodMinutes = 15, 
   shiftEndTime = null,
-  roundingConfig = { enabled: true, interval: 30 }
+  roundingConfig = { enabled: true, interval: 30 },
+  penaltyRules = null
 ) {
   const checkIn = new Date(checkInTime);
   
@@ -98,8 +99,8 @@ function calculateLateness(
   const [shiftHour, shiftMinute] = shiftStartTime.split(':').map(Number);
   
   // Extract checkIn hour and minute in local system time
-  const checkInHour = checkIn.getHours();
-  const checkInMinute = checkIn.getMinutes();
+  const { getJakartaTime } = require('./dateHelper');
+  const { hour: checkInHour, minute: checkInMinute } = getJakartaTime(checkIn);
 
   // Convert both into absolute minutes from midnight for safe comparison
   let shiftMins = shiftHour * 60 + shiftMinute;
@@ -131,14 +132,32 @@ function calculateLateness(
   
   const exactLateMinutes = checkInMins - shiftMins;
   
+  // SAFEGUARD: Cap late minutes to shift duration.
+  // If checkIn is after shift end, the data is likely anomalous (e.g. device misclassification).
+  let shiftDurationMins = 10 * 60; // default 10 hour cap
+  if (shiftEndTime) {
+    const [endH, endM] = shiftEndTime.split(':').map(Number);
+    let shiftEndMins = endH * 60 + endM;
+    if (shiftEndMins < shiftMins) shiftEndMins += 24 * 60; // night shift
+    shiftDurationMins = shiftEndMins - shiftMins;
+  }
+
+  const cappedLateMinutes = Math.min(exactLateMinutes, shiftDurationMins);
+  const isAnomalous = exactLateMinutes > shiftDurationMins;
+
   // Respect rounding configuration
-  let finalLateMinutes = exactLateMinutes;
+  let finalLateMinutes = cappedLateMinutes;
   if (roundingConfig && roundingConfig.enabled !== false) {
     const interval = roundingConfig.interval || 30;
-    finalLateMinutes = Math.ceil(exactLateMinutes / interval) * interval;
+    finalLateMinutes = Math.ceil(cappedLateMinutes / interval) * interval;
   }
   
-  return { lateMinutes: finalLateMinutes, status: 'LATE' };
+  // M-13: Add extra penalty if rule2 is enabled and configured to add penalty
+  if (penaltyRules && penaltyRules.rule2Enabled !== false && penaltyRules.rule2AddPenalty) {
+    finalLateMinutes += penaltyRules.rule2ExtraMinutes || 0;
+  }
+  
+  return { lateMinutes: finalLateMinutes, status: 'LATE', isAnomalous };
 }
 
 /**
@@ -205,6 +224,99 @@ function resolveStatus(
   return currentStatus; // Either PRESENT or LATE
 }
 
+/**
+ * Determine whether an existing attendance record is a manual HRD correction
+ * that must be protected from being overwritten by fingerprint sync.
+ * Shared by every sync path (manual sync, commit, auto-sync cron) so the
+ * protection rule stays identical everywhere.
+ * @param {{ mode?: string, notes?: string }|null} record
+ * @returns {boolean}
+ */
+function isManualCorrection(record) {
+  if (!record) return false;
+  const mode = record.mode || '';
+  if (mode.startsWith('Manual')) return true; // 'Manual', 'Manual (SPL)', 'Manual (BHL)', ...
+  if (record.notes && record.notes.includes('HRD')) return true;
+  return false;
+}
+
+/**
+ * Classify one employee's scans for a single day into checkIn / checkOut.
+ *
+ * Single source of truth shared by every sync path (manual sync + auto-sync cron)
+ * so the classification result is guaranteed identical everywhere. Previously this
+ * logic was duplicated inline in deviceController.syncAttendance and cronJobs, which
+ * risked the two drifting apart (finding #5 in PERBAIKAN_ABSENSI.md).
+ *
+ * Behaviour (DELIBERATE policy — kept identical to the previous inline logic):
+ *  - If scans span beyond the single-scan threshold → earliest = checkIn,
+ *    latest = checkOut (normal full-day case).
+ *  - Otherwise the day is treated as a single scan. This covers both genuine
+ *    single scans and duplicate/double-tap punches within the threshold
+ *    (threshold = max(90 min, half of shift duration), so short shifts don't
+ *    lose their checkOut). The single scan is then classified by shift midpoint:
+ *      scan at/before midpoint → checkIn (checkOut stays null)
+ *      scan after midpoint     → checkOut (checkIn stays null)
+ *
+ *  NOTE: a single scan after the midpoint yields checkIn=null, which resolveStatus
+ *  turns into MANGKIR. This is an accepted HRD policy decision, not a bug — see
+ *  PERBAIKAN_ABSENSI.md #5.
+ *
+ * @param {Array<Date>} scanTimes - All scan timestamps for one employee on one day (any order).
+ * @param {string} shiftStart - Shift start "HH:mm"
+ * @param {string} shiftEnd - Shift end "HH:mm"
+ * @returns {{ checkIn: Date|null, checkOut: Date|null }}
+ */
+function classifyDayScans(scanTimes, shiftStart, shiftEnd) {
+  if (!Array.isArray(scanTimes) || scanTimes.length === 0) {
+    return { checkIn: null, checkOut: null };
+  }
+
+  // Defensive copy + chronological sort so callers don't have to pre-sort.
+  const times = [...scanTimes].sort((a, b) => a - b);
+  const earliest = times[0];
+  const latest = times[times.length - 1];
+
+  const [startH, startM] = shiftStart.split(':').map(Number);
+  const [endH, endM] = shiftEnd.split(':').map(Number);
+  const shiftStartMinutes = startH * 60 + startM;
+  let shiftEndMinutes = endH * 60 + endM;
+  if (shiftEndMinutes < shiftStartMinutes) {
+    shiftEndMinutes += 24 * 60; // Handle night shift crossing midnight
+  }
+
+  // Dynamic threshold: half of shift duration, minimum 90 minutes.
+  // Prevents losing a checkOut for short-shift workers.
+  const shiftDurMin = shiftEndMinutes - shiftStartMinutes;
+  const singleScanThreshold = Math.max(90, shiftDurMin / 2);
+  const timeDiffMinutes = (latest - earliest) / (1000 * 60);
+  const isSingleScan = times.length === 1 || timeDiffMinutes < singleScanThreshold;
+
+  if (!isSingleScan) {
+    // Multiple scans — earliest = checkIn, latest = checkOut
+    return { checkIn: earliest, checkOut: latest };
+  }
+
+  // === SMART SINGLE-SCAN DETECTION ===
+  // Use the shift midpoint to decide whether the lone scan is a check-in or check-out.
+  const midpointMinutes = Math.floor((shiftStartMinutes + shiftEndMinutes) / 2);
+
+  const { getJakartaTime } = require('./dateHelper');
+  const { hour: scanHour, minute: scanMinute } = getJakartaTime(earliest);
+  let scanMinutes = scanHour * 60 + scanMinute;
+
+  // If it's a night shift and the scan is in the morning (after midnight), push it
+  // into the same "next day" continuum as shiftEndMinutes for a correct comparison.
+  if (shiftEndMinutes > 1440 && scanMinutes < shiftStartMinutes - 6 * 60) {
+    scanMinutes += 24 * 60;
+  }
+
+  if (scanMinutes <= midpointMinutes) {
+    return { checkIn: earliest, checkOut: null };
+  }
+  return { checkIn: null, checkOut: earliest };
+}
+
 function parsePenaltySettings(settingsList) {
   const settingsMap = {};
   if (Array.isArray(settingsList)) {
@@ -231,5 +343,5 @@ function parsePenaltySettings(settingsList) {
   };
 }
 
-module.exports = { calculateLateness, resolveStatus, isEarlyDeparture, isShiftStillActive, parsePenaltySettings };
+module.exports = { calculateLateness, resolveStatus, isEarlyDeparture, isShiftStillActive, parsePenaltySettings, isManualCorrection, classifyDayScans };
 

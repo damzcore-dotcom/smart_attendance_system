@@ -23,7 +23,8 @@ import {
   RefreshCcw,
   UserX
 } from 'lucide-react';
-import api from '../../services/api';
+import api, { getFileUrl } from '../../services/api';
+import { getAiEngineUrl } from '../../utils/aiEngine';
 
 const LiveCameraMonitor = () => {
   const { t, i18n } = useTranslation();
@@ -64,10 +65,7 @@ const LiveCameraMonitor = () => {
   const cameras = camerasData?.data || [];
 
   // AI Engine base URL
-  const envUrl = import.meta.env.VITE_AI_ENGINE_URL;
-  const aiUrl = (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1'))
-    ? envUrl
-    : `${window.location.protocol}//${window.location.hostname}:8002`;
+  const aiUrl = getAiEngineUrl();
 
   // Fetch AI Engine health status
   const { data: aiStatus } = useQuery({
@@ -474,7 +472,7 @@ const LiveCameraMonitor = () => {
                       {/* Avatar crop snapshot */}
                       <div className="w-10 h-10 rounded-lg overflow-hidden bg-slate-100 shrink-0 border border-slate-200">
                         {event.photoUrl ? (
-                          <img src={event.photoUrl} alt="Face" className="w-full h-full object-cover" />
+                          <img src={getFileUrl(event.photoUrl)} alt="Face" className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-lg font-bold text-slate-400">
                             {event.isSpoof ? '🚫' : event.isUnknown ? '👤' : '✅'}
@@ -867,7 +865,7 @@ const LiveCameraMonitor = () => {
                         {/* Snapshot from storage */}
                         <div className="w-16 h-16 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 shrink-0 shadow-sm relative group/zoom">
                           {event.photoUrl ? (
-                            <img src={event.photoUrl} alt="Face Snapshot" className="w-full h-full object-cover group-hover/zoom:scale-125 transition-all duration-300" />
+                            <img src={getFileUrl(event.photoUrl)} alt="Face Snapshot" className="w-full h-full object-cover group-hover/zoom:scale-125 transition-all duration-300" />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-2xl">
                               {isSpoof ? '🚫' : isUnknown ? '👤' : '✅'}

@@ -326,10 +326,17 @@ async def enroll_face(employee_id: int, file: UploadFile = File(...)):
     if not quality_result["passed"]:
         raise HTTPException(status_code=400, detail=f"Kualitas foto kurang baik: {quality_result['reason']}")
 
-    # Check liveness
-    liveness_result = liveness_detector.check(face["region"])
-    if liveness_result.get("is_real") is False:
-        raise HTTPException(status_code=403, detail="Liveness spoofing terdeteksi (Wajah palsu/foto tidak diizinkan)")
+    # Check liveness — only when liveness is globally enabled, so enrollment
+    # behaves consistently with the live recognition path. Previously enrollment
+    # ALWAYS enforced liveness even when LIVENESS_ENABLED=false, which could block
+    # enrollment on deployments that intentionally run without liveness
+    # (PERBAIKAN_WAJAH_CCTV.md #3).
+    liveness_enabled = os.getenv("LIVENESS_ENABLED", "false").lower() == "true"
+    liveness_result = {"is_real": True, "skipped": True}
+    if liveness_enabled:
+        liveness_result = liveness_detector.check(face["region"])
+        if liveness_result.get("is_real") is False:
+            raise HTTPException(status_code=403, detail="Liveness spoofing terdeteksi (Wajah palsu/foto tidak diizinkan)")
 
     # Extract embedding
     embedding = face_recognizer.get_embedding(face["aligned"])
@@ -495,6 +502,10 @@ async def camera_worker(cam_id: str, detector, recognizer, liveness, recorder):
     global rois_config
     
     while stream_manager._running:
+        # Check if camera was removed
+        if cam_id not in stream_manager.cameras:
+            print(f"[AI Engine] Camera {cam_id} is no longer active. Exiting worker task.")
+            break
         try:
             frame = await stream_manager.get_frame_async(cam_id)
             if frame is None:
@@ -540,6 +551,7 @@ async def camera_worker(cam_id: str, detector, recognizer, liveness, recorder):
                 quality_res = face_quality_checker.check(face["region"], face["det_score"], face.get("kps"))
                 if not quality_res["passed"]:
                     ai_metrics["total_quality_filtered"] += 1
+                    print(f"[{cam_id}] Face quality check failed: {quality_res.get('reason')}")
                     continue
 
                 is_real = True
@@ -635,14 +647,25 @@ async def camera_worker_manager(detector, recognizer, liveness, recorder):
     print("[AI Engine] Starting camera worker manager...")
     
     last_roi_load = 0.0
+    last_camera_sync = 0.0
     
     while stream_manager._running:
         try:
-            # 1. Reload ROIs periodically (every 10 seconds)
             now = time.time()
+            # 1. Reload ROIs periodically (every 10 seconds)
             if now - last_roi_load > 10.0:
                 rois_config = load_rois()
                 last_roi_load = now
+            
+            # 1.5 Sync camera configurations from DB periodically (every 10 seconds)
+            if now - last_camera_sync > 10.0:
+                try:
+                    api_cameras = await recorder.bridge.get_cameras()
+                    if api_cameras is not None:
+                        stream_manager.sync_from_api(api_cameras)
+                except Exception as e:
+                    print(f"[AI Engine] Dynamic camera sync failed: {e}")
+                last_camera_sync = now
             
             # 2. Check active cameras and start new workers
             active_cams = stream_manager.get_active_cameras()

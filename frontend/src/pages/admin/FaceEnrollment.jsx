@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Camera, UserCheck, AlertCircle, Upload, Loader2, CheckCircle, XCircle, ScanFace, Search, RotateCcw } from 'lucide-react';
 import api, { employeeAPI } from '../../services/api';
+import { getAiEngineUrl } from '../../utils/aiEngine';
 
 const FaceEnrollment = () => {
   const { t } = useTranslation();
@@ -32,10 +33,7 @@ const FaceEnrollment = () => {
     { key: "bottom", icon: "🔽", titleFallback: "Tengok Bawah", descFallback: "Tundukkan wajah sedikit ke bawah", shortFallback: "Bawah" },
   ];
 
-  const envUrl = import.meta.env.VITE_AI_ENGINE_URL;
-  const aiUrl = (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1'))
-    ? envUrl
-    : `${window.location.protocol}//${window.location.hostname}:8002`;
+  const aiUrl = getAiEngineUrl();
 
   // Data Options
   const { data: optionsData } = useQuery({
@@ -52,11 +50,41 @@ const FaceEnrollment = () => {
   });
   const filteredEmployees = employeesData?.data || [];
 
-  const startCamera = async () => {
+  const [videoDevices, setVideoDevices] = useState([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState('');
+
+  useEffect(() => {
+    const detectDevices = async () => {
+      try {
+        // Request temporary permission to populate labels
+        const tempStream = await navigator.mediaDevices.getUserMedia({ video: true }).catch(() => null);
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoInputs = devices.filter(d => d.kind === 'videoinput');
+        setVideoDevices(videoInputs);
+        if (videoInputs.length > 0) {
+          setSelectedDeviceId(videoInputs[0].deviceId);
+        }
+        if (tempStream) {
+          tempStream.getTracks().forEach(t => t.stop());
+        }
+      } catch (err) {
+        console.error('Failed to list video devices:', err);
+      }
+    };
+    detectDevices();
+  }, []);
+
+  const startCamera = async (deviceId) => {
+    const actualDeviceId = (deviceId && typeof deviceId === 'string') ? deviceId : selectedDeviceId;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480, facingMode: 'user' }
-      });
+      const constraints = {
+        video: { 
+          width: 640, 
+          height: 480,
+          deviceId: actualDeviceId ? { exact: actualDeviceId } : undefined
+        }
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = stream;
       if (videoRef.current) videoRef.current.srcObject = stream;
       setCameraActive(true);
@@ -211,7 +239,7 @@ const FaceEnrollment = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="h-[calc(100vh-110px)] flex flex-col space-y-4 overflow-hidden">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
@@ -221,9 +249,9 @@ const FaceEnrollment = () => {
         <p className="text-sm text-slate-500 mt-1">{t('faceEnrollment.subtitle')}</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
         {/* Employee Selection */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex flex-col min-h-0">
           <h3 className="font-semibold text-slate-700 flex items-center gap-2 text-sm">
             <UserCheck className="w-4 h-4" /> {t('faceEnrollment.selectEmployee')}
           </h3>
@@ -251,7 +279,7 @@ const FaceEnrollment = () => {
             </div>
           </div>
 
-          <div className="max-h-96 overflow-y-auto space-y-1 pr-1">
+          <div className="flex-1 overflow-y-auto space-y-1 pr-1 min-h-0 mt-3">
             {loadingEmployees ? (
               <div className="flex items-center justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
             ) : filteredEmployees.length === 0 ? (
@@ -267,7 +295,7 @@ const FaceEnrollment = () => {
                     <div className="font-medium">{emp.name}</div>
                     <div className="text-xs text-slate-400">{emp.employeeCode} • {emp.department?.name}</div>
                   </div>
-                  {emp.faceEmbeddingV2 ? (
+                  {emp.faceStatus === 'ENROLLED' ? (
                     <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">ENROLLED</span>
                   ) : (
                     <span className="text-[10px] bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full font-semibold">PENDING</span>
@@ -279,15 +307,52 @@ const FaceEnrollment = () => {
         </div>
 
         {/* Camera + Capture */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex flex-col min-h-0 overflow-y-auto space-y-3.5">
           <h3 className="font-semibold text-slate-700 flex items-center gap-2 text-sm">
             <Camera className="w-4 h-4" /> {t('faceEnrollment.liveCameraPreview')}
           </h3>
 
+          {selectedEmployee?.faceStatus === 'ENROLLED' && (
+            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl flex items-center gap-3">
+              <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+              <div>
+                <p className="font-bold text-sm">Wajah CCTV Terdaftar</p>
+                <p className="text-xs text-emerald-600">Karyawan ini sudah terdaftar untuk deteksi CCTV ({selectedEmployee.faceSamples || 5} sampel wajah).</p>
+              </div>
+            </div>
+          )}
+
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-600" dangerouslySetInnerHTML={{ __html: t('faceEnrollment.howItWorks') }} />
 
+          {/* Camera Select Dropdown */}
+          {videoDevices.length > 1 && (
+            <div className="flex flex-col gap-1 w-full max-w-xs">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">
+                Pilih Kamera
+              </label>
+              <select
+                value={selectedDeviceId}
+                onChange={(e) => {
+                  const newId = e.target.value;
+                  setSelectedDeviceId(newId);
+                  if (cameraActive) {
+                    stopCamera();
+                    setTimeout(() => startCamera(newId), 100);
+                  }
+                }}
+                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              >
+                {videoDevices.map((device, idx) => (
+                  <option key={device.deviceId} value={device.deviceId}>
+                    {device.label || `Kamera ${idx + 1}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Camera feed */}
-          <div className="relative bg-slate-900 rounded-xl overflow-hidden aspect-video border border-slate-200 shadow-sm">
+          <div className="relative bg-slate-900 rounded-xl overflow-hidden aspect-video border border-slate-200 shadow-sm max-h-[320px] w-full mx-auto">
             <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
             
             {!cameraActive && (
@@ -362,7 +427,7 @@ const FaceEnrollment = () => {
           {/* Controls */}
           <div className="flex flex-wrap gap-3">
             {!cameraActive ? (
-              <button onClick={startCamera}
+              <button onClick={() => startCamera(selectedDeviceId)}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-all flex items-center gap-2 shadow-sm">
                 <Camera className="w-4 h-4" /> {t('faceEnrollment.activateCameraBtn')}
               </button>

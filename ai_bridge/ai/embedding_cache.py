@@ -17,21 +17,31 @@ class EmbeddingCache:
         self.ids_list = []     # list of employee IDs of size M
         self.names_map = {}    # dict of {employee_id: name}
 
-    async def set(self, employee_id: str, embeddings_list: list):
-        """Store a list of embeddings in Redis and rebuild the in-memory matrix."""
-        # Convert any numpy arrays in the list to regular lists
+    async def set(self, employee_id: str, embeddings_list: list, rebuild: bool = True):
+        """
+        Store a list of embeddings in Redis and (optionally) rebuild the matrix.
+
+        Pass rebuild=False during bulk loads to avoid an O(N^2) rebuild on every
+        employee; the caller is then responsible for one final rebuild_matrix()
+        (PERBAIKAN_WAJAH_CCTV.md #8).
+        """
+        # Convert numpy arrays to lists and drop null/invalid entries so a bad
+        # slot (e.g. a padded None from the slot-based enrollment path) can never
+        # corrupt the in-memory matrix later (PERBAIKAN_WAJAH_CCTV.md #5).
         serializable_list = []
         for emb in embeddings_list:
             if isinstance(emb, np.ndarray):
                 serializable_list.append(emb.tolist())
-            else:
+            elif isinstance(emb, list) and len(emb) > 0:
                 serializable_list.append(emb)
+            # else: None / empty → skip
 
         await self.redis.set(
             f"{self.KEY_PREFIX}{employee_id}",
             json.dumps(serializable_list)
         )
-        await self.rebuild_matrix()
+        if rebuild:
+            await self.rebuild_matrix()
 
     async def set_name(self, employee_id: str, name: str):
         """Store employee name in Redis and update in-memory names map."""
@@ -125,18 +135,14 @@ class EmbeddingCache:
                     data = json.loads(val)
                     # Support both list of embeddings and single embedding (backward compatibility)
                     if isinstance(data, list) and len(data) > 0:
-                        if isinstance(data[0], list):
-                            # Multi-embedding
-                            for emb in data:
-                                arr = np.array(emb, dtype=np.float32)
-                                norm = np.linalg.norm(arr)
-                                if norm > 0:
-                                    arr = arr / norm
-                                db_matrix_list.append(arr)
-                                ids_list.append(emp_id)
-                        else:
-                            # Single embedding
-                            arr = np.array(data, dtype=np.float32)
+                        # Normalize to a list-of-embeddings shape
+                        multi = data if isinstance(data[0], list) else [data]
+                        for emb in multi:
+                            # Skip null / empty / malformed entries so one bad slot
+                            # cannot break np.stack below (PERBAIKAN_WAJAH_CCTV.md #5)
+                            if not isinstance(emb, list) or len(emb) == 0:
+                                continue
+                            arr = np.array(emb, dtype=np.float32)
                             norm = np.linalg.norm(arr)
                             if norm > 0:
                                 arr = arr / norm
@@ -191,12 +197,14 @@ class EmbeddingCache:
                         embeddings_list = []
 
                     if embeddings_list:
-                        # Convert to numpy array lists to save
-                        await self.set(str(emp["id"]), embeddings_list)
+                        # rebuild=False: defer the (expensive) matrix rebuild to a
+                        # single call after the loop instead of once per employee
+                        # (PERBAIKAN_WAJAH_CCTV.md #8).
+                        await self.set(str(emp["id"]), embeddings_list, rebuild=False)
                         if emp.get("name"):
                             await self.set_name(str(emp["id"]), emp["name"])
                         loaded += 1
-            
+
             await self.rebuild_matrix()
             print(f"[Cache] Loaded {loaded} employees' embeddings from DB")
         except Exception as e:

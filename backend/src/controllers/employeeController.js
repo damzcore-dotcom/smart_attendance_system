@@ -4,6 +4,14 @@ const xlsx = require('xlsx');
 const { recordAuditLog } = require('./auditLogController');
 
 const { handleControllerError } = require('../middleware/validate');
+
+const isBhl = (employmentStatus, salaryCategory) => {
+  const bhlList = ['HARIAN', 'BHL', 'DAILY', 'DAILY WORKER', 'HARIAN LEPAS'];
+  const status = String(employmentStatus || '').trim().toUpperCase();
+  const category = String(salaryCategory || '').trim().toUpperCase();
+  return bhlList.includes(status) || bhlList.includes(category);
+};
+
 const getAll = async (req, res) => {
   try {
     const { search, dept, section, position, status, empStatus, page = 1, limit = 20, sortBy = 'createdAt', order = 'desc', locationId } = req.query;
@@ -39,15 +47,19 @@ const getAll = async (req, res) => {
     }
 
     if (req.query.excludeBhl === 'true') {
-      where.employmentStatus = { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] };
-      where.salaryCategory = { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] };
+      conditions.push({
+        employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily', 'Bhl', 'DAILY WORKER', 'Harian Lepas'] }
+      });
+      conditions.push({
+        salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily', 'Bhl', 'DAILY WORKER', 'Harian Lepas'] }
+      });
     }
 
     if (req.query.onlyBhl === 'true') {
       conditions.push({
         OR: [
-          { employmentStatus: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } },
-          { salaryCategory: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } }
+          { employmentStatus: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily', 'Bhl', 'DAILY WORKER', 'Harian Lepas'] } },
+          { salaryCategory: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily', 'Bhl', 'DAILY WORKER', 'Harian Lepas'] } }
         ]
       });
     }
@@ -132,6 +144,7 @@ const getAll = async (req, res) => {
           terminationReason: emp.terminationReason,
           fingerPrintId: emp.fingerPrintId,
           faceId: emp.faceId,
+          faceStatus: emp.faceStatus,
           faceIdDisplay: emp.faceId || (emp.faceStatus === 'ENROLLED' ? 'Enrolled' : 'Pending'),
           facePhoto: emp.facePhoto,
           bpjsTk: emp.bpjsTk,
@@ -194,10 +207,16 @@ const create = async (req, res) => {
 
     // Auto-generate NIK based on last numeric sequence
     let employeeCode = rest.employeeCode?.trim();
+    const isEmpHarian = isBhl(rest.employmentStatus, rest.salaryCategory);
     if (!employeeCode) {
-      if (rest.employmentStatus === 'HARIAN' || rest.salaryCategory === 'HARIAN') {
+      if (isEmpHarian) {
         const allBhl = await prisma.employee.findMany({ 
-          where: { OR: [{ employmentStatus: 'HARIAN' }, { salaryCategory: 'HARIAN' }] }, 
+          where: { 
+            OR: [
+              { employmentStatus: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily', 'Bhl', 'DAILY WORKER', 'Harian Lepas'] } },
+              { salaryCategory: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily', 'Bhl', 'DAILY WORKER', 'Harian Lepas'] } }
+            ]
+          }, 
           select: { employeeCode: true } 
         });
         const allBhlUsers = await prisma.user.findMany({
@@ -218,7 +237,12 @@ const create = async (req, res) => {
         employeeCode = `BHL-${String(maxNum + 1).padStart(4, '0')}`;
       } else {
         const allEmployees = await prisma.employee.findMany({ 
-          where: { AND: [{ employmentStatus: { not: 'HARIAN' } }, { salaryCategory: { not: 'HARIAN' } }] },
+          where: { 
+            AND: [
+              { employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily', 'Bhl', 'DAILY WORKER', 'Harian Lepas'] } },
+              { salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily', 'Bhl', 'DAILY WORKER', 'Harian Lepas'] } }
+            ]
+          },
           select: { employeeCode: true } 
         });
         const allUsers = await prisma.user.findMany({
@@ -291,7 +315,7 @@ const create = async (req, res) => {
 
     const employee = await prisma.$transaction(async (tx) => {
       const emp = await tx.employee.create({ data: dataObj, include: { department: true } });
-      if (rest.employmentStatus !== 'HARIAN' && rest.salaryCategory !== 'HARIAN') {
+      if (!isEmpHarian) {
         const hashedPassword = await bcrypt.hash('password123', 10);
         await tx.user.create({ data: { username: employeeCode, password: hashedPassword, role: 'EMPLOYEE', employeeId: emp.id, mustChangePassword: true } });
       }
@@ -351,6 +375,13 @@ const update = async (req, res) => {
       data.faceDescriptor = [JSON.parse(faceDescriptor)];
       data.faceStatus = 'ENROLLED';
     }
+    // CCTV (InsightFace) enrollment: stamp the enrollment time so it matches the
+    // bridge save path. Without this, faces enrolled through the UI had a null
+    // faceEnrolledAt (PERBAIKAN_WAJAH_CCTV.md #2).
+    if (data.faceEmbeddingV2) {
+      data.faceEnrolledAt = new Date();
+      data.faceStatus = 'ENROLLED';
+    }
     if ('shiftId' in data) {
       data.shiftId = data.shiftId ? parseInt(data.shiftId) : null;
     }
@@ -393,13 +424,8 @@ const update = async (req, res) => {
     
     // Broadcast cache invalidation to AI Engine if face embedding was updated
     if (data.faceEmbeddingV2 || data.faceDescriptor || faceDescriptor) {
-      const aiHost = process.env.AI_ENGINE_URL || 'http://sa_ai_engine:8001';
-      fetch(`${aiHost}/cache/reload`, { method: 'POST' }).catch(err => {
-         // Silently fallback to localhost just in case they're on simple baremetal config
-         if(aiHost === 'http://sa_ai_engine:8001') {
-            fetch(`http://127.0.0.1:8001/cache/reload`, { method: 'POST' }).catch(() => {});
-         }
-      });
+      const { reloadFaceCache } = require('../utils/aiEngine');
+      reloadFaceCache();
     }
 
     res.json({ success: true, message: 'Employee updated', data: employee });
@@ -465,9 +491,121 @@ const importExcel = async (req, res) => {
     let employeesUpdated = 0;
     const totalRows = rawData.length;
 
+    // Extract confirmConflicts and resolutions
+    const confirmConflicts = req.body.confirmConflicts === 'true';
+    const resolutions = req.body.resolutions ? JSON.parse(req.body.resolutions) : null;
+
     // PRE-FETCH DATA: Optimization to avoid N+1 Query problem (O(1) lookups)
-    const existingEmployees = await prisma.employee.findMany({ select: { id: true, employeeCode: true } });
-    const existingNikMap = new Map(existingEmployees.map(e => [e.employeeCode.trim(), e.id]));
+    const existingEmployees = await prisma.employee.findMany({
+      select: { id: true, employeeCode: true, name: true, idNumber: true, fingerPrintId: true }
+    });
+    const existingNikMap = new Map();
+    const existingNameMap = new Map();
+    const existingKtpMap = new Map();
+    const existingPinMap = new Map(); // Map: fingerPrintId -> Array of Employees
+
+    existingEmployees.forEach(e => {
+      if (e.employeeCode) {
+        existingNikMap.set(e.employeeCode.trim(), e.id);
+      }
+      if (e.name) {
+        existingNameMap.set(e.name.toLowerCase().trim(), e.id);
+      }
+      if (e.idNumber) {
+        existingKtpMap.set(e.idNumber.trim(), e.id);
+      }
+      if (e.fingerPrintId) {
+        const pin = e.fingerPrintId.trim();
+        if (!existingPinMap.has(pin)) {
+          existingPinMap.set(pin, []);
+        }
+        existingPinMap.get(pin).push(e);
+      }
+    });
+
+    // First pass / dry-run: Check for PIN conflicts if confirmConflicts is false
+    const conflictsMap = new Map();
+    const processedInFileForConflictCheck = new Set();
+    const ns = (val) => { const s = String(val || '').trim(); return s || null; };
+
+    for (let i = 0; i < totalRows; i++) {
+      const row = rawData[i];
+      let empCode = String(row['NIK'] || row['Nik'] || row['nik'] || row['No.'] || row['Employee ID'] || '').trim();
+      const name = String(row['Nama'] || row['Name'] || '').trim();
+
+      const pinRaw = row['PIN'] !== undefined ? row['PIN'] :
+                     row['Fingerprint ID'] !== undefined ? row['Fingerprint ID'] :
+                     row['No. Mesin'] !== undefined ? row['No. Mesin'] :
+                     row['AC No.'] !== undefined ? row['AC No.'] :
+                     row['AC-No.'] !== undefined ? row['AC-No.'] :
+                     row['ac-no.'] !== undefined ? row['ac-no.'] :
+                     row['AC-No'] !== undefined ? row['AC-No'] :
+                     row['ac-no'] !== undefined ? row['ac-no'] :
+                     row['AC_No'] !== undefined ? row['AC_No'] :
+                     row['ac_no'] !== undefined ? row['ac_no'] :
+                     row['No. PIN'] !== undefined ? row['No. PIN'] :
+                     row['FingerPrintId'] !== undefined ? row['FingerPrintId'] :
+                     row['Fingerprint'] !== undefined ? row['Fingerprint'] :
+                     row['fingerPrintId'] !== undefined ? row['fingerPrintId'] :
+                     row['fingerprintId'];
+      const pinVal = pinRaw !== undefined && pinRaw !== null && String(pinRaw).trim() !== '' ? String(pinRaw).trim() : null;
+
+      if (!empCode && pinVal) {
+        empCode = `TEMP_PIN_${pinVal}`;
+      }
+
+      if (!empCode || !name) continue;
+      if (processedInFileForConflictCheck.has(empCode)) continue;
+      processedInFileForConflictCheck.add(empCode);
+
+      if (pinVal) {
+        let existingId = existingNikMap.get(empCode);
+        const ktpVal = ns(row['NIK KTP'] || row['ID Number']);
+        if (!existingId && ktpVal) {
+          existingId = existingKtpMap.get(ktpVal.trim());
+        }
+        if (!existingId && name) {
+          existingId = existingNameMap.get(name.toLowerCase().trim());
+        }
+
+        // Temporary NIK upgrade check
+        if (!existingId) {
+          const empsWithPin = existingPinMap.get(pinVal) || [];
+          const tempEmp = empsWithPin.find(e => e.employeeCode.startsWith('TEMP_PIN_'));
+          if (tempEmp) {
+            existingId = tempEmp.id;
+          }
+        }
+
+        // Find conflicting employees in DB:
+        const dbEmpsWithPin = existingPinMap.get(pinVal) || [];
+        const conflictingEmps = dbEmpsWithPin.filter(e => e.id !== existingId);
+
+        if (conflictingEmps.length > 0) {
+          conflictingEmps.forEach(ce => {
+            const conflictKey = `${pinVal}_${ce.id}`;
+            if (!conflictsMap.has(conflictKey)) {
+              conflictsMap.set(conflictKey, {
+                pin: pinVal,
+                excelEmployeeName: name,
+                excelEmployeeNik: empCode,
+                dbEmployeeName: ce.name,
+                dbEmployeeNik: ce.employeeCode,
+                dbEmployeeId: ce.id
+              });
+            }
+          });
+        }
+      }
+    }
+
+    if (!confirmConflicts && conflictsMap.size > 0) {
+      return res.json({
+        success: true,
+        needsConfirmation: true,
+        conflicts: Array.from(conflictsMap.values())
+      });
+    }
 
     // Pre-fetch existing usernames to prevent unique constraint violations
     const existingUsers = await prisma.user.findMany({ select: { username: true } });
@@ -484,6 +622,7 @@ const importExcel = async (req, res) => {
     const defaultBhlWage = bhlWageSetting ? parseFloat(bhlWageSetting.value) || 150000 : 150000;
 
     const errors = [];
+    const warnings = [];
 
     // Helper: konversi Excel Serial Number ke Date
     const parseExcelDate = (val) => {
@@ -509,9 +648,30 @@ const importExcel = async (req, res) => {
         global.importProgress[jobId] = Math.round((i / totalRows) * 100);
       }
 
-      const empCode = String(row['NIK'] || row['No.'] || row['Employee ID'] || '').trim();
+      let empCode = String(row['NIK'] || row['Nik'] || row['nik'] || row['No.'] || row['Employee ID'] || '').trim();
       const name = String(row['Nama'] || row['Name'] || '').trim();
-      
+
+      const pinRaw = row['PIN'] !== undefined ? row['PIN'] :
+                     row['Fingerprint ID'] !== undefined ? row['Fingerprint ID'] :
+                     row['No. Mesin'] !== undefined ? row['No. Mesin'] :
+                     row['AC No.'] !== undefined ? row['AC No.'] :
+                     row['AC-No.'] !== undefined ? row['AC-No.'] :
+                     row['ac-no.'] !== undefined ? row['ac-no.'] :
+                     row['AC-No'] !== undefined ? row['AC-No'] :
+                     row['ac-no'] !== undefined ? row['ac-no'] :
+                     row['AC_No'] !== undefined ? row['AC_No'] :
+                     row['ac_no'] !== undefined ? row['ac_no'] :
+                     row['No. PIN'] !== undefined ? row['No. PIN'] :
+                     row['FingerPrintId'] !== undefined ? row['FingerPrintId'] :
+                     row['Fingerprint'] !== undefined ? row['Fingerprint'] :
+                     row['fingerPrintId'] !== undefined ? row['fingerPrintId'] :
+                     row['fingerprintId'];
+      const pinVal = pinRaw !== undefined && pinRaw !== null && String(pinRaw).trim() !== '' ? String(pinRaw).trim() : null;
+
+      if (!empCode && pinVal) {
+        empCode = `TEMP_PIN_${pinVal}`;
+      }
+
       if (!empCode || !name) continue;
 
       // Cegah duplikat dalam 1 file
@@ -519,6 +679,41 @@ const importExcel = async (req, res) => {
       processedInFile.add(empCode);
 
       try {
+        const ns = (val) => { const s = String(val || '').trim(); return s || null; };
+
+        // ── CHECK MULTI-KRITERIA: Cari karyawan lama di database ──
+        let existingId = existingNikMap.get(empCode);
+
+        // Cari lewat NIK KTP jika belum ketemu
+        const ktpVal = ns(row['NIK KTP'] || row['ID Number']);
+        if (!existingId && ktpVal) {
+          existingId = existingKtpMap.get(ktpVal.trim());
+        }
+
+        // Cari lewat Nama jika belum ketemu
+        if (!existingId && name) {
+          existingId = existingNameMap.get(name.toLowerCase().trim());
+        }
+
+        // Jika NIK resmi baru diunggah untuk PIN yang memiliki NIK sementara, upgrade NIK di DB
+        if (!existingId && pinVal) {
+          const empWithSamePin = await prisma.employee.findFirst({
+            where: {
+              fingerPrintId: pinVal,
+              employeeCode: { startsWith: 'TEMP_PIN_' }
+            }
+          });
+          if (empWithSamePin) {
+            existingId = empWithSamePin.id;
+            console.log(`Upgrading temporary NIK ${empWithSamePin.employeeCode} to official NIK ${empCode} for employee: ${name}`);
+            await prisma.employee.update({
+              where: { id: existingId },
+              data: { employeeCode: empCode }
+            });
+            existingNikMap.set(empCode, existingId);
+          }
+        }
+
         // Resolve department
         let deptName = String(row['Departemen'] || row['Department'] || 'General').trim();
         let deptKey = deptName.toLowerCase();
@@ -529,55 +724,119 @@ const importExcel = async (req, res) => {
           deptMap.set(deptKey, departmentId);
         }
 
-        const ns = (val) => { const s = String(val || '').trim(); return s || null; };
         const empStatusStr = ns(row['Status Kerja']);
-        const isHarian = ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'].includes(empStatusStr);
+        const salaryCatStr = ns(row['Kategori Gaji']);
+        const isHarian = ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily', 'Bhl', 'DAILY WORKER', 'Harian Lepas'].includes(empStatusStr) ||
+                         ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily', 'Bhl', 'DAILY WORKER', 'Harian Lepas'].includes(salaryCatStr);
 
-        // Build data object (shared for both create & update)
+        // Bersihkan PIN dari karyawan lain jika ada konflik
+        let activePinVal = pinVal;
+        if (activePinVal) {
+          const conflictingEmps = await prisma.employee.findMany({
+            where: {
+              fingerPrintId: activePinVal,
+              id: { not: existingId }
+            },
+            select: { employeeCode: true, name: true }
+          });
+
+          if (conflictingEmps.length > 0) {
+            const resType = resolutions ? resolutions[activePinVal] : null;
+            if (resType === 'ignore') {
+              conflictingEmps.forEach(ce => {
+                warnings.push({
+                  type: 'PIN_CONFLICT_IGNORED',
+                  pin: activePinVal,
+                  message: `PIN ${activePinVal} untuk ${name} (NIK: ${empCode}) diabaikan karena tetap digunakan oleh ${ce.name} (NIK: ${ce.employeeCode}).`
+                });
+              });
+              activePinVal = null;
+            } else {
+              conflictingEmps.forEach(ce => {
+                warnings.push({
+                  type: 'PIN_CONFLICT_OVERWRITTEN',
+                  pin: activePinVal,
+                  message: `PIN ${activePinVal} dipindahkan ke ${name} (NIK: ${empCode}) dari karyawan lama ${ce.name} (NIK: ${ce.employeeCode}). PIN lama dikosongkan.`
+                });
+              });
+              await prisma.employee.updateMany({
+                where: {
+                  fingerPrintId: activePinVal,
+                  id: { not: existingId }
+                },
+                data: { fingerPrintId: null }
+              });
+            }
+          }
+        }
+
+        // Build data object (hanya memasukkan kolom yang ada di file Excel)
         const empData = {
           name,
-          departmentId,
-          grade: ns(row['Grade']),
-          position: ns(row['Jabatan'] || row['Position']),
-          section: ns(row['Bagian']),
-          employmentStatus: empStatusStr,
-          contractDuration: ns(row['Lama Kontrak']),
-          bpjsTk: ns(row['BPJS TK']),
-          bpjsKesehatan: ns(row['BPJS Kesehatan']),
-          npwp: ns(row['NPWP']),
-          ptkpStatus: ns(row['Status PTKP (Pajak)']),
-          kkNumber: ns(row['No Kartu Keluarga']),
-          idNumber: ns(row['NIK KTP'] || row['ID Number']),
-          birthPlace: ns(row['Tempat Lahir']),
-          address: ns(row['Alamat']),
-          education: ns(row['Pendidikan Terakhir']),
-          major: ns(row['Jurusan']),
-          religion: ns(row['Agama']),
-          phone: ns(row['No HP']),
-          numberOfChildren: row['Jumlah Anak'] ? parseInt(row['Jumlah Anak']) : null,
-          fatherName: ns(row['Nama Ayah Kandung']),
-          motherName: ns(row['Nama Ibu Kandung']),
-          spouseName: ns(row['Nama Suami/Istri']),
-          emergencyContact: ns(row['KONTAK DARURAT']),
-          notes: ns(row['Keterangan']),
-          gender: ns(row['Jenis Kelamin']),
-          bankName: ns(row['Nama Bank']),
-          bankAccountNumber: ns(row['Nomor Rekening']),
-          salaryCategory: isHarian ? 'HARIAN' : (ns(row['Kategori Gaji']) || 'UMK/UMR'),
+          departmentId
         };
+
+        const addIfPresent = (dbKey, excelKeys) => {
+          for (const key of excelKeys) {
+            if (row[key] !== undefined) {
+              empData[dbKey] = ns(row[key]);
+              return;
+            }
+          }
+        };
+
+        addIfPresent('grade', ['Grade']);
+        addIfPresent('position', ['Jabatan', 'Position']);
+        addIfPresent('section', ['Bagian']);
+        addIfPresent('employmentStatus', ['Status Kerja']);
+        addIfPresent('contractDuration', ['Lama Kontrak']);
+        addIfPresent('bpjsTk', ['BPJS TK']);
+        addIfPresent('bpjsKesehatan', ['BPJS Kesehatan']);
+        addIfPresent('npwp', ['NPWP']);
+        addIfPresent('ptkpStatus', ['Status PTKP (Pajak)']);
+        addIfPresent('kkNumber', ['No Kartu Keluarga']);
+        addIfPresent('idNumber', ['NIK KTP', 'ID Number']);
+        addIfPresent('birthPlace', ['Tempat Lahir']);
+        addIfPresent('address', ['Alamat']);
+        addIfPresent('education', ['Pendidikan Terakhir']);
+        addIfPresent('major', ['Jurusan']);
+        addIfPresent('religion', ['Agama']);
+        addIfPresent('phone', ['No HP']);
+        addIfPresent('fatherName', ['Nama Ayah Kandung']);
+        addIfPresent('motherName', ['Nama Ibu Kandung']);
+        addIfPresent('spouseName', ['Nama Suami/Istri']);
+        addIfPresent('emergencyContact', ['KONTAK DARURAT']);
+        addIfPresent('notes', ['Keterangan']);
+        addIfPresent('gender', ['Jenis Kelamin']);
+        addIfPresent('bankName', ['Nama Bank']);
+        addIfPresent('bankAccountNumber', ['Nomor Rekening']);
+
+        if (row['Jumlah Anak'] !== undefined) {
+          const val = parseInt(row['Jumlah Anak']);
+          empData.numberOfChildren = isNaN(val) ? null : val;
+        }
+
+        if (row['Kategori Gaji'] !== undefined || isHarian) {
+          empData.salaryCategory = isHarian ? 'HARIAN' : (ns(row['Kategori Gaji']) || 'UMK/UMR');
+        }
 
         const joinDate = parseExcelDate(row['Tanggal Masuk']);
         const contractEnd = parseExcelDate(row['Sisa Tanggal Kontrak']);
         const birthDate = parseExcelDate(row['Tanggal Lahir']);
 
-        if (joinDate) empData.joinDate = joinDate;
-        if (contractEnd) empData.contractEnd = contractEnd;
-        if (birthDate) empData.birthDate = birthDate;
-
-        // ── CHECK: NIK sudah ada di database? ──
-        const existingId = existingNikMap.get(empCode);
+        if (row['Tanggal Masuk'] !== undefined) empData.joinDate = joinDate;
+        if (row['Sisa Tanggal Kontrak'] !== undefined) empData.contractEnd = contractEnd;
+        if (row['Tanggal Lahir'] !== undefined) empData.birthDate = birthDate;
 
         if (existingId) {
+          // HANYA update fingerPrintId jika activePinVal dari Excel bernilai valid (tidak null)
+          if (activePinVal !== null) {
+            empData.fingerPrintId = activePinVal;
+          }
+          
+          // Sinkronkan NIK jika karyawan ditemukan berdasarkan KTP/Nama namun NIK-nya diperbarui
+          empData.employeeCode = empCode;
+          
           // ═══ UPDATE existing employee ═══
           await prisma.employee.update({
             where: { id: existingId },
@@ -588,7 +847,8 @@ const importExcel = async (req, res) => {
           // ═══ CREATE new employee ═══
           empData.employeeCode = empCode;
           empData.email = ns(row['Email']) || `${empCode.toLowerCase()}@company.com`;
-          empData.fingerPrintId = null;
+          // Set fingerPrintId untuk karyawan baru (bisa null atau valid PIN)
+          empData.fingerPrintId = activePinVal;
 
           const newEmployee = await prisma.employee.create({ data: empData });
           existingNikMap.set(empCode, newEmployee.id);
@@ -632,8 +892,9 @@ const importExcel = async (req, res) => {
     const parts = [];
     if (employeesImported > 0) parts.push(`${employeesImported} karyawan baru ditambahkan`);
     if (employeesUpdated > 0) parts.push(`${employeesUpdated} karyawan diperbarui`);
+    if (warnings.length > 0) parts.push(`${warnings.length} konflik PIN diselesaikan`);
     if (errors.length > 0) parts.push(`${errors.length} baris gagal`);
-    const errMsg = errors.length > 0 ? ` ${errors.length} baris gagal.` : '';
+    
     res.json({ 
       success: true, 
       message: `Import selesai: ${parts.join(', ')}.`,
@@ -641,7 +902,8 @@ const importExcel = async (req, res) => {
         imported: employeesImported,
         updated: employeesUpdated,
         total: totalRows,
-        errors: errors.slice(0, 20)
+        errors: errors.slice(0, 20),
+        warnings: warnings.slice(0, 50)
       }
     });
   } catch (err) {
@@ -794,4 +1056,70 @@ const batchUpdateSalaryCategory = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, create, update, remove, importExcel, getProgress, getMasterOptions, batchUpdateShift, batchUpdateSalaryCategory, checkDuplicate, getNextFingerId };
+const getNextEmployeeCode = async (req, res) => {
+  try {
+    const { employmentStatus, salaryCategory } = req.query;
+    const isEmpHarian = isBhl(employmentStatus, salaryCategory);
+    
+    let nextNik = '';
+    if (isEmpHarian) {
+      const allBhl = await prisma.employee.findMany({ 
+        where: { 
+          OR: [
+            { employmentStatus: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily', 'Bhl', 'DAILY WORKER', 'Harian Lepas'] } },
+            { salaryCategory: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily', 'Bhl', 'DAILY WORKER', 'Harian Lepas'] } }
+          ]
+        }, 
+        select: { employeeCode: true } 
+      });
+      const allBhlUsers = await prisma.user.findMany({
+        where: { username: { startsWith: 'BHL-' } },
+        select: { username: true }
+      });
+      
+      let maxNum = 0;
+      allBhl.forEach(emp => {
+        const num = parseInt(emp.employeeCode.replace(/\D/g, ''));
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      });
+      allBhlUsers.forEach(u => {
+        const num = parseInt(u.username.replace(/\D/g, ''));
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      });
+      
+      nextNik = `BHL-${String(maxNum + 1).padStart(4, '0')}`;
+    } else {
+      const allEmployees = await prisma.employee.findMany({ 
+        where: { 
+          AND: [
+            { employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily', 'Bhl', 'DAILY WORKER', 'Harian Lepas'] } },
+            { salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily', 'Bhl', 'DAILY WORKER', 'Harian Lepas'] } }
+          ]
+        },
+        select: { employeeCode: true } 
+      });
+      const allUsers = await prisma.user.findMany({
+        where: { NOT: { username: { startsWith: 'BHL-' } } },
+        select: { username: true }
+      });
+
+      let maxNum = 0;
+      allEmployees.forEach(emp => {
+        const num = parseInt(emp.employeeCode.replace(/\D/g, ''));
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      });
+      allUsers.forEach(u => {
+        const num = parseInt(u.username.replace(/\D/g, ''));
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      });
+      
+      nextNik = String(maxNum + 1);
+    }
+    
+    res.json({ success: true, nextNik });
+  } catch (err) {
+    handleControllerError(res, err, 'employeeController');
+  }
+};
+
+module.exports = { getAll, getById, create, update, remove, importExcel, getProgress, getMasterOptions, batchUpdateShift, batchUpdateSalaryCategory, checkDuplicate, getNextFingerId, getNextEmployeeCode };

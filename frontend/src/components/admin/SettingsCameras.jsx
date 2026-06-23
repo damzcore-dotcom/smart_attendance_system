@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Camera, Plus, Trash2, Edit, Wifi, WifiOff, Loader2, XCircle, Server, History, Sliders, Crop } from 'lucide-react';
 import api from '../../services/api';
+import { getAiEngineUrl } from '../../utils/aiEngine';
 
 // Helper for parsing RTSP URLs back into structured parameters
 const parseRtspUrl = (url) => {
@@ -200,9 +201,17 @@ const SettingsCameras = ({ permissions = { canCreate: true, canUpdate: true, can
   useEffect(() => {
     if (!isModalOpen) return;
     
+    // Sanitize connectionIp: strip protocol, trailing slashes, paths, and ports
+    let cleanIp = connectionIp ? connectionIp.trim() : '';
+    if (cleanIp) {
+      cleanIp = cleanIp.replace(/^(https?:\/\/)/i, '');
+      cleanIp = cleanIp.split('/')[0];
+      cleanIp = cleanIp.split(':')[0];
+    }
+    
     const rtsp = generateRtspUrl({
       sourceType,
-      ip: connectionIp,
+      ip: cleanIp,
       port: connectionPort,
       username,
       password,
@@ -214,7 +223,7 @@ const SettingsCameras = ({ permissions = { canCreate: true, canUpdate: true, can
     setFormData(prev => ({
       ...prev,
       rtspUrl: rtsp,
-      ipAddress: connectionIp
+      ipAddress: cleanIp
     }));
   }, [sourceType, connectionIp, connectionPort, username, password, nvrChannel, streamType, manualRtspUrl, isModalOpen]);
 
@@ -718,10 +727,7 @@ const SettingsCameras = ({ permissions = { canCreate: true, canUpdate: true, can
             {/* Live Preview Screen Container */}
             <div className="bg-slate-950 rounded-xl border border-slate-800 overflow-hidden relative group aspect-[16/9] mb-5 shadow-inner">
               {(() => {
-                const envUrl = import.meta.env.VITE_AI_ENGINE_URL;
-                const aiUrl = (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1'))
-                  ? envUrl
-                  : `${window.location.protocol}//${window.location.hostname}:8002`;
+                const aiUrl = getAiEngineUrl();
                 const streamUrl = `${aiUrl}/cameras/${selectedRoiCamera.id}/stream`;
                 return (
                   <>

@@ -1,12 +1,15 @@
 const prisma = require('../prismaClient');
 const ZKLib = require('node-zklib');
 const crypto = require('crypto');
+const { getAttendancesWithRetry } = require('../utils/zkHelper');
 const { recordAuditLog } = require('./auditLogController');
+const { adjustZkTimeToUTC, getJakartaDateKey } = require('../utils/dateHelper');
 
 const { handleControllerError } = require('../middleware/validate');
-// Short-lived cache for attendance sync preview data
-const attendanceSyncCache = new Map();
-const CACHE_TIMEOUT = 15 * 60 * 1000; // 15 minutes
+// Sync cache is stored in the database Settings table (key: sync_preview_{token})
+// This ensures cache survives server restarts and PM2 multi-instance deployments
+const CACHE_TIMEOUT_MINUTES = 15;
+const { getNextEmployeeCode } = require('../utils/employeeUtils');
 
 
 /**
@@ -218,24 +221,60 @@ const testConnection = async (req, res) => {
  */
 
 // Daftar singkatan umum nama Indonesia
+// Expanded: menangani berbagai penulisan nama di mesin fingerprint
 const NAME_ABBREVIATIONS = {
-  'm': ['muhammad', 'muhamad', 'muh', 'moch', 'mochamad', 'mohamad', 'mohammad'],
-  'a': ['ahmad', 'achmad', 'achmat', 'ahmat'],
-  'abd': ['abdul', 'abdu'],
-  'muh': ['muhammad', 'muhamad'],
-  'moch': ['mochamad', 'mohamad'],
-  'r': ['rizky', 'rizki', 'risky', 'ricky'],
-  'h': ['haji', 'hajjah'],
-  'siti': ['siti'],
-  'sri': ['sri'],
-  'nur': ['nur', 'nuru', 'nurul'],
-  'dw': ['dwi'],
+  // Muhammad variants
+  'm':    ['muhammad', 'muhamad', 'muh', 'moch', 'mochamad', 'mohamad', 'mohammad'],
+  'muh':  ['muhammad', 'muhamad'],
+  'moh':  ['mohammad', 'mohamad', 'muhammad', 'muhamad'],
+  'mhd':  ['muhammad', 'muhamad'],
+  'md':   ['muhammad', 'muhamad'],
+  'moch': ['mochamad', 'mohamad', 'mochammad'],
+  'mochammad': ['mochamad', 'mohamad'],
+  // Ahmad / Achmad variants
+  'a':   ['ahmad', 'achmad', 'achmat', 'ahmat'],
+  'ach': ['achmad', 'ahmad'],
+  'akh': ['akhmat', 'akhmad'],
+  // Abdul variants
+  'abd':  ['abdul', 'abdu'],
+  'abdu': ['abdul'],
+  // Siti — KUNCI: mesin sering tulis "St" bukan "Siti"
+  'st':   ['siti'],
+  'siti': ['st'],
+  // Nur variants
+  'nur':  ['nur', 'nuru', 'nurul', 'nuri'],
+  'nrl':  ['nurul'],
+  'nuru': ['nurul', 'nur'],
+  // Rizky variants
+  'r':    ['rizky', 'rizki', 'risky', 'ricky'],
+  'rzk':  ['rizky', 'rizki'],
+  // Haji / Hajjah
+  'h':    ['haji', 'hajjah'],
+  'hj':   ['haji', 'hajjah'],
+  'hjh':  ['hajjah'],
+  // Sri
+  'sri':  ['sri'],
+  'sry':  ['sri'],
+  // Dwi
+  'dw':   ['dwi'],
+  'dwi':  ['dw'],
+  // Khoirul / Khairul variants
+  'kh':   ['khoirul', 'khairul', 'khalid', 'kholid'],
+  'khol': ['kholid', 'khalid'],
+  // Agus / Agung
+  'ag':   ['agus', 'agung'],
+  'ags':  ['agus'],
+  // Tambahan singkatan satu/dua huruf yang umum di mesin
+  'n':    ['nur', 'nurul', 'nuri', 'nuru'],
+  'dede': ['dede'],
+  'ade':  ['ade'],
 };
 
 /**
  * Normalisasi nama: lowercase, hapus titik/koma, pecah jadi kata-kata
  */
 function normalizeName(name) {
+  if (!name) return [];
   return name
     .toLowerCase()
     .replace(/[.,\-_'"]/g, ' ')   // Ganti tanda baca dengan spasi
@@ -260,10 +299,10 @@ function wordsMatch(wordA, wordB) {
     }
   }
   
-  // Cek prefix matching (minimal 3 huruf)
-  // Contoh: "muh" cocok dengan "muhammad"
-  if (wordA.length >= 3 && wordB.startsWith(wordA)) return true;
-  if (wordB.length >= 3 && wordA.startsWith(wordB)) return true;
+  // Cek prefix matching (minimal 4 huruf)
+  // Contoh: "abdu" cocok dengan "abdul"
+  if (wordA.length >= 4 && wordB.startsWith(wordA)) return true;
+  if (wordB.length >= 4 && wordA.startsWith(wordB)) return true;
   
   return false;
 }
@@ -288,12 +327,15 @@ function calculateNameScore(machineWords, dbWords) {
     }
   }
   
-  // Skor = persentase kata yang cocok dari total kata terpendek
+  // Skor = persentase kata yang cocok dari nama TERPENDEK (machine-first scoring)
+  // Ini menangani kasus nama terpotong di mesin:
+  // Contoh: "Rahayu Maulida" (mesin) vs "Rahayu Maulida Inayah" (DB) → skor 2/2 = 100%
+  // Bukan 2/3 = 67% seperti sebelumnya
   const minWords = Math.min(machineWords.length, dbWords.length);
   const maxWords = Math.max(machineWords.length, dbWords.length);
   
-  // Hitung berdasarkan total kata terpanjang agar lebih akurat
-  return Math.round((matchCount / maxWords) * 100);
+  // Gunakan minWords agar nama terpotong di mesin tidak dihukum
+  return Math.round((matchCount / minWords) * 100);
 }
 
 /**
@@ -308,7 +350,9 @@ function findBestNameMatch(machineName, employeeList) {
   let bestScore = 0;
   
   for (const emp of employeeList) {
+    if (!emp || !emp.name) continue; // Skip employees with null/missing name
     const dbWords = normalizeName(emp.name);
+    if (dbWords.length === 0) continue;
     const score = calculateNameScore(machineWords, dbWords);
     
     if (score > bestScore) {
@@ -317,37 +361,22 @@ function findBestNameMatch(machineName, employeeList) {
     }
   }
   
-  // Threshold: minimal 60% kata cocok untuk dianggap match
-  // Untuk nama 3 kata, minimal 2 kata harus cocok
-  if (bestScore >= 60) {
+  // Raised threshold to 80% to prevent false-positive name matching
+  // which could link wrong employee to a fingerprint ID
+  // FIX: Guard against bestMatch being null (empty employeeList or all scores = 0)
+  if (!bestMatch || bestScore < 80) {
+    return null;
+  }
+  
+  const lengthRatio = Math.min(bestMatch.name.length, machineName.length) / Math.max(bestMatch.name.length, machineName.length);
+  if (lengthRatio >= 0.7) {
     return bestMatch;
   }
   
   return null;
 }
 
-/**
- * Generate next sequential NIK from database
- * Finds the highest numeric employeeCode and increments it
- */
-async function getNextEmployeeCode() {
-  const allEmployees = await prisma.employee.findMany({
-    select: { employeeCode: true },
-    orderBy: { id: 'desc' }
-  });
-  
-  let maxCode = 0;
-  for (const emp of allEmployees) {
-    // Extract pure numeric codes (skip 'FNG' prefixed or non-numeric codes)
-    const code = emp.employeeCode || '';
-    const numericPart = parseInt(code.replace(/\D/g, ''), 10);
-    if (!isNaN(numericPart) && numericPart > maxCode) {
-      maxCode = numericPart;
-    }
-  }
-  
-  return String(maxCode + 1);
-}
+
 
 /**
  * Sync Users (Enrollment dari Mesin ke Sistem)
@@ -380,15 +409,26 @@ const syncUsers = async (req, res) => {
 
       let committedLinked = 0;
       let committedNew = 0;
+      let committedPinFixed = 0;
 
       for (const item of selectedUsers) {
         const fingerPrintId = String(item.acNo).trim();
-        
-        // Double-check: skip if already linked in DB
-        const alreadyExists = await prisma.employee.findFirst({ where: { fingerPrintId } });
-        if (alreadyExists) continue;
 
         if (item.status === 'linked' && item.dbMatchId) {
+          // Bersihkan PIN dari karyawan lain jika ada konflik
+          await prisma.employee.updateMany({
+            where: {
+              fingerPrintId,
+              id: { not: item.dbMatchId }
+            },
+            data: { fingerPrintId: null }
+          });
+
+          // Check if the target employee already has a different fingerPrintId
+          const targetEmp = await prisma.employee.findUnique({ where: { id: item.dbMatchId }, select: { fingerPrintId: true, name: true } });
+          if (targetEmp?.fingerPrintId && targetEmp.fingerPrintId !== fingerPrintId) {
+            console.warn(`[Commit] ⚠️ Overwriting fingerPrintId for employee ${targetEmp.name}: ${targetEmp.fingerPrintId} → ${fingerPrintId}`);
+          }
           // Auto-link: update existing employee's fingerPrintId
           await prisma.employee.update({
             where: { id: item.dbMatchId },
@@ -396,7 +436,29 @@ const syncUsers = async (req, res) => {
           });
           committedLinked++;
           console.log(`[Commit] ✅ Linked AC No.${fingerPrintId} → Employee ID ${item.dbMatchId}`);
+        } else if (item.status === 'pin_mismatch' && item.dbMatchId) {
+          // Bersihkan PIN dari karyawan lain jika ada konflik
+          await prisma.employee.updateMany({
+            where: {
+              fingerPrintId,
+              id: { not: item.dbMatchId }
+            },
+            data: { fingerPrintId: null }
+          });
+
+          // PIN mismatch: karyawan ditemukan di DB dengan nama cocok tapi fingerPrintId berbeda
+          // Sesuai instruksi user: update fingerPrintId di DB agar cocok dengan mesin
+          await prisma.employee.update({
+            where: { id: item.dbMatchId },
+            data: { fingerPrintId }
+          });
+          committedPinFixed++;
+          console.log(`[Commit] 🔄 PIN updated: AC No.${fingerPrintId} → Employee ID ${item.dbMatchId} (old PIN: ${item.oldFingerPrintId || 'unknown'})`);
         } else if (item.status === 'new') {
+          // Tetap lakukan pemeriksaan untuk karyawan baru agar tidak terjadi duplikasi PIN
+          const alreadyExists = await prisma.employee.findFirst({ where: { fingerPrintId } });
+          if (alreadyExists) continue;
+
           // Create new employee with sequential NIK
           const nextCode = await getNextEmployeeCode();
           await prisma.employee.create({
@@ -437,7 +499,7 @@ const syncUsers = async (req, res) => {
 
       return res.json({
         success: true,
-        message: `Berhasil disimpan! ${committedLinked} auto-link, ${committedNew} karyawan baru.`
+        message: `Berhasil disimpan! ${committedLinked} auto-link, ${committedPinFixed} update PIN, ${committedNew} karyawan baru.`
       });
     }
 
@@ -445,8 +507,31 @@ const syncUsers = async (req, res) => {
     // PREVIEW MODE: Scan machine, classify, return data
     // ──────────────────────────────────────────────
     zkInstance = new ZKLib(device.ipAddress, device.port, 60000, 30000);
-    await zkInstance.createSocket();
-    const users = await zkInstance.getUsers();
+    
+    try {
+      await zkInstance.createSocket();
+    } catch (connErr) {
+      return res.status(503).json({
+        success: false,
+        message: `Tidak dapat terhubung ke mesin "${device.name}" (${device.ipAddress}:${device.port}). Pastikan mesin menyala dan terhubung ke jaringan yang sama dengan server.`
+      });
+    }
+
+    let users;
+    try {
+      users = await zkInstance.getUsers();
+      if (!users || !users.data) {
+        return res.status(502).json({
+          success: false,
+          message: `Mesin "${device.name}" terhubung namun tidak mengembalikan data user. Coba lagi atau restart mesin.`
+        });
+      }
+    } catch (getUsersErr) {
+      return res.status(502).json({
+        success: false,
+        message: `Gagal membaca data karyawan dari mesin "${device.name}": ${getUsersErr.message}. Coba Test Koneksi terlebih dahulu.`
+      });
+    }
     
     // Fetch attendance logs to filter out old, inactive users who haven't fingerprinted in > 60 days
     let logs = null;
@@ -463,14 +548,23 @@ const syncUsers = async (req, res) => {
     }
     zkInstance = null; // Reset so finally block won't call it again
 
+
     // Map of deviceUserId -> latest scan date
     const latestScanMap = {};
     let globalLatestScan = new Date(0);
 
+    let timezoneOffset = 420;
+    try {
+      const tzSetting = await prisma.settings.findUnique({ where: { key: 'timezoneOffset' } });
+      if (tzSetting) timezoneOffset = parseInt(tzSetting.value, 10);
+    } catch (e) {
+      console.warn('[Sync Users] Failed to fetch timezoneOffset setting:', e.message);
+    }
+
     if (logs && logs.data) {
       for (const log of logs.data) {
         const pinStr = String(log.deviceUserId).trim();
-        const recordTime = new Date(log.recordTime);
+        const recordTime = adjustZkTimeToUTC(new Date(log.recordTime), timezoneOffset);
         if (!latestScanMap[pinStr] || recordTime > latestScanMap[pinStr]) {
           latestScanMap[pinStr] = recordTime;
         }
@@ -482,6 +576,7 @@ const syncUsers = async (req, res) => {
 
     let newCount = 0;
     let linkedCount = 0;
+    let pinMismatchCount = 0;
     let alreadyLinkedCount = 0;
     let inactiveCount = 0;
     const syncDetails = [];
@@ -499,13 +594,13 @@ const syncUsers = async (req, res) => {
           {
             OR: [
               { employmentStatus: null },
-              { employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } }
+              { employmentStatus: { not: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily', 'Bhl', 'DAILY WORKER', 'Harian Lepas'] } } }
             ]
           },
           {
             OR: [
               { salaryCategory: null },
-              { salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } }
+              { salaryCategory: { not: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily', 'Bhl', 'DAILY WORKER', 'Harian Lepas'] } } }
             ]
           }
         ]
@@ -521,6 +616,13 @@ const syncUsers = async (req, res) => {
     allDbEmployees.forEach(e => {
       dbEmpByFpMap.set(String(e.fingerPrintId).trim(), e);
     });
+
+    // Pool untuk deteksi PIN mismatch:
+    // Karyawan yang sudah punya fingerPrintId di DB tapi PIN-nya berbeda dengan mesin
+    // Ini menangani kasus karyawan ada di DB tapi fingerPrintId-nya salah/lama
+    let mutablePinMismatchPool = allDbEmployees
+      .filter(e => e.name && e.name.trim().length > 0)
+      .map(e => ({ id: e.id, name: e.name, fingerPrintId: e.fingerPrintId }));
 
     // Hitung ambang batas 60 hari dari aktivitas TERAKHIR di mesin
     const thresholdDate = globalLatestScan.getTime() > 0 ? new Date(globalLatestScan) : new Date();
@@ -548,8 +650,11 @@ const syncUsers = async (req, res) => {
       // Check if employee has fingerprint activity in the last 60 days
       const lastScan = latestScanMap[fingerPrintId];
       const hasRecentActivity = lastScan && lastScan >= thresholdDate;
+      // FIX Bug 2.2: Users who have NEVER scanned on this device (e.g. newly transferred)
+      // have no log entry at all — they are NOT inactive, they are new.
+      const isNewUser = !latestScanMap.hasOwnProperty(fingerPrintId);
       
-      if (!hasRecentActivity) {
+      if (!isNewUser && !hasRecentActivity) {
         inactiveCount++;
         syncDetails.push({
           acNo: fingerPrintId,
@@ -582,6 +687,28 @@ const syncUsers = async (req, res) => {
         }
       }
       
+      // 2b. FALLBACK: Deteksi PIN mismatch
+      // Cari nama di pool karyawan yang sudah punya fingerPrintId berbeda
+      if (machineName) {
+        const pinMismatchMatch = findBestNameMatch(machineName, mutablePinMismatchPool);
+        if (pinMismatchMatch) {
+          // Hapus dari pool agar tidak di-match dua kali
+          const idx = mutablePinMismatchPool.findIndex(e => e.id === pinMismatchMatch.id);
+          if (idx !== -1) mutablePinMismatchPool.splice(idx, 1);
+          pinMismatchCount++;
+          syncDetails.push({
+            acNo: fingerPrintId,
+            machineName,
+            dbName: pinMismatchMatch.name,
+            dbMatchId: pinMismatchMatch.id,
+            oldFingerPrintId: pinMismatchMatch.fingerPrintId,
+            status: 'pin_mismatch',
+            statusText: 'Update PIN (Nama Cocok, PIN Beda)'
+          });
+          continue;
+        }
+      }
+
       // 3. Tidak ditemukan — preview sebagai karyawan baru
       newCount++;
       syncDetails.push({
@@ -601,11 +728,12 @@ const syncUsers = async (req, res) => {
 
     res.json({ 
       success: true, 
-      message: `Preview: ${linkedCount} auto-link, ${newCount} baru, ${alreadyLinkedCount} sudah terlink, ${inactiveCount} diabaikan.`,
+      message: `Preview: ${linkedCount} auto-link, ${pinMismatchCount} update PIN, ${newCount} baru, ${alreadyLinkedCount} sudah terlink, ${inactiveCount} diabaikan.`,
       deviceId: parseInt(id),
       data: {
         totalMachine: users.data.length,
         linked: linkedCount,
+        pinMismatch: pinMismatchCount,
         new: newCount,
         alreadyLinked: alreadyLinkedCount,
         inactive: inactiveCount,
@@ -635,68 +763,6 @@ const syncUsers = async (req, res) => {
 };
 
 /**
- * Helper: Fetch attendance logs from device with retry logic
- * node-zklib uses UDP which is unreliable for large data transfers.
- * This function retries multiple times and picks the best (largest) result.
- */
-async function fetchAttendancesWithRetry(ipAddress, port, maxRetries = 3) {
-  let bestResult = null;
-  let bestCount = 0;
-  const allAttemptCounts = [];
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    let zk = null;
-    try {
-      // Use longer timeouts: 60s connect, 30s intra-packet for large data
-      zk = new ZKLib(ipAddress, port, 60000, 30000);
-      await zk.createSocket();
-      
-      // Auto-Calibrate Device Time to Server Time
-      try {
-        await zk.setTime(new Date());
-        console.log(`[Sync] Device time calibrated successfully.`);
-      } catch (err) {
-        console.warn(`[Sync] Failed to calibrate device time: ${err.message}`);
-      }
-      
-      console.log(`[Sync] Attempt ${attempt}/${maxRetries}: Fetching attendance logs...`);
-      const logs = await zk.getAttendances();
-      const count = logs?.data?.length || 0;
-      allAttemptCounts.push(count);
-      console.log(`[Sync] Attempt ${attempt}/${maxRetries}: Got ${count} logs.`);
-
-      if (count > bestCount) {
-        bestCount = count;
-        bestResult = logs;
-      }
-
-      await zk.disconnect();
-
-      // If we got a good amount of data, we can stop early on 2nd+ attempt
-      // only if the count is stable (same as previous best)
-      if (attempt >= 2 && count > 0 && count === bestCount) {
-        console.log(`[Sync] Consistent result after ${attempt} attempts (${count} logs). Using this data.`);
-        break;
-      }
-    } catch (err) {
-      allAttemptCounts.push(0);
-      console.warn(`[Sync] Attempt ${attempt}/${maxRetries} FAILED: ${err.message}`);
-      try { if (zk) await zk.disconnect(); } catch (e) {}
-      
-      // Wait a bit before retrying (exponential backoff)
-      if (attempt < maxRetries) {
-        const waitMs = 1000 * attempt; // 1s, 2s, 3s
-        console.log(`[Sync] Waiting ${waitMs}ms before retry...`);
-        await new Promise(resolve => setTimeout(resolve, waitMs));
-      }
-    }
-  }
-
-  console.log(`[Sync] All attempt results: [${allAttemptCounts.join(', ')}] logs. Best: ${bestCount}`);
-  return { logs: bestResult, bestCount, allAttemptCounts };
-}
-
-/**
  * Sync Attendance
  */
 const syncAttendance = async (req, res) => {
@@ -710,10 +776,14 @@ const syncAttendance = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Device not found' });
     }
 
+    const settingsList = await prisma.settings.findMany();
+    const timezoneOffsetSetting = settingsList.find(s => s.key === 'timezoneOffset')?.value || '420';
+    const timezoneOffset = parseInt(timezoneOffsetSetting, 10);
+
     console.log(`[Sync] Connecting to device at ${device.ipAddress}:${device.port} with retry logic...`);
     
     // Fetch logs with retry — picks the best result from multiple attempts
-    const { logs, bestCount, allAttemptCounts } = await fetchAttendancesWithRetry(
+    const { logs, bestCount, allAttemptCounts } = await getAttendancesWithRetry(
       device.ipAddress, device.port, 3
     );
     
@@ -739,7 +809,7 @@ const syncAttendance = async (req, res) => {
     let earliestDeviceLog = null;
     let latestDeviceLog = null;
     for (const log of logs.data) {
-      const rt = new Date(log.recordTime);
+      const rt = adjustZkTimeToUTC(new Date(log.recordTime), timezoneOffset);
       if (!isNaN(rt.getTime())) {
         if (!earliestDeviceLog || rt < earliestDeviceLog) earliestDeviceLog = rt;
         if (!latestDeviceLog || rt > latestDeviceLog) latestDeviceLog = rt;
@@ -755,13 +825,13 @@ const syncAttendance = async (req, res) => {
           {
             OR: [
               { employmentStatus: null },
-              { employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } }
+              { employmentStatus: { not: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily', 'Bhl', 'DAILY WORKER', 'Harian Lepas'] } } }
             ]
           },
           {
             OR: [
               { salaryCategory: null },
-              { salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } }
+              { salaryCategory: { not: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily', 'Bhl', 'DAILY WORKER', 'Harian Lepas'] } } }
             ]
           }
         ]
@@ -778,8 +848,8 @@ const syncAttendance = async (req, res) => {
       if (e.idNumber) empByCode[e.idNumber.trim()] = e;
     });
 
-    const { calculateLateness, resolveStatus, parsePenaltySettings } = require('../utils/lateCalculator');
-    
+    const { calculateLateness, resolveStatus, parsePenaltySettings, isManualCorrection, classifyDayScans } = require('../utils/lateCalculator');
+
     // Parse query params for date filtering
     const startDateQuery = req.query.start;
     const endDateQuery = req.query.end;
@@ -811,20 +881,18 @@ const syncAttendance = async (req, res) => {
     const grouped = {};
     for (const log of logs.data) {
       const pinStr = String(log.deviceUserId).trim();
-      const recordTime = new Date(log.recordTime);
+      const recordTime = adjustZkTimeToUTC(new Date(log.recordTime), timezoneOffset);
       
       // Skip records outside of filter range
       if (recordTime < filterStart || recordTime > filterEnd) continue;
       logsInRange++;
 
-      // FIX TIMEZONE BUG:
-      // toISOString() uses UTC. In WIB (UTC+7), 06:58 AM on May 1st becomes 23:58 PM on April 30th!
-      // This caused morning scans to be grouped into the PREVIOUS day, causing flipped check-ins.
-      // We must construct the date string using LOCAL TIME instead.
-      const year = recordTime.getFullYear();
-      const month = String(recordTime.getMonth() + 1).padStart(2, '0');
-      const day = String(recordTime.getDate()).padStart(2, '0');
-      const dateKey = `${year}-${month}-${day}`;
+      // TIMEZONE: derive the calendar date in Asia/Jakarta (WIB) directly so grouping
+      // no longer depends on the server's local timezone. recordTime is already a true
+      // UTC instant (from adjustZkTimeToUTC); getJakartaDateKey converts it back to the
+      // WIB calendar date. This fixes morning scans being grouped into the wrong day
+      // whenever the server is not running in WIB.
+      const dateKey = getJakartaDateKey(recordTime);
       
       const emp = empByFingerPrint[pinStr] || empByCode[pinStr];
       if (!emp) {
@@ -854,12 +922,12 @@ const syncAttendance = async (req, res) => {
     const recordsToCreate = [];
     const entries = Object.values(grouped);
     
-    // Fetch Saturday Half-Day settings
-    const settingsList = await prisma.settings.findMany();
     const { penaltyRules, roundingConfig } = parsePenaltySettings(settingsList);
     const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
     const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
     const globalGracePeriod = parseInt(settingsList.find(s => s.key === 'gracePeriod')?.value || '15', 10);
+    const defaultShiftStart = settingsList.find(s => s.key === 'defaultShiftStart')?.value || '08:00';
+    const defaultShiftEnd = settingsList.find(s => s.key === 'defaultShiftEnd')?.value || '17:00';
     
     // Fetch Overrides for all active employees within this sync date range
     const allOverrides = await prisma.employeeShiftOverride.findMany({
@@ -890,8 +958,8 @@ const syncAttendance = async (req, res) => {
       const overrideShift = overrideMap.get(`${emp.id}_${dStr}`);
       const effectiveShift = overrideShift || emp.shift || null;
 
-      const shiftStart = effectiveShift?.startTime || '08:00';
-      let shiftEnd = effectiveShift?.endTime || '17:00';
+      const shiftStart = effectiveShift?.startTime || defaultShiftStart;
+      let shiftEnd = effectiveShift?.endTime || defaultShiftEnd;
       const gracePeriod = effectiveShift ? effectiveShift.gracePeriod : globalGracePeriod;
       
       // Override shiftEnd untuk hari Sabtu sesuai shift protocol
@@ -905,63 +973,22 @@ const syncAttendance = async (req, res) => {
       
       // Sort all scans chronologically
       entry.scans.sort((a, b) => a.time - b.time);
-      
+
       const earliestScan = entry.scans[0];
-      const latestScan = entry.scans[entry.scans.length - 1];
-      const earliest = earliestScan.time;
-      const latest = latestScan.time;
       const earliestVerifyMode = earliestScan.verifyMode;
-      
-      let checkIn = null;
-      let checkOut = null;
-      
-      // Treat multiple scans within 60 minutes of each other as a single scan day
-      // to handle duplicate/double-tap scans when arriving or leaving.
-      const timeDiffMinutes = (latest - earliest) / (1000 * 60);
-      const isSingleScan = entry.scans.length === 1 || timeDiffMinutes < 60;
-      
-      if (isSingleScan) {
-        // === SMART SINGLE-SCAN DETECTION ===
-        // Calculate shift midpoint to determine if scan is check-in or check-out
-        const [startH, startM] = shiftStart.split(':').map(Number);
-        const [endH, endM] = shiftEnd.split(':').map(Number);
-        const shiftStartMinutes = startH * 60 + startM;
-        let shiftEndMinutes = endH * 60 + endM;
-        
-        if (shiftEndMinutes < shiftStartMinutes) {
-          shiftEndMinutes += 24 * 60; // Handle night shift crossing midnight
-        }
-        
-        const midpointMinutes = Math.floor((shiftStartMinutes + shiftEndMinutes) / 2);
-        
-        const scanHour = earliest.getHours();
-        const scanMinute = earliest.getMinutes();
-        let scanMinutes = scanHour * 60 + scanMinute;
-        
-        // If it's a night shift and the scan is in the morning (after midnight)
-        if (shiftEndMinutes > 1440 && scanMinutes < shiftStartMinutes - 6 * 60) {
-          scanMinutes += 24 * 60;
-        }
-        
-        if (scanMinutes <= midpointMinutes) {
-          // Scan sebelum/saat tengah shift → ini MASUK (checkIn)
-          checkIn = earliest;
-          checkOut = null;
-        } else {
-          // Scan setelah tengah shift → ini PULANG (checkOut)
-          checkIn = null;
-          checkOut = earliest;
-        }
-      } else {
-        // Multiple scans — paling awal = checkIn, paling akhir = checkOut
-        checkIn = earliest;
-        checkOut = latest;
-      }
-      
+
+      // Classify masuk/pulang via the shared helper so manual sync and auto-sync
+      // cron stay byte-for-byte identical (PERBAIKAN_ABSENSI.md #5).
+      const { checkIn, checkOut } = classifyDayScans(
+        entry.scans.map(s => s.time),
+        shiftStart,
+        shiftEnd
+      );
+
       // Calculate Lateness (only if checkIn exists)
-      const calc = checkIn 
-        ? calculateLateness(checkIn, shiftStart, gracePeriod, shiftEnd, roundingConfig)
-        : { lateMinutes: 0, status: 'Mangkir' };
+      const calc = checkIn
+        ? calculateLateness(checkIn, shiftStart, gracePeriod, shiftEnd, roundingConfig, penaltyRules)
+        : { lateMinutes: 0, status: 'MANGKIR' };
       
       // Resolve status using updated logic
       const status = resolveStatus(checkIn, checkOut, calc.status, entry.date, penaltyRules, shiftEnd, shiftStart);
@@ -994,17 +1021,19 @@ const syncAttendance = async (req, res) => {
     const isPreview = req.query.preview === 'true';
 
     if (isPreview) {
-      // Generate a unique sync token and cache the records on the backend
+      // Generate a unique sync token and persist to DB (survives server restarts)
       const syncToken = crypto.randomUUID();
-      attendanceSyncCache.set(syncToken, {
-        deviceId: parseInt(id),
-        records: recordsToCreate,
-        expiresAt: Date.now() + CACHE_TIMEOUT
+      const expiresAt = new Date(Date.now() + CACHE_TIMEOUT_MINUTES * 60 * 1000);
+      await prisma.settings.upsert({
+        where: { key: `sync_preview_${syncToken}` },
+        create: {
+          key: `sync_preview_${syncToken}`,
+          value: JSON.stringify({ deviceId: parseInt(id), records: recordsToCreate, expiresAt: expiresAt.toISOString() })
+        },
+        update: {
+          value: JSON.stringify({ deviceId: parseInt(id), records: recordsToCreate, expiresAt: expiresAt.toISOString() })
+        }
       });
-      // Automatically cleanup token after timeout
-      setTimeout(() => {
-        attendanceSyncCache.delete(syncToken);
-      }, CACHE_TIMEOUT);
 
       // Map back to a friendlier format for frontend display
       // Include employeeId so the frontend can send it back for direct commit
@@ -1072,6 +1101,13 @@ const syncAttendance = async (req, res) => {
           }
         });
 
+        // Protect manual HRD corrections from being overwritten by fingerprint sync
+        // (consistent with the auto-sync cron). Skip the record entirely if manual.
+        if (existingRecord && isManualCorrection(existingRecord)) {
+          console.log(`[Sync] Skipping emp ${record.employeeId} on ${record.date.toISOString().split('T')[0]} to protect manual HRD correction.`);
+          continue;
+        }
+
         let mergedCheckIn = record.checkIn;
         let mergedCheckOut = record.checkOut;
         let finalStatus = record.status;
@@ -1098,9 +1134,9 @@ const syncAttendance = async (req, res) => {
           }
 
           // Recalculate status and lateness based on merged times
-          const calc = mergedCheckIn 
-            ? calculateLateness(mergedCheckIn, record.shiftStart, record.gracePeriod, record.shiftEnd, roundingConfig)
-            : { lateMinutes: 0, status: 'Mangkir' };
+          const calc = mergedCheckIn
+            ? calculateLateness(mergedCheckIn, record.shiftStart, record.gracePeriod, record.shiftEnd, roundingConfig, penaltyRules)
+            : { lateMinutes: 0, status: 'MANGKIR' };
           
           lateMins = calc.lateMinutes;
           finalStatus = resolveStatus(mergedCheckIn, mergedCheckOut, calc.status, record.date, penaltyRules, record.shiftEnd, record.shiftStart);
@@ -1256,11 +1292,28 @@ const commitAttendance = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Token sinkronisasi diperlukan' });
     }
 
-    const cachedData = attendanceSyncCache.get(syncToken);
-    if (!cachedData) {
+    // Load cached preview data from DB (persists across server restarts)
+    const cacheEntry = await prisma.settings.findUnique({ where: { key: `sync_preview_${syncToken}` } });
+    if (!cacheEntry) {
       return res.status(400).json({ 
         success: false, 
-        message: 'Sesi sinkronisasi tidak valid atau telah kedaluwarsa. Silakan jalankan sync ulang.' 
+        message: 'Sesi sinkronisasi tidak valid atau telah kedaluwarsa. Silakan jalankan sync ulang dari mesin.' 
+      });
+    }
+    
+    let cachedData;
+    try {
+      cachedData = JSON.parse(cacheEntry.value);
+    } catch (e) {
+      return res.status(400).json({ success: false, message: 'Data sesi rusak. Silakan jalankan sync ulang.' });
+    }
+    
+    // Check if expired
+    if (new Date(cachedData.expiresAt) < new Date()) {
+      await prisma.settings.delete({ where: { key: `sync_preview_${syncToken}` } }).catch(() => {});
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Sesi sinkronisasi telah kedaluwarsa (15 menit). Silakan jalankan sync ulang.' 
       });
     }
 
@@ -1271,7 +1324,7 @@ const commitAttendance = async (req, res) => {
     const records = cachedData.records;
 
     if (!records || records.length === 0) {
-      attendanceSyncCache.delete(syncToken);
+      await prisma.settings.delete({ where: { key: `sync_preview_${syncToken}` } }).catch(() => {});
       return res.json({ success: true, message: 'Tidak ada data untuk disimpan.' });
     }
 
@@ -1280,8 +1333,8 @@ const commitAttendance = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Device not found' });
     }
 
-    const { calculateLateness, resolveStatus, parsePenaltySettings } = require('../utils/lateCalculator');
-    
+    const { calculateLateness, resolveStatus, parsePenaltySettings, isManualCorrection, classifyDayScans } = require('../utils/lateCalculator');
+
     // Fetch non-BHL employees
     const employees = await prisma.employee.findMany({
       where: {
@@ -1289,13 +1342,13 @@ const commitAttendance = async (req, res) => {
           {
             OR: [
               { employmentStatus: null },
-              { employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } }
+              { employmentStatus: { not: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily', 'Bhl', 'DAILY WORKER', 'Harian Lepas'] } } }
             ]
           },
           {
             OR: [
               { salaryCategory: null },
-              { salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } }
+              { salaryCategory: { not: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily', 'Bhl', 'DAILY WORKER', 'Harian Lepas'] } } }
             ]
           }
         ]
@@ -1311,6 +1364,8 @@ const commitAttendance = async (req, res) => {
     const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
     const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
     const globalGracePeriod = parseInt(settingsList.find(s => s.key === 'gracePeriod')?.value || '15', 10);
+    const defaultShiftStart = settingsList.find(s => s.key === 'defaultShiftStart')?.value || '08:00';
+    const defaultShiftEnd = settingsList.find(s => s.key === 'defaultShiftEnd')?.value || '17:00';
 
     let saved = 0;
     let failed = 0;
@@ -1331,12 +1386,17 @@ const commitAttendance = async (req, res) => {
 
         // Normalize date to UTC midnight for @db.Date compatibility
         const rawDate = new Date(record.date);
+        if (isNaN(rawDate.getTime())) {
+          console.error(`[Commit] Invalid date for record: ${JSON.stringify(record)}`);
+          failed++;
+          continue;
+        }
         const date = new Date(Date.UTC(rawDate.getFullYear(), rawDate.getMonth(), rawDate.getDate()));
 
         // Recalculate status based on employee's shift and overrides if not in record
-        const shiftStart = record.shiftStart || emp?.shift?.startTime || '08:00';
+        const shiftStart = record.shiftStart || emp?.shift?.startTime || defaultShiftStart;
         const gracePeriod = record.gracePeriod !== undefined ? record.gracePeriod : (emp?.shift?.gracePeriod || globalGracePeriod);
-        let shiftEnd = record.shiftEnd || emp?.shift?.endTime || '17:00';
+        let shiftEnd = record.shiftEnd || emp?.shift?.endTime || defaultShiftEnd;
 
         // Apply Saturday shift protocol fallback if not stored
         if (!record.shiftEnd && date.getUTCDay() === 6) {
@@ -1347,75 +1407,94 @@ const commitAttendance = async (req, res) => {
         }
 
         const calc = checkIn
-          ? calculateLateness(checkIn, shiftStart, gracePeriod, shiftEnd, roundingConfig)
-          : { lateMinutes: 0, status: 'Mangkir' };
+          ? calculateLateness(checkIn, shiftStart, gracePeriod, shiftEnd, roundingConfig, penaltyRules)
+          : { lateMinutes: 0, status: 'MANGKIR' };
         const status = resolveStatus(checkIn, checkOut, calc.status, date, penaltyRules, shiftEnd, shiftStart);
 
-        // Fetch existing record first to merge check-in and check-out times
-        const existingRecord = await prisma.attendance.findUnique({
-          where: {
-            employeeId_date: {
-              employeeId: employeeId,
-              date: date
+        // Preserve the verification mode captured during preview ('Fingered'/'Pinned'/
+        // 'Carded'/'Face Machine'); fall back to 'Fingerprint' for older preview tokens.
+        const recordMode = record.mode || 'Fingerprint';
+
+        // Concurrency-safe Read-Modify-Write transaction
+        let skippedManual = false;
+        await prisma.$transaction(async (tx) => {
+          const existingRecord = await tx.attendance.findUnique({
+            where: {
+              employeeId_date: {
+                employeeId: employeeId,
+                date: date
+              }
             }
+          });
+
+          // Protect manual HRD corrections from being overwritten (consistent with cron).
+          if (existingRecord && isManualCorrection(existingRecord)) {
+            skippedManual = true;
+            return;
           }
+
+          let mergedCheckIn = checkIn;
+          let mergedCheckOut = checkOut;
+          let finalStatus = status;
+          let lateMins = calc.lateMinutes;
+
+          if (existingRecord) {
+            if (checkIn) {
+              mergedCheckIn = existingRecord.checkIn 
+                ? (checkIn < existingRecord.checkIn ? checkIn : existingRecord.checkIn) 
+                : checkIn;
+            } else {
+              mergedCheckIn = existingRecord.checkIn;
+            }
+
+            if (checkOut) {
+              mergedCheckOut = existingRecord.checkOut 
+                ? (checkOut > existingRecord.checkOut ? checkOut : existingRecord.checkOut) 
+                : checkOut;
+            } else {
+              mergedCheckOut = existingRecord.checkOut;
+            }
+
+            // Recalculate based on merged
+            const calcMerged = mergedCheckIn
+              ? calculateLateness(mergedCheckIn, shiftStart, gracePeriod, shiftEnd, roundingConfig, penaltyRules)
+              : { lateMinutes: 0, status: 'MANGKIR' };
+            lateMins = calcMerged.lateMinutes;
+            finalStatus = resolveStatus(mergedCheckIn, mergedCheckOut, calcMerged.status, date, penaltyRules, shiftEnd, shiftStart);
+          }
+
+          await tx.attendance.upsert({
+            where: {
+              employeeId_date: {
+                employeeId: employeeId,
+                date: date
+              }
+            },
+            create: {
+              employeeId,
+              date,
+              checkIn: mergedCheckIn,
+              checkOut: mergedCheckOut,
+              status: finalStatus,
+              lateMinutes: lateMins,
+              mode: recordMode,
+              source: 'fingerprint'
+            },
+            update: {
+              checkIn: mergedCheckIn || undefined,
+              checkOut: mergedCheckOut || undefined,
+              status: finalStatus,
+              lateMinutes: lateMins,
+              mode: recordMode,
+              source: 'fingerprint'
+            }
+          });
         });
 
-        let mergedCheckIn = checkIn;
-        let mergedCheckOut = checkOut;
-        let finalStatus = status;
-        let lateMins = calc.lateMinutes;
-
-        if (existingRecord) {
-          if (checkIn) {
-            mergedCheckIn = existingRecord.checkIn 
-              ? (checkIn < existingRecord.checkIn ? checkIn : existingRecord.checkIn) 
-              : checkIn;
-          } else {
-            mergedCheckIn = existingRecord.checkIn;
-          }
-
-          if (checkOut) {
-            mergedCheckOut = existingRecord.checkOut 
-              ? (checkOut > existingRecord.checkOut ? checkOut : existingRecord.checkOut) 
-              : checkOut;
-          } else {
-            mergedCheckOut = existingRecord.checkOut;
-          }
-
-          // Recalculate based on merged
-          const calcMerged = mergedCheckIn
-            ? calculateLateness(mergedCheckIn, shiftStart, gracePeriod, shiftEnd, roundingConfig)
-            : { lateMinutes: 0, status: 'Mangkir' };
-          lateMins = calcMerged.lateMinutes;
-          finalStatus = resolveStatus(mergedCheckIn, mergedCheckOut, calcMerged.status, date, penaltyRules, shiftEnd, shiftStart);
+        if (skippedManual) {
+          console.log(`[Commit] Skipping emp ${employeeId} on ${date.toISOString().split('T')[0]} to protect manual HRD correction.`);
+          continue;
         }
-
-        // Concurrency-safe Upsert
-        await prisma.attendance.upsert({
-          where: {
-            employeeId_date: {
-              employeeId: employeeId,
-              date: date
-            }
-          },
-          create: {
-            employeeId,
-            date,
-            checkIn: mergedCheckIn,
-            checkOut: mergedCheckOut,
-            status: finalStatus,
-            lateMinutes: lateMins,
-            mode: 'Fingerprint'
-          },
-          update: {
-            checkIn: mergedCheckIn || undefined,
-            checkOut: mergedCheckOut || undefined,
-            status: finalStatus,
-            lateMinutes: lateMins,
-            mode: 'Fingerprint'
-          }
-        });
 
         saved++;
       } catch (e) {
@@ -1430,8 +1509,8 @@ const commitAttendance = async (req, res) => {
       data: { lastSync: new Date(), status: 'ONLINE' }
     });
 
-    // Cleanup cache
-    attendanceSyncCache.delete(syncToken);
+    // Cleanup DB cache entry
+    await prisma.settings.delete({ where: { key: `sync_preview_${syncToken}` } }).catch(() => {});
 
     // Audit log
     await recordAuditLog({
@@ -1475,6 +1554,52 @@ const clearDeviceLogs = async (req, res) => {
 
     zkInstance = new ZKLib(device.ipAddress, device.port, 15000, 15000);
     await zkInstance.createSocket();
+    
+    // Fetch logs before clearing to create a backup (L-20)
+    let logsCount = 0;
+    try {
+      const logs = await zkInstance.getAttendances();
+      if (logs && logs.data) {
+        let timezoneOffset = 420;
+        try {
+          const tzSetting = await prisma.settings.findUnique({ where: { key: 'timezoneOffset' } });
+          if (tzSetting) timezoneOffset = parseInt(tzSetting.value, 10);
+        } catch (e) {
+          console.warn('[Device] Failed to fetch timezoneOffset setting:', e.message);
+        }
+
+        logs.data.forEach(log => {
+          log.recordTime = adjustZkTimeToUTC(new Date(log.recordTime), timezoneOffset);
+        });
+
+        logsCount = logs.data.length;
+        const backupKey = `device_clear_backup_${device.id}_${Date.now()}`;
+        await prisma.settings.upsert({
+          where: { key: backupKey },
+          create: {
+            key: backupKey,
+            value: JSON.stringify({
+              deviceId: device.id,
+              deviceName: device.name,
+              clearedAt: new Date().toISOString(),
+              records: logs.data
+            })
+          },
+          update: {
+            value: JSON.stringify({
+              deviceId: device.id,
+              deviceName: device.name,
+              clearedAt: new Date().toISOString(),
+              records: logs.data
+            })
+          }
+        });
+        console.log(`[Device] Backup created successfully under key: ${backupKey}. Total records: ${logsCount}`);
+      }
+    } catch (backupErr) {
+      console.warn(`[Device] Failed to create backup before clearing: ${backupErr.message}`);
+    }
+
     await zkInstance.clearAttendanceLog();
 
     await recordAuditLog({
@@ -1487,7 +1612,8 @@ const clearDeviceLogs = async (req, res) => {
       details: JSON.stringify({
         message: `Cleared all attendance logs from device ${device.name}`,
         device: device.name,
-        ipAddress: device.ipAddress
+        ipAddress: device.ipAddress,
+        recordsCleared: logsCount
       }),
       ipAddress: req.ip
     });
@@ -1516,7 +1642,8 @@ const getDeviceSyncLogs = async (req, res) => {
       orderBy: {
         createdAt: 'desc'
       },
-      take: 10
+      take: parseInt(req.query.limit) || 20,
+      skip: parseInt(req.query.offset) || 0
     });
     
     const parsedLogs = logs.map(log => {
@@ -1535,7 +1662,16 @@ const getDeviceSyncLogs = async (req, res) => {
       };
     });
     
-    res.json({ success: true, data: parsedLogs });
+    const total = await prisma.auditLog.count({
+      where: {
+        entity: 'Device',
+        action: {
+          in: ['SYNC', 'TEST_CONNECTION']
+        }
+      }
+    });
+
+    res.json({ success: true, data: parsedLogs, total });
   } catch (err) {
     handleControllerError(res, err, 'deviceController');
   }

@@ -4,9 +4,7 @@ const { recordAuditLog } = require('./auditLogController');
 const { handleControllerError } = require('../middleware/validate');
 const crypto = require('crypto');
 
-// Cache timeout for attendance sync preview
-const attendanceSyncCache = new Map();
-const CACHE_TIMEOUT = 15 * 60 * 1000;
+// (removed dead code: attendanceSyncCache was declared but never used)
 
 // GET /api/v1/bridge/health
 const getHealth = (req, res) => {
@@ -98,6 +96,10 @@ const postCheckin = async (req, res) => {
       }
     });
 
+    if (!employee) {
+      return res.status(404).json({ success: false, message: 'Karyawan tidak ditemukan' });
+    }
+
     const parseTime = (tString, defaultVal) => {
       if (!tString) return defaultVal;
       const [h, min] = tString.split(':').map(Number);
@@ -111,11 +113,18 @@ const postCheckin = async (req, res) => {
     let isCheckOutPeriod = false;
     let shiftStartMin = null;
 
+    // Load default shift from DB Settings (M-15)
+    const settingsList = await prisma.settings.findMany();
+    const defaultShiftStart = settingsList.find(s => s.key === 'defaultShiftStart')?.value || '08:00';
+    const defaultShiftEnd = settingsList.find(s => s.key === 'defaultShiftEnd')?.value || '17:00';
+    const defStartMin = parseTime(defaultShiftStart, 8 * 60);
+    const defEndMin = parseTime(defaultShiftEnd, 17 * 60);
+
     const activeShift = employee?.shiftOverrides?.length > 0 ? employee.shiftOverrides[0].shift : employee?.shift;
     
     if (activeShift) {
-      shiftStartMin = parseTime(activeShift.startTime, 8 * 60);
-      const shiftEndMin = parseTime(activeShift.endTime, 17 * 60);
+      shiftStartMin = parseTime(activeShift.startTime, defStartMin);
+      const shiftEndMin = parseTime(activeShift.endTime, defEndMin);
       
       const inWindowStart = shiftStartMin - (2 * 60);
       const inWindowEnd = shiftStartMin + (4 * 60);
@@ -139,9 +148,11 @@ const postCheckin = async (req, res) => {
       return res.json({ success: true, ignored: true, message: 'Outside scheduled capture times (Shift / Global)' });
     }
 
+    // Fetch grace period from active shift, default 15 min
+    const gracePeriodMin = activeShift?.gracePeriod ?? 15;
     let lateMinutes = 0;
     if (status === 'LATE' && isCheckInPeriod && shiftStartMin) {
-      lateMinutes = Math.max(0, m - shiftStartMin);
+      lateMinutes = Math.max(0, m - shiftStartMin - gracePeriodMin);
     }
 
     const existing = await prisma.attendance.findUnique({
@@ -326,8 +337,8 @@ const postEnrollmentSave = async (req, res) => {
       }
     });
 
-    const aiHost = process.env.AI_ENGINE_URL || 'http://127.0.0.1:8002';
-    fetch(`${aiHost}/cache/reload`, { method: 'POST' }).catch(() => {});
+    const { reloadFaceCache } = require('../utils/aiEngine');
+    reloadFaceCache();
 
     res.json({ 
       success: true, 
@@ -529,12 +540,18 @@ const getUnknownAlerts = async (req, res) => {
     if (resolved !== undefined) where.resolved = resolved === 'true';
 
     if (startDate || endDate) {
-      where.eventTime = {};
-      if (startDate) where.eventTime.gte = new Date(startDate);
-      if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        where.eventTime.lte = end;
+      const gteDate = startDate ? new Date(startDate) : null;
+      const lteDate = endDate ? new Date(endDate) : null;
+      const timeCond = {};
+      if (gteDate && !isNaN(gteDate.getTime())) {
+        timeCond.gte = gteDate;
+      }
+      if (lteDate && !isNaN(lteDate.getTime())) {
+        lteDate.setHours(23, 59, 59, 999);
+        timeCond.lte = lteDate;
+      }
+      if (Object.keys(timeCond).length > 0) {
+        where.eventTime = timeCond;
       }
     }
 
@@ -603,12 +620,18 @@ const deleteUnknownAlertsBulk = async (req, res) => {
     }
 
     if (startDate || endDate) {
-      where.eventTime = {};
-      if (startDate) where.eventTime.gte = new Date(startDate);
-      if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        where.eventTime.lte = end;
+      const gteDate = startDate ? new Date(startDate) : null;
+      const lteDate = endDate ? new Date(endDate) : null;
+      const timeCond = {};
+      if (gteDate && !isNaN(gteDate.getTime())) {
+        timeCond.gte = gteDate;
+      }
+      if (lteDate && !isNaN(lteDate.getTime())) {
+        lteDate.setHours(23, 59, 59, 999);
+        timeCond.lte = lteDate;
+      }
+      if (Object.keys(timeCond).length > 0) {
+        where.eventTime = timeCond;
       }
     }
 
@@ -668,9 +691,18 @@ const getFaceEvents = async (req, res) => {
     const where = {};
     if (cameraId) where.cameraId = cameraId;
     if (startDate || endDate) {
-      where.eventTime = {};
-      if (startDate) where.eventTime.gte = new Date(startDate);
-      if (endDate) where.eventTime.lte = new Date(endDate);
+      const gteDate = startDate ? new Date(startDate) : null;
+      const lteDate = endDate ? new Date(endDate) : null;
+      const timeCond = {};
+      if (gteDate && !isNaN(gteDate.getTime())) {
+        timeCond.gte = gteDate;
+      }
+      if (lteDate && !isNaN(lteDate.getTime())) {
+        timeCond.lte = lteDate;
+      }
+      if (Object.keys(timeCond).length > 0) {
+        where.eventTime = timeCond;
+      }
     }
 
     const events = await prisma.faceEvent.findMany({

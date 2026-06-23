@@ -1,11 +1,13 @@
 const cron = require('node-cron');
 const prisma = require('../prismaClient');
 const ZKLib = require('node-zklib');
-const { calculateLateness, resolveStatus, parsePenaltySettings } = require('./lateCalculator');
+const zkHelper = require('./zkHelper');
+const { calculateLateness, resolveStatus, parsePenaltySettings, isManualCorrection, classifyDayScans } = require('./lateCalculator');
+const { adjustZkTimeToUTC, getJakartaDateKey } = require('./dateHelper');
 
-// Runs every 5 minutes to check if any device needs auto-sync
+// Runs every minute to check if any device needs auto-sync
 const startCronJobs = () => {
-  cron.schedule('*/5 * * * *', async () => {
+  cron.schedule('* * * * *', async () => {
     try {
       const now = new Date();
       const currentHourStr = now.getHours().toString().padStart(2, '0');
@@ -26,10 +28,9 @@ const startCronJobs = () => {
       for (const device of devices) {
         console.log(`[Cron] Auto-syncing attendance for device ID: ${device.id} (${device.name})`);
         try {
-          const zkInstance = new ZKLib(device.ipAddress, device.port, 60000, 30000);
-          await zkInstance.createSocket();
-          const logs = await zkInstance.getAttendances();
-          await zkInstance.disconnect();
+          const { logs, bestCount } = await zkHelper.getAttendancesWithRetry(
+            device.ipAddress, device.port, 3
+          );
 
           if (!logs || !logs.data || logs.data.length === 0) {
             console.log(`[Cron] No new logs found for device ID: ${device.id}`);
@@ -42,19 +43,46 @@ const startCronJobs = () => {
                 {
                   OR: [
                     { employmentStatus: null },
-                    { employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } }
+                    { employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily', 'Bhl', 'DAILY WORKER', 'Harian Lepas'] } }
                   ]
                 },
                 {
                   OR: [
                     { salaryCategory: null },
-                    { salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } }
+                    { salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily', 'Bhl', 'DAILY WORKER', 'Harian Lepas'] } }
                   ]
                 }
               ]
             },
             include: { shift: true }
           });
+
+          // Fetch Overrides for all active employees within today's range (last 30 days buffer)
+          const filterStart = new Date();
+          filterStart.setDate(filterStart.getDate() - 30);
+          filterStart.setHours(0, 0, 0, 0);
+          const filterEnd = new Date();
+          filterEnd.setHours(23, 59, 59, 999);
+
+          const allOverrides = await prisma.employeeShiftOverride.findMany({
+            where: {
+              startDate: { lte: filterEnd },
+              endDate: { gte: filterStart }
+            },
+            include: { shift: true }
+          });
+
+          const overrideMap = new Map();
+          for (const ov of allOverrides) {
+            let d = new Date(ov.startDate);
+            const endD = new Date(ov.endDate);
+            while (d <= endD) {
+              const dStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+              overrideMap.set(`${ov.employeeId}_${dStr}`, ov.shift);
+              d.setUTCDate(d.getUTCDate() + 1);
+            }
+          }
+
           const empByFingerPrint = {};
           const empByCode = {};
           employees.forEach(e => {
@@ -68,30 +96,44 @@ const startCronJobs = () => {
           const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
           const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
           const globalGracePeriod = parseInt(settingsList.find(s => s.key === 'gracePeriod')?.value || '15', 10);
+          const defaultShiftStart = settingsList.find(s => s.key === 'defaultShiftStart')?.value || '08:00';
+          const defaultShiftEnd = settingsList.find(s => s.key === 'defaultShiftEnd')?.value || '17:00';
 
-          // Only process logs from today (auto-sync is daily, no need to reprocess old data)
-          // lastSync is used as a cutoff: process logs since last sync or since start of today
+          // Dynamically compute cutoff based on last sync time with a 2-hour buffer.
+          // Capped to a maximum of 30 days ago to keep operations performant.
           const lastSyncDate = device.lastSync ? new Date(device.lastSync) : null;
-          const todayStart = new Date();
-          todayStart.setHours(0, 0, 0, 0);
-          // Use the later of: start of today OR last sync time
-          const cutoffTime = lastSyncDate && lastSyncDate > todayStart ? lastSyncDate : todayStart;
+          let cutoffTime;
+          if (lastSyncDate) {
+            cutoffTime = new Date(lastSyncDate.getTime() - 2 * 60 * 60 * 1000); // 2 hours safety buffer
+            const maxBack = new Date();
+            maxBack.setDate(maxBack.getDate() - 30);
+            maxBack.setHours(0, 0, 0, 0);
+            if (cutoffTime < maxBack) {
+              cutoffTime = maxBack;
+            }
+          } else {
+            // Default to 7 days ago if first time sync
+            cutoffTime = new Date();
+            cutoffTime.setDate(cutoffTime.getDate() - 7);
+            cutoffTime.setHours(0, 0, 0, 0);
+          }
 
           console.log(`[Cron] Filtering logs newer than: ${cutoffTime.toISOString()}`);
+
+          const timezoneOffsetSetting = settingsList.find(s => s.key === 'timezoneOffset')?.value || '420';
+          const timezoneOffset = parseInt(timezoneOffsetSetting, 10);
 
           const grouped = {};
           for (const log of logs.data) {
             const pinStr = String(log.deviceUserId).trim();
-            const recordTime = new Date(log.recordTime);
+            const recordTime = adjustZkTimeToUTC(new Date(log.recordTime), timezoneOffset);
             
             // Skip records older than cutoff (yesterday and before)
             if (recordTime < cutoffTime) continue;
 
-            // Extract local date components to avoid timezone shifting
-            const year = recordTime.getFullYear();
-            const month = String(recordTime.getMonth() + 1).padStart(2, '0');
-            const day = String(recordTime.getDate()).padStart(2, '0');
-            const dateKey = `${year}-${month}-${day}`;
+            // Derive the WIB calendar date directly so grouping does not depend on the
+            // server's local timezone (recordTime is already a true UTC instant).
+            const dateKey = getJakartaDateKey(recordTime);
             
             const emp = empByFingerPrint[pinStr] || empByCode[pinStr];
             if (!emp) continue;
@@ -106,9 +148,12 @@ const startCronJobs = () => {
           const recordsToCreate = [];
           for (const entry of Object.values(grouped)) {
             const emp = entry.employee;
-            const empShift = emp.shift || null;
-            const shiftStart = empShift?.startTime || '08:00';
-            let shiftEnd = empShift?.endTime || '17:00';
+            const dStr = `${entry.date.getUTCFullYear()}-${String(entry.date.getUTCMonth()+1).padStart(2,'0')}-${String(entry.date.getUTCDate()).padStart(2,'0')}`;
+            const overrideShift = overrideMap.get(`${emp.id}_${dStr}`);
+            const empShift = overrideShift || emp.shift || null;
+
+            const shiftStart = empShift?.startTime || defaultShiftStart;
+            let shiftEnd = empShift?.endTime || defaultShiftEnd;
             const gracePeriod = empShift ? empShift.gracePeriod : globalGracePeriod;
             
             // Override shiftEnd for Saturday if Saturday protocols match
@@ -120,56 +165,12 @@ const startCronJobs = () => {
               }
             }
             
-            // Sort all scans chronologically
-            entry.scans.sort((a, b) => a - b);
-            
-            const earliest = entry.scans[0];
-            const latest = entry.scans[entry.scans.length - 1];
-            
-            let checkIn = null;
-            let checkOut = null;
-            
-            // Treat multiple scans within 60 minutes of each other as a single scan day
-            // to handle duplicate/double-tap scans when arriving or leaving.
-            const timeDiffMinutes = (latest - earliest) / (1000 * 60);
-            const isSingleScan = entry.scans.length === 1 || timeDiffMinutes < 60;
-            
-            if (isSingleScan) {
-              // === SMART SINGLE-SCAN DETECTION ===
-              const [startH, startM] = shiftStart.split(':').map(Number);
-              const [endH, endM] = shiftEnd.split(':').map(Number);
-              const shiftStartMinutes = startH * 60 + startM;
-              let shiftEndMinutes = endH * 60 + endM;
-              
-              if (shiftEndMinutes < shiftStartMinutes) {
-                shiftEndMinutes += 24 * 60; // Handle night shift crossing midnight
-              }
-              
-              const midpointMinutes = Math.floor((shiftStartMinutes + shiftEndMinutes) / 2);
-              
-              const scanHour = earliest.getHours();
-              const scanMinute = earliest.getMinutes();
-              let scanMinutes = scanHour * 60 + scanMinute;
-              
-              // If it's a night shift and the scan is in the morning (after midnight)
-              if (shiftEndMinutes > 1440 && scanMinutes < shiftStartMinutes - 6 * 60) {
-                scanMinutes += 24 * 60;
-              }
-              
-              if (scanMinutes <= midpointMinutes) {
-                checkIn = earliest;
-                checkOut = null;
-              } else {
-                checkIn = null;
-                checkOut = earliest;
-              }
-            } else {
-              checkIn = earliest;
-              checkOut = latest;
-            }
-            
+            // Classify masuk/pulang via the shared helper so auto-sync cron and
+            // manual sync stay byte-for-byte identical (PERBAIKAN_ABSENSI.md #5).
+            const { checkIn, checkOut } = classifyDayScans(entry.scans, shiftStart, shiftEnd);
+
             const calc = checkIn 
-              ? calculateLateness(checkIn, shiftStart, gracePeriod, shiftEnd, roundingConfig)
+              ? calculateLateness(checkIn, shiftStart, gracePeriod, shiftEnd, roundingConfig, penaltyRules)
               : { lateMinutes: 0, status: 'MANGKIR' };
             
             const status = resolveStatus(checkIn, checkOut, calc.status, entry.date, penaltyRules, shiftEnd, shiftStart);
@@ -198,11 +199,7 @@ const startCronJobs = () => {
 
               if (existing) {
                 // If it is a manual correction by HRD, protect it and skip sync
-                const isManual = existing.mode === 'Manual' || 
-                                 existing.mode === 'Manual (SPL)' || 
-                                 existing.mode === 'Manual (BHL)' || 
-                                 (existing.notes && existing.notes.includes('HRD'));
-                if (isManual) {
+                if (isManualCorrection(existing)) {
                   console.log(`[Cron] Skipping sync for employee ${record.employeeId} on ${record.date.toISOString().split('T')[0]} to protect manual HRD correction.`);
                   continue;
                 }
@@ -229,7 +226,7 @@ const startCronJobs = () => {
 
                 // Recalculate status based on merged times
                 const calcMerged = mergedCheckIn
-                  ? calculateLateness(mergedCheckIn, record.shiftStart, record.gracePeriod, record.shiftEnd, roundingConfig)
+                  ? calculateLateness(mergedCheckIn, record.shiftStart, record.gracePeriod, record.shiftEnd, roundingConfig, penaltyRules)
                   : { lateMinutes: 0, status: 'MANGKIR' };
                 const mergedStatus = resolveStatus(mergedCheckIn, mergedCheckOut, calcMerged.status, record.date, penaltyRules, record.shiftEnd, record.shiftStart);
 
@@ -458,6 +455,72 @@ const startCronJobs = () => {
       }
     } catch (err) {
       console.error('[Cron] Error checking expiring PKWT contracts:', err);
+    }
+  });
+
+  // 4. Auto Backup Scheduler (Runs daily at 00:00 midnight)
+  cron.schedule('0 0 * * *', async () => {
+    console.log('[Cron] Checking Auto Backup requirements...');
+    try {
+      const keys = ['auto_backup_enabled', 'auto_backup_schedule', 'auto_backup_last_run'];
+      const settings = await prisma.settings.findMany({
+        where: { key: { in: keys } }
+      });
+
+      const config = {
+        auto_backup_enabled: 'false',
+        auto_backup_schedule: 'daily',
+        auto_backup_last_run: '-'
+      };
+
+      settings.forEach(s => {
+        config[s.key] = s.value;
+      });
+
+      if (config.auto_backup_enabled !== 'true') {
+        console.log('[Cron] Auto Backup is disabled.');
+        return;
+      }
+
+      const now = new Date();
+      let shouldBackup = false;
+
+      if (config.auto_backup_schedule === 'daily') {
+        shouldBackup = true;
+      } else if (config.auto_backup_schedule === 'weekly') {
+        if (now.getDay() === 0) { // Sunday
+          shouldBackup = true;
+        } else if (config.auto_backup_last_run !== '-') {
+          const lastRun = new Date(config.auto_backup_last_run);
+          const diffTime = Math.abs(now - lastRun);
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          if (diffDays >= 7) shouldBackup = true;
+        } else {
+          shouldBackup = true;
+        }
+      } else if (config.auto_backup_schedule === 'monthly') {
+        if (now.getDate() === 1) { // 1st day of month
+          shouldBackup = true;
+        } else if (config.auto_backup_last_run !== '-') {
+          const lastRun = new Date(config.auto_backup_last_run);
+          if (now.getMonth() !== lastRun.getMonth() || now.getFullYear() !== lastRun.getFullYear()) {
+            shouldBackup = true;
+          }
+        } else {
+          shouldBackup = true;
+        }
+      }
+
+      if (shouldBackup) {
+        console.log('[Cron] Triggering Scheduled Auto Backup...');
+        const { triggerAutoBackup } = require('../controllers/backupController');
+        const filename = await triggerAutoBackup();
+        console.log(`[Cron] Scheduled Auto Backup completed successfully. File: ${filename}`);
+      } else {
+        console.log('[Cron] Scheduled Auto Backup is not due today.');
+      }
+    } catch (err) {
+      console.error('[Cron] Error in Auto Backup scheduler:', err.message);
     }
   });
 };
