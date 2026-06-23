@@ -9,6 +9,7 @@ import DirectorLayout from './components/layout/DirectorLayout';
 import DirectorDashboard from './pages/director/DirectorDashboard';
 import DirectorAttendance from './pages/director/DirectorAttendance';
 import DirectorLeave from './pages/director/DirectorLeave';
+import DirectorPayroll from './pages/director/DirectorPayroll';
 import ManagerDashboard from './pages/manager/ManagerDashboard';
 import ManagerAttendance from './pages/manager/ManagerAttendance';
 import ManagerLeave from './pages/manager/ManagerLeave';
@@ -57,6 +58,9 @@ const Claims = React.lazy(() => import('./pages/employee/Claims'));
 const AdminClaims = React.lazy(() => import('./pages/admin/Claims'));
 const AdminProfileRequests = React.lazy(() => import('./pages/admin/AdminProfileRequests'));
 const KPIEvaluation = React.lazy(() => import('./pages/manager/KPIEvaluation'));
+const WarningLetters = React.lazy(() => import('./pages/admin/WarningLetters'));
+const Paklaring = React.lazy(() => import('./pages/admin/Paklaring'));
+const Translator = React.lazy(() => import('./pages/admin/Translator'));
 
 import { usePermission } from './hooks/usePermission';
 import { authAPI } from './services/api';
@@ -175,6 +179,9 @@ function App() {
             <Route path="announcements" element={<PermissionRoute menuKey="announcements"><Announcements /></PermissionRoute>} />
             <Route path="face-check" element={<PermissionRoute menuKey="face-check"><AdminFaceCheck /></PermissionRoute>} />
             <Route path="settings" element={<PermissionRoute menuKey="settings"><Settings /></PermissionRoute>} />
+            <Route path="warning-letters" element={<PermissionRoute menuKey="warning-letters"><WarningLetters /></PermissionRoute>} />
+            <Route path="paklaring" element={<PermissionRoute menuKey="paklaring"><Paklaring /></PermissionRoute>} />
+            <Route path="translator" element={<PermissionRoute menuKey="translator"><Translator /></PermissionRoute>} />
             <Route path="shift-roster" element={<PermissionRoute menuKey="shift-roster"><ShiftRoster /></PermissionRoute>} />
             <Route path="devices" element={<PermissionRoute menuKey="devices"><DeviceSettings /></PermissionRoute>} />
             <Route path="fingerprint" element={<PermissionRoute menuKey="fingerprint"><FingerprintManagement /></PermissionRoute>} />
@@ -194,10 +201,13 @@ function App() {
           <Route path="/director" element={<DirectorRoute><DirectorLayout /></DirectorRoute>}>
             <Route index element={<DirectorDashboard />} />
             <Route path="attendance" element={<DirectorAttendance />} />
+            <Route path="leave" element={<DirectorLeave />} />
+            <Route path="payroll" element={<DirectorPayroll />} />
             <Route path="employees" element={<Employees isReadOnly={true} />} />
             <Route path="contracts" element={<EmployeeContracts isReadOnly={true} />} />
             <Route path="training" element={<EmployeeTraining isReadOnly={true} />} />
             <Route path="terminated" element={<EmployeeTerminated isReadOnly={true} />} />
+            <Route path="warning-letters" element={<WarningLetters isReadOnly={true} />} />
             <Route path="audit-log" element={<AuditLog />} />
             <Route path="kpi" element={<KPIEvaluation />} />
           </Route>
@@ -206,10 +216,12 @@ function App() {
           <Route path="/manager" element={<ManagerRoute><ManagerLayout /></ManagerRoute>}>
             <Route index element={<ManagerDashboard />} />
             <Route path="attendance" element={<ManagerAttendance />} />
+            <Route path="leave" element={<ManagerLeave />} />
             <Route path="employees" element={<Employees isReadOnly={true} />} />
             <Route path="contracts" element={<EmployeeContracts isReadOnly={true} />} />
             <Route path="training" element={<EmployeeTraining isReadOnly={true} />} />
             <Route path="terminated" element={<EmployeeTerminated isReadOnly={true} />} />
+            <Route path="warning-letters" element={<WarningLetters isReadOnly={true} />} />
             <Route path="audit-log" element={<AuditLog />} />
             <Route path="kpi" element={<KPIEvaluation />} />
           </Route>

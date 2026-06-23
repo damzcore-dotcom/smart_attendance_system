@@ -28,7 +28,7 @@ import {
 import { verifyRealLocation } from '../../utils/geoUtils';
 import Webcam from 'react-webcam';
 import { loadFaceModels, faceapi, areModelsLoaded } from '../../utils/faceModelLoader';
-import { encryptData, decryptData } from '../../utils/cryptoUtils';
+import { syncPendingAttendance, queuePendingRecord } from '../../utils/offlineSync';
 
 const Scan = () => {
   const navigate = useNavigate();
@@ -71,79 +71,10 @@ const Scan = () => {
     return 'Liveness terverifikasi! Tahan posisi...';
   };
 
-  const syncOfflineData = async () => {
-    const rawPending = localStorage.getItem('pending_sync');
-    if (!rawPending) return;
-
-    try {
-      let pending = [];
-      const secret = sessionStorage.getItem('accessToken') || 'fallback-secret';
-      try {
-        const decryptedStr = await decryptData(rawPending, secret);
-        pending = JSON.parse(decryptedStr);
-      } catch (err) {
-        console.error('Failed to decrypt pending sync data:', err);
-        try {
-          pending = JSON.parse(rawPending);
-        } catch {
-          localStorage.removeItem('pending_sync');
-          return;
-        }
-      }
-
-      if (pending.length === 0) return;
-
-      console.log(`Syncing ${pending.length} offline attendance records...`);
-      const remaining = [];
-
-      for (const record of pending) {
-        try {
-          if (record.type === 'IN') {
-            await attendanceAPI.checkIn(
-              record.employeeId,
-              record.mode,
-              record.lat,
-              record.lng,
-              record.accuracy,
-              record.timestamp,
-              record.photoData
-            );
-          } else {
-            await attendanceAPI.checkOut(
-              record.employeeId,
-              record.photoData,
-              record.lat,
-              record.lng
-            );
-          }
-        } catch (err) {
-          console.error('Failed to sync record:', err);
-          remaining.push(record);
-        }
-      }
-
-      if (remaining.length > 0) {
-        const encrypted = await encryptData(JSON.stringify(remaining), secret);
-        localStorage.setItem('pending_sync', encrypted);
-      } else {
-        localStorage.removeItem('pending_sync');
-        console.log('All offline attendance records synced successfully!');
-      }
-    } catch (err) {
-      console.error('Sync offline data error:', err);
-    }
-  };
-
-  // Auto-sync when online
+  // Auto-sync offline queue when online (shared util — see utils/offlineSync.js)
   useEffect(() => {
-    if (navigator.onLine) {
-      syncOfflineData();
-    }
-
-    const handleOnline = () => {
-      syncOfflineData();
-    };
-
+    syncPendingAttendance();
+    const handleOnline = () => syncPendingAttendance();
     window.addEventListener('online', handleOnline);
     return () => window.removeEventListener('online', handleOnline);
   }, []);
@@ -267,27 +198,10 @@ const Scan = () => {
     mutationFn: async () => {
       const snap = lastImageSrcRef.current;
       
-      // Offline Mode Fallback
+      // Offline Mode Fallback — queue via shared util (encrypted)
       if (!navigator.onLine) {
-        const rawPending = localStorage.getItem('pending_sync');
-        let pending = [];
-        const secret = sessionStorage.getItem('accessToken') || 'fallback-secret';
-
-        if (rawPending) {
-          try {
-            const decryptedStr = await decryptData(rawPending, secret);
-            pending = JSON.parse(decryptedStr);
-          } catch (err) {
-            try {
-              pending = JSON.parse(rawPending);
-            } catch {
-              pending = [];
-            }
-          }
-        }
-
         const c = coordsRef.current;
-        pending.push({
+        await queuePendingRecord({
           type: isCheckOut ? 'OUT' : 'IN',
           employeeId: empId,
           mode: 'Face ID',
@@ -297,9 +211,6 @@ const Scan = () => {
           timestamp: c?.timestamp || Date.now(),
           photoData: snap
         });
-
-        const encrypted = await encryptData(JSON.stringify(pending), secret);
-        localStorage.setItem('pending_sync', encrypted);
         return { message: 'Offline! Absen disimpan di HP. Segera dapatkan sinyal agar data terkirim otomatis.', offline: true };
       }
 

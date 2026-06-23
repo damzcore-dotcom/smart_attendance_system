@@ -1,6 +1,8 @@
 const prisma = require('../prismaClient');
 const { resolveStatus, parsePenaltySettings } = require('../utils/lateCalculator');
 const { handleControllerError } = require('../middleware/validate');
+const { toUTCMidnight, getUTCToday, getUTCStartOfWeek, getUTCStartOfMonth, getUTCEndOfDay } = require('../utils/dateHelper');
+
 
 // GET /api/direktur/stats — Summary statistics
 const getStats = async (req, res) => {
@@ -39,22 +41,20 @@ const getAttendance = async (req, res) => {
     let dateFilter = {};
     const now = new Date();
     if (period === 'today') {
-      const start = new Date(now); start.setHours(0,0,0,0);
-      const end = new Date(now); end.setHours(23,59,59,999);
-      dateFilter = { gte: start, lte: end };
+      const today = getUTCToday();
+      const tomorrow = new Date(today);
+      tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+      dateFilter = { gte: today, lt: tomorrow };
     } else if (period === 'week') {
-      const day = now.getDay();
-      const diff = now.getDate() - (day === 0 ? 6 : day - 1);
-      const start = new Date(now.getFullYear(), now.getMonth(), diff);
-      start.setHours(0,0,0,0);
-      const end = new Date(now); end.setHours(23,59,59,999);
-      dateFilter = { gte: start, lte: end };
+      const startOfWeek = getUTCStartOfWeek(now);
+      dateFilter = { gte: startOfWeek, lte: toUTCMidnight(now) };
     } else if (period === 'month') {
-      const start = new Date(now.getFullYear(), now.getMonth(), 1);
-      const end = new Date(now); end.setHours(23,59,59,999);
-      dateFilter = { gte: start, lte: end };
+      const startOfMonth = getUTCStartOfMonth(now);
+      dateFilter = { gte: startOfMonth, lte: toUTCMidnight(now) };
     } else if (period === 'custom' && startDate && endDate) {
-      dateFilter = { gte: new Date(startDate), lte: new Date(new Date(endDate).setHours(23,59,59,999)) };
+      const start = toUTCMidnight(new Date(startDate));
+      const end = getUTCEndOfDay(toUTCMidnight(new Date(endDate)));
+      dateFilter = { gte: start, lte: end };
     }
 
     const empWhere = { status: 'ACTIVE' };
@@ -113,7 +113,7 @@ const getAttendance = async (req, res) => {
 
       const finalData = paginated.map(e => ({
         id: `absent-${e.id}`,
-        date: dateFilter.gte || new Date(),
+        date: (dateFilter.gte || new Date()).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }),
         nik: e.employeeCode,
         name: e.name,
         dept: e.department?.name || '-',
@@ -233,24 +233,29 @@ const getAttendance = async (req, res) => {
     });
 
     // Fetch working days and penalty settings
-    const settings = await prisma.settings.findMany();
-    const { penaltyRules } = parsePenaltySettings(settings);
-    const workingDaysSetting = settings.find(s => s.key === 'workingDays');
-    const workingDays = workingDaysSetting ? JSON.parse(workingDaysSetting.value) : [1, 2, 3, 4, 5];
-    const isSaturdayHalfDay = settings.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
-    const satCheckoutTime = settings.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
+     const settings = await prisma.settings.findMany();
+     const { penaltyRules } = parsePenaltySettings(settings);
+     const workingDaysSetting = settings.find(s => s.key === 'workingDays');
+     const workingDays = workingDaysSetting ? JSON.parse(workingDaysSetting.value) : [1, 2, 3, 4, 5];
+     const isSaturdayHalfDay = settings.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
+     const satCheckoutTime = settings.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
+     const defaultShiftStart = settings.find(s => s.key === 'defaultShiftStart')?.value || '08:00';
+     const defaultShiftEnd = settings.find(s => s.key === 'defaultShiftEnd')?.value || '17:00';
 
     const summary = {
       total: allRecordsForSummary.length,
-      hadir: 0, telat: 0, mangkir: 0, absen: 0, holiday: 0, cuti: 0, sakit: 0, izin: 0, earlyDeparture: 0, totalLate: 0, uniqueEmployeeCount: 0
+      hadir: 0, telat: 0, mangkir: 0, absen: 0, holiday: 0, cuti: 0, sakit: 0, izin: 0, earlyDeparture: 0, totalLate: 0, uniqueEmployeeCount: 0,
+      // Expose the configured mangkir penalty so the frontend shows the same value
+      // it uses in summary.totalLate instead of a hardcoded 30 (PERBAIKAN_MODE_KARYAWAN.md / leadership review).
+      mangkirPenalty: penaltyRules?.rule1Minutes || 30
     };
 
     const uniqueEmps = new Set();
 
     allRecordsForSummary.forEach(r => {
       const empShift = r.employee?.shift;
-      const shiftStart = empShift?.startTime || '08:00';
-      let shiftEnd = empShift?.endTime || '17:00';
+      const shiftStart = empShift?.startTime || defaultShiftStart;
+      let shiftEnd = empShift?.endTime || defaultShiftEnd;
       const recordDay = r.date.getUTCDay();
       
       // Apply Saturday shift end time override
@@ -310,8 +315,8 @@ const getAttendance = async (req, res) => {
       success: true,
       data: records.map(att => {
         const empShift = att.employee?.shift;
-        const shiftStart = empShift?.startTime || '08:00';
-        let shiftEnd = empShift?.endTime || '17:00';
+        const shiftStart = empShift?.startTime || defaultShiftStart;
+        let shiftEnd = empShift?.endTime || defaultShiftEnd;
         const recordDay = att.date.getUTCDay();
 
         // Apply Saturday shift end time override
@@ -368,9 +373,9 @@ const getAttendance = async (req, res) => {
           dept: att.employee.department?.name,
           section: att.employee.section,
           position: att.employee.position,
-          date: att.date,
-          checkIn: att.checkIn,
-          checkOut: att.checkOut,
+          date: att.date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }),
+          checkIn: att.checkIn ? att.checkIn.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }) : '-- : --',
+          checkOut: att.checkOut ? att.checkOut.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }) : '-- : --',
           status: resolved,
           displayStatus: displayStatus,
           lateMinutes: att.lateMinutes,
@@ -462,22 +467,26 @@ const getAttendanceOptions = async (req, res) => {
     // Date filtering (matching logic in /attendance)
     const now = new Date();
     if (period === 'today' || (!period && !date && !startDate)) {
-      const start = new Date(now); start.setHours(0,0,0,0);
-      const end = new Date(now); end.setHours(23,59,59,999);
-      where.date = { gte: start, lte: end };
+      const today = getUTCToday();
+      const tomorrow = new Date(today);
+      tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+      where.date = { gte: today, lt: tomorrow };
     } else if (period === 'week') {
-      const start = new Date(now); start.setDate(now.getDate() - now.getDay());  start.setHours(0,0,0,0);
-      const end = new Date(now); end.setHours(23,59,59,999);
-      where.date = { gte: start, lte: end };
+      const startOfWeek = getUTCStartOfWeek(now);
+      where.date = { gte: startOfWeek, lte: toUTCMidnight(now) };
     } else if (period === 'month') {
-      const start = new Date(now.getFullYear(), now.getMonth(), 1);
-      const end = new Date(now); end.setHours(23,59,59,999);
-      where.date = { gte: start, lte: end };
+      const startOfMonth = getUTCStartOfMonth(now);
+      where.date = { gte: startOfMonth, lte: toUTCMidnight(now) };
     } else if (period === 'custom' && startDate && endDate) {
-      where.date = { gte: new Date(startDate), lte: new Date(new Date(endDate).setHours(23,59,59,999)) };
+      const start = toUTCMidnight(new Date(startDate));
+      const end = getUTCEndOfDay(toUTCMidnight(new Date(endDate)));
+      where.date = { gte: start, lte: end };
     } else if (date) {
       const d = new Date(date);
-      where.date = { gte: d, lt: new Date(new Date(d).setDate(d.getDate() + 1)) };
+      const start = toUTCMidnight(d);
+      const next = new Date(start);
+      next.setUTCDate(next.getUTCDate() + 1);
+      where.date = { gte: start, lt: next };
     }
 
     const employeeWhere = {};
@@ -491,10 +500,12 @@ const getAttendanceOptions = async (req, res) => {
       ];
     }
 
-    const settingsList = await prisma.settings.findMany();
-    const { penaltyRules } = parsePenaltySettings(settingsList);
-    const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
-    const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
+     const settingsList = await prisma.settings.findMany();
+     const { penaltyRules } = parsePenaltySettings(settingsList);
+     const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
+     const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
+     const defaultShiftStart = settingsList.find(s => s.key === 'defaultShiftStart')?.value || '08:00';
+     const defaultShiftEnd = settingsList.find(s => s.key === 'defaultShiftEnd')?.value || '17:00';
 
     const records = await prisma.attendance.findMany({
       where: { ...where, employee: employeeWhere },
@@ -528,8 +539,8 @@ const getAttendanceOptions = async (req, res) => {
       
       // Resolve status for the list
       const empShift = r.employee?.shift;
-      const shiftStart = empShift?.startTime || '08:00';
-      let shiftEnd = empShift?.endTime || '17:00';
+      const shiftStart = empShift?.startTime || defaultShiftStart;
+      let shiftEnd = empShift?.endTime || defaultShiftEnd;
       const recordDay = r.date.getUTCDay();
 
       // Apply Saturday shift end time override

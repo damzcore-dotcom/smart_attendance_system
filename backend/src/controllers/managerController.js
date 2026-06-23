@@ -189,7 +189,7 @@ const getAttendance = async (req, res) => {
 
       const finalData = paginated.map(e => ({
         id: `absent-${e.id}`,
-        date: dateRange.gte || new Date(),
+        date: (dateRange.gte || new Date()).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }),
         nik: e.employeeCode,
         name: e.name,
         dept: e.department?.name,
@@ -247,12 +247,14 @@ const getAttendance = async (req, res) => {
     const { resolveStatus, parsePenaltySettings } = require('../utils/lateCalculator');
 
     // Fetch Global Settings (Working Days & Penalties)
-    const settingsList = await prisma.settings.findMany();
-    const { penaltyRules } = parsePenaltySettings(settingsList);
-    const workingDaysSetting = settingsList.find(s => s.key === 'workingDays')?.value || '[1,2,3,4,5]';
-    const workingDays = JSON.parse(workingDaysSetting);
-    const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
-    const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
+     const settingsList = await prisma.settings.findMany();
+     const { penaltyRules } = parsePenaltySettings(settingsList);
+     const workingDaysSetting = settingsList.find(s => s.key === 'workingDays')?.value || '[1,2,3,4,5]';
+     const workingDays = JSON.parse(workingDaysSetting);
+     const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
+     const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
+     const defaultShiftStart = settingsList.find(s => s.key === 'defaultShiftStart')?.value || '08:00';
+     const defaultShiftEnd = settingsList.find(s => s.key === 'defaultShiftEnd')?.value || '17:00';
 
     const [records, total, allRecords, calendarOverrides, rosterOverrides] = await Promise.all([
       prisma.attendance.findMany({
@@ -312,13 +314,15 @@ const getAttendance = async (req, res) => {
         }
       }
     }
-    let summary = { total: allRecords.length, hadir: 0, telat: 0, mangkir: 0, absen: 0, holiday: 0, cuti: 0, sakit: 0, izin: 0, earlyDeparture: 0, totalLate: 0, uniqueEmployeeCount: 0 };
+    let summary = { total: allRecords.length, hadir: 0, telat: 0, mangkir: 0, absen: 0, holiday: 0, cuti: 0, sakit: 0, izin: 0, earlyDeparture: 0, totalLate: 0, uniqueEmployeeCount: 0,
+      // Configured mangkir penalty (min) so the frontend matches summary.totalLate instead of hardcoding 30.
+      mangkirPenalty: penaltyRules?.rule1Minutes || 30 };
     const uniqueEmployees = new Set();
     allRecords.forEach(r => {
       uniqueEmployees.add(r.employeeId);
       const empShift = r.employee?.shift;
-      const shiftStart = empShift?.startTime || '08:00';
-      let shiftEnd = empShift?.endTime || '17:00';
+      const shiftStart = empShift?.startTime || defaultShiftStart;
+      let shiftEnd = empShift?.endTime || defaultShiftEnd;
       const recordDay = r.date.getUTCDay();
 
       // Apply Saturday shift end time override
@@ -382,8 +386,8 @@ const getAttendance = async (req, res) => {
       summary,
       data: records.map(att => {
         const empShift = att.employee?.shift;
-        const shiftStart = empShift?.startTime || '08:00';
-        let shiftEnd = empShift?.endTime || '17:00';
+        const shiftStart = empShift?.startTime || defaultShiftStart;
+        let shiftEnd = empShift?.endTime || defaultShiftEnd;
         const recordDay = att.date.getUTCDay();
 
         // Apply Saturday shift end time override
@@ -442,8 +446,8 @@ const getAttendance = async (req, res) => {
           section: att.employee.section,
           position: att.employee.position,
           date: att.date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }),
-          checkIn: att.checkIn ? att.checkIn.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-- : --',
-          checkOut: att.checkOut ? att.checkOut.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-- : --',
+          checkIn: att.checkIn ? att.checkIn.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }) : '-- : --',
+          checkOut: att.checkOut ? att.checkOut.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }) : '-- : --',
           status: displayStatus,
           lateMinutes: att.lateMinutes,
           mode: att.mode,

@@ -164,9 +164,15 @@ export const employeeAPI = {
   create: (data) => apiFetch('/employees', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => apiFetch(`/employees/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   remove: (id) => apiFetch(`/employees/${id}`, { method: 'DELETE' }),
-  importExcel: async (file, jobId) => {
+  importExcel: async (file, jobId, confirmConflicts = false, resolutions = null) => {
     const formData = new FormData();
     formData.append('file', file);
+    if (confirmConflicts) {
+      formData.append('confirmConflicts', 'true');
+    }
+    if (resolutions) {
+      formData.append('resolutions', JSON.stringify(resolutions));
+    }
     
     // Use API_BASE to ensure request goes to backend, not frontend
     const token = getAccessToken();
@@ -189,6 +195,8 @@ export const employeeAPI = {
   },
   checkNikDuplicate: (nik) => apiFetch(`/employees/check-nik?nik=${nik}`),
   getNextFingerId: () => apiFetch('/employees/next-finger-id'),
+  getNextNik: (employmentStatus = '', salaryCategory = '') => 
+    apiFetch(`/employees/next-nik?employmentStatus=${encodeURIComponent(employmentStatus)}&salaryCategory=${encodeURIComponent(salaryCategory)}`),
   getMasterOptions: (params = {}) => {
     const q = new URLSearchParams(params).toString();
     return apiFetch(`/employees/master-options${q ? `?${q}` : ''}`);
@@ -225,7 +233,7 @@ export const attendanceAPI = {
     return apiFetch(`/attendance${q ? `?${q}` : ''}`);
   },
   checkIn: (employeeId, mode, lat, lng, accuracy, timestamp, photoData) => apiFetch('/attendance/check-in', { method: 'POST', body: JSON.stringify({ employeeId, mode, lat, lng, accuracy, timestamp, photoData }) }),
-  checkOut: (employeeId, photoData, lat, lng) => apiFetch('/attendance/check-out', { method: 'POST', body: JSON.stringify({ employeeId, photoData, lat, lng }) }),
+  checkOut: (employeeId, photoData, lat, lng, timestamp) => apiFetch('/attendance/check-out', { method: 'POST', body: JSON.stringify({ employeeId, photoData, lat, lng, timestamp }) }),
   getSummary: () => apiFetch('/attendance/summary'),
   getHistory: (empId, params = {}) => {
     const q = new URLSearchParams(params).toString();
@@ -365,6 +373,7 @@ export const fingerprintAPI = {
   enrollUser: (deviceId, employeeId, fingerId) => apiFetch(`/fingerprint/devices/${deviceId}/users/enroll`, { method: 'POST', body: JSON.stringify({ employeeId, fingerId }) }),
   verifyEnroll: (deviceId, employeeId, fingerId) => apiFetch(`/fingerprint/devices/${deviceId}/users/enroll/verify`, { method: 'POST', body: JSON.stringify({ employeeId, fingerId }) }),
   clearLogs: (deviceId) => apiFetch(`/devices/${deviceId}/clear-logs`, { method: 'POST' }),
+  transferTemplates: (sourceDeviceId, targetDeviceId, employeeIds) => apiFetch(`/fingerprint/devices/${sourceDeviceId}/transfer/${targetDeviceId}`, { method: 'POST', body: JSON.stringify({ employeeIds }) }),
 };
 
 // ─── Notification API ────────────────────────────
@@ -408,6 +417,29 @@ export const leaveAPI = {
 export const backupAPI = {
   export: () => apiFetch('/backup/export'),
   restore: (backup) => apiFetch('/backup/restore', { method: 'POST', body: JSON.stringify({ backup }) }),
+  getAutoConfig: () => apiFetch('/backup/config'),
+  updateAutoConfig: (data) => apiFetch('/backup/config', { method: 'PUT', body: JSON.stringify(data) }),
+  getAutoHistory: () => apiFetch('/backup/history'),
+  downloadAutoFile: async (filename) => {
+    const token = getAccessToken();
+    const res = await fetch(`${API_BASE}/backup/download/${filename}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error('Gagal mengunduh file backup');
+    
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.parentNode.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  },
+  deleteAutoFile: (filename) => apiFetch(`/backup/${filename}`, { method: 'DELETE' }),
+  triggerAutoBackup: (signal) => apiFetch('/backup/trigger', { method: 'POST', signal }),
+  restoreAutoFile: (filename) => apiFetch(`/backup/restore-file/${filename}`, { method: 'POST' }),
 };
 
 // ─── Manager API ─────────────────────────────────
@@ -491,6 +523,7 @@ export const payrollAPI = {
   reject: (id, data) => apiFetch(`/payroll/${id}/reject`, { method: 'PUT', body: JSON.stringify(data) }),
   finalize: (id) => apiFetch(`/payroll/${id}/finalize`, { method: 'PUT' }),
   cancel: (id) => apiFetch(`/payroll/${id}/cancel`, { method: 'PUT' }),
+  delete: (id) => apiFetch(`/payroll/${id}`, { method: 'DELETE' }),
   exportExcel: async (id, lang = 'id') => {
     const token = getAccessToken();
     const res = await fetch(`${API_BASE}/payroll/${id}/export-excel?lang=${lang}`, {
@@ -602,6 +635,74 @@ export const kpiAPI = {
     method: 'PUT',
     body: JSON.stringify({ status, reviewNote })
   })
+};
+
+// ─── Translation API ──────────────────────────────
+export const translationAPI = {
+  get: (lang) => apiFetch(`/translations/${lang}`),
+  update: (lang, updates) => apiFetch(`/translations/${lang}`, { method: 'PUT', body: JSON.stringify({ updates }) }),
+};
+
+// ─── Warning Letter API ───────────────────────────
+export const warningLetterAPI = {
+  getAll: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return apiFetch(`/warning-letters${q ? `?${q}` : ''}`);
+  },
+  getById: (id) => apiFetch(`/warning-letters/${id}`),
+  create: async (data, file) => {
+    const formData = new FormData();
+    Object.entries(data).forEach(([k, v]) => {
+      if (v !== undefined && v !== null) {
+        formData.append(k, v);
+      }
+    });
+    if (file) {
+      formData.append('file', file);
+    }
+    const token = getAccessToken();
+    const res = await fetch(`${API_BASE}/warning-letters`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData
+    });
+    const resData = await res.json();
+    if (!res.ok) throw new Error(resData.message || 'Gagal menyimpan Surat Peringatan');
+    return resData;
+  },
+  update: async (id, data, file) => {
+    const formData = new FormData();
+    Object.entries(data).forEach(([k, v]) => {
+      if (v !== undefined && v !== null) {
+        formData.append(k, v);
+      }
+    });
+    if (file) {
+      formData.append('file', file);
+    }
+    const token = getAccessToken();
+    const res = await fetch(`${API_BASE}/warning-letters/${id}`, {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData
+    });
+    const resData = await res.json();
+    if (!res.ok) throw new Error(resData.message || 'Gagal memperbarui Surat Peringatan');
+    return resData;
+  },
+  delete: (id) => apiFetch(`/warning-letters/${id}`, { method: 'DELETE' }),
+};
+
+// ─── Paklaring API ───────────────────────────────
+export const paklaringAPI = {
+  getAll: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return apiFetch(`/paklaring${q ? `?${q}` : ''}`);
+  },
+  getById: (id) => apiFetch(`/paklaring/${id}`),
+  create: (data) => apiFetch('/paklaring', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id, data) => apiFetch(`/paklaring/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  delete: (id) => apiFetch(`/paklaring/${id}`, { method: 'DELETE' }),
 };
 
 export default api;

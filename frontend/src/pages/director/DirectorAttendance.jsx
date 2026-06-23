@@ -65,6 +65,7 @@ const translateMethod = (method, lang) => {
     'Pinned': isIndo ? 'Pinned' : isKo ? 'PIN 입력' : isZh ? 'PIN密码' : 'Pinned',
     'Fingered': isIndo ? 'Fingered' : isKo ? '지문 인식' : isZh ? '指纹打卡' : 'Fingered',
     'Manual': isIndo ? 'Manual' : isKo ? '수동 입력' : isZh ? '手工录入' : 'Manual',
+    'System': isIndo ? 'Sistem' : isKo ? '시스템' : isZh ? '系统' : 'System',
     '-': '-'
   };
   
@@ -144,6 +145,96 @@ const formatLateAccumulation = (minutes, lang = 'id') => {
   if (h === 0) return `${m} ${minStr}`;
   if (m === 0) return `${h} ${hrStr}`;
   return `${h} ${hrStr} ${m} ${minStr}`;
+};
+
+const getPaddedRecords = (rawRecords, summary, appliedFilters, sortConfig) => {
+  if (!rawRecords || rawRecords.length === 0) return [];
+  const uniqueEmployeeCount = summary?.uniqueEmployeeCount || 1;
+  
+  if (uniqueEmployeeCount === 1 && appliedFilters.search) {
+    let startDate, endDate;
+    const now = new Date();
+    
+    if (appliedFilters.period === 'month') {
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      endDate = new Date();
+    } else if (appliedFilters.period === 'week') {
+      const day = now.getDay();
+      const diff = now.getDate() - (day === 0 ? 6 : day - 1);
+      startDate = new Date(now.getFullYear(), now.getMonth(), diff);
+      endDate = new Date();
+    } else if (appliedFilters.period === 'custom' && appliedFilters.startDate && appliedFilters.endDate) {
+      startDate = new Date(appliedFilters.startDate);
+      endDate = new Date(appliedFilters.endDate);
+      if (endDate > now) endDate = now;
+    } else {
+      const sorted = [...rawRecords].sort((a, b) => new Date(a.date) - new Date(b.date));
+      return sortConfig?.order === 'desc' ? sorted.reverse() : sorted;
+    }
+
+    const padData = [];
+    const dataMap = {};
+    rawRecords.forEach(r => {
+      const parsedObj = new Date(r.date);
+      if (!isNaN(parsedObj.getTime())) {
+        const isoMatch = `${parsedObj.getFullYear()}-${String(parsedObj.getMonth()+1).padStart(2,'0')}-${String(parsedObj.getDate()).padStart(2,'0')}`;
+        dataMap[isoMatch] = r; 
+      }
+    });
+
+    const empRef = rawRecords[0];
+    const overrides = summary?.calendarOverrides || [];
+    const overrideMap = {};
+    overrides.forEach(c => {
+       const dStr = c.date.split('T')[0];
+       overrideMap[dStr] = c.type;
+    });
+    const workingDays = summary?.workingDays || [1,2,3,4,5];
+
+    const start = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+    const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const isoKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      
+      if (dataMap[isoKey]) {
+        padData.push(dataMap[isoKey]);
+      } else {
+        const isoDate = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().split('T')[0];
+        const dayOfWeek = d.getDay();
+        const overrideType = overrideMap[isoDate];
+        
+        let isLibur = false;
+        if (overrideType) {
+           isLibur = overrideType === 'HOLIDAY';
+        } else {
+           isLibur = !workingDays.includes(dayOfWeek);
+        }
+
+        padData.push({
+          id: `pad-${d.getTime()}`,
+          name: empRef.name,
+          employeeCode: empRef.employeeCode,
+          dept: empRef.dept,
+          section: empRef.section,
+          position: empRef.position,
+          date: d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
+          checkIn: '-- : --',
+          checkOut: '-- : --',
+          status: isLibur ? 'HOLIDAY' : 'ABSENT',
+          lateMinutes: 0,
+          overtimeHours: 0,
+          mode: 'System',
+        });
+      }
+    }
+    
+    const sorted = [...padData].sort((a, b) => new Date(a.date) - new Date(b.date));
+    return sortConfig?.order === 'desc' ? sorted.reverse() : sorted;
+  }
+  
+  const sorted = [...rawRecords].sort((a, b) => new Date(a.date) - new Date(b.date));
+  return sortConfig?.order === 'desc' ? sorted.reverse() : sorted;
 };
 
 const SortIcon = ({ column, sortBy, order }) => {
@@ -264,7 +355,8 @@ const DirectorAttendance = () => {
         g.pulangCepatDetails.push({ date: row.date, checkIn: row.checkIn, checkOut: row.checkOut, shiftEnd: '17:00' });
       } else if (status === 'MANGKIR' || status === 'Mangkir') {
         g.mangkir++;
-        const penalty = (row.lateMinutes || 0) === 0 ? 30 : 0;
+        const mangkirPenalty = fullDataForRekap?.summary?.mangkirPenalty || 30;
+        const penalty = (row.lateMinutes || 0) === 0 ? mangkirPenalty : 0;
         g.totalLateMinutes += (row.lateMinutes || 0) + penalty;
         g.mangkirDetails.push({ date: row.date, checkIn: row.checkIn, checkOut: row.checkOut });
       } else if (status === 'ABSENT' || status === 'Alpa' || status === 'MISSING') {
@@ -284,7 +376,11 @@ const DirectorAttendance = () => {
   const totalPages = data?.totalPages || 1;
   const summary = data?.summary || {};
   const [showOnlyAnomalies, setShowOnlyAnomalies] = useState(false);
-  const displayedRecords = showOnlyAnomalies ? records.filter(isAnomaly) : records;
+  
+  let displayedRecords = showOnlyAnomalies ? records.filter(isAnomaly) : records;
+  if (!isLoading && summary?.uniqueEmployeeCount === 1 && appliedFilters.search && displayedRecords.length > 0) {
+    displayedRecords = getPaddedRecords(displayedRecords, summary, appliedFilters, { sortBy: appliedFilters.sortBy, order: appliedFilters.order });
+  }
 
   const handleApplyFilters = (newFilters) => {
     setAppliedFilters(prev => ({ ...prev, ...newFilters, page: 1 }));
@@ -383,13 +479,17 @@ const DirectorAttendance = () => {
       const rows = sortedRecords.map(r => {
         const statusUpper = (r.status || '').toUpperCase();
         const isMangkir = (statusUpper === 'MANGKIR' || statusUpper === 'MISSING' || r.status === 'Mangkir');
-        const penalty = (isMangkir && (r.lateMinutes || 0) === 0) ? 30 : 0;
+        const penalty = (isMangkir && (r.lateMinutes || 0) === 0) ? (summary?.mangkirPenalty || 30) : 0;
 
         let rawMethod = 'Manual';
         const modeUpper = (r.mode || '').toUpperCase();
         const srcUpper = (r.source || '').toUpperCase();
 
-        if (modeUpper === 'FACE CCTV' || srcUpper === 'FACE_CCTV') {
+        if (modeUpper === 'SYSTEM' || 
+            ((!r.checkIn || r.checkIn === '--:--' || r.checkIn === '-- : --' || r.checkIn === '-') && 
+             (!r.checkOut || r.checkOut === '--:--' || r.checkOut === '-- : --' || r.checkOut === '-'))) {
+          rawMethod = 'System';
+        } else if (modeUpper === 'FACE CCTV' || srcUpper === 'FACE_CCTV') {
           rawMethod = 'Face CCTV';
         } else if (modeUpper === 'FACE ID' || modeUpper === 'FACE HP' || srcUpper === 'FACE_WEB') {
           rawMethod = 'Face HP';
@@ -833,8 +933,17 @@ const DirectorAttendance = () => {
                          </span>
                       </td>
                       <td className="px-4 py-2 text-center">
-                        {(!r.checkIn && !r.checkOut) ? (
-                          <span className="text-slate-400">—</span>
+                        {r.mode === 'System' ? (
+                          <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 px-2 py-0.5 rounded-lg text-[10px] font-bold border border-slate-200 shadow-sm" title={lang.startsWith('id') ? 'Otomatis oleh Sistem' : 'Automatically generated by System'}>
+                            <ShieldCheck className="w-3 h-3 text-slate-500" />
+                            {translateMethod('System', lang)}
+                          </span>
+                        ) : ((!r.checkIn || r.checkIn === '--:--' || r.checkIn === '-- : --' || r.checkIn === '-') && 
+                             (!r.checkOut || r.checkOut === '--:--' || r.checkOut === '-- : --' || r.checkOut === '-')) ? (
+                          <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 px-2 py-0.5 rounded-lg text-[10px] font-bold border border-slate-200 shadow-sm" title={lang.startsWith('id') ? 'Otomatis oleh Sistem' : 'Automatically generated by System'}>
+                            <ShieldCheck className="w-3 h-3 text-slate-500" />
+                            {translateMethod('System', lang)}
+                          </span>
                         ) : (r.mode === 'Face CCTV' || r.source === 'face_cctv') ? (
                           <span className="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-lg text-[10px] font-bold border border-indigo-100 shadow-sm" title="Face Detection via CCTV">
                             <Camera className="w-3 h-3 text-indigo-500" />
@@ -873,7 +982,7 @@ const DirectorAttendance = () => {
                         ) : (r.status?.toUpperCase() === 'MANGKIR' || r.status?.toUpperCase() === 'MISSING' || r.status === 'Mangkir') ? (
                           <div className="flex items-center justify-center gap-1.5">
                             <div className="w-1.5 h-1.5 bg-slate-400 rounded-full" />
-                            <span className="text-xs font-bold text-slate-500">+{ (r.lateMinutes || 0) + ((r.lateMinutes || 0) === 0 ? 30 : 0) }m</span>
+                            <span className="text-xs font-bold text-slate-500">+{ (r.lateMinutes || 0) + ((r.lateMinutes || 0) === 0 ? (summary?.mangkirPenalty || 30) : 0) }m</span>
                           </div>
                         ) : (
                           <span className="text-slate-200 font-black">—</span>

@@ -14,7 +14,11 @@ import {
   Shield,
   FileText,
   GraduationCap,
-  UserMinus
+  UserMinus,
+  AlertTriangle,
+  Globe,
+  CalendarDays,
+  Wallet
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -49,9 +53,12 @@ const DirectorLayout = () => {
     { name: t('navigation.dashboard'), path: '/director', icon: LayoutDashboard },
     { name: t('navigation.employees'), path: '/director/employees', icon: Users },
     { name: t('navigation.attendanceData'), path: '/director/attendance', icon: CalendarCheck },
+    { name: t('navigation.leaveApproval') || 'Persetujuan Cuti', path: '/director/leave', icon: CalendarDays },
     { name: t('navigation.contracts'), path: '/director/contracts', icon: FileText },
     { name: t('navigation.training'), path: '/director/training', icon: GraduationCap },
     { name: t('navigation.terminated'), path: '/director/terminated', icon: UserMinus },
+    { name: t('navigation.warningLetters') || 'Surat Peringatan (SP)', path: '/director/warning-letters', icon: AlertTriangle },
+    { name: t('navigation.payroll') || 'Payroll', path: '/director/payroll', icon: Wallet },
     { name: t('navigation.auditLog'), path: '/director/audit-log', icon: Shield },
     { name: t('navigation.kpiEvaluation'), path: '/director/kpi', icon: Shield },
   ];

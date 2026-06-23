@@ -91,6 +91,20 @@ const requireDirektur = (req, res, next) => {
 };
 
 /**
+ * Require ADMIN/SUPER_ADMIN/ACCOUNTING, or DIREKTUR.
+ * Used for the payroll approval workflow where the Director acts as the checker
+ * (admin generates & submits, director approves/rejects). Scoped to the specific
+ * payroll endpoints the Director Payroll page uses.
+ */
+const requireAdminOrDirektur = (req, res, next) => {
+  const allowed = ['ADMIN', 'SUPER_ADMIN', 'ACCOUNTING', 'DIREKTUR'];
+  if (!allowed.includes(req.user.role)) {
+    return res.status(403).json({ success: false, message: 'Access denied' });
+  }
+  next();
+};
+
+/**
  * Require ADMIN, SUPER_ADMIN, or MANAGER role
  */
 const requireAdminOrManager = (req, res, next) => {
@@ -106,8 +120,9 @@ module.exports = {
   requireAdmin, 
   requireSuperAdmin, 
   requireManager, 
-  requireDirektur, 
+  requireDirektur,
   requireAdminOrManager,
-  generateAccessToken, 
+  requireAdminOrDirektur,
+  generateAccessToken,
   generateRefreshToken 
 };

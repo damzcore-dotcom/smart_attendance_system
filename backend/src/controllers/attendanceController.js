@@ -1,6 +1,6 @@
 const prisma = require('../prismaClient');
 const { calculateLateness, resolveStatus, parsePenaltySettings } = require('../utils/lateCalculator');
-const { toUTCMidnight, parseUTCDate, getUTCToday, getUTCYesterday, getUTCStartOfWeek, getUTCStartOfMonth, getUTCEndOfDay, VALID_STATUSES, MANGKIR_PENALTY_MINUTES } = require('../utils/dateHelper');
+const { toUTCMidnight, parseUTCDate, getUTCToday, getUTCYesterday, getUTCStartOfWeek, getUTCStartOfMonth, getUTCEndOfDay, VALID_STATUSES, MANGKIR_PENALTY_MINUTES, adjustZkTimeToUTC } = require('../utils/dateHelper');
 const { getDistance } = require('../utils/geo');
 const XLSX = require('xlsx');
 const fs = require('fs');
@@ -22,20 +22,12 @@ const getAll = async (req, res) => {
     const workingDays = JSON.parse(workingDaysSetting);
     const { penaltyRules, roundingConfig } = parsePenaltySettings(settingsList);
     const mangkirPenalty = penaltyRules.rule1Minutes; // Fallback / default
+    const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
+    const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
+    const defaultShiftStart = settingsList.find(s => s.key === 'defaultShiftStart')?.value || '08:00';
+    const defaultShiftEnd = settingsList.find(s => s.key === 'defaultShiftEnd')?.value || '17:00';
 
     const where = {};
-
-    if (locationId && locationId !== 'All' && locationId !== '') {
-      where.employee = {
-        ...where.employee,
-        OR: [
-          { locationId: { equals: locationId } },
-          { locationId: { startsWith: `${locationId},` } },
-          { locationId: { endsWith: `,${locationId}` } },
-          { locationId: { contains: `,${locationId},` } }
-        ]
-      };
-    }
 
     // Date filtering
     const now = new Date();
@@ -62,24 +54,60 @@ const getAll = async (req, res) => {
       where.date = { gte: start, lt: next };
     }
 
-    // Organizational filters
+    // Consolidated Employee Filters to prevent property overwrites (e.g. OR / excludeBhl collisions)
+    const employeeWhere = {};
+    const employeeConditions = [];
+
     if (dept && dept !== 'All') {
-      where.employee = { ...where.employee, department: { name: dept } };
+      employeeWhere.department = { name: dept };
     }
     if (section && section !== 'All') {
-      where.employee = { ...where.employee, section: section };
+      employeeWhere.section = section;
     }
     if (position && position !== 'All') {
-      where.employee = { ...where.employee, position: position };
+      employeeWhere.position = position;
+    }
+    if (search) {
+      employeeWhere.name = { contains: search, mode: 'insensitive' };
     }
 
-    // Search
-    if (search) {
-      where.employee = {
-        ...where.employee,
-        name: { contains: search, mode: 'insensitive' },
-      };
+    if (locationId && locationId !== 'All' && locationId !== '') {
+      employeeConditions.push({
+        OR: [
+          { locationId: { equals: locationId } },
+          { locationId: { startsWith: `${locationId},` } },
+          { locationId: { endsWith: `,${locationId}` } },
+          { locationId: { contains: `,${locationId},` } }
+        ]
+      });
     }
+
+    if (req.query.excludeBhl === 'true') {
+      employeeConditions.push({
+        employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily', 'Bhl', 'DAILY WORKER', 'Harian Lepas'] }
+      });
+      employeeConditions.push({
+        salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily', 'Bhl', 'DAILY WORKER', 'Harian Lepas'] }
+      });
+    }
+
+    if (req.query.onlyBhl === 'true') {
+      employeeConditions.push({
+        OR: [
+          { employmentStatus: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily', 'Bhl', 'DAILY WORKER', 'Harian Lepas'] } },
+          { salaryCategory: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily', 'Bhl', 'DAILY WORKER', 'Harian Lepas'] } }
+        ]
+      });
+    }
+
+    if (employeeConditions.length > 0) {
+      employeeWhere.AND = employeeConditions;
+    }
+
+    if (Object.keys(employeeWhere).length > 0) {
+      where.employee = employeeWhere;
+    }
+
     if (status && status !== 'All') {
       const statusValues = status.split(',').map(s => s.trim());
       if (statusValues.length === 1) {
@@ -87,25 +115,6 @@ const getAll = async (req, res) => {
       } else {
         where.status = { in: statusValues };
       }
-    }
-
-    // BHL Isolation Filters
-    if (req.query.excludeBhl === 'true') {
-      where.employee = {
-        ...where.employee,
-        employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] },
-        salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] }
-      };
-    }
-
-    if (req.query.onlyBhl === 'true') {
-      where.employee = {
-        ...where.employee,
-        OR: [
-          { employmentStatus: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } },
-          { salaryCategory: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } }
-        ]
-      };
     }
 
     // Sorting Logic
@@ -293,15 +302,25 @@ const getAll = async (req, res) => {
       totalPages: Math.ceil(total / limit),
       summary,
       data: records.map(r => {
-        // Use DB status directly — don't re-resolve, as resolveStatus can
-        // incorrectly change LATE→MANGKIR when checkOut is missing mid-day
-        let resolved = r.status;
+        const empShift = r.employee?.shift;
+        const shiftStart = empShift?.startTime || defaultShiftStart;
+        let shiftEnd = empShift?.endTime || defaultShiftEnd;
+        const recordDay = r.date.getUTCDay();
+
+        // Apply Saturday shift end time override
+        if (recordDay === 6) {
+          const satType = empShift?.saturdayType || (isSaturdayHalfDay ? 'HALF_DAY' : 'FULL_DAY');
+          if (satType === 'HALF_DAY') {
+            shiftEnd = empShift?.saturdayEndTime || satCheckoutTime;
+          }
+        }
+
+        let resolved = resolveStatus(r.checkIn, r.checkOut, r.status, r.date, penaltyRules, shiftEnd, shiftStart);
         
         // Only apply HOLIDAY override logic
         if (resolved === 'MANGKIR' || resolved === 'ABSENT' || resolved === 'HOLIDAY') {
           const dateStr = r.date.toISOString().split('T')[0];
           const override = overrideMap[dateStr];
-          const recordDay = r.date.getUTCDay();
           
           const rosterShift = rosterMap.get(`${r.employee.id}_${dateStr}`);
           const effectiveShift = rosterShift || r.employee?.shift || null;
@@ -347,7 +366,7 @@ const getAll = async (req, res) => {
           checkinCameraId: r.checkinCameraId,
           checkoutCameraId: r.checkoutCameraId,
           shiftName: r.employee.shift?.name || 'Default Shift',
-          shiftTime: r.employee.shift ? `${r.employee.shift.startTime} - ${r.employee.shift.endTime}` : '08:00 - 17:00',
+          shiftTime: r.employee.shift ? `${r.employee.shift.startTime} - ${r.employee.shift.endTime}` : `${defaultShiftStart} - ${defaultShiftEnd}`,
         };
       }),
     });
@@ -462,6 +481,8 @@ const checkIn = async (req, res) => {
     const globalGracePeriod = parseInt(settings.find(s => s.key === 'gracePeriod')?.value || '15', 10);
     const isSaturdayHalfDay = settings.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
     const satCheckoutTime = settings.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
+    const defaultShiftStart = settings.find(s => s.key === 'defaultShiftStart')?.value || '08:00';
+    const defaultShiftEnd = settings.find(s => s.key === 'defaultShiftEnd')?.value || '17:00';
 
     // Fetch shift overrides for today
     const dateStart = new Date(now);
@@ -479,8 +500,8 @@ const checkIn = async (req, res) => {
     const effectiveShift = override?.shift || employee.shift || null;
 
     // Calculate lateness
-    const shiftStart = effectiveShift?.startTime || '08:00';
-    let shiftEnd = effectiveShift?.endTime || '17:00';
+    const shiftStart = effectiveShift?.startTime || defaultShiftStart;
+    let shiftEnd = effectiveShift?.endTime || defaultShiftEnd;
     const gracePeriod = effectiveShift ? effectiveShift.gracePeriod : globalGracePeriod;
 
     // Apply Saturday Shift rules
@@ -492,7 +513,7 @@ const checkIn = async (req, res) => {
     }
 
     const { penaltyRules, roundingConfig } = parsePenaltySettings(settings);
-    const { lateMinutes, status: lateStatus } = calculateLateness(now, shiftStart, gracePeriod, shiftEnd, roundingConfig);
+    const { lateMinutes, status: lateStatus } = calculateLateness(now, shiftStart, gracePeriod, shiftEnd, roundingConfig, penaltyRules);
 
     // Initial status for check-in is either PRESENT, LATE, or MANGKIR (if day ends)
     // But since this is a real-time check-in, if we don't have check-out yet, 
@@ -531,7 +552,7 @@ const checkIn = async (req, res) => {
  */
 const checkOut = async (req, res) => {
   try {
-    const { photoData, lat, lng } = req.body;
+    const { photoData, lat, lng, timestamp } = req.body;
     let employeeId = req.body.employeeId;
 
     // Security: Validate employeeId from JWT token for non-admin users to prevent IDOR
@@ -550,7 +571,18 @@ const checkOut = async (req, res) => {
       console.log(`[Checkout Log] Employee ID ${employeeId} checked out with GPS: lat=${lat}, lng=${lng}`);
     }
 
-    const now = new Date();
+    // Use the client-supplied timestamp when present (offline check-out that is
+    // being synced later) so the recorded time is when it actually happened, not
+    // the upload time. Only accept a valid, non-future value; otherwise fall back
+    // to server time. Mirrors the check-in path which already trusts the client
+    // timestamp (PERBAIKAN_MODE_KARYAWAN.md #2).
+    let now = new Date();
+    if (timestamp) {
+      const ts = new Date(typeof timestamp === 'number' ? timestamp : Date.parse(timestamp));
+      if (!isNaN(ts.getTime()) && ts.getTime() <= Date.now() + 60 * 1000) {
+        now = ts;
+      }
+    }
     const today = getUTCToday();
 
     let attendance = await prisma.attendance.findUnique({
@@ -583,6 +615,8 @@ const checkOut = async (req, res) => {
     const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
     const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
     const timezoneOffset = parseInt(settingsList.find(s => s.key === 'timezoneOffset')?.value || '420', 10);
+    const defaultShiftStart = settingsList.find(s => s.key === 'defaultShiftStart')?.value || '08:00';
+    const defaultShiftEnd = settingsList.find(s => s.key === 'defaultShiftEnd')?.value || '17:00';
 
     // Fetch shift overrides for the attendance date
     const attendanceDate = new Date(attendance.date);
@@ -601,8 +635,8 @@ const checkOut = async (req, res) => {
     const effectiveShift = override?.shift || attendance.employee?.shift || null;
 
     // Recalculate status now that we have both checkIn and checkOut
-    const shiftStart = effectiveShift?.startTime || '08:00';
-    let shiftEnd = effectiveShift?.endTime || '17:00';
+    const shiftStart = effectiveShift?.startTime || defaultShiftStart;
+    let shiftEnd = effectiveShift?.endTime || defaultShiftEnd;
     const gracePeriod = effectiveShift ? effectiveShift.gracePeriod : (parseInt(settingsList.find(s => s.key === 'gracePeriod')?.value || '15', 10));
     
     // If today is Saturday (6) override shiftEnd according to Saturday Shift Protocol
@@ -620,7 +654,7 @@ const checkOut = async (req, res) => {
     const { penaltyRules, roundingConfig } = parsePenaltySettings(settingsList);
 
     if (attendance.checkIn) {
-      const calc = calculateLateness(attendance.checkIn, shiftStart, gracePeriod, shiftEnd, roundingConfig);
+      const calc = calculateLateness(attendance.checkIn, shiftStart, gracePeriod, shiftEnd, roundingConfig, penaltyRules);
       lateStatus = calc.status;
       lateMinutes = calc.lateMinutes;
     }
@@ -872,8 +906,12 @@ const importFromExcel = async (req, res) => {
     const settingsList = await prisma.settings.findMany();
     const { penaltyRules, roundingConfig } = parsePenaltySettings(settingsList);
     const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
+    const timezoneOffsetSetting = settingsList.find(s => s.key === 'timezoneOffset')?.value || '420';
+    const timezoneOffset = parseInt(timezoneOffsetSetting, 10);
     const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
     const globalGracePeriod = parseInt(settingsList.find(s => s.key === 'gracePeriod')?.value || '15', 10);
+    const defaultShiftStart = settingsList.find(s => s.key === 'defaultShiftStart')?.value || '08:00';
+    const defaultShiftEnd = settingsList.find(s => s.key === 'defaultShiftEnd')?.value || '17:00';
 
     const allOverrides = await prisma.employeeShiftOverride.findMany({
       include: { shift: true }
@@ -907,9 +945,10 @@ const importFromExcel = async (req, res) => {
       let eventTime;
       // Handle Excel Date Serial Number vs String
       if (typeof rawDateTime === 'number') {
-        eventTime = new Date(Math.round((rawDateTime - 25569) * 86400 * 1000));
-        // Normalize UTC back to Local Offset because Javascript serial parsing drops it
-        eventTime = new Date(eventTime.getTime() + (eventTime.getTimezoneOffset() * 60000));
+        // Parse raw serial number as UTC Date representing literal hours/minutes
+        const utcDate = new Date(Math.round((rawDateTime - 25569) * 86400 * 1000));
+        // Shift by timezoneOffset so it represents Jakarta local time (M-14)
+        eventTime = new Date(utcDate.getTime() - (timezoneOffset * 60 * 1000));
       } else {
         rawDateTime = rawDateTime.toString().trim();
         if (rawDateTime.includes('/')) {
@@ -929,9 +968,9 @@ const importFromExcel = async (req, res) => {
              if (ampm === 'PM' && hours < 12) hours += 12;
              if (ampm === 'AM' && hours === 12) hours = 0;
            }
-           eventTime = new Date(y, m - 1, d, hours, minutes, seconds);
+           eventTime = adjustZkTimeToUTC(new Date(y, m - 1, d, hours, minutes, seconds), timezoneOffset);
         } else {
-           eventTime = new Date(rawDateTime);
+           eventTime = adjustZkTimeToUTC(new Date(rawDateTime), timezoneOffset);
         }
       }
 
@@ -965,8 +1004,8 @@ const importFromExcel = async (req, res) => {
       const rosterShift = overrideMap.get(`${emp.id}_${dateOnlyStr}`);
       const effectiveShift = rosterShift || emp.shift || null;
 
-      const empShiftStart = effectiveShift?.startTime || '08:00';
-      let empShiftEnd = effectiveShift?.endTime || '17:00';
+      const empShiftStart = effectiveShift?.startTime || defaultShiftStart;
+      let empShiftEnd = effectiveShift?.endTime || defaultShiftEnd;
       
       const dayOfWeek = eventTime.getDay(); // 0 = Sunday, 6 = Saturday
       if (dayOfWeek === 6) {
@@ -1005,7 +1044,20 @@ const importFromExcel = async (req, res) => {
         }
       }
 
-      if (rawStatus.includes('in') || (!rawStatus.includes('out') && scanMinutes <= midpointMinutes)) {
+      // SAFEGUARD: Override device 'check-in' status if scan is after shift end + 1 hour.
+      // Prevents misclassification (e.g. 18:02 scan on 07:00-17:00 shift → was wrongly 690 min late).
+      const afterShiftEndBuffer = shiftEndMinutes + 60; // 1 hour after shift end
+      const beforeShiftStartBuffer = shiftStartMinutes - 180; // 3 hours before shift start
+      const isDeviceSaysIn = rawStatus.includes('in');
+      const isTimeBasedIn = !rawStatus.includes('out') && scanMinutes <= midpointMinutes;
+
+      if (isDeviceSaysIn && scanMinutes > afterShiftEndBuffer) {
+        // Device says 'check-in' but it's way past shift end — override to check-out
+        if (!grouped[groupKey].checkOut || eventTime > grouped[groupKey].checkOut) {
+          grouped[groupKey].checkOut = eventTime;
+          grouped[groupKey].checkOutVerifyCode = rawVerifyCode;
+        }
+      } else if (isDeviceSaysIn || isTimeBasedIn) {
         if (!grouped[groupKey].checkIn || eventTime < grouped[groupKey].checkIn) {
           grouped[groupKey].checkIn = eventTime;
           grouped[groupKey].checkInVerifyCode = rawVerifyCode;
@@ -1083,8 +1135,8 @@ const importFromExcel = async (req, res) => {
         const rosterShift = overrideMap.get(`${emp.id}_${entry.date}`);
         const effectiveShift = rosterShift || emp.shift || null;
 
-        const shiftStart = effectiveShift?.startTime || '08:00';
-        let shiftEnd = effectiveShift?.endTime || '17:00';
+        const shiftStart = effectiveShift?.startTime || defaultShiftStart;
+        let shiftEnd = effectiveShift?.endTime || defaultShiftEnd;
         const gracePeriod = effectiveShift ? effectiveShift.gracePeriod : globalGracePeriod;
 
         const recordDate = new Date(dateObj);
@@ -1099,7 +1151,7 @@ const importFromExcel = async (req, res) => {
         let lateStatus = 'PRESENT';
         let lateMinutes = 0;
         if (entry.checkIn) {
-          const calc = calculateLateness(entry.checkIn, shiftStart, gracePeriod, shiftEnd, roundingConfig);
+          const calc = calculateLateness(entry.checkIn, shiftStart, gracePeriod, shiftEnd, roundingConfig, penaltyRules);
           lateStatus = calc.status;
           lateMinutes = calc.lateMinutes;
         }
@@ -1253,6 +1305,8 @@ const recalculate = async (req, res) => {
     const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
     const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
     const globalGracePeriod = parseInt(settingsList.find(s => s.key === 'gracePeriod')?.value || '15', 10);
+    const defaultShiftStart = settingsList.find(s => s.key === 'defaultShiftStart')?.value || '08:00';
+    const defaultShiftEnd = settingsList.find(s => s.key === 'defaultShiftEnd')?.value || '17:00';
 
     const overrides = await prisma.employeeShiftOverride.findMany({
       where: {
@@ -1284,8 +1338,8 @@ const recalculate = async (req, res) => {
       const rosterShift = overrideMap.get(`${record.employeeId}_${dateStr}`);
       const effectiveShift = rosterShift || record.employee.shift || null;
 
-      const shiftStart = effectiveShift?.startTime || '08:00';
-      let shiftEnd = effectiveShift?.endTime || '17:00';
+      const shiftStart = effectiveShift?.startTime || defaultShiftStart;
+      let shiftEnd = effectiveShift?.endTime || defaultShiftEnd;
       const gracePeriod = effectiveShift ? effectiveShift.gracePeriod : globalGracePeriod;
 
       const recordDate = new Date(record.date);
@@ -1300,7 +1354,7 @@ const recalculate = async (req, res) => {
       let lateStatus = 'PRESENT';
       let lateMinutes = 0;
       if (record.checkIn) {
-        const calc = calculateLateness(record.checkIn, shiftStart, gracePeriod, shiftEnd, roundingConfig);
+        const calc = calculateLateness(record.checkIn, shiftStart, gracePeriod, shiftEnd, roundingConfig, penaltyRules);
         lateStatus = calc.status;
         lateMinutes = calc.lateMinutes;
       }
@@ -1366,6 +1420,8 @@ const swapDays = async (req, res) => {
     const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
     const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
     const globalGracePeriod = parseInt(settingsList.find(s => s.key === 'gracePeriod')?.value || '15', 10);
+    const defaultShiftStart = settingsList.find(s => s.key === 'defaultShiftStart')?.value || '08:00';
+    const defaultShiftEnd = settingsList.find(s => s.key === 'defaultShiftEnd')?.value || '17:00';
 
     const overrides = await prisma.employeeShiftOverride.findMany({
       where: {
@@ -1377,7 +1433,8 @@ const swapDays = async (req, res) => {
 
     const overrideMap = new Map();
     for (const ov of overrides) {
-      overrideMap.set(ov.employeeId, ov.shift);
+      const targetDateStr = `${tStart.getUTCFullYear()}-${String(tStart.getUTCMonth()+1).padStart(2,'0')}-${String(tStart.getUTCDate()).padStart(2,'0')}`;
+      overrideMap.set(`${ov.employeeId}_${targetDateStr}`, ov.shift);
     }
 
     await prisma.$transaction(async (tx) => {
@@ -1401,11 +1458,12 @@ const swapDays = async (req, res) => {
           newCheckOut.setUTCFullYear(tDate.getFullYear(), tDate.getMonth(), tDate.getDate());
         }
 
-        const rosterShift = overrideMap.get(src.employeeId);
+        const targetDateStr = `${tStart.getUTCFullYear()}-${String(tStart.getUTCMonth()+1).padStart(2,'0')}-${String(tStart.getUTCDate()).padStart(2,'0')}`;
+        const rosterShift = overrideMap.get(`${src.employeeId}_${targetDateStr}`);
         const effectiveShift = rosterShift || src.employee.shift || null;
 
-        const shiftStart = effectiveShift?.startTime || '08:00';
-        let shiftEnd = effectiveShift?.endTime || '17:00';
+        const shiftStart = effectiveShift?.startTime || defaultShiftStart;
+        let shiftEnd = effectiveShift?.endTime || defaultShiftEnd;
         const gracePeriod = effectiveShift ? effectiveShift.gracePeriod : globalGracePeriod;
 
         const dayOfWeek = tStart.getUTCDay();
@@ -1419,7 +1477,7 @@ const swapDays = async (req, res) => {
         let lateStatus = 'PRESENT';
         let lateMinutes = 0;
         if (newCheckIn) {
-          const calc = calculateLateness(newCheckIn, shiftStart, gracePeriod, shiftEnd, roundingConfig);
+          const calc = calculateLateness(newCheckIn, shiftStart, gracePeriod, shiftEnd, roundingConfig, penaltyRules);
           lateStatus = calc.status;
           lateMinutes = calc.lateMinutes;
         }
@@ -1675,6 +1733,8 @@ const update = async (req, res) => {
     const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
     const globalGracePeriod = parseInt(settingsList.find(s => s.key === 'gracePeriod')?.value || '15', 10);
     const timezoneOffset = parseInt(settingsList.find(s => s.key === 'timezoneOffset')?.value || '420', 10);
+    const defaultShiftStart = settingsList.find(s => s.key === 'defaultShiftStart')?.value || '08:00';
+    const defaultShiftEnd = settingsList.find(s => s.key === 'defaultShiftEnd')?.value || '17:00';
 
     const dateStart = new Date(oldRecord.date);
     dateStart.setHours(0,0,0,0);
@@ -1730,8 +1790,8 @@ const update = async (req, res) => {
     // Automatically recalculate status and lateness if times are changed and status is not explicitly set to SAKIT/IZIN/etc.
     const finalStatusType = status || oldRecord.status;
     if (!['SAKIT', 'IZIN', 'CUTI', 'HOLIDAY'].includes(finalStatusType)) {
-      const shiftStart = effectiveShift?.startTime || '08:00';
-      let shiftEnd = effectiveShift?.endTime || '17:00';
+      const shiftStart = effectiveShift?.startTime || defaultShiftStart;
+      let shiftEnd = effectiveShift?.endTime || defaultShiftEnd;
       const gracePeriod = effectiveShift ? effectiveShift.gracePeriod : globalGracePeriod;
       
       const recordDate = new Date(oldRecord.date);
@@ -1749,7 +1809,7 @@ const update = async (req, res) => {
       let lateStatus = 'PRESENT';
       let lateMins = 0;
       if (finalIn) {
-        const calc = calculateLateness(finalIn, shiftStart, gracePeriod, shiftEnd, updateRoundingConfig);
+        const calc = calculateLateness(finalIn, shiftStart, gracePeriod, shiftEnd, updateRoundingConfig, updatePenaltyRules);
         lateStatus = calc.status;
         lateMins = calc.lateMinutes;
       }
@@ -1996,10 +2056,11 @@ const manualCorrectionHRD = async (req, res) => {
 
     const targetDate = toUTCMidnight(new Date(date));
     
-    // Fetch timezoneOffset setting
-    const timezoneOffsetSetting = await prisma.settings.findUnique({
-      where: { key: 'timezoneOffset' }
-    });
+    // Fetch settings including defaultShiftStart/End and timezoneOffset
+    const settingsList = await prisma.settings.findMany();
+    const defaultShiftStart = settingsList.find(s => s.key === 'defaultShiftStart')?.value || '08:00';
+    const defaultShiftEnd = settingsList.find(s => s.key === 'defaultShiftEnd')?.value || '17:00';
+    const timezoneOffsetSetting = settingsList.find(s => s.key === 'timezoneOffset');
     const timezoneOffset = parseInt(timezoneOffsetSetting?.value || '420', 10);
     
     let updatedCount = 0;
@@ -2111,7 +2172,7 @@ const manualCorrectionHRD = async (req, res) => {
           });
 
           const effectiveShift = shiftOverride?.shift || emp.shift;
-          const cInStr = effectiveShift?.startTime || "08:00"; 
+          const cInStr = effectiveShift?.startTime || defaultShiftStart; 
           const gracePeriod = effectiveShift?.gracePeriod || 15;
           
           const [sh, sm] = cInStr.split(':').map(Number);
@@ -2313,7 +2374,7 @@ const getBhlSummary = async (req, res) => {
     
     const summary = bhlEmployees.map(emp => {
       const dailyRate = emp.salary?.dailyRate || 0;
-      const workingDays = emp.attendance.filter(a => ['PRESENT', 'LATE'].includes(a.status)).length;
+      const workingDays = emp.attendance.filter(a => ['PRESENT', 'LATE', 'EARLY_DEPARTURE'].includes(a.status)).length;
       const halfDays = emp.attendance.filter(a => a.status === 'HALF_DAY').length;
       const sickDays = emp.attendance.filter(a => a.status === 'SAKIT').length;
       const leaveDays = emp.attendance.filter(a => a.status === 'IZIN').length;

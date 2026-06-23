@@ -131,6 +131,10 @@ const Leave = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (formData.endDate && formData.startDate && formData.endDate < formData.startDate) {
+      showToast('Tanggal selesai tidak boleh sebelum tanggal mulai.', 'error');
+      return;
+    }
     leaveMutation.mutate({ ...formData, employeeId: empId });
   };
 
@@ -278,19 +282,25 @@ const Leave = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-xs font-semibold text-slate-500">Start Date</label>
-                  <input 
+                  <input
                     type="date"
                     required
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 transition-all"
                     value={formData.startDate}
-                    onChange={(e) => setFormData({...formData, startDate: e.target.value})}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      startDate: e.target.value,
+                      // Keep endDate consistent: clear it if it now precedes startDate
+                      endDate: formData.endDate && formData.endDate < e.target.value ? '' : formData.endDate
+                    })}
                   />
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs font-semibold text-slate-500">End Date</label>
-                  <input 
+                  <input
                     type="date"
                     required
+                    min={formData.startDate || undefined}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 transition-all"
                     value={formData.endDate}
                     onChange={(e) => setFormData({...formData, endDate: e.target.value})}

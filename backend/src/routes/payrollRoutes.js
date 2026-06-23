@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { verifyToken: auth, requireAdmin } = require('../middleware/auth');
+const { verifyToken: auth, requireAdmin, requireAdminOrDirektur } = require('../middleware/auth');
 const configCtrl = require('../controllers/payrollConfigController');
 const payrollCtrl = require('../controllers/payrollController');
 
@@ -37,16 +37,19 @@ router.put('/position-allowances/batch', auth, requireAdmin, configCtrl.batchUps
 router.delete('/position-allowances/:id', auth, requireAdmin, configCtrl.deletePositionAllowance);
 
 // ─── Payroll Operations ──────────────────────────
-router.get('/list', auth, requireAdmin, payrollCtrl.getAll);
+// Director acts as payroll checker (approve/reject) and can view list/detail/export.
+// All other payroll operations stay admin-only.
+router.get('/list', auth, requireAdminOrDirektur, payrollCtrl.getAll);
 router.get('/summary', auth, requireAdmin, payrollCtrl.getPayrollSummary);
 router.post('/generate', auth, requireAdmin, payrollCtrl.generate);
-router.get('/detail/:id', auth, requireAdmin, payrollCtrl.getById);
+router.get('/detail/:id', auth, requireAdminOrDirektur, payrollCtrl.getById);
 router.put('/:id/submit', auth, requireAdmin, payrollCtrl.submitForApproval);
-router.put('/:id/approve', auth, requireAdmin, payrollCtrl.approve);
-router.put('/:id/reject', auth, requireAdmin, payrollCtrl.reject);
+router.put('/:id/approve', auth, requireAdminOrDirektur, payrollCtrl.approve);
+router.put('/:id/reject', auth, requireAdminOrDirektur, payrollCtrl.reject);
 router.put('/:id/finalize', auth, requireAdmin, payrollCtrl.finalize);
 router.put('/:id/cancel', auth, requireAdmin, payrollCtrl.cancel);
-router.get('/:id/export-excel', auth, requireAdmin, payrollCtrl.exportExcel);
+router.delete('/:id', auth, requireAdmin, payrollCtrl.deletePayroll);
+router.get('/:id/export-excel', auth, requireAdminOrDirektur, payrollCtrl.exportExcel);
 router.get('/:id/slip/:empId', auth, requireAdmin, payrollCtrl.getSlip);
 
 // ─── Employee Slip (own — validates ownership in controller) ─────────────────

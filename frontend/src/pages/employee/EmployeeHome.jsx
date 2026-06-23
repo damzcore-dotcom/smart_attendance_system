@@ -14,9 +14,9 @@ import {
 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { authAPI, attendanceAPI, announcementAPI } from '../../services/api';
-import { verifyRealLocation } from '../../utils/geoUtils';
+import { syncPendingAttendance } from '../../utils/offlineSync';
 
 const EmployeeHome = () => {
   const navigate = useNavigate();
@@ -26,6 +26,17 @@ const EmployeeHome = () => {
 
   const [toast, setToast] = useState(null);
   const [timeState, setTimeState] = useState(new Date());
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const update = () => setIsOnline(navigator.onLine);
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    return () => {
+      window.removeEventListener('online', update);
+      window.removeEventListener('offline', update);
+    };
+  }, []);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -71,98 +82,21 @@ const EmployeeHome = () => {
   
   const announcements = annData?.data || [];
 
-  // Offline Sync Effect
+  // Offline Sync Effect — uses the shared, encryption-aware util so the queue
+  // written by Scan.jsx (encrypted) is read correctly here too.
   useEffect(() => {
     const syncOffline = async () => {
-      if (!navigator.onLine) return;
-      const pendingText = localStorage.getItem('pending_sync');
-      if (!pendingText) return;
-      
-      try {
-        const pending = JSON.parse(pendingText);
-        if (pending.length === 0) return;
-        
-        let successCount = 0;
-        for (const record of pending) {
-          try {
-            if (record.type === 'OUT') {
-              await attendanceAPI.checkOut(record.employeeId, record.photoData);
-            } else {
-              await attendanceAPI.checkIn(
-                record.employeeId, 
-                record.mode, 
-                record.lat, 
-                record.lng, 
-                record.accuracy, 
-                record.timestamp, 
-                record.photoData
-              );
-            }
-            successCount++;
-          } catch (e) {
-            console.error('Sync error for record:', e);
-          }
-        }
-        
-        if (successCount > 0) {
-          showToast(`Berhasil sinkronisasi ${successCount} rekam absen offline ke server!`, 'success');
-          localStorage.removeItem('pending_sync');
-          queryClient.invalidateQueries({ queryKey: ['today-attendance'] });
-        }
-      } catch (err) {
-        console.error('Failed to parse pending auth', err);
+      const { synced } = await syncPendingAttendance();
+      if (synced > 0) {
+        showToast(`Berhasil sinkronisasi ${synced} rekam absen offline ke server!`, 'success');
+        queryClient.invalidateQueries({ queryKey: ['today-attendance'] });
       }
     };
-    
-    // Attempt sync
+
     syncOffline();
     window.addEventListener('online', syncOffline);
     return () => window.removeEventListener('online', syncOffline);
   }, [queryClient]);
-
-  const checkInMutation = useMutation({
-    mutationFn: (mode) => {
-      return new Promise((resolve, reject) => {
-        verifyRealLocation(
-          (pos) => {
-            const { latitude, longitude, accuracy } = pos.coords;
-            attendanceAPI.checkIn(empId, mode, latitude, longitude, accuracy, pos.timestamp)
-              .then(resolve)
-              .catch(reject);
-          },
-          (err) => reject(err)
-        );
-      });
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['today-attendance'] });
-      showToast(data.message, 'success');
-    },
-    onError: (err) => showToast(err.message || 'Failed to check in', 'error'),
-  });
-
-  const checkOutMutation = useMutation({
-    mutationFn: () => {
-      return new Promise((resolve, reject) => {
-        verifyRealLocation(
-          (pos) => {
-            // Kita bisa juga nge-pass coordinates checkout ke backend kalau backend mendukung,
-            // tapi saat ini API attendanceAPI.checkOut(empId) tidak mengirim lat/lng.
-            // Namun, proses ini memastikan pengguna harus berada di lokasi yang valid (tidak fake) saat checkout.
-            attendanceAPI.checkOut(empId)
-              .then(resolve)
-              .catch(reject);
-          },
-          (err) => reject(err)
-        );
-      });
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['today-attendance'] });
-      showToast(data.message, 'success');
-    },
-    onError: (err) => showToast(err.message || 'Failed to check out', 'error'),
-  });
 
   const todayRecord = attendanceData?.data?.find(r => r.employeeId === empId);
   const currentTime = timeState.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -214,8 +148,8 @@ const EmployeeHome = () => {
             </h2>
             
             <div className="flex items-center gap-2 text-xs bg-slate-50 w-fit px-3 py-1.5 rounded-lg border border-slate-200 text-slate-500 font-medium">
-              <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse" />
-              <span>HQ Office • Connected</span>
+              <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+              <span>{shift?.name || 'Shift Default'} • {isOnline ? 'Online' : 'Offline'}</span>
             </div>
           </div>
           
