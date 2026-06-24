@@ -487,7 +487,6 @@ const Employees = ({ isReadOnly = false }) => {
               onClick={() => {
                 setNewEmployee(emptyEmployee);
                 setActiveTab('basic');
-                setNikError('');
                 setAddModalOpen(true);
               }} 
               className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.98]"

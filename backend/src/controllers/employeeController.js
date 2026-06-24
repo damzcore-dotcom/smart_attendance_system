@@ -239,6 +239,21 @@ const create = async (req, res) => {
         employeeCode = String(maxNum + 1);
       }
     }
+
+    if (employeeCode) {
+      const existingNik = await prisma.employee.findUnique({ where: { employeeCode } });
+      if (existingNik) {
+        return res.status(400).json({ success: false, message: `NIK ${employeeCode} sudah terdaftar di sistem.` });
+      }
+    }
+
+    if (rest.fingerprintId) {
+      const existingFinger = await prisma.employee.findUnique({ where: { fingerprintId: rest.fingerprintId } });
+      if (existingFinger) {
+        return res.status(400).json({ success: false, message: `ID Sidik Jari ${rest.fingerprintId} sudah digunakan oleh karyawan lain.` });
+      }
+    }
+
     const defaultShift = await prisma.shift.findFirst();
 
     let profilePhotoUrl = rest.profilePhoto || null;
@@ -328,6 +343,15 @@ const create = async (req, res) => {
 const update = async (req, res) => {
   try {
     const { name, email, dept, phone, position, status, faceStatus, faceDescriptor, ...rest } = req.body;
+    const empId = parseInt(req.params.id);
+
+    if (rest.fingerprintId) {
+      const existingFinger = await prisma.employee.findUnique({ where: { fingerprintId: rest.fingerprintId } });
+      if (existingFinger && existingFinger.id !== empId) {
+        return res.status(400).json({ success: false, message: `ID Sidik Jari ${rest.fingerprintId} sudah digunakan oleh karyawan lain.` });
+      }
+    }
+
     const data = { ...rest };
     if (name) data.name = name;
     if (email) data.email = email;
