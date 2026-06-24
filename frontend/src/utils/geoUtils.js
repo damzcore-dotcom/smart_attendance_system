@@ -5,24 +5,27 @@
  * 1. Suspicious accuracy values combined with lack of altitude/speed data.
  * 2. Perfect static coordinates over a short period of time. Real GPS always has minor fluctuations (noise).
  */
-export const verifyRealLocation = (onSuccess, onError) => {
+export const verifyRealLocation = (onSuccess, onError, opts = {}) => {
   if (!navigator.geolocation) {
     return onError(new Error("Geolocation is not supported by your browser"));
   }
 
-  const options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
+  // Batas akurasi maksimum (meter) sebelum lokasi ditolak. Browser (terutama desktop/WiFi)
+  // sering melaporkan akurasi rendah, jadi default dilonggarkan menjadi 1500 m.
+  const maxAccuracy = opts.maxAccuracy || 1500;
+  const options = { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 };
 
   navigator.geolocation.getCurrentPosition(
     (pos1) => {
       const { accuracy, altitude, speed, latitude, longitude } = pos1.coords;
-      
+
       // Basic heuristic: Accuracy is often perfectly round on Fake GPS (e.g., 10, 20, 65)
       // And they usually don't simulate altitude or speed.
       const suspiciousAccuracies = [1, 5, 10, 15, 20, 65, 100];
       const isSuspicious = suspiciousAccuracies.includes(accuracy) && altitude === null && speed === null;
 
-      if (accuracy > 500) {
-        return onError(new Error(`GPS Accuracy terlalu rendah (${Math.round(accuracy)}m). Silakan pindah ke area terbuka.`));
+      if (accuracy > maxAccuracy) {
+        return onError(new Error(`GPS Accuracy terlalu rendah (${Math.round(accuracy)}m). Silakan pindah ke area terbuka atau gunakan ponsel.`));
       }
 
       // Advanced heuristic: Check for static coordinates (No noise)

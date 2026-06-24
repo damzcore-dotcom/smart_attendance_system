@@ -327,7 +327,7 @@ const Settings = () => {
 
       <div className="flex flex-col lg:flex-row gap-8 items-start">
         {/* Sidebar Navigation */}
-        <aside className="w-full lg:w-72 shrink-0 lg:sticky lg:top-8">
+        <aside className="w-full lg:w-80 shrink-0 lg:sticky lg:top-8">
           <div className="bg-white p-3 border border-slate-200 rounded-2xl shadow-sm space-y-1">
             {visibleTabs.map((tab) => {
               const Icon = tab.icon;
@@ -336,7 +336,7 @@ const Settings = () => {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`w-full flex items-center gap-4 px-5 py-4 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-300 group relative overflow-hidden ${
+                  className={`w-full flex items-center gap-4 px-5 py-4 rounded-xl text-xs font-bold uppercase tracking-wider text-left transition-all duration-300 group relative overflow-hidden ${
                     isActive 
                       ? 'bg-blue-50 text-blue-700' 
                       : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
@@ -610,6 +610,18 @@ const Settings = () => {
                       <div className="w-12 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                     </label>
                   </div>
+
+                  <div className="p-6 bg-slate-50 border border-slate-100 rounded-2xl space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.location.gpsTolerance', 'Toleransi Akurasi GPS (meter)')}</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={formData.gpsAccuracyTolerance ?? 75}
+                      onChange={(e) => handleInputChange('gpsAccuracyTolerance', e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-5 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                    />
+                    <p className="text-[10px] text-slate-400 ml-1 normal-case">{t('settingsPage.location.gpsToleranceHelp', 'Ditambahkan ke radius saat akurasi GPS rendah (mis. browser/desktop). Maks. yang ditambahkan = nilai ini.')}</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -873,70 +885,173 @@ const Settings = () => {
                 </div>
 
                 <div className="bg-white p-8 border border-slate-200 shadow-sm rounded-3xl">
-                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-widest mb-6 border-l-4 border-amber-500 pl-4">{t('settingsPage.shifts.otIntel')}</h3>
-                  
-                  <div className="space-y-4 mb-6">
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-widest mb-6 border-l-4 border-blue-500 pl-4">{t('settingsPage.shifts.attWindow', 'Aturan Presensi (Jendela & Guard)')}</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.shifts.otMaxDay')}</label>
-                      <input 
-                        type="number" 
-                        value={formData.overtimeMaxPerDay || 4} 
-                        onChange={(e) => handleInputChange('overtimeMaxPerDay', e.target.value)}
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.shifts.checkinEarly', 'Buka check-in sebelum jam masuk (menit)')}</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={formData.checkinEarlyMinutes ?? 120}
+                        onChange={(e) => handleInputChange('checkinEarlyMinutes', e.target.value)}
                         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all"
                       />
+                      <p className="text-[10px] text-slate-400 ml-1 normal-case">{t('settingsPage.shifts.checkinEarlyHelp', 'Check-in tetap tersedia sampai jam pulang shift (mendukung izin datang telat).')}</p>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.shifts.otMaxMonth')}</label>
-                      <input 
-                        type="number" 
-                        value={formData.overtimeMaxPerMonth || 40} 
-                        onChange={(e) => handleInputChange('overtimeMaxPerMonth', e.target.value)}
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">{t('settingsPage.shifts.checkoutGuard', 'Jeda minimal sebelum check-out (menit)')}</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={formData.checkoutGuardMinutes ?? 30}
+                        onChange={(e) => handleInputChange('checkoutGuardMinutes', e.target.value)}
                         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all"
                       />
+                      <p className="text-[10px] text-slate-400 ml-1 normal-case">{t('settingsPage.shifts.checkoutGuardHelp', 'Mencegah salah-pencet ganda; pulang sebelum jam pulang ditandai EARLY_DEPARTURE.')}</p>
                     </div>
                   </div>
+                </div>
 
-                  <div className="flex items-center justify-between p-6 bg-slate-50 border border-slate-100 rounded-2xl hover:border-blue-200 transition-all duration-300">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-amber-50 border border-amber-100 rounded-xl flex items-center justify-center text-amber-600">
-                        <Bell className="w-5 h-5" />
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-sm font-bold text-slate-800 tracking-tight">{t('settingsPage.shifts.otNotify')}</p>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{t('settingsPage.shifts.otNotifyDesc')}</p>
-                      </div>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        className="sr-only peer" 
-                        checked={formData.otNotification === 'true'}
-                        onChange={(e) => handleInputChange('otNotification', String(e.target.checked))}
-                      />
-                      <div className="w-12 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </label>
-                  </div>
-                  
-                  <div className="flex items-center justify-between p-6 bg-slate-50 border border-slate-100 rounded-2xl hover:border-blue-200 transition-all duration-300 mt-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-center text-indigo-600">
-                        <Clock className="w-5 h-5" />
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-sm font-bold text-slate-800 tracking-tight">{t('settingsPage.shifts.otAuto')}</p>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{t('settingsPage.shifts.otAutoDesc')}</p>
-                      </div>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        className="sr-only peer" 
-                        checked={formData.autoCalculateOvertime !== 'false'}
-                        onChange={(e) => handleInputChange('autoCalculateOvertime', String(e.target.checked))}
-                      />
-                      <div className="w-12 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </label>
-                  </div>
+                <div className="bg-white p-8 border border-slate-200 shadow-sm rounded-3xl">
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-widest mb-6 border-l-4 border-amber-500 pl-4">{t('settingsPage.shifts.otIntel')}</h3>
+
+                  {(() => {
+                    const otMode = formData.overtimeMode || (formData.autoCalculateOvertime === 'false' ? 'MANUAL' : 'AUTO');
+                    const setOtMode = (mode) => {
+                      handleInputChange('overtimeMode', mode);
+                      handleInputChange('autoCalculateOvertime', mode === 'MANUAL' ? 'false' : 'true');
+                    };
+                    const inputCls = "w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-3.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all";
+                    const labelCls = "text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1";
+                    const toggleCls = "w-12 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600";
+                    const holidayOn = formData.holidayOvertimeEnabled !== 'false';
+                    const holidayMode = formData.holidayOvertimeCalcMode || 'FULL_WORKED';
+                    return (
+                      <>
+                        {/* Pemilih Mode Lembur */}
+                        <div className="mb-6">
+                          <label className={labelCls}>{t('settingsPage.shifts.otModeTitle', 'Mode Perhitungan Lembur')}</label>
+                          <div className="grid grid-cols-2 gap-3 mt-2">
+                            <button type="button" onClick={() => setOtMode('AUTO')}
+                              className={`flex flex-col items-start gap-1 p-4 rounded-2xl border-2 text-left transition-all ${otMode === 'AUTO' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-slate-50 hover:border-blue-200'}`}>
+                              <span className="text-sm font-bold text-slate-800">{t('settingsPage.shifts.otModeAuto', 'Otomatis')}</span>
+                              <span className="text-[10px] text-slate-500 font-semibold leading-tight">{t('settingsPage.shifts.otModeAutoDesc', 'Sistem menghitung lembur saat absen pulang')}</span>
+                            </button>
+                            <button type="button" onClick={() => setOtMode('MANUAL')}
+                              className={`flex flex-col items-start gap-1 p-4 rounded-2xl border-2 text-left transition-all ${otMode === 'MANUAL' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-slate-50 hover:border-blue-200'}`}>
+                              <span className="text-sm font-bold text-slate-800">{t('settingsPage.shifts.otModeManual', 'Manual (SPL)')}</span>
+                              <span className="text-[10px] text-slate-500 font-semibold leading-tight">{t('settingsPage.shifts.otModeManualDesc', 'Lembur hanya dari input Manajemen Lembur')}</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {otMode === 'MANUAL' ? (
+                          <div className="flex items-start gap-3 p-5 bg-amber-50 border border-amber-100 rounded-2xl">
+                            <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                            <p className="text-xs text-amber-800 font-semibold leading-relaxed">{t('settingsPage.shifts.otManualNote', 'Mode Manual aktif: sistem tidak menghitung lembur otomatis saat absen pulang. Input jam lembur melalui menu Manajemen Lembur (SPL).')}</p>
+                          </div>
+                        ) : (
+                          <>
+                            {/* Parameter mode Otomatis */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+                              <div className="space-y-2">
+                                <label className={labelCls}>{t('settingsPage.shifts.otMinMinutes', 'Ambang Minimal (menit)')}</label>
+                                <input type="number" min="0" value={formData.overtimeMinMinutes ?? 30} onChange={(e) => handleInputChange('overtimeMinMinutes', e.target.value)} className={inputCls} />
+                              </div>
+                              <div className="space-y-2">
+                                <label className={labelCls}>{t('settingsPage.shifts.otRounding', 'Pembulatan (menit)')}</label>
+                                <input type="number" min="0" value={formData.overtimeRoundingMinutes ?? 30} onChange={(e) => handleInputChange('overtimeRoundingMinutes', e.target.value)} className={inputCls} />
+                              </div>
+                              <div className="space-y-2">
+                                <label className={labelCls}>{t('settingsPage.shifts.otRoundingMode', 'Arah Pembulatan')}</label>
+                                <select value={formData.overtimeRoundingMode || 'DOWN'} onChange={(e) => handleInputChange('overtimeRoundingMode', e.target.value)} className={inputCls}>
+                                  <option value="DOWN">{t('settingsPage.shifts.otRoundDown', 'Ke bawah')}</option>
+                                  <option value="NEAREST">{t('settingsPage.shifts.otRoundNearest', 'Terdekat')}</option>
+                                  <option value="UP">{t('settingsPage.shifts.otRoundUp', 'Ke atas')}</option>
+                                </select>
+                              </div>
+                              <div className="space-y-2">
+                                <label className={labelCls}>{t('settingsPage.shifts.otMaxDay')}</label>
+                                <input type="number" min="0" value={formData.overtimeMaxPerDay || 4} onChange={(e) => handleInputChange('overtimeMaxPerDay', e.target.value)} className={inputCls} />
+                              </div>
+                              <div className="space-y-2">
+                                <label className={labelCls}>{t('settingsPage.shifts.otMaxMonth')}</label>
+                                <input type="number" min="0" value={formData.overtimeMaxPerMonth || 40} onChange={(e) => handleInputChange('overtimeMaxPerMonth', e.target.value)} className={inputCls} />
+                              </div>
+                            </div>
+
+                            {/* Potong jam istirahat */}
+                            <div className="flex items-center justify-between p-5 bg-slate-50 border border-slate-100 rounded-2xl mb-4">
+                              <div className="space-y-1 pr-4">
+                                <p className="text-sm font-bold text-slate-800 tracking-tight">{t('settingsPage.shifts.otDeductBreak', 'Potong Jam Istirahat')}</p>
+                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{t('settingsPage.shifts.otDeductBreakDesc', 'Kurangi durasi istirahat dari jam lembur')}</p>
+                              </div>
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" className="sr-only peer" checked={formData.overtimeDeductBreak === 'true'} onChange={(e) => handleInputChange('overtimeDeductBreak', String(e.target.checked))} />
+                                <div className={toggleCls}></div>
+                              </label>
+                            </div>
+
+                            {/* Sub-kartu Lembur Hari Libur */}
+                            <div className="p-6 bg-gradient-to-br from-rose-50 to-amber-50 border border-rose-100 rounded-2xl">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 bg-white border border-rose-100 rounded-xl flex items-center justify-center text-rose-500"><CalendarCheck className="w-5 h-5" /></div>
+                                  <div className="space-y-0.5">
+                                    <p className="text-sm font-bold text-slate-800 tracking-tight">{t('settingsPage.shifts.holidayOt', 'Lembur Hari Libur')}</p>
+                                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{t('settingsPage.shifts.holidayOtDesc', 'Hitung lembur otomatis saat masuk di hari libur')}</p>
+                                  </div>
+                                </div>
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                  <input type="checkbox" className="sr-only peer" checked={holidayOn} onChange={(e) => handleInputChange('holidayOvertimeEnabled', String(e.target.checked))} />
+                                  <div className={toggleCls}></div>
+                                </label>
+                              </div>
+
+                              {holidayOn && (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5">
+                                  <div className="space-y-2">
+                                    <label className={labelCls}>{t('settingsPage.shifts.holidayOtMode', 'Cara Hitung')}</label>
+                                    <select value={holidayMode} onChange={(e) => handleInputChange('holidayOvertimeCalcMode', e.target.value)} className={inputCls}>
+                                      <option value="FULL_WORKED">{t('settingsPage.shifts.holidayOtFull', 'Seluruh durasi kerja')}</option>
+                                      <option value="AFTER_TIME">{t('settingsPage.shifts.holidayOtAfter', 'Setelah jam tertentu')}</option>
+                                    </select>
+                                  </div>
+                                  {holidayMode === 'AFTER_TIME' && (
+                                    <div className="space-y-2">
+                                      <label className={labelCls}>{t('settingsPage.shifts.holidayOtStart', 'Jam Mulai')}</label>
+                                      <input type="time" value={formData.holidayOvertimeStartTime || '08:00'} onChange={(e) => handleInputChange('holidayOvertimeStartTime', e.target.value)} className={inputCls} />
+                                    </div>
+                                  )}
+                                  <div className="space-y-2">
+                                    <label className={labelCls}>{t('settingsPage.shifts.holidayOtMax', 'Maks. Jam Libur')}</label>
+                                    <input type="number" min="0" value={formData.holidayOvertimeMaxHours || 12} onChange={(e) => handleInputChange('holidayOvertimeMaxHours', e.target.value)} className={inputCls} />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        )}
+
+                        {/* Notifikasi lembur (selalu tampil) */}
+                        <div className="flex items-center justify-between p-6 bg-slate-50 border border-slate-100 rounded-2xl hover:border-blue-200 transition-all duration-300 mt-4">
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 bg-amber-50 border border-amber-100 rounded-xl flex items-center justify-center text-amber-600">
+                              <Bell className="w-5 h-5" />
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-sm font-bold text-slate-800 tracking-tight">{t('settingsPage.shifts.otNotify')}</p>
+                              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{t('settingsPage.shifts.otNotifyDesc')}</p>
+                            </div>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" className="sr-only peer" checked={formData.otNotification === 'true'} onChange={(e) => handleInputChange('otNotification', String(e.target.checked))} />
+                            <div className={toggleCls}></div>
+                          </label>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             </div>

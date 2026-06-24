@@ -827,7 +827,6 @@ const ManualCorrectionHRD = () => {
                                     className="bg-white border border-slate-300 text-slate-700 cursor-pointer rounded-lg px-3 py-1.5 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-rose-500 uppercase transition-all"
                                   >
                                     <option value="">{t('manualCorrection.table.noChange')}</option>
-                                    <option value="PRESENT">{t('manualCorrection.table.presentNormal')}</option>
                                     <option value="IZIN">{t('manualCorrection.table.izin')}</option>
                                     <option value="SAKIT">{t('manualCorrection.table.sakit')}</option>
                                     <option value="CUTI">{t('manualCorrection.table.cuti')}</option>

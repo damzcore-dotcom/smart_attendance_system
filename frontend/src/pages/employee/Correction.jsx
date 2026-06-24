@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { 
   Calendar, 
   Clock, 
@@ -14,6 +15,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { authAPI, correctionAPI } from '../../services/api';
 
 const Correction = () => {
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const user = authAPI.getStoredUser();
@@ -29,6 +31,15 @@ const Correction = () => {
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
+  };
+
+  const getRequestStatusTranslation = (status) => {
+    switch (status) {
+      case 'PENDING': return t('claims.statuses.PENDING', 'Menunggu');
+      case 'APPROVED': return t('claims.statuses.APPROVED', 'Disetujui');
+      case 'REJECTED': return t('claims.statuses.REJECTED', 'Ditolak');
+      default: return status;
+    }
   };
 
   useEffect(() => {
@@ -50,8 +61,8 @@ const Correction = () => {
 
   const mutation = useMutation({
     mutationFn: (data) => correctionAPI.create({ ...data, employeeId: empId }),
-    onSuccess: () => {
-      showToast('Correction request submitted successfully!', 'success');
+    onSuccess: (res) => {
+      showToast(t('employee.historyPage.toastSubmitSuccess', 'Pengajuan koreksi berhasil dikirim!'), 'success');
       setFormData({
         date: '',
         type: 'In',
@@ -59,8 +70,14 @@ const Correction = () => {
         reason: ''
       });
       queryClient.invalidateQueries({ queryKey: ['correction-history', empId] });
+      // Jika koreksi membuat check-in provisional → segarkan status absen hari ini agar tombol checkout muncul
+      if (res?.provisional) {
+        queryClient.invalidateQueries({ queryKey: ['today-attendance'] });
+        showToast(t('employee.correctionPage.toastProvisionalSuccess', 'Check-in tercatat sementara. Anda kini dapat melakukan checkout.'), 'success');
+        setTimeout(() => navigate('/employee'), 1200);
+      }
     },
-    onError: (err) => showToast(err.message || 'Failed to submit request', 'error'),
+    onError: (err) => showToast(err.message || t('employee.correctionPage.toastSubmitError', 'Gagal mengirim pengajuan'), 'error'),
   });
 
   const handleSubmit = (e) => {
@@ -80,13 +97,13 @@ const Correction = () => {
         >
           <ChevronLeft className="w-6 h-6" />
         </button>
-        <h1 className="text-xl font-bold text-slate-800">Request Correction</h1>
+        <h1 className="text-xl font-bold text-slate-800">{t('employee.correctionPage.title')}</h1>
       </div>
 
       <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex gap-3">
         <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
         <p className="text-xs text-amber-700 leading-relaxed">
-          Requests are subject to HR approval. Please provide a valid reason for the correction.
+          {t('employee.correctionPage.infoText')}
         </p>
       </div>
 
@@ -94,7 +111,7 @@ const Correction = () => {
         <div className="space-y-4">
           <div className="card p-4 space-y-4">
             <div>
-              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 px-1">Correction Date</label>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 px-1">{t('employee.correctionPage.dateLabel')}</label>
               <div className="relative">
                 <Calendar className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input 
@@ -108,7 +125,7 @@ const Correction = () => {
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 px-1">Correction Type</label>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 px-1">{t('employee.correctionPage.typeLabel')}</label>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
@@ -117,7 +134,7 @@ const Correction = () => {
                     formData.type === 'In' ? 'border-primary bg-primary/5 text-primary' : 'border-slate-50 bg-slate-50 text-slate-500'
                   }`}
                 >
-                  Check In
+                  {t('employee.correctionPage.checkIn')}
                 </button>
                 <button
                   type="button"
@@ -126,13 +143,13 @@ const Correction = () => {
                     formData.type === 'Out' ? 'border-primary bg-primary/5 text-primary' : 'border-slate-50 bg-slate-50 text-slate-500'
                   }`}
                 >
-                  Check Out
+                  {t('employee.correctionPage.checkOut')}
                 </button>
               </div>
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 px-1">Actual Time</label>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 px-1">{t('employee.correctionPage.actualTime')}</label>
               <div className="relative">
                 <Clock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input 
@@ -147,13 +164,13 @@ const Correction = () => {
           </div>
 
           <div className="card p-4">
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 px-1">Reason for Correction</label>
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 px-1">{t('employee.correctionPage.reasonLabel')}</label>
             <div className="relative">
               <FileText className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
               <textarea 
                 required
                 value={formData.reason}
-                placeholder="Ex: Forgot to check in due to urgent meeting..."
+                placeholder={t('employee.correctionPage.reasonPlaceholder')}
                 className="w-full bg-slate-50 border border-slate-100 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[120px]"
                 onChange={(e) => setFormData({...formData, reason: e.target.value})}
               ></textarea>
@@ -169,7 +186,7 @@ const Correction = () => {
           {mutation.isPending ? <Loader2 className="animate-spin" /> : (
             <>
               <Send className="w-5 h-5" />
-              Submit Request
+              {t('employee.correctionPage.submit')}
             </>
           )}
         </button>
@@ -177,7 +194,7 @@ const Correction = () => {
 
       {/* Riwayat Koreksi Section */}
       <div className="space-y-4 pt-6 border-t border-slate-200">
-        <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider px-1">Riwayat Koreksi</h3>
+        <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider px-1">{t('employee.correctionPage.historyTitle')}</h3>
         
         {historyLoading ? (
           <div className="flex justify-center py-8">
@@ -185,7 +202,7 @@ const Correction = () => {
           </div>
         ) : historyList.length === 0 ? (
           <div className="py-8 text-center border border-dashed border-slate-200 rounded-2xl bg-slate-50">
-            <p className="text-xs text-slate-400">Belum ada riwayat pengajuan koreksi</p>
+            <p className="text-xs text-slate-400">{t('employee.correctionPage.noHistory')}</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -198,36 +215,36 @@ const Correction = () => {
                     }`}>
                       Check {item.type}
                     </span>
-                    <p className="text-[10px] font-medium text-slate-400 mt-2">Diajukan: {new Date(item.createdAt).toLocaleDateString()}</p>
+                    <p className="text-[10px] font-medium text-slate-400 mt-2">{t('employee.correctionPage.filed')}: {new Date(item.createdAt).toLocaleDateString(i18n.language)}</p>
                   </div>
                   <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold border uppercase tracking-wider ${
                     item.status === 'PENDING' ? 'bg-amber-50 text-amber-700 border-amber-200' :
                     item.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
                     'bg-rose-50 text-rose-700 border-rose-200'
                   }`}>
-                    {item.status}
+                    {getRequestStatusTranslation(item.status)}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 bg-slate-50 border border-slate-100 rounded-xl p-4">
                   <div>
-                    <span className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Tanggal Koreksi</span>
+                    <span className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">{t('employee.correctionPage.dateCol')}</span>
                     <p className="text-xs font-bold text-slate-700 mt-0.5">{item.date}</p>
                   </div>
                   <div className="text-right">
-                    <span className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Jam</span>
+                    <span className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">{t('employee.correctionPage.timeCol')}</span>
                     <p className="text-xs font-bold text-slate-700 mt-0.5">{item.time}</p>
                   </div>
                 </div>
 
                 <div className="p-3.5 bg-slate-50 border border-slate-100 rounded-xl">
-                  <span className="text-[9px] text-slate-400 uppercase font-bold tracking-wider block mb-1">Alasan</span>
+                  <span className="text-[9px] text-slate-400 uppercase font-bold tracking-wider block mb-1">{t('employee.correctionPage.reasonCol')}</span>
                   <p className="text-xs text-slate-600 leading-relaxed italic">"{item.reason}"</p>
                 </div>
 
                 {item.reviewNote && (
                   <div className="pt-3 border-t border-slate-100">
-                    <span className="text-[9px] text-blue-600 uppercase font-bold tracking-wider block mb-1">Catatan Reviewer</span>
+                    <span className="text-[9px] text-blue-600 uppercase font-bold tracking-wider block mb-1">{t('employee.correctionPage.reviewerNote')}</span>
                     <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl">
                       <p className="text-xs text-slate-700 leading-relaxed">{item.reviewNote}</p>
                     </div>

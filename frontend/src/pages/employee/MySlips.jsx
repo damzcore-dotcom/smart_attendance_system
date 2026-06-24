@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { authAPI, payrollAPI, settingsAPI, attendanceAPI } from '../../services/api';
 import { Banknote, Printer, ChevronLeft, Loader2, Calendar, FileText } from 'lucide-react';
@@ -7,6 +8,7 @@ import PrintableSlip from '../../components/payroll/PrintableSlip';
 import PrintableAttendanceReport from '../../components/payroll/PrintableAttendanceReport';
 
 const MySlips = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [printDetail, setPrintDetail] = useState(null);
   const [printReport, setPrintReport] = useState(null);
@@ -93,7 +95,7 @@ const MySlips = () => {
       }, 500);
     } catch (err) {
       console.error(err);
-      alert('Gagal mengambil rincian absensi');
+      alert(t('employee.mySlipsPage.toastFetchError', 'Gagal mengambil rincian absensi'));
     }
   };
 
@@ -108,8 +110,8 @@ const MySlips = () => {
             <ChevronLeft className="w-5 h-5" />
           </button>
           <div>
-            <h1 className="text-lg font-bold text-slate-800">Slip Gaji Saya</h1>
-            <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Riwayat Penggajian</p>
+            <h1 className="text-lg font-bold text-slate-800">{t('employee.mySlipsPage.title')}</h1>
+            <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">{t('employee.mySlipsPage.subtitle')}</p>
           </div>
         </div>
       </div>
@@ -124,8 +126,8 @@ const MySlips = () => {
             <div className="w-16 h-16 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center mx-auto mb-4">
               <Banknote className="w-8 h-8" />
             </div>
-            <p className="text-sm font-semibold text-slate-600">Belum Ada Slip Gaji</p>
-            <p className="text-[10px] text-slate-400 mt-1">Slip gaji akan muncul di sini setelah disetujui HRD.</p>
+            <p className="text-sm font-semibold text-slate-600">{t('employee.mySlipsPage.noSlips')}</p>
+            <p className="text-[10px] text-slate-400 mt-1">{t('employee.mySlipsPage.noSlipsDesc')}</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -138,22 +140,22 @@ const MySlips = () => {
                     </div>
                     <div>
                       <h3 className="font-bold text-slate-800">{slip.payroll?.periodName}</h3>
-                      <p className="text-[10px] font-semibold text-slate-500 uppercase">Periode</p>
+                      <p className="text-[10px] font-semibold text-slate-500 uppercase">{t('employee.mySlipsPage.period')}</p>
                     </div>
                   </div>
                   <div className="text-right">
                     <h3 className="font-bold text-blue-600 text-lg">Rp {slip.netPay?.toLocaleString('id-ID')}</h3>
-                    <p className="text-[10px] font-semibold text-slate-500 uppercase">Total Diterima</p>
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase">{t('employee.mySlipsPage.totalReceived')}</p>
                   </div>
                 </div>
                 
                 <div className="p-4 grid grid-cols-2 gap-4 text-xs">
                   <div>
-                    <p className="text-slate-500 mb-0.5">Gaji Pokok</p>
+                    <p className="text-slate-500 mb-0.5">{t('employee.mySlipsPage.baseSalary')}</p>
                     <p className="font-bold text-slate-800">Rp {slip.baseSalary?.toLocaleString('id-ID')}</p>
                   </div>
                   <div>
-                    <p className="text-slate-500 mb-0.5">Total Potongan</p>
+                    <p className="text-slate-500 mb-0.5">{t('employee.mySlipsPage.totalDeduction')}</p>
                     <p className="font-bold text-red-500">-Rp {slip.totalDeduction?.toLocaleString('id-ID')}</p>
                   </div>
                 </div>
@@ -163,17 +165,17 @@ const MySlips = () => {
                      onClick={() => toggleExpand(slip.id)}
                      className="text-[10px] font-bold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1 py-1"
                    >
-                     {expandedSlips[slip.id] ? 'Sembunyikan Rincian' : 'Lihat Rincian Gaji'}
+                     {expandedSlips[slip.id] ? t('employee.mySlipsPage.hideDetails') : t('employee.mySlipsPage.showDetails')}
                    </button>
                  </div>
 
                  {expandedSlips[slip.id] && (
                    <div className="px-4 pb-4 pt-3 border-t border-slate-100 bg-slate-50/50 space-y-3 text-xs animate-in slide-in-from-top-2 duration-200">
                      <div>
-                       <p className="font-bold text-slate-700 border-b border-slate-200 pb-1 mb-1.5 uppercase text-[9px] tracking-wider">Rincian Pendapatan</p>
+                       <p className="font-bold text-slate-700 border-b border-slate-200 pb-1 mb-1.5 uppercase text-[9px] tracking-wider">{t('employee.mySlipsPage.incomeDetails')}</p>
                        <div className="space-y-1">
                          <div className="flex justify-between text-slate-600">
-                           <span>Gaji Pokok {slip.proRatedSalary < slip.baseSalary ? '(Pro-Rata)' : ''}</span>
+                           <span>{slip.proRatedSalary < slip.baseSalary ? t('employee.mySlipsPage.proRated') : t('employee.mySlipsPage.baseSalary')}</span>
                            <span className="font-semibold text-slate-800">Rp {slip.proRatedSalary?.toLocaleString('id-ID')}</span>
                          </div>
                          {slip.allowances?.map((allow, idx) => (
@@ -184,7 +186,7 @@ const MySlips = () => {
                          ))}
                          {slip.overtimePay > 0 && (
                            <div className="flex justify-between text-slate-600">
-                             <span>Lembur ({slip.overtimeHours} jam)</span>
+                             <span>{t('employee.mySlipsPage.overtimeDetails', { hours: slip.overtimeHours })}</span>
                              <span className="font-semibold text-slate-800">Rp {slip.overtimePay?.toLocaleString('id-ID')}</span>
                            </div>
                          )}
@@ -192,7 +194,7 @@ const MySlips = () => {
                      </div>
 
                      <div>
-                       <p className="font-bold text-slate-700 border-b border-slate-200 pb-1 mb-1.5 uppercase text-[9px] tracking-wider">Rincian Potongan</p>
+                       <p className="font-bold text-slate-700 border-b border-slate-200 pb-1 mb-1.5 uppercase text-[9px] tracking-wider">{t('employee.mySlipsPage.deductionDetails')}</p>
                        <div className="space-y-1">
                          {slip.deductions?.map((deduct, idx) => (
                            <div key={idx} className="flex justify-between text-slate-600">
@@ -202,7 +204,7 @@ const MySlips = () => {
                          ))}
                          {slip.attendancePenalty > 0 && (
                            <div className="flex justify-between text-slate-600">
-                             <span>Potongan Terlambat</span>
+                             <span>{t('employee.mySlipsPage.latenessDeduction')}</span>
                              <span className="font-semibold text-red-500">-Rp {slip.attendancePenalty?.toLocaleString('id-ID')}</span>
                            </div>
                          )}
@@ -216,13 +218,13 @@ const MySlips = () => {
                     onClick={() => handlePrint(slip)}
                     className="w-full py-2.5 bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors border border-blue-100 hover:border-blue-600 active:scale-[0.98]"
                   >
-                    <Printer className="w-4 h-4" /> CETAK SLIP
+                    <Printer className="w-4 h-4" /> {t('employee.mySlipsPage.printSlip')}
                   </button>
                   <button 
                     onClick={() => handlePrintReport(slip)}
                     className="w-full py-2.5 bg-emerald-50 hover:bg-emerald-600 text-emerald-600 hover:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors border border-emerald-100 hover:border-emerald-600 active:scale-[0.98]"
                   >
-                    <FileText className="w-4 h-4" /> CETAK ABSENSI
+                    <FileText className="w-4 h-4" /> {t('employee.mySlipsPage.printAttendance')}
                   </button>
                 </div>
               </div>

@@ -10,6 +10,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { authAPI, notificationAPI } from '../../services/api';
 
 const colorMap = {
@@ -24,6 +25,7 @@ const colorMap = {
 };
 
 const Notifications = () => {
+  const { t, i18n } = useTranslation();
   const [activeTab, setActiveTab] = useState('All');
   const queryClient = useQueryClient();
   const user = authAPI.getStoredUser();
@@ -74,23 +76,23 @@ const Notifications = () => {
     const diffHours = Math.floor(diffMins / 60);
     const diffDays = Math.floor(diffHours / 24);
 
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    if (diffMins < 1) return t('employee.notificationsPage.time.justNow', 'Baru saja');
+    if (diffMins < 60) return t('employee.notificationsPage.time.minsAgo', '{{mins}}m yang lalu', { mins: diffMins });
+    if (diffHours < 24) return t('employee.notificationsPage.time.hoursAgo', '{{hours}}j yang lalu', { hours: diffHours });
+    if (diffDays < 7) return t('employee.notificationsPage.time.daysAgo', '{{days}}hari yang lalu', { days: diffDays });
+    return date.toLocaleDateString(i18n.language, { month: 'short', day: 'numeric' });
   };
 
   return (
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-center px-2">
-        <h1 className="text-xl font-bold text-slate-800">Inbox</h1>
+        <h1 className="text-xl font-bold text-slate-800">{t('employee.notificationsPage.title')}</h1>
         <button 
           onClick={() => notifications.forEach(n => n.unread && markReadMutation.mutate(n.id))}
           className="text-primary text-xs font-bold flex items-center gap-1.5 hover:bg-primary/5 px-3 py-1.5 rounded-full transition-colors"
         >
           <MailOpen className="w-4 h-4" />
-          Mark all as read
+          {t('employee.notificationsPage.markAllRead')}
         </button>
       </div>
 
@@ -104,7 +106,7 @@ const Notifications = () => {
               activeTab === tab ? 'bg-white text-primary shadow-sm' : 'text-slate-500'
             }`}
           >
-            {tab}
+            {tab === 'All' ? t('employee.notificationsPage.allTab') : t('employee.notificationsPage.unreadTab')}
             {tab === 'Unread' && unreadCount > 0 && (
               <span className="ml-2 bg-primary text-white text-[10px] px-1.5 py-0.5 rounded-full">
                 {unreadCount}
@@ -156,7 +158,7 @@ const Notifications = () => {
           <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto text-slate-300">
             <Bell className="w-10 h-10" />
           </div>
-          <p className="text-slate-400 font-medium">No new notifications</p>
+          <p className="text-slate-400 font-medium">{t('employee.notificationsPage.noNotifications')}</p>
         </div>
       )}
     </div>

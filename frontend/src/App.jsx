@@ -43,7 +43,6 @@ import Notifications from './pages/employee/Notifications';
 import Correction from './pages/employee/Correction';
 import Schedule from './pages/employee/Schedule';
 import Scan from './pages/employee/Scan';
-import FaceCheck from './pages/employee/FaceCheck';
 import Leave from './pages/employee/Leave';
 import MySlips from './pages/employee/MySlips';
 import Calendar from './pages/employee/Calendar';
@@ -223,7 +222,6 @@ function App() {
             <Route path="correction" element={<Correction />} />
             <Route path="schedule" element={<Schedule />} />
             <Route path="scan" element={<Scan />} />
-            <Route path="face-check" element={<FaceCheck />} />
             <Route path="leave" element={<Leave />} />
             <Route path="slips" element={<MySlips />} />
             <Route path="calendar" element={<Calendar />} />

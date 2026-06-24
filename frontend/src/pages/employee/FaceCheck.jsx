@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import Webcam from 'react-webcam';
 import { 
   Camera, 
@@ -17,6 +18,7 @@ import { authAPI, userAPI } from '../../services/api';
 import { loadFaceModels, faceapi, areModelsLoaded } from '../../utils/faceModelLoader';
 
 const FaceCheck = () => {
+  const { t, i18n } = useTranslation();
   const [scanStatus, setScanStatus] = useState('ready'); // ready, detecting, success, error
   const [error, setError] = useState(null);
   const [modelsLoaded, setModelsLoaded] = useState(false);
@@ -60,11 +62,11 @@ const FaceCheck = () => {
     mutationFn: (data) => userAPI.updateBiometrics(user.id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['me'] });
-      alert('Face ID Enrollment Sukses!');
+      alert(t('employee.faceCheckPage.toastEnrollSuccess', 'Face ID Enrollment Sukses!'));
       navigate('/employee/profile');
     },
     onError: (err) => {
-      setError('Gagal menyimpan biometrik: ' + err.message);
+      setError(t('employee.faceCheckPage.errorSaveBiometrics', 'Gagal menyimpan biometrik: ') + err.message);
       setScanStatus('error');
     }
   });
@@ -74,7 +76,7 @@ const FaceCheck = () => {
       .then(() => setModelsLoaded(true))
       .catch(err => {
         console.error('Failed to load face models', err);
-        setError('Gagal memuat model pengenalan wajah.');
+        setError(t('employee.faceCheckPage.errorLoadModels', 'Gagal memuat model pengenalan wajah.'));
       });
   }, []);
 
@@ -107,12 +109,12 @@ const FaceCheck = () => {
           });
         } else {
           setScanStatus('error');
-          setError('Wajah tidak terdeteksi. Posisikan wajah di tengah frame.');
+          setError(t('employee.faceCheckPage.faceNotDetected', 'Wajah tidak terdeteksi. Posisikan wajah di tengah frame.'));
         }
       } catch (err) {
         console.error(err);
         setScanStatus('error');
-        setError('Gagal mendeteksi wajah. Silakan coba lagi.');
+        setError(t('employee.faceCheckPage.failedDetectFace', 'Gagal mendeteksi wajah. Silakan coba lagi.'));
       }
     }
   }, [modelsLoaded, user.id]);
@@ -177,7 +179,7 @@ const FaceCheck = () => {
 
             if (isCompletelyStatic) {
               setScanStatus('error');
-              setError('Anti-Spoofing: Wajah terdeteksi statis. Harap gunakan wajah asli.');
+              setError(t('employee.faceCheckPage.antiSpoofingFailed', 'Anti-Spoofing: Wajah terdeteksi statis. Harap gunakan wajah asli.'));
               clearInterval(faceGuideRef.current);
               faceGuideRef.current = null;
               return;
@@ -217,24 +219,24 @@ const FaceCheck = () => {
             <ArrowLeft className="w-5 h-5 text-slate-500" />
           </button>
           <div>
-            <h1 className="text-xl font-bold text-slate-800">Face ID Enrollment</h1>
-            <p className="text-xs text-blue-600 font-semibold">Register your biometric data</p>
+            <h1 className="text-xl font-bold text-slate-800">{t('employee.faceCheckPage.title')}</h1>
+            <p className="text-xs text-blue-600 font-semibold">{t('employee.faceCheckPage.subtitle')}</p>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center text-center">
             <Clock className="w-5 h-5 text-blue-600 mb-2" />
-            <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mb-0.5">Time</p>
+            <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mb-0.5">{t('common.time', 'Waktu')}</p>
             <p className="font-bold text-slate-800 text-sm">
-              {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              {currentTime.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
             </p>
           </div>
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center text-center">
             <MapPin className={`w-5 h-5 mb-2 transition-colors ${coords ? 'text-emerald-600' : 'text-slate-300'}`} />
-            <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mb-0.5">Location</p>
+            <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mb-0.5">{t('employee.schedulePage.workLocation', 'Lokasi')}</p>
             <p className={`font-bold text-[10px] truncate w-full ${coords ? 'text-slate-800' : 'text-slate-300'}`}>
-              {coords ? `${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}` : 'Establishing...'}
+              {coords ? `${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}` : t('employee.faceCheckPage.establishingGps', 'Establishing...')}
             </p>
             {coords && (
               <p className="text-[8px] text-emerald-600 font-semibold mt-1">±{Math.round(coords.accuracy)}m</p>
@@ -253,7 +255,7 @@ const FaceCheck = () => {
             {!modelsLoaded ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 gap-3">
                 <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-                <p className="text-xs font-semibold">Loading AI Models...</p>
+                <p className="text-xs font-semibold">{t('employee.faceCheckPage.loadingModels')}</p>
               </div>
             ) : (
               <Webcam
@@ -277,7 +279,7 @@ const FaceCheck = () => {
             {scanStatus === 'success' && (
               <div className="absolute inset-0 bg-emerald-500/20 flex flex-col items-center justify-center backdrop-blur-sm animate-in fade-in duration-500">
                 <CheckCircle2 className="w-16 h-16 text-emerald-500 mb-2" />
-                <p className="text-emerald-700 font-bold text-xs uppercase tracking-wider">Enrolled!</p>
+                <p className="text-emerald-700 font-bold text-xs uppercase tracking-wider">{t('employee.faceCheckPage.enrolled')}</p>
               </div>
             )}
 
@@ -317,11 +319,11 @@ const FaceCheck = () => {
                faceGuideStatus === 'not-detected' ? <AlertCircle className="w-4 h-4" /> :
                <ScanFace className="w-4 h-4 text-blue-600" />}
               <span>{
-                scanStatus === 'success' ? 'Enrollment Success' : 
-                scanStatus === 'error' ? 'Detection Failed' : 
-                faceGuideStatus === 'detected' ? `Wajah Terdeteksi — Auto-capture ${Math.min(stableCountRef.current, 5)}/5...` :
-                faceGuideStatus === 'not-detected' ? 'Posisikan wajah di tengah frame' :
-                'Ready to Scan'
+                scanStatus === 'success' ? t('employee.faceCheckPage.enrollmentSuccess') : 
+                scanStatus === 'error' ? t('employee.faceCheckPage.detectionFailed') : 
+                faceGuideStatus === 'detected' ? t('employee.faceCheckPage.faceDetectedCount', { count: Math.min(stableCountRef.current, 5) }) :
+                faceGuideStatus === 'not-detected' ? t('employee.faceCheckPage.alignFace') :
+                t('employee.faceCheckPage.readyScan')
               }</span>
             </div>
 
@@ -346,7 +348,7 @@ const FaceCheck = () => {
               disabled={!modelsLoaded || scanStatus === 'detecting'}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-semibold text-sm active:scale-[0.98] transition-all shadow-lg shadow-blue-600/20 disabled:opacity-30"
             >
-              {scanStatus === 'success' || scanStatus === 'error' ? 'Try Again' : 'Capture & Enroll'}
+              {scanStatus === 'success' || scanStatus === 'error' ? t('employee.scanPage.tryAgain', 'Try Again') : t('employee.faceCheckPage.captureEnroll', 'Capture & Enroll')}
             </button>
           </div>
         </div>
@@ -354,12 +356,12 @@ const FaceCheck = () => {
         <div className="bg-blue-50 p-5 rounded-2xl border border-blue-100 border-l-4 border-l-blue-500">
           <h3 className="font-bold text-slate-800 text-xs mb-3 flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-blue-600" />
-            Guidelines
+            {t('employee.faceCheckPage.guidelines')}
           </h3>
           <ul className="text-xs text-slate-600 space-y-2 leading-relaxed">
-            <li className="flex gap-2"><span className="text-blue-600">•</span> Ensure good lighting conditions</li>
-            <li className="flex gap-2"><span className="text-blue-600">•</span> Remove glasses or face coverings</li>
-            <li className="flex gap-2"><span className="text-blue-600">•</span> Center your face in the frame</li>
+            <li className="flex gap-2"><span className="text-blue-600">•</span> {t('employee.faceCheckPage.guideLighting')}</li>
+            <li className="flex gap-2"><span className="text-blue-600">•</span> {t('employee.faceCheckPage.guideNoCover')}</li>
+            <li className="flex gap-2"><span className="text-blue-600">•</span> {t('employee.faceCheckPage.guideCenterFace')}</li>
           </ul>
         </div>
       </div>

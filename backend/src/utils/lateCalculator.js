@@ -179,7 +179,7 @@ function resolveStatus(
   
   // Rule 1: Tidak melakukan finger masuk
   if (!checkIn) {
-    return rule1Enabled ? rule1Status : 'ABSENT';
+    return rule1Enabled ? rule1Status : 'MANGKIR';
   }
   
   // Rule 2: Ada finger masuk dan terlambat

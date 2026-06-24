@@ -328,12 +328,25 @@ const getMe = async (req, res) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
+    // Konfigurasi presensi (jendela check-in & guard checkout) untuk gating tombol di sisi karyawan
+    const cfgRows = await prisma.settings.findMany({
+      where: { key: { in: ['checkinEarlyMinutes', 'checkoutGuardMinutes', 'gpsAccuracyTolerance'] } }
+    });
+    const cfgMap = {};
+    cfgRows.forEach(s => { cfgMap[s.key] = s.value; });
+    const attendanceConfig = {
+      checkinEarlyMinutes: parseInt(cfgMap.checkinEarlyMinutes || '120', 10),
+      checkoutGuardMinutes: parseInt(cfgMap.checkoutGuardMinutes || '30', 10),
+      gpsAccuracyTolerance: parseInt(cfgMap.gpsAccuracyTolerance || '75', 10),
+    };
+
     res.json({
       success: true,
       user: {
         id: user.id,
         username: user.username,
         role: user.role,
+        attendanceConfig,
         permissions: user.role === 'SUPER_ADMIN' ? 'ALL' : user.permissions,
         employee: user.employee ? {
           id: user.employee.id,

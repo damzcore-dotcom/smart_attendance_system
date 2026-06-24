@@ -8,20 +8,31 @@ import {
   Clock
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { authAPI, calendarAPI, scheduleAPI } from '../../services/api';
 
-const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'
-];
-
 const Calendar = () => {
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const today = new Date();
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
+
+  const DAYS = useMemo(() => {
+    const locale = i18n.language || 'id-ID';
+    const formatter = new Intl.DateTimeFormat(locale, { weekday: 'short' });
+    return Array.from({ length: 7 }, (_, i) => {
+      const date = new Date(Date.UTC(2023, 0, 1 + i)); // 2023-01-01 is Sunday
+      return formatter.format(date);
+    });
+  }, [i18n.language]);
+
+  const getLocalizedMonthName = (monthIdx, year) => {
+    const locale = i18n.language || 'id-ID';
+    const date = new Date(year, monthIdx, 1);
+    return date.toLocaleDateString(locale, { month: 'long' });
+  };
 
   const user = authAPI.getStoredUser();
   const empId = user?.employee?.id;
@@ -64,7 +75,7 @@ const Calendar = () => {
   };
 
   const getShiftAbbrev = (shift) => {
-    if (!shift || shift.name === 'No Shift Assigned') return 'OFF';
+    if (!shift || shift.name === t('employee.schedulePage.noShiftAssigned', 'No Shift Assigned')) return 'OFF';
     return shift.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 3);
   };
 
@@ -142,8 +153,8 @@ const Calendar = () => {
           <ArrowLeft className="w-6 h-6" />
         </button>
         <div>
-          <h1 className="text-xl font-bold text-slate-800">Kalender Perusahaan</h1>
-          <p className="text-xs text-slate-400 mt-0.5">Company holidays & schedule</p>
+          <h1 className="text-xl font-bold text-slate-800">{t('employee.calendarPage.title')}</h1>
+          <p className="text-xs text-slate-400 mt-0.5">{t('employee.calendarPage.subtitle')}</p>
         </div>
       </div>
 
@@ -157,7 +168,7 @@ const Calendar = () => {
             <ChevronLeft className="w-5 h-5" />
           </button>
           <button onClick={goToToday} className="text-center">
-            <h2 className="text-lg font-bold text-slate-800">{MONTH_NAMES[currentMonth]}</h2>
+            <h2 className="text-lg font-bold text-slate-800 capitalize">{getLocalizedMonthName(currentMonth, currentYear)}</h2>
             <p className="text-xs text-slate-400">{currentYear}</p>
           </button>
           <button
@@ -271,7 +282,7 @@ const Calendar = () => {
         return (
           <div className="space-y-3">
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-1">
-              Holidays This Month
+              {t('employee.calendarPage.holidaysThisMonth')}
             </h3>
             {monthHolidays.map((h) => (
               <div key={h.id || h.date} className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
@@ -281,7 +292,7 @@ const Calendar = () => {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold text-slate-800 truncate">{h.name}</p>
                   <p className="text-[10px] text-slate-400 font-medium mt-0.5">
-                    {new Date(h.date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })}
+                    {new Date(h.date).toLocaleDateString(i18n.language || 'id-ID', { weekday: 'long', day: 'numeric', month: 'long' })}
                   </p>
                 </div>
               </div>
@@ -292,39 +303,39 @@ const Calendar = () => {
 
       {/* Legend */}
       <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
-        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Legend</h3>
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('employee.calendarPage.legend')}</h3>
         <div className="flex flex-wrap gap-4">
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 rounded-md bg-white border border-slate-200" />
-            <span className="text-xs text-slate-600">Working Day</span>
+            <span className="text-xs text-slate-600">{t('employee.calendarPage.workingDay')}</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 rounded-md bg-rose-50 border border-rose-200" />
-            <span className="text-xs text-slate-600">Holiday</span>
+            <span className="text-xs text-slate-600">{t('employee.calendarPage.holiday')}</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 rounded-md bg-slate-100 border border-slate-200" />
-            <span className="text-xs text-slate-600">Weekend</span>
+            <span className="text-xs text-slate-600">{t('employee.calendarPage.weekend')}</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 rounded-md bg-blue-600 border border-blue-600" />
-            <span className="text-xs text-slate-600">Today</span>
+            <span className="text-xs text-slate-600">{t('employee.calendarPage.today')}</span>
           </div>
         </div>
         <div className="pt-2 border-t border-slate-100">
-          <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Shift Indicators</h4>
+          <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">{t('employee.calendarPage.shiftIndicators')}</h4>
           <div className="flex flex-wrap gap-3">
             <div className="flex items-center gap-1.5">
               <span className="text-[8px] font-bold bg-blue-50 text-blue-600 px-1 py-0.5 rounded border border-blue-100">D / SP</span>
-              <span className="text-[10px] text-slate-500">Base Shift (Default / Pagi)</span>
+              <span className="text-[10px] text-slate-500">{t('employee.calendarPage.baseShiftDesc')}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="text-[8px] font-bold bg-amber-100 text-amber-800 border border-amber-200 px-1 py-0.5 rounded">SP</span>
-              <span className="text-[10px] text-slate-500">Overridden Shift (Roster Khusus)</span>
+              <span className="text-[10px] text-slate-500">{t('employee.calendarPage.overriddenShiftDesc')}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="text-[8px] font-bold bg-slate-100 text-slate-400 px-1 py-0.5 rounded">OFF</span>
-              <span className="text-[10px] text-slate-500">Libur Shift</span>
+              <span className="text-[10px] text-slate-500">{t('employee.calendarPage.offShiftDesc')}</span>
             </div>
           </div>
         </div>

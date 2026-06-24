@@ -9,7 +9,7 @@ const languages = [
   { code: 'ko', name: '한국어 (Korean)', flag: '🇰🇷' }
 ];
 
-export const LanguageSelector = ({ dark = false }) => {
+export const LanguageSelector = ({ dark = false, dropUp = false }) => {
   const { i18n } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -59,7 +59,9 @@ export const LanguageSelector = ({ dark = false }) => {
 
       {isOpen && (
         <div
-          className={`absolute right-0 mt-2 w-52 rounded-2xl shadow-xl border overflow-hidden animate-in fade-in zoom-in-95 duration-150 origin-top-right ${
+          className={`absolute right-0 w-52 rounded-2xl shadow-xl border overflow-hidden animate-in fade-in zoom-in-95 duration-150 ${
+            dropUp ? 'bottom-full mb-2 origin-bottom-right' : 'mt-2 origin-top-right'
+          } ${
             dark
               ? 'bg-slate-800 border-slate-700 text-slate-100'
               : 'bg-white border-slate-100 text-slate-700'

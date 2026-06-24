@@ -1,5 +1,6 @@
 const prisma = require('../prismaClient');
 const { calculateLateness, resolveStatus, parsePenaltySettings } = require('../utils/lateCalculator');
+const { getUTCToday, toUTCMidnight } = require('../utils/dateHelper');
 
 const { handleControllerError } = require('../middleware/validate');
 /**
@@ -13,9 +14,10 @@ const create = async (req, res) => {
       return res.status(400).json({ success: false, message: 'All fields are required' });
     }
 
+    const empId = parseInt(employeeId);
     const correction = await prisma.correctionRequest.create({
       data: {
-        employeeId: parseInt(employeeId),
+        employeeId: empId,
         date: new Date(date),
         type,
         time,
@@ -23,7 +25,57 @@ const create = async (req, res) => {
       },
     });
 
-    res.status(201).json({ success: true, message: 'Correction request submitted', data: correction });
+    // Lupa finger masuk → setelah ajukan Koreksi tipe "In" untuk HARI INI, buat check-in PROVISIONAL
+    // agar tombol checkout terbuka. Request tetap PENDING untuk ditinjau/diaudit HRD.
+    let provisional = false;
+    if (type === 'In') {
+      const today = getUTCToday();
+      const reqDate = toUTCMidnight(new Date(date));
+      if (reqDate.getTime() === today.getTime()) {
+        const existing = await prisma.attendance.findUnique({
+          where: { employeeId_date: { employeeId: empId, date: today } },
+        });
+        if (!existing || !existing.checkIn) {
+          const settingsList = await prisma.settings.findMany();
+          const { roundingConfig } = parsePenaltySettings(settingsList);
+          const timezoneOffset = parseInt(settingsList.find(s => s.key === 'timezoneOffset')?.value || '420', 10);
+          const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
+          const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
+          const globalGracePeriod = parseInt(settingsList.find(s => s.key === 'gracePeriod')?.value || '15', 10);
+
+          const employee = await prisma.employee.findUnique({ where: { id: empId }, include: { shift: true } });
+          const effectiveShift = employee?.shift || null;
+          const shiftStart = effectiveShift?.startTime || '08:00';
+          let shiftEnd = effectiveShift?.endTime || '17:00';
+          const gracePeriod = effectiveShift ? effectiveShift.gracePeriod : globalGracePeriod;
+          if (today.getUTCDay() === 6) {
+            const satType = effectiveShift?.saturdayType || (isSaturdayHalfDay ? 'HALF_DAY' : 'FULL_DAY');
+            if (satType === 'HALF_DAY') shiftEnd = effectiveShift?.saturdayEndTime || satCheckoutTime;
+          }
+
+          const [h, m] = time.split(':').map(Number);
+          const checkInInstant = new Date(today.getTime() + (h * 60 + m - timezoneOffset) * 60000);
+          const calc = calculateLateness(checkInInstant, shiftStart, gracePeriod, shiftEnd, roundingConfig);
+
+          const provisionalData = {
+            checkIn: checkInInstant,
+            status: calc.status,
+            lateMinutes: calc.lateMinutes,
+            mode: 'Koreksi',
+            source: 'correction',
+            notes: 'Check-in via pengajuan Koreksi (menunggu peninjauan)',
+          };
+          await prisma.attendance.upsert({
+            where: { employeeId_date: { employeeId: empId, date: today } },
+            update: provisionalData,
+            create: { employeeId: empId, date: today, ...provisionalData },
+          });
+          provisional = true;
+        }
+      }
+    }
+
+    res.status(201).json({ success: true, message: 'Correction request submitted', data: correction, provisional });
   } catch (err) {
     handleControllerError(res, err, 'correctionController');
   }
@@ -165,14 +217,46 @@ const review = async (req, res) => {
       await prisma.attendance.upsert({
         where: { employeeId_date: { employeeId, date: today } },
         update: { ...updateData, status: finalStatus, lateMinutes },
-        create: { 
-          employeeId, 
-          date: today, 
-          ...updateData, 
-          status: finalStatus, 
-          lateMinutes 
+        create: {
+          employeeId,
+          date: today,
+          ...updateData,
+          status: finalStatus,
+          lateMinutes
         },
       });
+    }
+
+    // Jika DITOLAK & koreksi tipe "In": batalkan check-in provisional
+    if (status === 'REJECTED' && correction.type === 'In') {
+      const provDate = toUTCMidnight(new Date(correction.date));
+      const att = await prisma.attendance.findUnique({
+        where: { employeeId_date: { employeeId: correction.employeeId, date: provDate } },
+      });
+      // Pastikan ini benar-benar data provisional (dari pengajuan)
+      if (att && att.mode === 'Koreksi' && att.source === 'correction') {
+        if (!att.checkOut) {
+          // Belum ada absen pulang sama sekali -> hapus utuh
+          await prisma.attendance.delete({ where: { id: att.id } });
+        } else {
+          // Sudah ada absen pulang -> kembalikan checkIn ke null
+          const settingsList = await prisma.settings.findMany();
+          const { penaltyRules } = parsePenaltySettings(settingsList);
+          const finalStatus = resolveStatus(null, att.checkOut, 'ABSENT', provDate, penaltyRules, '17:00', '08:00');
+          
+          await prisma.attendance.update({ 
+            where: { id: att.id },
+            data: { 
+              checkIn: null,
+              lateMinutes: 0,
+              status: finalStatus,
+              mode: 'Sistem', // Kembalikan ke mode normal
+              source: 'system',
+              notes: 'Pengajuan koreksi masuk ditolak'
+            }
+          });
+        }
+      }
     }
 
     res.json({ success: true, message: `Correction ${status.toLowerCase()}`, data: updatedCorrection });

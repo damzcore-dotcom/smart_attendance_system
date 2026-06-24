@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { 
   Calendar, 
   FileText, 
@@ -16,6 +17,7 @@ import { authAPI, leaveAPI } from '../../services/api';
 import { getStatusLabel, getStatusColor } from '../../utils/statusUtils';
 
 const Leave = () => {
+  const { t, i18n } = useTranslation();
   const user = authAPI.getStoredUser();
   const empId = user?.employee?.id;
   const queryClient = useQueryClient();
@@ -101,30 +103,40 @@ const Leave = () => {
     queryFn: () => authAPI.getMe(),
   });
 
+  const getLeaveTypeTranslation = (type) => {
+    switch (type) {
+      case 'Cuti': return t('employee.leavePage.typeLeave');
+      case 'Sakit': return t('employee.leavePage.typeSick');
+      case 'Izin': return t('employee.leavePage.typePermit');
+      case 'Dispensasi': return t('employee.leavePage.typeDispensation');
+      default: return type;
+    }
+  };
+
   const leaveMutation = useMutation({
     mutationFn: (data) => leaveAPI.create(data),
     onSuccess: () => {
-      showToast('Leave request submitted successfully!', 'success');
+      showToast(t('employee.leavePage.toastSubmitSuccess'), 'success');
       setIsModalOpen(false);
       setFormData({ startDate: '', endDate: '', type: 'Cuti', reason: '', medicalAttachment: null });
       queryClient.invalidateQueries({ queryKey: ['leave-requests', empId] });
       queryClient.invalidateQueries({ queryKey: ['me'] });
     },
-    onError: (err) => showToast(err.message || 'Failed to submit request', 'error')
+    onError: (err) => showToast(err.message || t('employee.leavePage.toastSubmitError'), 'error')
   });
 
   const cancelMutation = useMutation({
     mutationFn: (id) => leaveAPI.cancel(id),
     onSuccess: () => {
-      showToast('Leave request cancelled successfully!', 'success');
+      showToast(t('employee.leavePage.toastCancelSuccess'), 'success');
       queryClient.invalidateQueries({ queryKey: ['leave-requests', empId] });
       queryClient.invalidateQueries({ queryKey: ['me'] });
     },
-    onError: (err) => showToast(err.message || 'Failed to cancel leave request', 'error')
+    onError: (err) => showToast(err.message || t('employee.leavePage.toastCancelError'), 'error')
   });
 
   const handleCancel = (id) => {
-    if (window.confirm('Apakah Anda yakin ingin membatalkan pengajuan cuti ini?')) {
+    if (window.confirm(t('employee.leavePage.cancelConfirm'))) {
       cancelMutation.mutate(id);
     }
   };
@@ -143,8 +155,8 @@ const Leave = () => {
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-5 duration-500">
       <div className="flex justify-between items-center px-1">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">Leave Request</h1>
-          <p className="text-xs text-slate-400 mt-0.5">Manage your absences</p>
+          <h1 className="text-xl font-bold text-slate-800">{t('employee.leavePage.title')}</h1>
+          <p className="text-xs text-slate-400 mt-0.5">{t('employee.leavePage.subtitle')}</p>
         </div>
         <button 
           onClick={() => setIsModalOpen(true)}
@@ -158,9 +170,9 @@ const Leave = () => {
       <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-6 rounded-[2rem] text-white shadow-xl shadow-blue-600/10 relative overflow-hidden">
         <div className="relative z-10 flex justify-between items-center">
           <div>
-            <p className="text-[10px] font-bold text-blue-200 uppercase tracking-widest mb-1.5">Sisa Jatah Cuti</p>
+            <p className="text-[10px] font-bold text-blue-200 uppercase tracking-widest mb-1.5">{t('employee.leavePage.quota')}</p>
             <h2 className="text-3xl font-black tracking-tight">
-              {remainingLeave} <span className="text-sm font-medium text-blue-200">dari {leaveQuota} Hari</span>
+              {remainingLeave} <span className="text-sm font-medium text-blue-200">{t('employee.leavePage.quotaOf', { total: leaveQuota })}</span>
             </h2>
           </div>
           <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shrink-0">
@@ -172,7 +184,7 @@ const Leave = () => {
 
       {/* History List */}
       <div className="space-y-4">
-        <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-1">Request History</h2>
+        <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-1">{t('employee.leavePage.history')}</h2>
         {isLoading ? (
           <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>
         ) : list.length === 0 ? (
@@ -180,7 +192,7 @@ const Leave = () => {
             <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-300 mb-4 border border-slate-200">
               <Calendar className="w-8 h-8" />
             </div>
-            <p className="text-sm text-slate-400">No leave records yet</p>
+            <p className="text-sm text-slate-400">{t('employee.leavePage.noHistory')}</p>
           </div>
         ) : list.map((item) => (
           <div key={item.id} className="bg-white p-6 group animate-in slide-in-from-bottom-4 duration-500 border border-slate-200 rounded-2xl hover:border-blue-200 hover:shadow-sm transition-all shadow-sm">
@@ -190,8 +202,8 @@ const Leave = () => {
                   <FileText className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="text-base font-bold text-slate-800">{getStatusLabel(item.type)}</h4>
-                  <p className="text-[10px] text-slate-400 font-medium mt-0.5">Filed: {new Date(item.createdAt).toLocaleDateString()}</p>
+                  <h4 className="text-base font-bold text-slate-800">{getLeaveTypeTranslation(item.type)}</h4>
+                  <p className="text-[10px] text-slate-400 font-medium mt-0.5">{t('employee.leavePage.filed')}: {new Date(item.createdAt).toLocaleDateString(i18n.language)}</p>
                 </div>
               </div>
               <span className={`px-3 py-1.5 rounded-lg text-[10px] font-semibold border ${
@@ -206,12 +218,12 @@ const Leave = () => {
             
             <div className="grid grid-cols-2 gap-6 p-4 bg-slate-50 border border-slate-100 rounded-xl mb-4">
               <div className="space-y-0.5">
-                <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">Start</p>
-                <p className="text-sm font-bold text-slate-800">{new Date(item.startDate).toLocaleDateString()}</p>
+                <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">{t('employee.leavePage.startDate')}</p>
+                <p className="text-sm font-bold text-slate-800">{new Date(item.startDate).toLocaleDateString(i18n.language)}</p>
               </div>
               <div className="text-right space-y-0.5">
-                <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">End</p>
-                <p className="text-sm font-bold text-slate-800">{new Date(item.endDate).toLocaleDateString()}</p>
+                <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">{t('employee.leavePage.endDate')}</p>
+                <p className="text-sm font-bold text-slate-800">{new Date(item.endDate).toLocaleDateString(i18n.language)}</p>
               </div>
             </div>
 
@@ -228,7 +240,7 @@ const Leave = () => {
                   disabled={cancelMutation.isPending}
                   className="px-4 py-2 border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-500 hover:text-red-700 disabled:opacity-50 transition-all rounded-xl text-xs font-semibold active:scale-[0.98]"
                 >
-                  {cancelMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin text-red-600" /> : 'Batalkan Pengajuan'}
+                  {cancelMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin text-red-600" /> : t('employee.leavePage.cancelRequest')}
                 </button>
               </div>
             )}
@@ -247,8 +259,8 @@ const Leave = () => {
                   <Plus className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-800">New Leave Request</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Fill in the details below</p>
+                  <h3 className="text-base font-bold text-slate-800">{t('employee.leavePage.newTitle')}</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">{t('employee.leavePage.fillDetails')}</p>
                 </div>
               </div>
               <button onClick={() => setIsModalOpen(false)} className="w-8 h-8 flex items-center justify-center hover:bg-slate-100 rounded-lg transition-colors text-slate-400 hover:text-slate-700">
@@ -258,18 +270,18 @@ const Leave = () => {
             
             <form onSubmit={handleSubmit} className="p-6 space-y-5">
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-slate-500">Leave Type</label>
+                <label className="text-xs font-semibold text-slate-500">{t('employee.leavePage.type')}</label>
                 <div className="grid grid-cols-3 gap-3">
-                  {['Cuti', 'Sakit', 'Izin'].map(t => (
+                  {['Cuti', 'Sakit', 'Izin'].map(tVal => (
                     <button
-                      key={t}
+                      key={tVal}
                       type="button"
-                      onClick={() => setFormData({...formData, type: t})}
+                      onClick={() => setFormData({...formData, type: tVal})}
                       className={`py-3 rounded-xl text-sm font-semibold border transition-all duration-300 ${
-                        formData.type === t ? 'bg-blue-600 border-blue-600 text-white shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300'
+                        formData.type === tVal ? 'bg-blue-600 border-blue-600 text-white shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300'
                       }`}
                     >
-                      {t}
+                      {getLeaveTypeTranslation(tVal)}
                     </button>
                   ))}
                 </div>
@@ -277,7 +289,7 @@ const Leave = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-500">Start Date</label>
+                  <label className="text-xs font-semibold text-slate-500">{t('employee.leavePage.startDate')}</label>
                   <input 
                     type="date"
                     required
@@ -287,7 +299,7 @@ const Leave = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-500">End Date</label>
+                  <label className="text-xs font-semibold text-slate-500">{t('employee.leavePage.endDate')}</label>
                   <input 
                     type="date"
                     required
@@ -299,10 +311,10 @@ const Leave = () => {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-slate-500">Reason</label>
+                <label className="text-xs font-semibold text-slate-500">{t('employee.leavePage.reason')}</label>
                 <textarea 
                   required
-                  placeholder="Explain the reason for your leave..."
+                  placeholder={t('employee.leavePage.reasonPlaceholder')}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 transition-all min-h-[100px] resize-none placeholder:text-slate-400"
                   value={formData.reason}
                   onChange={(e) => setFormData({...formData, reason: e.target.value})}
@@ -311,7 +323,7 @@ const Leave = () => {
 
               {formData.type === 'Sakit' && (
                 <div className="space-y-2 animate-in fade-in slide-in-from-top-4 duration-500">
-                  <label className="text-xs font-semibold text-slate-500">Medical Certificate</label>
+                  <label className="text-xs font-semibold text-slate-500">{t('employee.leavePage.attachment')}</label>
                   <div className="relative group">
                     <input 
                       type="file"
@@ -333,13 +345,13 @@ const Leave = () => {
                             className="w-full h-32 object-cover rounded-lg"
                           />
                           <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-lg">
-                            <p className="text-white text-xs font-semibold">Change File</p>
+                            <p className="text-white text-xs font-semibold">{t('employee.leavePage.viewAttachment')}</p>
                           </div>
                         </div>
                       ) : (
                         <div className="flex flex-col items-center gap-2 p-6 text-slate-400 group-hover:text-blue-500 transition-colors">
                           <Plus className="w-6 h-6" />
-                          <p className="text-xs font-semibold">Upload Certificate</p>
+                          <p className="text-xs font-semibold">{t('employee.leavePage.attachment')}</p>
                         </div>
                       )}
                     </label>
@@ -353,7 +365,7 @@ const Leave = () => {
                   onClick={() => setIsModalOpen(false)}
                   className="flex-1 py-3.5 text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors bg-slate-50 rounded-xl border border-slate-200"
                 >
-                  Cancel
+                  {t('employee.leavePage.cancel')}
                 </button>
                 <button 
                   type="submit"
@@ -361,7 +373,7 @@ const Leave = () => {
                   className="flex-[2] bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-30 transition-all shadow-sm active:scale-[0.98]"
                 >
                   {leaveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                  Submit Request
+                  {t('employee.leavePage.submit')}
                 </button>
               </div>
             </form>

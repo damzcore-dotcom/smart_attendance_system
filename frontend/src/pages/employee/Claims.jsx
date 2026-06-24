@@ -24,7 +24,7 @@ const STATUS_COLORS = {
 };
 
 const Claims = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -53,16 +53,24 @@ const Claims = () => {
       
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(12);
-      doc.text('Laporan Riwayat Klaim Reimbursement', 14, 28);
+      doc.text(t('claims.pdfReportTitle', 'Laporan Riwayat Klaim Reimbursement'), 14, 28);
       doc.setFontSize(10);
-      doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 14, 34);
+      doc.text(`${t('claims.pdfPrintedAt', 'Dicetak pada')}: ${new Date().toLocaleString(i18n.language || 'id-ID')}`, 14, 34);
       
-      const tableColumn = ["No", "Tanggal", "Judul Klaim", "Kategori", "Nominal", "Status", "Catatan"];
+      const tableColumn = [
+        t('claims.pdfColNo', 'No'), 
+        t('common.date', 'Tanggal'), 
+        t('claims.pdfColTitle', 'Judul Klaim'), 
+        t('claims.pdfColCategory', 'Kategori'), 
+        t('claims.pdfColAmount', 'Nominal'), 
+        t('common.status', 'Status'), 
+        t('claims.pdfColNote', 'Catatan')
+      ];
       const tableRows = [];
       
       claims.forEach((claim, index) => {
-        const dateStr = new Date(claim.createdAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
-        const amountStr = `Rp ${claim.amount.toLocaleString('id-ID')}`;
+        const dateStr = new Date(claim.createdAt).toLocaleDateString(i18n.language || 'id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+        const amountStr = `Rp ${claim.amount.toLocaleString(i18n.language || 'id-ID')}`;
         const categoryStr = t(`claims.categories.${claim.category}`) || claim.category;
         const statusStr = t(`claims.statuses.${claim.status}`) || claim.status;
         const noteStr = claim.reviewNote || '-';
@@ -93,7 +101,7 @@ const Claims = () => {
       doc.save(`Riwayat_Klaim_${new Date().toISOString().slice(0,10)}.pdf`);
     } catch (err) {
       console.error('Failed to generate PDF:', err);
-      alert('Gagal mengekspor PDF. Pastikan data termuat dengan benar.');
+      alert(t('claims.pdfExportError', 'Gagal mengekspor PDF. Pastikan data termuat dengan benar.'));
     }
   };
 

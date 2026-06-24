@@ -207,9 +207,9 @@ app.use('/api', globalLimiter);
 
 // Rate limiting for auth endpoints (brute-force protection)
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 1 * 60 * 1000, // 1 minute
   max: 15, // limit each IP to 15 login attempts per window
-  message: { success: false, message: 'Terlalu banyak percobaan login. Silakan coba lagi dalam 15 menit.' },
+  message: { success: false, message: 'Terlalu banyak percobaan login. Silakan coba lagi dalam 1 menit.' },
   standardHeaders: true,
   legacyHeaders: false,
 });

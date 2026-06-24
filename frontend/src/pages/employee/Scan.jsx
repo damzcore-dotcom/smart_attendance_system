@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { attendanceAPI, authAPI, settingsAPI } from '../../services/api';
 
 const getDistance = (lat1, lon1, lat2, lon2) => {
@@ -31,6 +32,7 @@ import { loadFaceModels, faceapi, areModelsLoaded } from '../../utils/faceModelL
 import { encryptData, decryptData } from '../../utils/cryptoUtils';
 
 const Scan = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isCheckOut = searchParams.get('mode') === 'check-out';
@@ -60,15 +62,49 @@ const Scan = () => {
   const wasEyesOpenRef = useRef(false);
   const consecutiveClosedRef = useRef(0);
   const loopCountRef = useRef(0);
+  const earBaselineRef = useRef(0); // baseline EAR mata terbuka (adaptif per individu/pencahayaan)
+  const scanStartTimeRef = useRef(0); // timestamp mulai liveness (timeout berbasis waktu)
 
   const user = authAPI.getStoredUser();
   const empId = user?.employee?.id;
   const isGeofenceBlocked = !isCheckOut && geofenceStatus.checked && !geofenceStatus.isInside;
 
   const getGuideMessage = () => {
-    if (faceGuideStatus !== 'detected') return 'Arahkan wajah ke lingkaran';
-    if (!blinkDetectedRef.current) return 'Silakan kedipkan mata Anda...';
-    return 'Liveness terverifikasi! Tahan posisi...';
+    if (faceGuideStatus !== 'detected') return t('employee.scanPage.guideAlign', 'Arahkan wajah ke lingkaran');
+    return t('employee.scanPage.guideVerified', 'Wajah terdeteksi! Tahan posisi...');
+  };
+
+  const translateStatusText = (text) => {
+    if (!text) return '';
+    if (text === 'Memuat model wajah...') return t('employee.scanPage.loadingModels', 'Memuat model wajah...');
+    if (text === 'Memverifikasi lokasi GPS...') return t('employee.scanPage.verifyingGps', 'Memverifikasi lokasi GPS...');
+    if (text === 'Arahkan wajah Anda ke kamera') return t('employee.scanPage.alignFace', 'Arahkan wajah Anda ke kamera');
+    if (text === 'Memverifikasi wajah...') return t('employee.scanPage.verifyingFace', 'Memverifikasi wajah...');
+    if (text === 'Wajah terverifikasi! Mencatat kehadiran...') return t('employee.scanPage.faceVerifiedRecording', 'Wajah terverifikasi! Mencatat kehadiran...');
+    if (text === 'Menganalisis wajah...') return t('employee.scanPage.analyzingFace', 'Menganalisis wajah...');
+    if (text === 'Berhasil!') return t('common.success', 'Berhasil!');
+    if (text.includes('Offline!')) {
+      return t('employee.scanPage.offlineSaved', 'Offline! Absen disimpan di HP. Segera dapatkan sinyal agar data terkirim otomatis.');
+    }
+    return text;
+  };
+
+  const translateError = (err) => {
+    if (!err) return '';
+    if (err.includes('Gagal memuat model wajah')) return t('employee.scanPage.errorLoadModels', 'Gagal memuat model wajah. Coba muat ulang halaman.');
+    if (err.includes('Wajah tidak cocok dengan akun Anda')) {
+      const match = err.match(/\(Terdeteksi:\s*(.*?)\)/);
+      const name = match ? match[1] : 'Unknown';
+      return t('employee.scanPage.faceMismatch', 'Wajah tidak cocok dengan akun Anda! (Terdeteksi: {{name}})', { name });
+    }
+    if (err.includes('Wajah tidak dikenali dalam sistem')) return t('employee.scanPage.faceNotRecognized', 'Wajah tidak dikenali dalam sistem.');
+    if (err.includes('Gagal memverifikasi wajah')) return t('employee.scanPage.failedVerifyFace', 'Gagal memverifikasi wajah.');
+    if (err.includes('Wajah tidak terdeteksi')) return t('employee.scanPage.faceNotDetected', 'Wajah tidak terdeteksi. Pastikan posisi wajah di tengah frame.');
+    if (err.includes('Gagal memindai wajah')) return t('employee.scanPage.failedScanFace', 'Gagal memindai wajah.');
+    if (err.includes('Verifikasi Liveness Gagal')) return t('employee.scanPage.livenessFailed', 'Waktu verifikasi habis. Pastikan wajah berada di dalam lingkaran.');
+    if (err.includes('Gagal memproses absensi')) return t('employee.scanPage.failedProcessAttendance', 'Gagal memproses absensi.');
+    if (err === 'Cabang ditugaskan tidak ditemukan') return t('employee.scanPage.noAssignedBranch', 'Cabang ditugaskan tidak ditemukan');
+    return err;
   };
 
   const syncOfflineData = async () => {
@@ -234,9 +270,14 @@ const Scan = () => {
           const myLat = coordsRef.current.lat;
           const myLng = coordsRef.current.lng;
 
+          // Toleransi akurasi GPS: tambahkan sebagian ketidakpastian akurasi ke radius agar
+          // pengguna yang benar-benar di dalam area tidak tertolak saat akurasi browser menurun.
+          const toleranceCap = currentUser?.attendanceConfig?.gpsAccuracyTolerance ?? 75;
+          const gpsTolerance = Math.min(coordsRef.current.accuracy || 0, toleranceCap);
+
           for (const loc of locations) {
             const dist = getDistance(myLat, myLng, parseFloat(loc.lat), parseFloat(loc.lng));
-            if (dist <= loc.radius) {
+            if (dist <= loc.radius + gpsTolerance) {
               isInside = true;
               matchedLoc = loc;
               nearestDist = dist;
@@ -400,6 +441,8 @@ const Scan = () => {
     wasEyesOpenRef.current = false;
     consecutiveClosedRef.current = 0;
     loopCountRef.current = 0;
+    earBaselineRef.current = 0;
+    scanStartTimeRef.current = Date.now();
     setBlinkStatus('waiting');
     let isProcessing = false;
 
@@ -417,20 +460,20 @@ const Scan = () => {
           img.onerror = () => reject(new Error('Failed to load image'));
         });
 
-        // Fetch face with landmarks to calculate Eye Aspect Ratio (EAR)
+        // Fetch face
+        // inputSize: 224 balances speed and face tracking
         const detection = await faceapi
-          .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.2 }))
-          .withFaceLandmarks();
+          .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.2 }));
         
         if (detection) {
           setFaceGuideStatus('detected');
           loopCountRef.current++;
 
-          // Timeout if user takes too long to blink (8 seconds)
-          if (loopCountRef.current > 40 && !blinkDetectedRef.current) {
+          // Timeout berbasis waktu (25 detik)
+          if (Date.now() - scanStartTimeRef.current > 25000) {
             console.warn('[Liveness] Verification timeout');
             setScanStatus('error');
-            setError('Verifikasi Liveness Gagal: Waktu habis. Silakan kedipkan mata Anda dengan jelas saat diminta.');
+            setError('Verifikasi Liveness Gagal: Waktu habis. Pastikan wajah berada di dalam lingkaran.');
             clearInterval(faceGuideRef.current);
             faceGuideRef.current = null;
             return;
@@ -461,7 +504,7 @@ const Scan = () => {
             isCompletelyStatic = false;
           }
 
-          if (isCompletelyStatic && stableCountRef.current >= 6) {
+          if (isCompletelyStatic && stableCountRef.current >= 12) {
             console.warn('[Liveness] Static face detected. Box history:', boxHistoryRef.current);
             setScanStatus('error');
             setError('Anti-Spoofing: Wajah terdeteksi statis. Coba gerakkan kepala sedikit, pastikan wajah Anda asli.');
@@ -470,47 +513,8 @@ const Scan = () => {
             return;
           }
 
-          // 2. Calculate EAR for blink detection when face is stable
-          if (stableCountRef.current >= 3 && !blinkDetectedRef.current) {
-            const landmarks = detection.landmarks;
-            const leftEye = landmarks.getLeftEye();
-            const rightEye = landmarks.getRightEye();
-
-            const calculateEAR = (eye) => {
-              const p1 = eye[0];
-              const p2 = eye[1];
-              const p3 = eye[2];
-              const p4 = eye[3];
-              const p5 = eye[4];
-              const p6 = eye[5];
-
-              const dist = (a, b) => Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
-              const vertical1 = dist(p2, p6);
-              const vertical2 = dist(p3, p5);
-              const horizontal = dist(p1, p4);
-
-              return (vertical1 + vertical2) / (2.0 * horizontal);
-            };
-
-            const leftEAR = calculateEAR(leftEye);
-            const rightEAR = calculateEAR(rightEye);
-            const avgEAR = (leftEAR + rightEAR) / 2;
-
-            if (avgEAR > 0.24) {
-              wasEyesOpenRef.current = true;
-              if (consecutiveClosedRef.current >= 1) {
-                blinkDetectedRef.current = true;
-                setBlinkStatus('detected');
-                console.log('[Liveness] Blink detected! EAR went up to', avgEAR);
-              }
-            } else if (avgEAR <= 0.18 && wasEyesOpenRef.current) {
-              consecutiveClosedRef.current += 1;
-              console.log('[Liveness] Eyes closing... EAR:', avgEAR);
-            }
-          }
-
-          // 3. Trigger capture when both stable and blinked
-          if (blinkDetectedRef.current && stableCountRef.current >= 8 && !autoCaptureTriggeredRef.current) {
+          // 2. Trigger capture when stable
+          if (stableCountRef.current >= 4 && !autoCaptureTriggeredRef.current) {
             autoCaptureTriggeredRef.current = true;
             clearInterval(faceGuideRef.current);
             faceGuideRef.current = null;
@@ -528,7 +532,7 @@ const Scan = () => {
       } finally {
         isProcessing = false;
       }
-    }, 200);
+    }, 120);
 
     return () => {
       if (faceGuideRef.current) clearInterval(faceGuideRef.current);
@@ -546,6 +550,8 @@ const Scan = () => {
     wasEyesOpenRef.current = false;
     consecutiveClosedRef.current = 0;
     loopCountRef.current = 0;
+    earBaselineRef.current = 0;
+    scanStartTimeRef.current = Date.now();
     setBlinkStatus('waiting');
   };
 
@@ -571,9 +577,9 @@ const Scan = () => {
           <ChevronLeft className="w-5 h-5 text-white" />
         </button>
         <div className="flex flex-col items-center">
-          <span className="text-[9px] font-semibold uppercase tracking-wider text-blue-400 mb-0.5">Biometric Scan</span>
+          <span className="text-[9px] font-semibold uppercase tracking-wider text-blue-400 mb-0.5">{t('employee.scanPage.biometricScan')}</span>
           <span className="font-bold text-sm text-white tracking-tight">
-            {isCheckOut ? 'CHECK OUT' : 'CHECK IN'}
+            {isCheckOut ? t('employee.scanPage.titleCheckOut') : t('employee.scanPage.titleCheckIn')}
           </span>
         </div>
         <div className="w-9 h-9 flex items-center justify-center bg-emerald-500/20 backdrop-blur-sm border border-emerald-400/30 rounded-xl">
@@ -600,13 +606,12 @@ const Scan = () => {
             <div className="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center border border-rose-500/20 text-rose-500">
               <XCircle className="w-8 h-8" />
             </div>
-            <h3 className="text-white font-bold text-lg">Di Luar Radius Absensi</h3>
+            <h3 className="text-white font-bold text-lg">{t('employee.scanPage.outOfRadius')}</h3>
             <p className="text-slate-400 text-sm max-w-xs leading-relaxed">
-              Jarak Anda saat ini adalah <span className="text-rose-400 font-bold">{geofenceStatus.distance}m</span> dari <span className="text-white font-semibold">{geofenceStatus.name}</span>.<br />
-              Batas radius absensi adalah <span className="text-slate-200 font-semibold">{geofenceStatus.radius}m</span>.
+              {t('employee.scanPage.outOfRadiusDesc', { distance: geofenceStatus.distance, name: geofenceStatus.name, radius: geofenceStatus.radius })}
             </p>
             <p className="text-slate-500 text-xs italic">
-              Harap mendekat ke lokasi kantor untuk melakukan check-in.
+              {t('employee.scanPage.outOfRadiusHint')}
             </p>
           </div>
         )}
@@ -618,28 +623,28 @@ const Scan = () => {
               <ScanFace className="w-10 h-10 text-blue-400" />
             </div>
             <Loader2 className="w-8 h-8 text-blue-400 animate-spin mb-3" />
-            <p className="text-white/70 text-sm font-medium">{statusText}</p>
+            <p className="text-white/70 text-sm font-medium">{translateStatusText(statusText)}</p>
           </div>
         )}
 
-        {/* Dark overlay with circular cutout */}
+        {/* Dark overlay with face-shaped (elliptical) cutout */}
         {cameraActive && !isGeofenceBlocked && (
           <div className="absolute inset-0 pointer-events-none" style={{
-            background: 'radial-gradient(circle at 50% 45%, transparent 28%, rgba(0,0,0,0.7) 65%)'
+            background: 'radial-gradient(ellipse 42% 32% at 50% 42%, transparent 68%, rgba(0,0,0,0.7) 100%)'
           }}></div>
         )}
 
-        {/* Face Target Circle */}
+        {/* Face Target Oval — proporsi wajah (lebih tinggi dari lebar) */}
         {cameraActive && !isGeofenceBlocked && (
-          <div className={`absolute top-[45%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-56 h-56 border-[3px] rounded-full transition-all duration-500 pointer-events-none ${getBorderColor()}`}></div>
+          <div className={`absolute top-[42%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[72vw] h-[50vh] max-w-[380px] max-h-[520px] border-[3px] rounded-[50%] transition-all duration-500 pointer-events-none ${getBorderColor()}`}></div>
         )}
 
         {/* Success Overlay */}
         {scanStatus === 'success' && (
           <div className="absolute inset-0 bg-slate-900/85 backdrop-blur-sm flex flex-col items-center justify-center z-20">
             <CheckCircle2 className="w-20 h-20 text-emerald-400 mb-4" />
-            <p className="text-emerald-400 font-bold text-xl mb-1">Terverifikasi!</p>
-            <p className="text-white/60 text-sm">{statusText}</p>
+            <p className="text-emerald-400 font-bold text-xl mb-1">{t('employee.scanPage.verified')}</p>
+            <p className="text-white/60 text-sm">{translateStatusText(statusText)}</p>
           </div>
         )}
 
@@ -649,14 +654,25 @@ const Scan = () => {
             <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mb-4 border border-red-400/30">
               <XCircle className="w-8 h-8 text-red-400" />
             </div>
-            <p className="text-white font-bold text-lg mb-2 text-center">Gagal</p>
-            <p className="text-white/60 text-sm text-center mb-6 leading-relaxed">{error}</p>
-            <button 
-              onClick={resetScan}
-              className="bg-white/10 hover:bg-white/20 text-white px-8 py-3 rounded-xl text-sm font-semibold transition-colors border border-white/10"
-            >
-              Coba Lagi
-            </button>
+            <p className="text-white font-bold text-lg mb-2 text-center">{t('employee.scanPage.failed')}</p>
+            <p className="text-white/60 text-sm text-center mb-6 leading-relaxed">{translateError(error)}</p>
+            <div className="flex flex-col items-center gap-3">
+              {/* Lupa finger masuk → arahkan ke form Koreksi */}
+              {error && /koreksi|check-?in/i.test(error) && (
+                <button
+                  onClick={() => navigate('/employee/correction')}
+                  className="bg-amber-500 hover:bg-amber-600 text-white px-8 py-3 rounded-xl text-sm font-bold transition-colors"
+                >
+                  {t('employee.scanPage.applyCorrection')}
+                </button>
+              )}
+              <button
+                onClick={resetScan}
+                className="bg-white/10 hover:bg-white/20 text-white px-8 py-3 rounded-xl text-sm font-semibold transition-colors border border-white/10"
+              >
+                {t('employee.scanPage.tryAgain')}
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -673,8 +689,8 @@ const Scan = () => {
             <span className={`w-1.5 h-1.5 rounded-full ${geofenceStatus.isInside ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-rose-400 shadow-[0_0_8px_rgba(251,113,133,0.8)] animate-ping'}`}></span>
             <span>
               {geofenceStatus.isInside 
-                ? `Area Absen Terverifikasi: ${geofenceStatus.name}` 
-                : `Di luar area: ±${geofenceStatus.distance}m dari ${geofenceStatus.name} (Max ${geofenceStatus.radius}m)`
+                ? t('employee.scanPage.insideArea', { name: geofenceStatus.name }) 
+                : t('employee.scanPage.outsideArea', { distance: geofenceStatus.distance, name: geofenceStatus.name, radius: geofenceStatus.radius })
               }
             </span>
           </div>
@@ -685,7 +701,7 @@ const Scan = () => {
           <div className="flex items-center justify-center gap-2 mb-3">
             <span className={`w-2 h-2 rounded-full ${
               faceGuideStatus === 'detected' 
-                ? (blinkDetectedRef.current ? 'bg-emerald-400' : 'bg-blue-400 animate-pulse') 
+                ? 'bg-emerald-400' 
                 : 'bg-amber-400'
             }`}></span>
             <span className="text-white/80 text-xs font-medium">
@@ -697,14 +713,14 @@ const Scan = () => {
         {(scanStatus === 'detecting' || scanStatus === 'verifying') && (
           <div className="flex items-center justify-center gap-2 mb-3">
             <Loader2 className="w-4 h-4 text-amber-400 animate-spin" />
-            <span className="text-white/80 text-xs font-medium">{statusText}</span>
+            <span className="text-white/80 text-xs font-medium">{translateStatusText(statusText)}</span>
           </div>
         )}
 
         {scanStatus === 'loading' && (
           <div className="flex items-center justify-center gap-2 mb-3">
             <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
-            <span className="text-white/60 text-xs font-medium">{statusText}</span>
+            <span className="text-white/60 text-xs font-medium">{translateStatusText(statusText)}</span>
           </div>
         )}
 
@@ -713,7 +729,7 @@ const Scan = () => {
           className="w-full bg-white/10 hover:bg-white/15 backdrop-blur-sm text-white/80 py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 border border-white/10 active:scale-[0.98] transition-all"
         >
           <ChevronLeft className="w-4 h-4" />
-          Kembali
+          {t('employee.scanPage.back')}
         </button>
       </div>
     </div>

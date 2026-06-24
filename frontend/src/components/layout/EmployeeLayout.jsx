@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { LanguageSelector } from '../common/LanguageSelector';
@@ -12,9 +12,10 @@ import {
   Loader2
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { authAPI, notificationAPI } from '../../services/api';
+import { authAPI, notificationAPI, attendanceAPI } from '../../services/api';
 import { AppLogo } from '../AppLogo';
 import LicenseFooter from '../LicenseFooter';
+import { resolveAttendanceAction, getEffectiveShiftEnd, parseClockToday } from '../../utils/attendanceMode';
 
 const EmployeeLayout = () => {
   const { t } = useTranslation();
@@ -36,6 +37,35 @@ const EmployeeLayout = () => {
   });
 
   const unreadCount = notificationsData?.data?.filter(n => n.unread).length || 0;
+
+  // Jam ringan (refresh 30 dtk) agar mode tombol scan tetap sinkron melewati batas jendela waktu
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Status absen hari ini — share cache dengan EmployeeHome (queryKey sama)
+  const { data: attendanceData } = useQuery({
+    queryKey: ['today-attendance', empId],
+    queryFn: () => attendanceAPI.getAll({ period: 'Today', search: employee?.name }),
+    enabled: !!employee?.name && !!empId,
+  });
+  const todayRecord = attendanceData?.data?.find(r => r.employeeId === empId);
+  const hasCheckedIn = todayRecord?.checkIn && todayRecord.checkIn !== '-- : --';
+  const hasCheckedOut = todayRecord?.checkOut && todayRecord.checkOut !== '-- : --';
+  const attCfg = user?.attendanceConfig || {};
+  const scanAction = resolveAttendanceAction({
+    shiftStart: employee?.shift?.startTime || '08:00',
+    shiftEnd: getEffectiveShiftEnd(employee?.shift, now),
+    checkInAt: parseClockToday(todayRecord?.checkIn, now),
+    hasCheckedIn,
+    hasCheckedOut,
+    now,
+    checkinEarlyMinutes: attCfg.checkinEarlyMinutes,
+    checkoutGuardMinutes: attCfg.checkoutGuardMinutes,
+  });
+  const scanTo = `/employee/scan${scanAction.mode ? `?mode=${scanAction.mode}` : ''}`;
 
   // Web Push PWA Notification Subscription
   useEffect(() => {
@@ -111,11 +141,11 @@ const EmployeeLayout = () => {
   }, [empId]);
 
   const navItems = [
-    { name: t('navigation.employee.home'), path: '/employee', icon: Home },
-    { name: t('navigation.employee.history'), path: '/employee/history', icon: History },
-    { name: t('navigation.employee.scan'), path: '/employee/scan', icon: Scan, primary: true },
-    { name: t('navigation.employee.leave'), path: '/employee/leave', icon: ShieldCheck },
-    { name: t('navigation.employee.profile'), path: '/employee/profile', icon: User },
+    { name: t('employee.home'), path: '/employee', icon: Home },
+    { name: t('employee.history'), path: '/employee/history', icon: History },
+    { name: t('employee.scan'), path: '/employee/scan', icon: Scan, primary: true },
+    { name: t('employee.leave'), path: '/employee/leave', icon: ShieldCheck },
+    { name: t('employee.profile'), path: '/employee/profile', icon: User },
   ];
 
 
@@ -177,11 +207,33 @@ const EmployeeLayout = () => {
             const isActive = location.pathname === item.path;
             
             if (item.primary) {
+              // Tombol scan tidak aktif saat tidak ada aksi presensi (sudah selesai / check-out belum dibuka)
+              if (!scanAction.enabled) {
+                return (
+                  <div
+                    key={item.name}
+                    title={
+                      scanAction.state === 'completed' ? 'Presensi hari ini selesai'
+                        : scanAction.state === 'early' ? 'Check-in belum dibuka'
+                        : scanAction.state === 'guard' ? 'Baru saja check-in, tunggu sebentar'
+                        : scanAction.state === 'closed' ? 'Di luar jam kerja — ajukan Koreksi'
+                        : 'Belum ada aksi presensi'
+                    }
+                    className="relative -top-10 w-16 h-16 bg-slate-300 rounded-2xl flex items-center justify-center shadow-xl text-white/80 cursor-not-allowed ring-4 ring-[#f7f8fc]"
+                  >
+                    <Icon className="w-8 h-8" />
+                  </div>
+                );
+              }
               return (
-                <Link 
-                  key={item.name} 
-                  to={item.path}
-                  className="relative -top-10 w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center shadow-xl shadow-blue-600/40 text-white transition-all active:scale-95 group hover:bg-blue-700 ring-4 ring-[#f7f8fc]"
+                <Link
+                  key={item.name}
+                  to={scanTo}
+                  className={`relative -top-10 w-16 h-16 rounded-2xl flex items-center justify-center shadow-xl text-white transition-all active:scale-95 group ring-4 ring-[#f7f8fc] ${
+                    scanAction.mode === 'check-out'
+                      ? 'bg-orange-600 hover:bg-orange-700 shadow-orange-600/40'
+                      : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/40'
+                  }`}
                 >
                   <Icon className="w-8 h-8" />
                 </Link>

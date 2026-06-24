@@ -9,6 +9,51 @@ const { recordAuditLog } = require('./auditLogController');
 
 
 const { handleControllerError } = require('../middleware/validate');
+
+// ─── Overtime helpers ─────────────────────────────────────────────
+/**
+ * Apakah suatu tanggal merupakan hari libur/istirahat bagi karyawan.
+ * Prioritas: override kalender (WORKDAY/HOLIDAY) > Sabtu shift OFF > di luar working days.
+ */
+function isRestDay(dateObj, { workingDays, calendarOverride, effectiveShift }) {
+  if (calendarOverride) {
+    if (calendarOverride.type === 'WORKDAY') return false;
+    if (calendarOverride.type === 'HOLIDAY') return true;
+  }
+  const day = dateObj.getUTCDay();
+  if (day === 6 && effectiveShift) {
+    return effectiveShift.saturdayType === 'OFF';
+  }
+  return !workingDays.includes(day);
+}
+
+/**
+ * Bulatkan jam lembur ke kelipatan menit tertentu (DOWN/NEAREST/UP).
+ * roundingMinutes <= 0 berarti tanpa pembulatan.
+ */
+function roundOvertime(hours, roundingMinutes, mode) {
+  if (!roundingMinutes || roundingMinutes <= 0) {
+    return parseFloat(hours.toFixed(2));
+  }
+  const totalMin = hours * 60;
+  let rounded;
+  if (mode === 'UP') rounded = Math.ceil(totalMin / roundingMinutes) * roundingMinutes;
+  else if (mode === 'NEAREST') rounded = Math.round(totalMin / roundingMinutes) * roundingMinutes;
+  else rounded = Math.floor(totalMin / roundingMinutes) * roundingMinutes; // DOWN (default)
+  return parseFloat((rounded / 60).toFixed(2));
+}
+
+/**
+ * Durasi istirahat (menit) dari shift, mis. 12:00–13:00 => 60.
+ */
+function breakDurationMinutes(shift) {
+  if (!shift || !shift.breakStart || !shift.breakEnd) return 0;
+  const [bsH, bsM] = shift.breakStart.split(':').map(Number);
+  const [beH, beM] = shift.breakEnd.split(':').map(Number);
+  const diff = (beH * 60 + beM) - (bsH * 60 + bsM);
+  return diff > 0 ? diff : 0;
+}
+
 /**
  * GET /api/attendance
  */
@@ -367,6 +412,11 @@ const checkIn = async (req, res) => {
     // Security: Validate employeeId from JWT token for non-admin users to prevent IDOR
     if (req.user.role !== 'ADMIN' && req.user.role !== 'SUPER_ADMIN') {
       employeeId = req.user.employeeId;
+      if (!employeeId) {
+        // Fallback for stale JWT token without employeeId
+        const dbUser = await prisma.user.findUnique({ where: { id: req.user.id } });
+        if (dbUser && dbUser.employeeId) employeeId = dbUser.employeeId;
+      }
     }
 
     if (!employeeId) {
@@ -537,6 +587,11 @@ const checkOut = async (req, res) => {
     // Security: Validate employeeId from JWT token for non-admin users to prevent IDOR
     if (req.user.role !== 'ADMIN' && req.user.role !== 'SUPER_ADMIN') {
       employeeId = req.user.employeeId;
+      if (!employeeId) {
+        // Fallback for stale JWT token without employeeId
+        const dbUser = await prisma.user.findUnique({ where: { id: req.user.id } });
+        if (dbUser && dbUser.employeeId) employeeId = dbUser.employeeId;
+      }
     }
 
     if (!employeeId) {
@@ -571,7 +626,7 @@ const checkOut = async (req, res) => {
     }
 
     if (!attendance || !attendance.checkIn) {
-      return res.status(400).json({ success: false, message: 'No check-in record found for today' });
+      return res.status(400).json({ success: false, code: 'NO_CHECKIN', message: 'Belum ada data check-in (finger masuk) hari ini. Silakan ajukan Koreksi ke HRD.' });
     }
 
     if (attendance.checkOut) {
@@ -600,6 +655,11 @@ const checkOut = async (req, res) => {
     });
     const effectiveShift = override?.shift || attendance.employee?.shift || null;
 
+    // Working days + calendar override (untuk logika lembur hari libur)
+    const workingDays = JSON.parse(settingsList.find(s => s.key === 'workingDays')?.value || '[1,2,3,4,5]');
+    const calDate = new Date(Date.UTC(attendanceDate.getUTCFullYear(), attendanceDate.getUTCMonth(), attendanceDate.getUTCDate()));
+    const calendarOverride = await prisma.companyCalendar.findFirst({ where: { date: calDate } });
+
     // Recalculate status now that we have both checkIn and checkOut
     const shiftStart = effectiveShift?.startTime || '08:00';
     let shiftEnd = effectiveShift?.endTime || '17:00';
@@ -627,27 +687,65 @@ const checkOut = async (req, res) => {
 
     const finalStatus = resolveStatus(attendance.checkIn, now, lateStatus, attendance.date, penaltyRules, shiftEnd, shiftStart);
 
-    // Calculate Overtime with timezone-independent calculation
+    // ─── Hitung Lembur sesuai Pengaturan Lembur perusahaan ───
     let overtimeHours = 0;
-    const autoCalcOt = settingsList.find(s => s.key === 'autoCalculateOvertime')?.value !== 'false';
-    const [endHour, endMinute] = shiftEnd.split(':').map(Number);
-    
+
+    // Mode lembur (kompatibel mundur dengan flag lama autoCalculateOvertime)
+    const legacyAutoOt = settingsList.find(s => s.key === 'autoCalculateOvertime')?.value;
+    const overtimeMode = legacyAutoOt === 'false'
+      ? 'MANUAL'
+      : (settingsList.find(s => s.key === 'overtimeMode')?.value || 'AUTO');
+
+    // Parameter mode Otomatis
+    const otMinMinutes = parseInt(settingsList.find(s => s.key === 'overtimeMinMinutes')?.value || '30', 10);
+    const otRoundingMin = parseInt(settingsList.find(s => s.key === 'overtimeRoundingMinutes')?.value || '30', 10);
+    const otRoundingMode = settingsList.find(s => s.key === 'overtimeRoundingMode')?.value || 'DOWN';
+    const otDeductBreak = settingsList.find(s => s.key === 'overtimeDeductBreak')?.value === 'true';
+    const otMaxPerDay = parseFloat(settingsList.find(s => s.key === 'overtimeMaxPerDay')?.value || '4');
+    const holidayOtEnabled = settingsList.find(s => s.key === 'holidayOvertimeEnabled')?.value !== 'false';
+    const holidayOtCalcMode = settingsList.find(s => s.key === 'holidayOvertimeCalcMode')?.value || 'FULL_WORKED';
+    const holidayOtStartTime = settingsList.find(s => s.key === 'holidayOvertimeStartTime')?.value || '08:00';
+    const holidayOtMaxHours = parseFloat(settingsList.find(s => s.key === 'holidayOvertimeMaxHours')?.value || '12');
+
+    // Hitung jam pulang shift yang diharapkan (untuk lembur hari kerja). Mendukung shift malam lintas tengah malam.
     const [startHour, startMinute] = shiftStart.split(':').map(Number);
+    const [endHour, endMinute] = shiftEnd.split(':').map(Number);
     const startMins = startHour * 60 + startMinute;
     const endMins = endHour * 60 + endMinute;
-
     let targetEndMinutes = endMins;
-    if (endMins < startMins) {
-      // Shift crosses midnight (night shift)
-      targetEndMinutes += 24 * 60;
-    }
-
-    // Dynamic timezone offset. Compute expectedEnd as exact UTC date/time.
+    if (endMins < startMins) targetEndMinutes += 24 * 60; // shift malam
     const expectedEnd = new Date(new Date(attendance.date).getTime() + (targetEndMinutes - timezoneOffset) * 60000);
 
-    if (autoCalcOt && now > expectedEnd) {
-      const diffMs = now.getTime() - expectedEnd.getTime();
-      overtimeHours = parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2));
+    if (overtimeMode === 'MANUAL') {
+      // Mode Manual: lembur diinput via SPL (bulk-overtime). Jangan timpa di sini.
+      overtimeHours = attendance.overtimeHours || 0;
+    } else {
+      // Mode Otomatis
+      const restDay = isRestDay(attendanceDate, { workingDays, calendarOverride, effectiveShift });
+      if (restDay) {
+        if (holidayOtEnabled) {
+          let mins;
+          if (holidayOtCalcMode === 'AFTER_TIME') {
+            const [hH, hM] = holidayOtStartTime.split(':').map(Number);
+            const holidayStart = new Date(new Date(attendance.date).getTime() + (hH * 60 + hM - timezoneOffset) * 60000);
+            mins = (now.getTime() - holidayStart.getTime()) / 60000;
+          } else { // FULL_WORKED: seluruh durasi kerja
+            mins = (now.getTime() - attendance.checkIn.getTime()) / 60000;
+          }
+          if (otDeductBreak) mins -= breakDurationMinutes(effectiveShift);
+          const h = roundOvertime(Math.max(0, mins / 60), otRoundingMin, otRoundingMode);
+          overtimeHours = Math.min(h, holidayOtMaxHours);
+        } else {
+          overtimeHours = 0;
+        }
+      } else if (now > expectedEnd) {
+        // Hari kerja normal
+        const mins = (now.getTime() - expectedEnd.getTime()) / 60000;
+        if (mins >= otMinMinutes) {
+          const h = roundOvertime(mins / 60, otRoundingMin, otRoundingMode);
+          overtimeHours = Math.min(h, otMaxPerDay);
+        }
+      }
     }
 
     const updated = await prisma.attendance.update({
@@ -714,7 +812,12 @@ const getHistory = async (req, res) => {
 
     // Security: Prevent IDOR on history endpoint for non-admin/manager users
     if (req.user.role !== 'ADMIN' && req.user.role !== 'SUPER_ADMIN' && req.user.role !== 'MANAGER' && req.user.role !== 'DIREKTUR') {
-      if (empId !== req.user.employeeId) {
+      let authorized = empId === req.user.employeeId;
+      if (!authorized) {
+        const dbUser = await prisma.user.findUnique({ where: { id: req.user.id } });
+        if (dbUser && dbUser.employeeId === empId) authorized = true;
+      }
+      if (!authorized) {
         return res.status(403).json({ success: false, message: 'You are not authorized to view this employee\'s history.' });
       }
     }
@@ -1096,22 +1199,12 @@ const importFromExcel = async (req, res) => {
           }
         }
 
-        let lateStatus = 'PRESENT';
-        let lateMinutes = 0;
-        if (entry.checkIn) {
-          const calc = calculateLateness(entry.checkIn, shiftStart, gracePeriod, shiftEnd, roundingConfig);
-          lateStatus = calc.status;
-          lateMinutes = calc.lateMinutes;
-        }
-
-        const status = resolveStatus(entry.checkIn, entry.checkOut, lateStatus, dateObj, penaltyRules, shiftEnd, shiftStart);
-
         // H1 FIX / HRD protection: Skip records that were manually corrected by HRD
         const existingRecord = existingMap.get(`${entry.employeeId}_${dateStr}`);
         if (existingRecord) {
-          const isManual = existingRecord.mode === 'Manual' || 
-                           existingRecord.mode === 'Manual (SPL)' || 
-                           existingRecord.mode === 'Manual (BHL)' || 
+          const isManual = existingRecord.mode === 'Manual' ||
+                           existingRecord.mode === 'Manual (SPL)' ||
+                           existingRecord.mode === 'Manual (BHL)' ||
                            existingRecord.notes?.includes('HRD');
           if (isManual) {
             processedEntries++;
@@ -1119,31 +1212,56 @@ const importFromExcel = async (req, res) => {
           }
         }
 
-        let finalMode = 'Fingered';
-        const vCode = entry.checkInVerifyCode !== undefined ? entry.checkInVerifyCode : (entry.checkOutVerifyCode !== undefined ? entry.checkOutVerifyCode : 1);
-        if (typeof vCode === 'string') {
-          const str = vCode.toLowerCase().trim();
-          if ((str.includes('pass') || str.includes('pw')) && !str.includes('fp/pw/rf/face')) {
-            finalMode = 'Pinned';
-          } else {
-            finalMode = 'Fingered';
+        // ── Merge anti-tindih: pertahankan jam MASUK paling awal & jam PULANG paling akhir lintas sumber ──
+        let mergedCheckIn = entry.checkIn || null;
+        let mergedCheckOut = entry.checkOut || null;
+        if (existingRecord) {
+          if (existingRecord.checkIn && (!mergedCheckIn || existingRecord.checkIn < mergedCheckIn)) {
+            mergedCheckIn = existingRecord.checkIn;
           }
-        } else {
-          if (vCode === 0 || vCode === 3 || vCode === 4) {
-            finalMode = 'Pinned';
-          } else {
-            finalMode = 'Fingered';
+          if (existingRecord.checkOut && (!mergedCheckOut || existingRecord.checkOut > mergedCheckOut)) {
+            mergedCheckOut = existingRecord.checkOut;
           }
         }
+
+        let lateStatus = 'PRESENT';
+        let lateMinutes = 0;
+        if (mergedCheckIn) {
+          const calc = calculateLateness(mergedCheckIn, shiftStart, gracePeriod, shiftEnd, roundingConfig);
+          lateStatus = calc.status;
+          lateMinutes = calc.lateMinutes;
+        }
+
+        const status = resolveStatus(mergedCheckIn, mergedCheckOut, lateStatus, dateObj, penaltyRules, shiftEnd, shiftStart);
+
+        // Mode: hanya beri label mesin bila mesin benar-benar menyumbang punch; jika tidak, pertahankan mode lama
+        const machineHasPunch = !!(entry.checkIn || entry.checkOut);
+        let finalMode = existingRecord?.mode || 'Fingered';
+        if (machineHasPunch) {
+          const vCode = entry.checkInVerifyCode !== undefined ? entry.checkInVerifyCode : (entry.checkOutVerifyCode !== undefined ? entry.checkOutVerifyCode : 1);
+          if (typeof vCode === 'string') {
+            const str = vCode.toLowerCase().trim();
+            finalMode = ((str.includes('pass') || str.includes('pw')) && !str.includes('fp/pw/rf/face')) ? 'Pinned' : 'Fingered';
+          } else {
+            finalMode = (vCode === 0 || vCode === 3 || vCode === 4) ? 'Pinned' : 'Fingered';
+          }
+        }
+
+        // Tandai "orphan punch": hanya ada satu sidik (masuk saja / pulang saja) → ambigu, perlu tinjau HRD
+        const isOrphanPunch = (!!mergedCheckIn) !== (!!mergedCheckOut);
+        const anomalyNote = (isOrphanPunch && status !== 'PRESENT' && status !== 'LATE')
+          ? `ANOMALI: hanya 1 rekam sidik (${mergedCheckIn ? 'masuk' : 'pulang'} saja) — perlu tinjau HRD`
+          : null;
 
         entriesToSave.push({
           employeeId: entry.employeeId,
           dateObj,
-          checkIn: entry.checkIn || null,
-          checkOut: entry.checkOut || null,
+          checkIn: mergedCheckIn,
+          checkOut: mergedCheckOut,
           status,
           lateMinutes,
           mode: finalMode,
+          notes: anomalyNote,
           hasExisting: !!existingRecord,
           existingId: existingRecord?.id,
           key
@@ -1170,7 +1288,8 @@ const importFromExcel = async (req, res) => {
                   checkOut: item.checkOut,
                   status: item.status,
                   lateMinutes: item.lateMinutes,
-                  mode: item.mode
+                  mode: item.mode,
+                  ...(item.notes ? { notes: item.notes } : {})
                 }
               });
             } else {
@@ -1182,7 +1301,8 @@ const importFromExcel = async (req, res) => {
                   checkOut: item.checkOut,
                   status: item.status,
                   lateMinutes: item.lateMinutes,
-                  mode: item.mode
+                  mode: item.mode,
+                  ...(item.notes ? { notes: item.notes } : {})
                 }
               });
             }
@@ -2040,6 +2160,7 @@ const manualCorrectionHRD = async (req, res) => {
             status: status,
             checkIn: null,
             checkOut: null,
+            mode: 'Koreksi HRD',
             notes: 'Diupdate manual oleh HRD'
           };
           

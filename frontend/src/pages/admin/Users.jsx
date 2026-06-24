@@ -186,7 +186,7 @@ const Users = () => {
         { key: 'settings', label: 'Pengaturan Sistem' },
         { key: 'settings-company-profile', label: '↳ Profil Perusahaan' },
         { key: 'settings-geofencing', label: '↳ Geofencing' },
-        { key: 'settings-shift-rules', label: '↳ Aturan Shift' },
+        { key: 'settings-shift-rules', label: '↳ Aturan Shift & Overtime' },
         { key: 'settings-calendar', label: '↳ Kalender & Hari Libur' },
         { key: 'settings-biometrics', label: '↳ Biometrik' },
         { key: 'settings-cctv', label: '↳ Kamera CCTV AI' },
