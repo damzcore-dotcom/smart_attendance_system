@@ -247,10 +247,10 @@ const create = async (req, res) => {
       }
     }
 
-    if (rest.fingerprintId) {
-      const existingFinger = await prisma.employee.findUnique({ where: { fingerprintId: rest.fingerprintId } });
+    if (rest.fingerPrintId) {
+      const existingFinger = await prisma.employee.findUnique({ where: { fingerPrintId: rest.fingerPrintId } });
       if (existingFinger) {
-        return res.status(400).json({ success: false, message: `ID Sidik Jari ${rest.fingerprintId} sudah digunakan oleh karyawan lain.` });
+        return res.status(400).json({ success: false, message: `ID Sidik Jari ${rest.fingerPrintId} sudah digunakan oleh karyawan lain.` });
       }
     }
 
@@ -345,10 +345,10 @@ const update = async (req, res) => {
     const { name, email, dept, phone, position, status, faceStatus, faceDescriptor, ...rest } = req.body;
     const empId = parseInt(req.params.id);
 
-    if (rest.fingerprintId) {
-      const existingFinger = await prisma.employee.findUnique({ where: { fingerprintId: rest.fingerprintId } });
+    if (rest.fingerPrintId) {
+      const existingFinger = await prisma.employee.findUnique({ where: { fingerPrintId: rest.fingerPrintId } });
       if (existingFinger && existingFinger.id !== empId) {
-        return res.status(400).json({ success: false, message: `ID Sidik Jari ${rest.fingerprintId} sudah digunakan oleh karyawan lain.` });
+        return res.status(400).json({ success: false, message: `ID Sidik Jari ${rest.fingerPrintId} sudah digunakan oleh karyawan lain.` });
       }
     }
 
