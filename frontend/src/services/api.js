@@ -189,6 +189,7 @@ export const employeeAPI = {
   },
   checkNikDuplicate: (nik) => apiFetch(`/employees/check-nik?nik=${nik}`),
   getNextFingerId: () => apiFetch('/employees/next-finger-id'),
+  getNextNik: (isBhl) => apiFetch(`/employees/next-nik?isBhl=${isBhl ? 'true' : 'false'}`),
   getMasterOptions: (params = {}) => {
     const q = new URLSearchParams(params).toString();
     return apiFetch(`/employees/master-options${q ? `?${q}` : ''}`);

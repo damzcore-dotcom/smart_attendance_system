@@ -786,6 +786,59 @@ const getNextFingerId = async (req, res) => {
     res.json({ success: true, nextFingerId: String(nextId) });
   } catch (err) {
     handleControllerError(res, err, 'employeeController');
+};
+
+const getNextNik = async (req, res) => {
+  try {
+    const { isBhl } = req.query;
+    let employeeCode = '';
+
+    if (isBhl === 'true') {
+      const allBhl = await prisma.employee.findMany({ 
+        where: { OR: [{ employmentStatus: 'HARIAN' }, { salaryCategory: 'HARIAN' }] }, 
+        select: { employeeCode: true } 
+      });
+      const allBhlUsers = await prisma.user.findMany({
+        where: { username: { startsWith: 'BHL-' } },
+        select: { username: true }
+      });
+      
+      let maxNum = 0;
+      allBhl.forEach(emp => {
+        const num = parseInt(emp.employeeCode.replace(/\D/g, ''));
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      });
+      allBhlUsers.forEach(u => {
+        const num = parseInt(u.username.replace(/\D/g, ''));
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      });
+      
+      employeeCode = `BHL-${String(maxNum + 1).padStart(4, '0')}`;
+    } else {
+      const allEmployees = await prisma.employee.findMany({ 
+        where: { AND: [{ employmentStatus: { not: 'HARIAN' } }, { salaryCategory: { not: 'HARIAN' } }] },
+        select: { employeeCode: true } 
+      });
+      const allUsers = await prisma.user.findMany({
+        where: { NOT: { username: { startsWith: 'BHL-' } } },
+        select: { username: true }
+      });
+
+      let maxNum = 0;
+      allEmployees.forEach(emp => {
+        const num = parseInt(emp.employeeCode.replace(/\D/g, ''));
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      });
+      allUsers.forEach(u => {
+        const num = parseInt(u.username.replace(/\D/g, ''));
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      });
+      
+      employeeCode = String(maxNum + 1);
+    }
+    res.json({ success: true, nextNik: employeeCode });
+  } catch (err) {
+    handleControllerError(res, err, 'employeeController');
   }
 };
 
@@ -818,4 +871,4 @@ const batchUpdateSalaryCategory = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, create, update, remove, importExcel, getProgress, getMasterOptions, batchUpdateShift, batchUpdateSalaryCategory, checkDuplicate, getNextFingerId };
+module.exports = { getAll, getById, create, update, remove, importExcel, getProgress, getMasterOptions, batchUpdateShift, batchUpdateSalaryCategory, checkDuplicate, getNextFingerId, getNextNik };

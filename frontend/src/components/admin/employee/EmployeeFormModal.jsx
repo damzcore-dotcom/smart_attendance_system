@@ -273,18 +273,40 @@ const EmployeeFormModal = ({
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <div>
                   <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">NIK (ID Karyawan)</label>
-                  <input
-                    value={newEmployee.employeeCode}
-                    onChange={e => { setNewEmployee({...newEmployee, employeeCode: e.target.value}); setNikError(''); }}
-                    onBlur={handleNikBlur}
-                    readOnly={!!newEmployee.dbId}
-                    placeholder={newEmployee.dbId ? '' : 'Dibuat otomatis jika kosong'}
-                    className={`w-full border rounded-xl px-4 py-3 text-sm transition-all focus:outline-none ${
-                      nikError ? 'border-rose-300 bg-rose-50 text-rose-700 focus:ring-2 focus:ring-rose-500/20' : 
-                      newEmployee.dbId ? 'bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200' : 
-                      'bg-white border-slate-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 text-slate-800 placeholder:text-slate-400'
-                    }`}
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      value={newEmployee.employeeCode}
+                      onChange={e => { setNewEmployee({...newEmployee, employeeCode: e.target.value}); setNikError(''); }}
+                      onBlur={handleNikBlur}
+                      readOnly={!!newEmployee.dbId}
+                      placeholder={newEmployee.dbId ? '' : 'Dibuat otomatis jika kosong'}
+                      className={`flex-1 border rounded-xl px-4 py-3 text-sm transition-all focus:outline-none ${
+                        nikError ? 'border-rose-300 bg-rose-50 text-rose-700 focus:ring-2 focus:ring-rose-500/20' : 
+                        newEmployee.dbId ? 'bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200' : 
+                        'bg-white border-slate-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 text-slate-800 placeholder:text-slate-400'
+                      }`}
+                    />
+                    {!newEmployee.dbId && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const isBhl = newEmployee.employmentStatus === 'HARIAN' || newEmployee.salaryCategory === 'HARIAN';
+                            const res = await employeeAPI.getNextNik(isBhl);
+                            if (res.success) {
+                              setNewEmployee({...newEmployee, employeeCode: res.nextNik});
+                              setNikError('');
+                            }
+                          } catch (err) {
+                            alert(`Gagal membuat NIK: ${err.message}`);
+                          }
+                        }}
+                        className="bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-600 px-3 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 shrink-0"
+                      >
+                        Oto
+                      </button>
+                    )}
+                  </div>
                   {nikError && (
                     <p className="text-[10px] text-rose-600 mt-1.5 flex items-center gap-1 font-semibold uppercase tracking-wider">
                       <AlertCircle className="w-3.5 h-3.5" /> {nikError}
