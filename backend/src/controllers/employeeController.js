@@ -786,6 +786,7 @@ const getNextFingerId = async (req, res) => {
     res.json({ success: true, nextFingerId: String(nextId) });
   } catch (err) {
     handleControllerError(res, err, 'employeeController');
+  }
 };
 
 const getNextNik = async (req, res) => {
