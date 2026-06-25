@@ -2,10 +2,11 @@ const cron = require('node-cron');
 const prisma = require('../prismaClient');
 const ZKLib = require('node-zklib');
 const { calculateLateness, resolveStatus, parsePenaltySettings } = require('./lateCalculator');
+const deviceSync = require('./deviceSync');
 
-// Runs every 5 minutes to check if any device needs auto-sync
+// Runs every minute to check if any device needs auto-sync (agar jam non-kelipatan-5, mis. 08:09, tetap terpicu)
 const startCronJobs = () => {
-  cron.schedule('*/5 * * * *', async () => {
+  cron.schedule('* * * * *', async () => {
     try {
       const now = new Date();
       const currentHourStr = now.getHours().toString().padStart(2, '0');
@@ -36,224 +37,36 @@ const startCronJobs = () => {
             continue;
           }
 
+          // Karyawan non-BHL + indeks pencocokan PIN (logika bersama deviceSync)
           const employees = await prisma.employee.findMany({
-            where: {
-              AND: [
-                {
-                  OR: [
-                    { employmentStatus: null },
-                    { employmentStatus: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } }
-                  ]
-                },
-                {
-                  OR: [
-                    { salaryCategory: null },
-                    { salaryCategory: { notIn: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } }
-                  ]
-                }
-              ]
-            },
+            where: deviceSync.nonBhlWhere(),
             include: { shift: true }
           });
-          const empByFingerPrint = {};
-          const empByCode = {};
-          employees.forEach(e => {
-            if (e.fingerPrintId) empByFingerPrint[String(e.fingerPrintId).trim()] = e;
-            if (e.employeeCode) empByCode[String(e.employeeCode).trim()] = e;
-          });
+          const index = deviceSync.buildEmployeeIndex(employees);
 
-          // Fetch Settings to check for Saturday Half-Day rules & global grace period
           const settingsList = await prisma.settings.findMany();
-          const { penaltyRules, roundingConfig } = parsePenaltySettings(settingsList);
-          const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
-          const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
-          const globalGracePeriod = parseInt(settingsList.find(s => s.key === 'gracePeriod')?.value || '15', 10);
+          const syncSettings = deviceSync.loadSyncSettings(settingsList);
 
-          // Only process logs from today (auto-sync is daily, no need to reprocess old data)
-          // lastSync is used as a cutoff: process logs since last sync or since start of today
+          // Cutoff incremental: proses log sejak last sync atau sejak awal hari (mana yang lebih baru)
           const lastSyncDate = device.lastSync ? new Date(device.lastSync) : null;
           const todayStart = new Date();
           todayStart.setHours(0, 0, 0, 0);
-          // Use the later of: start of today OR last sync time
           const cutoffTime = lastSyncDate && lastSyncDate > todayStart ? lastSyncDate : todayStart;
-
           console.log(`[Cron] Filtering logs newer than: ${cutoffTime.toISOString()}`);
 
-          const grouped = {};
-          for (const log of logs.data) {
-            const pinStr = String(log.deviceUserId).trim();
-            const recordTime = new Date(log.recordTime);
-            
-            // Skip records older than cutoff (yesterday and before)
-            if (recordTime < cutoffTime) continue;
+          // Override roster untuk rentang yang diproses (agar konsisten dgn tarik absensi manual)
+          const overrides = await prisma.employeeShiftOverride.findMany({
+            where: { startDate: { lte: new Date() }, endDate: { gte: cutoffTime } },
+            include: { shift: true }
+          });
+          const overrideMap = deviceSync.buildOverrideMap(overrides);
 
-            // Extract local date components to avoid timezone shifting
-            const year = recordTime.getFullYear();
-            const month = String(recordTime.getMonth() + 1).padStart(2, '0');
-            const day = String(recordTime.getDate()).padStart(2, '0');
-            const dateKey = `${year}-${month}-${day}`;
-            
-            const emp = empByFingerPrint[pinStr] || empByCode[pinStr];
-            if (!emp) continue;
+          const { records: recordsToCreate } = deviceSync.buildAttendanceRecords({
+            logs, index, overrideMap, settings: syncSettings, filterStart: cutoffTime, filterEnd: null
+          });
 
-            const key = `${emp.id}|${dateKey}`;
-            if (!grouped[key]) {
-              grouped[key] = { employeeId: emp.id, employee: emp, date: new Date(dateKey + 'T00:00:00.000Z'), scans: [] };
-            }
-            grouped[key].scans.push(recordTime);
-          }
-
-          const recordsToCreate = [];
-          for (const entry of Object.values(grouped)) {
-            const emp = entry.employee;
-            const empShift = emp.shift || null;
-            const shiftStart = empShift?.startTime || '08:00';
-            let shiftEnd = empShift?.endTime || '17:00';
-            const gracePeriod = empShift ? empShift.gracePeriod : globalGracePeriod;
-            
-            // Override shiftEnd for Saturday if Saturday protocols match
-            const dayOfWeek = entry.date.getUTCDay(); // 0=Sun, 6=Sat
-            if (dayOfWeek === 6) {
-              const satType = empShift?.saturdayType || (isSaturdayHalfDay ? 'HALF_DAY' : 'FULL_DAY');
-              if (satType === 'HALF_DAY') {
-                shiftEnd = empShift?.saturdayEndTime || satCheckoutTime;
-              }
-            }
-            
-            // Sort all scans chronologically
-            entry.scans.sort((a, b) => a - b);
-            
-            const earliest = entry.scans[0];
-            const latest = entry.scans[entry.scans.length - 1];
-            
-            let checkIn = null;
-            let checkOut = null;
-            
-            // Treat multiple scans within 60 minutes of each other as a single scan day
-            // to handle duplicate/double-tap scans when arriving or leaving.
-            const timeDiffMinutes = (latest - earliest) / (1000 * 60);
-            const isSingleScan = entry.scans.length === 1 || timeDiffMinutes < 60;
-            
-            if (isSingleScan) {
-              // === SMART SINGLE-SCAN DETECTION ===
-              const [startH, startM] = shiftStart.split(':').map(Number);
-              const [endH, endM] = shiftEnd.split(':').map(Number);
-              const shiftStartMinutes = startH * 60 + startM;
-              let shiftEndMinutes = endH * 60 + endM;
-              
-              if (shiftEndMinutes < shiftStartMinutes) {
-                shiftEndMinutes += 24 * 60; // Handle night shift crossing midnight
-              }
-              
-              const midpointMinutes = Math.floor((shiftStartMinutes + shiftEndMinutes) / 2);
-              
-              const scanHour = earliest.getHours();
-              const scanMinute = earliest.getMinutes();
-              let scanMinutes = scanHour * 60 + scanMinute;
-              
-              // If it's a night shift and the scan is in the morning (after midnight)
-              if (shiftEndMinutes > 1440 && scanMinutes < shiftStartMinutes - 6 * 60) {
-                scanMinutes += 24 * 60;
-              }
-              
-              if (scanMinutes <= midpointMinutes) {
-                checkIn = earliest;
-                checkOut = null;
-              } else {
-                checkIn = null;
-                checkOut = earliest;
-              }
-            } else {
-              checkIn = earliest;
-              checkOut = latest;
-            }
-            
-            const calc = checkIn 
-              ? calculateLateness(checkIn, shiftStart, gracePeriod, shiftEnd, roundingConfig)
-              : { lateMinutes: 0, status: 'MANGKIR' };
-            
-            const status = resolveStatus(checkIn, checkOut, calc.status, entry.date, penaltyRules, shiftEnd, shiftStart);
-
-            recordsToCreate.push({
-              employeeId: entry.employeeId,
-              date: entry.date,
-              checkIn,
-              checkOut,
-              status,
-              lateMinutes: calc.lateMinutes,
-              mode: 'Fingerprint',
-              shiftStart,
-              shiftEnd,
-              gracePeriod
-            });
-          }
-
-          let saved = 0;
-          for (const record of recordsToCreate) {
-            try {
-              // C7 FIX: Fetch existing record to check if it was manually corrected
-              const existing = await prisma.attendance.findUnique({
-                where: { employeeId_date: { employeeId: record.employeeId, date: record.date } }
-              });
-
-              if (existing) {
-                // If it is a manual correction by HRD, protect it and skip sync
-                const isManual = existing.mode === 'Manual' || 
-                                 existing.mode === 'Manual (SPL)' || 
-                                 existing.mode === 'Manual (BHL)' || 
-                                 (existing.notes && existing.notes.includes('HRD'));
-                if (isManual) {
-                  console.log(`[Cron] Skipping sync for employee ${record.employeeId} on ${record.date.toISOString().split('T')[0]} to protect manual HRD correction.`);
-                  continue;
-                }
-
-                // Merge check-in/check-out: keep earliest checkIn, latest checkOut
-                let mergedCheckIn = record.checkIn;
-                let mergedCheckOut = record.checkOut;
-
-                if (record.checkIn) {
-                  mergedCheckIn = existing.checkIn
-                    ? (record.checkIn < existing.checkIn ? record.checkIn : existing.checkIn)
-                    : record.checkIn;
-                } else {
-                  mergedCheckIn = existing.checkIn;
-                }
-
-                if (record.checkOut) {
-                  mergedCheckOut = existing.checkOut
-                    ? (record.checkOut > existing.checkOut ? record.checkOut : existing.checkOut)
-                    : record.checkOut;
-                } else {
-                  mergedCheckOut = existing.checkOut;
-                }
-
-                // Recalculate status based on merged times
-                const calcMerged = mergedCheckIn
-                  ? calculateLateness(mergedCheckIn, record.shiftStart, record.gracePeriod, record.shiftEnd, roundingConfig)
-                  : { lateMinutes: 0, status: 'MANGKIR' };
-                const mergedStatus = resolveStatus(mergedCheckIn, mergedCheckOut, calcMerged.status, record.date, penaltyRules, record.shiftEnd, record.shiftStart);
-
-                await prisma.attendance.update({
-                  where: { id: existing.id },
-                  data: {
-                    checkIn: mergedCheckIn,
-                    checkOut: mergedCheckOut,
-                    status: mergedStatus,
-                    lateMinutes: calcMerged.lateMinutes,
-                    mode: 'Fingerprint'
-                  }
-                });
-              } else {
-                const { shiftStart, shiftEnd, gracePeriod, ...prismaRecord } = record;
-                await prisma.attendance.create({
-                  data: prismaRecord
-                });
-              }
-              saved++;
-            } catch (e) {
-              console.error(`[Cron] Failed to save record for emp ${record.employeeId}:`, e.message);
-            }
-          }
+          const result = await deviceSync.persistAttendanceRecords(recordsToCreate, syncSettings);
+          const saved = result.saved;
 
           await prisma.device.update({
             where: { id: device.id },

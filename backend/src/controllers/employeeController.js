@@ -4,6 +4,15 @@ const xlsx = require('xlsx');
 const { recordAuditLog } = require('./auditLogController');
 
 const { handleControllerError } = require('../middleware/validate');
+
+// Deteksi karyawan harian/BHL secara konsisten (lewat employmentStatus ATAU salaryCategory)
+const BHL_TOKENS = ['harian', 'bhl', 'daily'];
+const isHarian = (employmentStatus, salaryCategory) => {
+  const a = String(employmentStatus || '').toLowerCase().trim();
+  const b = String(salaryCategory || '').toLowerCase().trim();
+  return BHL_TOKENS.includes(a) || BHL_TOKENS.includes(b);
+};
+
 const getAll = async (req, res) => {
   try {
     const { search, dept, section, position, status, empStatus, page = 1, limit = 20, sortBy = 'createdAt', order = 'desc', locationId } = req.query;
@@ -195,7 +204,7 @@ const create = async (req, res) => {
     // Auto-generate NIK based on last numeric sequence
     let employeeCode = rest.employeeCode?.trim();
     if (!employeeCode) {
-      if (rest.employmentStatus === 'HARIAN' || rest.salaryCategory === 'HARIAN') {
+      if (isHarian(rest.employmentStatus, rest.salaryCategory)) {
         const allBhl = await prisma.employee.findMany({ 
           where: { OR: [{ employmentStatus: 'HARIAN' }, { salaryCategory: 'HARIAN' }] }, 
           select: { employeeCode: true } 
@@ -247,10 +256,12 @@ const create = async (req, res) => {
       }
     }
 
-    if (rest.fingerPrintId) {
-      const existingFinger = await prisma.employee.findUnique({ where: { fingerPrintId: rest.fingerPrintId } });
+    // Normalisasi ID Sidik Jari (No. AC) & cegah duplikasi (findFirst — fingerPrintId bukan field unik)
+    const fingerId = rest.fingerPrintId ? String(rest.fingerPrintId).trim() : '';
+    if (fingerId) {
+      const existingFinger = await prisma.employee.findFirst({ where: { fingerPrintId: fingerId } });
       if (existingFinger) {
-        return res.status(400).json({ success: false, message: `ID Sidik Jari ${rest.fingerPrintId} sudah digunakan oleh karyawan lain.` });
+        return res.status(400).json({ success: false, message: `ID Sidik Jari ${fingerId} sudah digunakan oleh karyawan lain.` });
       }
     }
 
@@ -276,6 +287,7 @@ const create = async (req, res) => {
     // Map string dates if present
     const dataObj = {
       employeeCode, name, email, phone: phone || null, position: position || null,
+      fingerPrintId: fingerId || null,
       profilePhoto: profilePhotoUrl,
       departmentId: department.id,
       // Prioritize user-selected shift over system default
@@ -306,7 +318,7 @@ const create = async (req, res) => {
 
     const employee = await prisma.$transaction(async (tx) => {
       const emp = await tx.employee.create({ data: dataObj, include: { department: true } });
-      if (rest.employmentStatus !== 'HARIAN' && rest.salaryCategory !== 'HARIAN') {
+      if (!isHarian(rest.employmentStatus, rest.salaryCategory)) {
         const hashedPassword = await bcrypt.hash('password123', 10);
         await tx.user.create({ data: { username: employeeCode, password: hashedPassword, role: 'EMPLOYEE', employeeId: emp.id, mustChangePassword: true } });
       }
@@ -345,14 +357,17 @@ const update = async (req, res) => {
     const { name, email, dept, phone, position, status, faceStatus, faceDescriptor, ...rest } = req.body;
     const empId = parseInt(req.params.id);
 
-    if (rest.fingerPrintId) {
-      const existingFinger = await prisma.employee.findUnique({ where: { fingerPrintId: rest.fingerPrintId } });
-      if (existingFinger && existingFinger.id !== empId) {
-        return res.status(400).json({ success: false, message: `ID Sidik Jari ${rest.fingerPrintId} sudah digunakan oleh karyawan lain.` });
+    const fingerId = rest.fingerPrintId ? String(rest.fingerPrintId).trim() : '';
+    if (fingerId) {
+      const existingFinger = await prisma.employee.findFirst({ where: { fingerPrintId: fingerId, NOT: { id: empId } } });
+      if (existingFinger) {
+        return res.status(400).json({ success: false, message: `ID Sidik Jari ${fingerId} sudah digunakan oleh karyawan lain.` });
       }
     }
 
     const data = { ...rest };
+    // Simpan No. AC yang sudah dinormalisasi; kosong → null (hindari bentrok antar string kosong)
+    if ('fingerPrintId' in data) data.fingerPrintId = fingerId || null;
     if (name) data.name = name;
     if (email) data.email = email;
     if (phone !== undefined) data.phone = phone;
