@@ -124,8 +124,13 @@ const translateMethod = (method, lang) => {
 
 const getPaddedRecords = (rawRecords, summary, appliedFilters, sortConfig) => {
   if (!rawRecords || rawRecords.length === 0) return [];
+  const safeSort = () => {
+    const s = [...rawRecords].sort((a, b) => new Date(a.date) - new Date(b.date));
+    return sortConfig?.order === 'desc' ? s.reverse() : s;
+  };
+  try {
   const uniqueEmployeeCount = summary?.uniqueEmployeeCount || 1;
-  
+
   if (uniqueEmployeeCount === 1 && appliedFilters.search) {
     let startDate, endDate;
     const now = new Date();
@@ -149,11 +154,12 @@ const getPaddedRecords = (rawRecords, summary, appliedFilters, sortConfig) => {
 
     const padData = [];
     const dataMap = {};
-    rawRecords.forEach(r => {
+    // Pembatas aman: jangan proses lebih dari 20rb record untuk satu karyawan
+    rawRecords.slice(0, 20000).forEach(r => {
       const parsedObj = new Date(r.date);
       if (!isNaN(parsedObj.getTime())) {
         const isoMatch = `${parsedObj.getFullYear()}-${String(parsedObj.getMonth()+1).padStart(2,'0')}-${String(parsedObj.getDate()).padStart(2,'0')}`;
-        dataMap[isoMatch] = r; 
+        dataMap[isoMatch] = r;
       }
     });
 
@@ -161,15 +167,21 @@ const getPaddedRecords = (rawRecords, summary, appliedFilters, sortConfig) => {
     const overrides = summary?.calendarOverrides || [];
     const overrideMap = {};
     overrides.forEach(c => {
-       const dStr = c.date.split('T')[0];
+       if (!c || !c.date) return;
+       const dStr = String(c.date).split('T')[0];
        overrideMap[dStr] = c.type;
     });
     const workingDays = summary?.workingDays || [1,2,3,4,5];
 
     const start = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
     const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+    // Pembatas aman: tanggal tak valid / terbalik → jangan padding (cegah freeze)
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || end < start) {
+      return safeSort();
+    }
+    const MAX_PAD_DAYS = 400; // batas keras iterasi (mis. ±13 bulan) agar tak pernah membeku
 
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    for (let d = new Date(start), guardCount = 0; d <= end && guardCount < MAX_PAD_DAYS; d.setDate(d.getDate() + 1), guardCount++) {
       const isoKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
       const displayDate = d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
       
@@ -208,9 +220,12 @@ const getPaddedRecords = (rawRecords, summary, appliedFilters, sortConfig) => {
     const sorted = [...padData].sort((a, b) => new Date(a.date) - new Date(b.date));
     return sortConfig?.order === 'desc' ? sorted.reverse() : sorted;
   }
-  
-  const sorted = [...rawRecords].sort((a, b) => new Date(a.date) - new Date(b.date));
-  return sortConfig?.order === 'desc' ? sorted.reverse() : sorted;
+
+  return safeSort();
+  } catch (e) {
+    console.error('getPaddedRecords gagal, fallback ke data apa adanya:', e);
+    return safeSort();
+  }
 };
 
 const getPrintPaddedLogs = (rawLogs, emp, selectedMonth, summary) => {
@@ -225,18 +240,19 @@ const getPrintPaddedLogs = (rawLogs, emp, selectedMonth, summary) => {
   }
   
   const dataMap = {};
-  rawLogs.forEach(r => {
+  rawLogs.slice(0, 20000).forEach(r => {
     const parsedObj = new Date(r.date);
     if (!isNaN(parsedObj.getTime())) {
       const isoMatch = `${parsedObj.getFullYear()}-${String(parsedObj.getMonth()+1).padStart(2,'0')}-${String(parsedObj.getDate()).padStart(2,'0')}`;
-      dataMap[isoMatch] = r; 
+      dataMap[isoMatch] = r;
     }
   });
 
   const overrides = summary?.calendarOverrides || [];
   const overrideMap = {};
   overrides.forEach(c => {
-     const dStr = c.date.split('T')[0];
+     if (!c || !c.date) return;
+     const dStr = String(c.date).split('T')[0];
      overrideMap[dStr] = c.type;
   });
   const workingDays = summary?.workingDays || [1,2,3,4,5];
@@ -244,8 +260,11 @@ const getPrintPaddedLogs = (rawLogs, emp, selectedMonth, summary) => {
   const padData = [];
   const loopStart = new Date(start.getFullYear(), start.getMonth(), start.getDate());
   const loopEnd = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+  if (isNaN(loopStart.getTime()) || isNaN(loopEnd.getTime()) || loopEnd < loopStart) {
+    return [...rawLogs].sort((a, b) => new Date(a.date) - new Date(b.date));
+  }
 
-  for (let d = new Date(loopStart); d <= loopEnd; d.setDate(d.getDate() + 1)) {
+  for (let d = new Date(loopStart), guardCount = 0; d <= loopEnd && guardCount < 400; d.setDate(d.getDate() + 1), guardCount++) {
     const isoKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     const displayDate = d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
     
@@ -547,7 +566,8 @@ const Attendance = () => {
     const rawLogs = fullDataForRekap?.data || [];
     const groups = {};
 
-    rawLogs.forEach(row => {
+    // Pembatas aman: batasi jumlah record yang diproses agar rekap tak pernah membeku
+    rawLogs.slice(0, 50000).forEach(row => {
       const empCode = row.employeeCode || 'SYS_ID_ERR';
       const name = row.name || '—';
       const dept = row.dept || 'UMUM';
@@ -867,7 +887,7 @@ const Attendance = () => {
 
         const exportData = rekapData.map((g, idx) => {
           const totalExcludeOff = g.total - g.other;
-          const rate = totalExcludeOff > 0 ? Math.round((g.present / totalExcludeOff) * 100) : 100;
+          const rate = totalExcludeOff > 0 ? `${Math.round((g.present / totalExcludeOff) * 100)}%` : '-';
           return {
             [headers.no]: idx + 1,
             [headers.nik]: g.employeeCode || '-',
@@ -881,7 +901,7 @@ const Attendance = () => {
             [headers.mangkir]: g.mangkir,
             [headers.absent]: g.absent,
             [headers.other]: g.other,
-            [headers.rate]: `${rate}%`,
+            [headers.rate]: rate,
             [headers.totalLate]: formatDuration(g.totalLateMinutes, lang)
           };
         });
@@ -1087,7 +1107,7 @@ const Attendance = () => {
       if (activeViewTab === 'REKAPITULASI') {
         const tableData = rekapData.map((g, idx) => {
           const totalExcludeOff = g.total - g.other;
-          const rate = totalExcludeOff > 0 ? Math.round((g.present / totalExcludeOff) * 100) : 100;
+          const rate = totalExcludeOff > 0 ? `${Math.round((g.present / totalExcludeOff) * 100)}%` : '-';
           return [
             g.employeeCode || '-',
             g.name,
@@ -1100,7 +1120,7 @@ const Attendance = () => {
             g.mangkir,
             g.absent,
             g.other,
-            `${rate}%`,
+            rate,
             formatDuration(g.totalLateMinutes, lang)
           ];
         });

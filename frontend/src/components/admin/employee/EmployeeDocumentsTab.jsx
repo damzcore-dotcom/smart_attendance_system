@@ -104,13 +104,28 @@ const EmployeeDocumentsTab = ({ employeeId }) => {
           </div>
           <div className="space-y-1.5">
             <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block ml-1">Pilih File (PDF, Gambar, Word)</label>
-            <input 
+            <input
               id="doc-file-input"
-              type="file" 
+              type="file"
               accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
-              onChange={e => setFile(e.target.files[0])} 
+              onChange={e => {
+                const f = e.target.files[0];
+                if (!f) { setFile(null); return; }
+                const ext = '.' + (f.name.split('.').pop() || '').toLowerCase();
+                const allowed = ['.pdf', '.png', '.jpg', '.jpeg', '.doc', '.docx'];
+                if (!allowed.includes(ext)) {
+                  alert('Format tidak didukung. Hanya PDF, Word (.doc/.docx), atau Gambar (JPG/PNG).');
+                  e.target.value = ''; setFile(null); return;
+                }
+                if (f.size > 10 * 1024 * 1024) {
+                  alert(`Ukuran file ${(f.size / 1024 / 1024).toFixed(1)} MB melebihi batas maksimal 10 MB.`);
+                  e.target.value = ''; setFile(null); return;
+                }
+                setFile(f);
+              }}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
             />
+            <p className="text-[10px] text-slate-400 mt-1 ml-1">Maks. 10 MB · PDF, Word (.doc/.docx), Gambar (JPG/PNG)</p>
           </div>
         </div>
         <div className="flex justify-end">

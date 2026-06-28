@@ -135,19 +135,35 @@ const getOverrides = async (req, res) => {
 const createOverrides = async (req, res) => {
   try {
     const { employeeIds, shiftId, startDate, endDate } = req.body;
-    
+
     if (!employeeIds || employeeIds.length === 0 || !shiftId || !startDate || !endDate) {
       return res.status(400).json({ success: false, message: 'Data tidak lengkap' });
     }
 
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    
+    // Hanya ID karyawan valid (buang NaN/non-numerik agar tak error / salah karyawan)
+    const validEmployeeIds = [...new Set(
+      employeeIds.map(id => parseInt(id)).filter(id => Number.isInteger(id) && id > 0)
+    )];
+    if (validEmployeeIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'Tidak ada ID karyawan yang valid.' });
+    }
+    const parsedShiftId = parseInt(shiftId);
+    if (!Number.isInteger(parsedShiftId)) {
+      return res.status(400).json({ success: false, message: 'Shift tidak valid.' });
+    }
+
+    // Parse tanggal sebagai UTC-midnight (selaras bulk-generate & pembacaan absensi)
+    const [sY, sM, sD] = String(startDate).slice(0, 10).split('-').map(Number);
+    const [eY, eM, eD] = String(endDate).slice(0, 10).split('-').map(Number);
+    const start = new Date(Date.UTC(sY, sM - 1, sD));
+    const end = new Date(Date.UTC(eY, eM - 1, eD));
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
+      return res.status(400).json({ success: false, message: 'Rentang tanggal tidak valid.' });
+    }
+
     // Pastikan tidak ada conflict
     // Selesaikan konflik tumpang tindih (Roster Collision) dengan cara memotong/membagi range tanggal
-    for (const empId of employeeIds) {
-      const parsedEmpId = parseInt(empId);
-      
+    for (const parsedEmpId of validEmployeeIds) {
       const overlapping = await prisma.employeeShiftOverride.findMany({
         where: {
           employeeId: parsedEmpId,
@@ -166,7 +182,7 @@ const createOverrides = async (req, res) => {
         } else if (ovStart.getTime() < start.getTime() && ovEnd.getTime() > end.getTime()) {
           // Kasus 2: Menutupi seluruh range baru -> Potong menjadi dua bagian (Kiri dan Kanan)
           const endBefore = new Date(start);
-          endBefore.setDate(endBefore.getDate() - 1);
+          endBefore.setUTCDate(endBefore.getUTCDate() - 1);
           
           await prisma.employeeShiftOverride.update({
             where: { id: ov.id },
@@ -174,7 +190,7 @@ const createOverrides = async (req, res) => {
           });
           
           const startAfter = new Date(end);
-          startAfter.setDate(startAfter.getDate() + 1);
+          startAfter.setUTCDate(startAfter.getUTCDate() + 1);
           
           await prisma.employeeShiftOverride.create({
             data: {
@@ -187,7 +203,7 @@ const createOverrides = async (req, res) => {
         } else if (ovStart.getTime() < start.getTime() && ovEnd.getTime() >= start.getTime() && ovEnd.getTime() <= end.getTime()) {
           // Kasus 3: Menumpuk di bagian awal range baru -> Kecilkan endDate
           const endBefore = new Date(start);
-          endBefore.setDate(endBefore.getDate() - 1);
+          endBefore.setUTCDate(endBefore.getUTCDate() - 1);
           
           await prisma.employeeShiftOverride.update({
             where: { id: ov.id },
@@ -196,7 +212,7 @@ const createOverrides = async (req, res) => {
         } else if (ovStart.getTime() >= start.getTime() && ovStart.getTime() <= end.getTime() && ovEnd.getTime() > end.getTime()) {
           // Kasus 4: Menumpuk di bagian akhir range baru -> Kecilkan startDate
           const startAfter = new Date(end);
-          startAfter.setDate(startAfter.getDate() + 1);
+          startAfter.setUTCDate(startAfter.getUTCDate() + 1);
           
           await prisma.employeeShiftOverride.update({
             where: { id: ov.id },
@@ -206,9 +222,9 @@ const createOverrides = async (req, res) => {
       }
     }
 
-    const overrideData = employeeIds.map(empId => ({
-      employeeId: parseInt(empId),
-      shiftId: parseInt(shiftId),
+    const overrideData = validEmployeeIds.map(empId => ({
+      employeeId: empId,
+      shiftId: parsedShiftId,
       startDate: start,
       endDate: end
     }));
@@ -217,7 +233,7 @@ const createOverrides = async (req, res) => {
       data: overrideData
     });
 
-    res.status(201).json({ success: true, message: `${employeeIds.length} Data roster berhasil disimpan` });
+    res.status(201).json({ success: true, message: `${validEmployeeIds.length} Data roster berhasil disimpan` });
   } catch (err) {
     handleControllerError(res, err, 'scheduleController');
   }

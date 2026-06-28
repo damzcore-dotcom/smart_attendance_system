@@ -1,5 +1,11 @@
 // Trigger nodemon restart to load node-zklib socket fixes
 require('dotenv').config();
+
+// Paksa timezone proses ke Asia/Jakarta (WIB) sebelum Date apa pun dibuat.
+// Perhitungan keterlambatan/status memakai Date.getHours()/getDay() yang bergantung TZ proses;
+// ini menjamin akurasi absensi walau host/kontainer tidak menyetel TZ. Bisa di-override via .env.
+process.env.TZ = process.env.TZ || 'Asia/Jakarta';
+
 const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
@@ -223,6 +229,10 @@ const uploadLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Demo mode guard — blocks restricted features when DEMO_MODE=true (no effect in production)
+const { demoGuard } = require('./middleware/demoGuard');
+app.use('/api', demoGuard);
+
 // Routes
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/verify-face', authLimiter);
@@ -247,6 +257,7 @@ app.use('/api/devices', deviceRoutes);
 app.use('/api/fingerprint', require('./routes/fingerprintRoutes'));
 app.use('/api/audit-logs', require('./routes/auditLogRoutes'));
 app.use('/api/payroll', require('./routes/payrollRoutes'));
+app.use('/api/bhl-payroll', require('./routes/bhlPayrollRoutes'));
 app.use('/api/calendar', require('./routes/calendar'));
 app.use('/api/bridge', require('./routes/bridgeRoutes'));
 app.use('/api/chat', require('./routes/chatRoutes'));

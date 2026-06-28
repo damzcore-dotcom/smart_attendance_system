@@ -1,17 +1,43 @@
 @import "tailwindcss";
 
+/* Porcelain theme — accent terracotta. Utilitas blue-* & indigo-* dipetakan ke ramp
+   terracotta agar warna aksen di semua halaman ikut tema secara otomatis. */
 @theme {
-  --color-primary: #2563eb;
-  --color-primary-dark: #1d4ed8;
-  --color-primary-light: #3b82f6;
-  --color-secondary: #f7f8fc;
-  
+  --color-primary: #C0532B;
+  --color-primary-dark: #A8481F;
+  --color-primary-light: #C66A3C;
+  --color-secondary: #F6F3EC;
+
+  --color-blue-50: #FAF0EA;
+  --color-blue-100: #F4E4DB;
+  --color-blue-200: #ECCBBA;
+  --color-blue-300: #E0B9A6;
+  --color-blue-400: #D08A66;
+  --color-blue-500: #C66A3C;
+  --color-blue-600: #C0532B;
+  --color-blue-700: #A8481F;
+  --color-blue-800: #8A3A18;
+  --color-blue-900: #6E2E13;
+  --color-blue-950: #4A1E0C;
+
+  --color-indigo-50: #FAF0EA;
+  --color-indigo-100: #F4E4DB;
+  --color-indigo-200: #ECCBBA;
+  --color-indigo-300: #E0B9A6;
+  --color-indigo-400: #D08A66;
+  --color-indigo-500: #C66A3C;
+  --color-indigo-600: #C0532B;
+  --color-indigo-700: #A8481F;
+  --color-indigo-800: #8A3A18;
+  --color-indigo-900: #6E2E13;
+  --color-indigo-950: #4A1E0C;
+
   --font-sans: "Inter", "Outfit", system-ui, -apple-system, sans-serif;
 }
 
 @layer base {
   body {
-    @apply bg-[#f7f8fc] text-slate-800 antialiased selection:bg-blue-500/20 selection:text-blue-900;
+    @apply bg-[#F6F3EC] text-slate-800 antialiased selection:bg-[#C0532B]/15 selection:text-[#6E2E13];
   }
 }
 
@@ -23,47 +49,45 @@
   .btn-professional {
     @apply relative overflow-hidden bg-gradient-to-br from-blue-600 to-blue-700 text-white px-8 py-4 rounded-2xl font-bold text-sm tracking-wide transition-all duration-300 shadow-xl shadow-blue-600/25 hover:shadow-blue-500/40 hover:-translate-y-0.5 active:scale-95;
   }
-  
+
   .card {
-    @apply bg-white rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md overflow-hidden transition-all duration-300;
+    @apply bg-white rounded-2xl border border-[#ECE6DA] shadow-sm hover:shadow-md overflow-hidden transition-all duration-300;
   }
 
   .dark-card {
-    @apply bg-white rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all duration-300;
+    @apply bg-white rounded-2xl border border-[#ECE6DA] shadow-sm hover:shadow-md transition-all duration-300;
   }
-  
+
   .glass {
-    @apply bg-white/80 backdrop-blur-xl border border-slate-200/50 shadow-sm;
+    @apply bg-white/80 backdrop-blur-xl border border-[#ECE6DA]/60 shadow-sm;
   }
 
   .executive-bg {
-    @apply fixed inset-0 -z-10 bg-[#f7f8fc];
+    @apply fixed inset-0 -z-10 bg-[#F6F3EC];
   }
 }
 
-/* Crystal Azure Scrollbar */
+/* Petakan latar lawas (#f7f8fc) ke ivory tema di seluruh aplikasi */
+.bg-\[\#f7f8fc\] { background-color: #F6F3EC !important; }
+
+/* Warm scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
-
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: #F1ECE2;
 }
-
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #D8CFC0;
   border-radius: 20px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #C0B6A4;
 }
-
-/* For Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 #f1f5f9;
+  scrollbar-color: #D8CFC0 #F1ECE2;
 }
 
 /* Floating Save Bar dynamic sidebar spacing */
@@ -71,7 +95,7 @@
   transition: left 0.3s ease-in-out;
 }
 .sidebar-open .floating-save-bar {
-  left: 288px !important; /* matches aside w-72 */
+  left: 256px !important; /* matches aside w-64 */
 }
 .sidebar-collapsed .floating-save-bar {
   left: 80px !important; /* matches aside w-20 */
@@ -90,4 +114,3 @@
 .animate-blink {
   animation: blink 1.2s infinite;
 }
-

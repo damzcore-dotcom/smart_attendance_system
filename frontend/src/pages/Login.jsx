@@ -334,7 +334,7 @@ const Login = () => {
   const isBusy = scanStatus === 'detecting' || scanStatus === 'verifying' || scanStatus === 'success';
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 md:p-8 relative overflow-hidden font-sans bg-[#f8fafc] text-slate-800">
+    <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 md:p-8 relative overflow-hidden font-sans bg-[#F6F3EC] text-slate-800">
       
       {/* Light & Vibrant background glowing blobs */}
       <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-sky-400/15 rounded-full blur-[130px] animate-pulse pointer-events-none" style={{ animationDuration: '8s' }} />
@@ -754,8 +754,8 @@ const Login = () => {
           position: absolute;
           left: 5%; right: 5%;
           height: 3px;
-          background: linear-gradient(90deg, transparent, #3b82f6, transparent);
-          box-shadow: 0 0 20px rgba(59, 130, 246, 0.6);
+          background: linear-gradient(90deg, transparent, #C0532B, transparent);
+          box-shadow: 0 0 20px rgba(192, 83, 43, 0.6);
           animation: scanMove 3s ease-in-out infinite;
         }
         @keyframes scanMove { 0%, 100% { top: 10% } 50% { top: 90% } }

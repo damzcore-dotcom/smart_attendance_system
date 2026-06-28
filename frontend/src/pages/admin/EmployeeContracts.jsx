@@ -3,8 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { employeeAPI } from '../../services/api';
-import { 
-  FileText, Search, Filter, ShieldCheck, ChevronRight, Loader2, Calendar, AlertCircle, Clock, Users, ArrowUpRight, Fingerprint
+import {
+  FileText, Search, Filter, ShieldCheck, ChevronRight, Loader2, Calendar, AlertCircle, Clock, Users, ArrowUpRight, Fingerprint, History, X
 } from 'lucide-react';
 
 const EmployeeContracts = ({ isReadOnly = false }) => {
@@ -26,12 +26,13 @@ const EmployeeContracts = ({ isReadOnly = false }) => {
     }
   }, [location.state, navigate]);
 
-  // Load all employees with biometrics/contracts info
-  const { data: allEmployeesData, isLoading } = useQuery({
-    queryKey: ['all-employees-biometrics'],
-    queryFn: () => employeeAPI.getAll({ limit: 10000, excludeBhl: true })
+  // Endpoint ringan khusus kontrak (PKWT/KONTRAK non-terminated) — payload jauh lebih kecil
+  // daripada menarik seluruh karyawan lalu memfilter di browser.
+  const { data: contractsData, isLoading } = useQuery({
+    queryKey: ['contracts-summary'],
+    queryFn: () => employeeAPI.getContractsSummary()
   });
-  const allEmployees = allEmployeesData?.data || [];
+  const allEmployees = contractsData?.data || [];
 
   // Load master options for department filter
   const { data: optionsData } = useQuery({
@@ -74,11 +75,18 @@ const EmployeeContracts = ({ isReadOnly = false }) => {
     };
   });
 
+  // Klasifikasi tunggal — dipakai sama persis oleh kartu statistik DAN filter agar tidak ada selisih.
+  const isExpired = (e) => e.daysLeft !== null && e.daysLeft <= 0;
+  const isCritical = (e) => e.daysLeft !== null && e.daysLeft > 0 && e.daysLeft <= 30;
+  const isActive = (e) => e.daysLeft !== null && e.daysLeft > 30;
+  const isUnknown = (e) => e.daysLeft === null; // kontrak tanpa tanggal akhir
+
   // Calculate statistics
   const totalContracts = employeesWithContractInfo.length;
-  const expiredCount = employeesWithContractInfo.filter(e => e.daysLeft !== null && e.daysLeft <= 0).length;
-  const criticalCount = employeesWithContractInfo.filter(e => e.daysLeft !== null && e.daysLeft > 0 && e.daysLeft <= 30).length;
-  const activeCount = totalContracts - expiredCount - criticalCount;
+  const expiredCount = employeesWithContractInfo.filter(isExpired).length;
+  const criticalCount = employeesWithContractInfo.filter(isCritical).length;
+  const activeCount = employeesWithContractInfo.filter(isActive).length;
+  const unknownCount = employeesWithContractInfo.filter(isUnknown).length;
 
   // Filter logic
   const filtered = employeesWithContractInfo.filter(emp => {
@@ -88,11 +96,13 @@ const EmployeeContracts = ({ isReadOnly = false }) => {
     
     let matchesStatus = true;
     if (statusFilter === 'expired') {
-      matchesStatus = emp.daysLeft !== null && emp.daysLeft <= 0;
+      matchesStatus = isExpired(emp);
     } else if (statusFilter === 'critical') {
-      matchesStatus = emp.daysLeft !== null && emp.daysLeft > 0 && emp.daysLeft <= 30;
+      matchesStatus = isCritical(emp);
     } else if (statusFilter === 'active') {
-      matchesStatus = emp.daysLeft !== null && emp.daysLeft > 30;
+      matchesStatus = isActive(emp);
+    } else if (statusFilter === 'unknown') {
+      matchesStatus = isUnknown(emp);
     }
 
     return matchesSearch && matchesDept && matchesStatus;
@@ -104,10 +114,35 @@ const EmployeeContracts = ({ isReadOnly = false }) => {
   const startIndex = (page - 1) * PAGE_SIZE;
   const paginatedEmployees = filtered.slice(startIndex, startIndex + PAGE_SIZE);
 
+  // Clamp halaman bila filter mengecilkan hasil agar tidak menampilkan halaman kosong.
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [totalPages, page]);
+
   const handleNavigateToEdit = (employeeCode) => {
     // Navigate to Employees page with state to auto-trigger the edit modal
     navigate('/admin/employees', { state: { editEmployeeCode: employeeCode, cameFrom: '/admin/contracts' } });
   };
+
+  // ── Riwayat kontrak ──
+  const [historyEmp, setHistoryEmp] = useState(null);
+  const [historyData, setHistoryData] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  const openHistory = async (emp) => {
+    setHistoryEmp(emp);
+    setHistoryLoading(true);
+    setHistoryData([]);
+    try {
+      const res = await employeeAPI.getContractHistory(emp.dbId);
+      if (res.success) setHistoryData(res.data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+  const fmtDate = (d) => d ? new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-';
 
   const getAlertBadgeStyles = (level) => {
     switch (level) {
@@ -218,7 +253,7 @@ const EmployeeContracts = ({ isReadOnly = false }) => {
             <div className={`w-12 h-12 rounded-xl flex items-center justify-center border transition-all shadow-sm ${
               statusFilter === 'active'
                 ? 'bg-emerald-600 text-white border-emerald-600'
-                : 'bg-emerald-50 text-emerald-650 border-emerald-105 group-hover:bg-emerald-600 group-hover:text-white'
+                : 'bg-emerald-50 text-emerald-600 border-emerald-100 group-hover:bg-emerald-600 group-hover:text-white'
             }`}>
               <ShieldCheck className="w-5 h-5" />
             </div>
@@ -245,7 +280,7 @@ const EmployeeContracts = ({ isReadOnly = false }) => {
             <div className={`w-12 h-12 rounded-xl flex items-center justify-center border transition-all shadow-sm ${
               statusFilter === 'critical'
                 ? 'bg-orange-600 text-white border-orange-600'
-                : 'bg-orange-50 text-orange-650 border-orange-105 group-hover:bg-orange-600 group-hover:text-white'
+                : 'bg-orange-50 text-orange-600 border-orange-100 group-hover:bg-orange-600 group-hover:text-white'
             }`}>
               <Clock className="w-5 h-5" />
             </div>
@@ -272,7 +307,7 @@ const EmployeeContracts = ({ isReadOnly = false }) => {
             <div className={`w-12 h-12 rounded-xl flex items-center justify-center border transition-all shadow-sm ${
               statusFilter === 'expired'
                 ? 'bg-rose-600 text-white border-rose-600'
-                : 'bg-rose-50 text-rose-650 border-rose-105 group-hover:bg-rose-600 group-hover:text-white'
+                : 'bg-rose-50 text-rose-600 border-rose-100 group-hover:bg-rose-600 group-hover:text-white'
             }`}>
               <AlertCircle className="w-5 h-5" />
             </div>
@@ -325,6 +360,7 @@ const EmployeeContracts = ({ isReadOnly = false }) => {
                   <option value="active">{t('contracts.statusActive')} (&gt; 30 {t('contracts.days')})</option>
                   <option value="critical">{t('contracts.expiringSoon')} (&lt;= 30 {t('contracts.days')})</option>
                   <option value="expired">{t('contracts.statusExpired')}</option>
+                  {unknownCount > 0 && <option value="unknown">{t('contracts.noEndDate', 'Tanpa tanggal akhir')} ({unknownCount})</option>}
                 </select>
                 <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
                   <Filter className="w-4 h-4 text-slate-400" />
@@ -365,7 +401,7 @@ const EmployeeContracts = ({ isReadOnly = false }) => {
                 ) : filtered.length === 0 ? (
                   <tr>
                     <td colSpan="10" className="text-center py-20 text-slate-400 font-medium">
-                      {t('announcements.noAnnouncements')}
+                      {t('contracts.noData', 'Tidak ada data kontrak yang cocok dengan filter.')}
                     </td>
                   </tr>
                 ) : (
@@ -373,13 +409,22 @@ const EmployeeContracts = ({ isReadOnly = false }) => {
                     <tr key={emp.dbId} className="hover:bg-slate-50/50 transition-colors duration-200">
                       {!isReadOnly && (
                         <td className="px-6 py-3 text-center">
-                          <button 
-                            onClick={() => handleNavigateToEdit(emp.employeeCode)} 
-                            className="px-3.5 py-1.5 bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white border border-blue-100 hover:border-blue-600 rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition-all shadow-sm flex items-center gap-1.5 mx-auto cursor-pointer"
-                          >
-                            {t('contracts.editContractBtn')}
-                            <ArrowUpRight className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={() => handleNavigateToEdit(emp.employeeCode)}
+                              className="px-3.5 py-1.5 bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white border border-blue-100 hover:border-blue-600 rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                            >
+                              {t('contracts.editContractBtn')}
+                              <ArrowUpRight className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => openHistory(emp)}
+                              title={t('contracts.history', 'Riwayat kontrak')}
+                              className="p-1.5 bg-white hover:bg-slate-100 text-slate-400 hover:text-slate-700 border border-slate-200 rounded-lg transition-all shadow-sm cursor-pointer"
+                            >
+                              <History className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
                       )}
                       <td className="px-6 py-3 font-semibold text-xs text-slate-700">
@@ -417,8 +462,8 @@ const EmployeeContracts = ({ isReadOnly = false }) => {
                         {emp.contractEnd ? new Date(emp.contractEnd).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'}
                       </td>
                       <td className="px-6 py-3 text-center">
-                        <span className={`px-2 py-0.5 rounded font-mono font-bold text-[10px] ${emp.daysLeft <= 0 ? 'text-rose-600 bg-rose-50' : emp.daysLeft <= 30 ? 'text-amber-600 bg-amber-50' : 'text-slate-600 bg-slate-50'}`}>
-                          {emp.daysLeft !== null ? (emp.daysLeft <= 0 ? t('contracts.statusExpired') : `${emp.daysLeft} ${t('contracts.days')}`) : '-'}
+                        <span className={`px-2 py-0.5 rounded font-mono font-bold text-[10px] ${emp.daysLeft === null ? 'text-slate-400 bg-slate-50' : emp.daysLeft <= 0 ? 'text-rose-600 bg-rose-50' : emp.daysLeft <= 30 ? 'text-amber-600 bg-amber-50' : 'text-slate-600 bg-slate-50'}`}>
+                          {emp.daysLeft !== null ? (emp.daysLeft <= 0 ? t('contracts.statusExpired') : `${emp.daysLeft} ${t('contracts.days')}`) : t('contracts.noEndDate', 'Tanpa tanggal')}
                         </span>
                       </td>
                       <td className="px-6 py-3">
@@ -459,6 +504,63 @@ const EmployeeContracts = ({ isReadOnly = false }) => {
         </div>
 
       </div>
+
+      {/* Modal Riwayat Kontrak */}
+      {historyEmp && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setHistoryEmp(null)} />
+          <div className="bg-white rounded-3xl w-full max-w-lg relative z-10 shadow-2xl animate-in fade-in zoom-in-95 duration-300 flex flex-col max-h-[80vh]">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <History className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">Riwayat Kontrak</h3>
+                  <p className="text-[11px] text-slate-400">{historyEmp.name} · {historyEmp.employeeCode}</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setHistoryEmp(null)} className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 transition-all">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5">
+              {historyLoading ? (
+                <div className="flex justify-center py-10"><Loader2 className="w-7 h-7 animate-spin text-blue-600" /></div>
+              ) : historyData.length === 0 ? (
+                <div className="text-center py-10 space-y-2">
+                  <FileText className="w-8 h-8 text-slate-300 mx-auto" />
+                  <p className="text-sm text-slate-400">Belum ada riwayat perpanjangan tercatat.</p>
+                  <p className="text-[11px] text-slate-400">Riwayat akan terisi otomatis saat tanggal akhir kontrak diubah lewat "Ubah Kontrak".</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {historyData.map((h, idx) => (
+                    <div key={h.id} className="relative pl-6 pb-3 border-l-2 border-slate-100 last:border-transparent">
+                      <div className={`absolute -left-[7px] top-1 w-3 h-3 rounded-full border-2 border-white ${idx === 0 ? 'bg-[#C0532B]' : 'bg-slate-300'}`} />
+                      <div className="bg-slate-50 border border-slate-100 rounded-xl p-3">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider ${h.action === 'NEW' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>
+                            {h.action === 'NEW' ? 'Kontrak Baru' : 'Perpanjangan'}
+                          </span>
+                          <span className="text-[10px] text-slate-400">{new Date(h.createdAt).toLocaleString('id-ID')}</span>
+                        </div>
+                        <div className="text-xs text-slate-600 grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono">
+                          <span className="text-slate-400">Mulai</span><span>{fmtDate(h.startDate)}</span>
+                          {h.previousEndDate && (<><span className="text-slate-400">Akhir lama</span><span className="line-through text-slate-400">{fmtDate(h.previousEndDate)}</span></>)}
+                          <span className="text-slate-400">Akhir baru</span><span className="font-bold text-slate-700">{fmtDate(h.endDate)}</span>
+                          {h.duration && (<><span className="text-slate-400">Durasi</span><span>{h.duration}</span></>)}
+                        </div>
+                        {h.createdBy && <p className="text-[10px] text-slate-400 mt-1.5">Oleh: {h.createdBy}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

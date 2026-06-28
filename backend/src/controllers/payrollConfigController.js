@@ -4,10 +4,27 @@ const { recordAuditLog } = require('./auditLogController');
 const { handleControllerError } = require('../middleware/validate');
 // ─── Payroll Config (Key-Value) ──────────────────
 
+// Default konfigurasi payroll — agar UI selalu menampilkan semua opsi walau belum pernah disimpan.
+const PAYROLL_CONFIG_DEFAULTS = {
+  overtimeEnabled: 'false',
+  overtimeMode: 'AUTO',              // AUTO (hitung dari jam pulang) | MANUAL (input SPL)
+  overtimeFlatMode: 'false',         // true = samaratakan satu multiplier; false = beda per jenis hari
+  overtimeFlatMultiplier: '1.5',
+  overtimeHourlyDivisor: '173',
+  attendancePenaltyEnabled: 'true',
+  penaltyPerMinute: '0',
+  pph21Enabled: 'true',
+  bpjsApplyMode: 'BY_NUMBER',        // BY_NUMBER (hanya yg punya nomor) | ALL (semua karyawan)
+  bpjsKesMaxSalary: '12000000',
+  jpMaxSalary: '10022900',
+  biayaJabatanRate: '0.05',
+  biayaJabatanMaxMonthly: '500000',
+};
+
 const getConfig = async (req, res) => {
   try {
     const configs = await prisma.payrollConfig.findMany();
-    const obj = {};
+    const obj = { ...PAYROLL_CONFIG_DEFAULTS };
     configs.forEach(c => { obj[c.key] = c.value; });
     res.json({ success: true, data: obj });
   } catch (err) {

@@ -25,12 +25,13 @@ const EmployeeTraining = ({ isReadOnly = false }) => {
     }
   }, [location.state, navigate]);
 
-  // Load all employees with biometrics/contracts info
-  const { data: allEmployeesData, isLoading } = useQuery({
-    queryKey: ['all-employees-biometrics'],
-    queryFn: () => employeeAPI.getAll({ limit: 10000, excludeBhl: true })
+  // Endpoint ringan khusus training (non-terminated) — payload jauh lebih kecil daripada
+  // menarik seluruh karyawan lalu memfilter di browser.
+  const { data: trainingData, isLoading } = useQuery({
+    queryKey: ['training-summary'],
+    queryFn: () => employeeAPI.getTrainingSummary()
   });
-  const allEmployees = allEmployeesData?.data || [];
+  const allEmployees = trainingData?.data || [];
 
   // Load master options for department filter
   const { data: optionsData } = useQuery({
@@ -73,11 +74,18 @@ const EmployeeTraining = ({ isReadOnly = false }) => {
     };
   });
 
+  // Klasifikasi tunggal — dipakai sama persis oleh kartu statistik DAN filter agar tidak ada selisih.
+  const isExpired = (e) => e.daysLeft !== null && e.daysLeft <= 0;
+  const isCritical = (e) => e.daysLeft !== null && e.daysLeft > 0 && e.daysLeft <= 30;
+  const isActive = (e) => e.daysLeft !== null && e.daysLeft > 30;
+  const isUnknown = (e) => e.daysLeft === null; // training tanpa tanggal selesai
+
   // Calculate statistics
   const totalTraining = employeesWithTrainingInfo.length;
-  const expiredCount = employeesWithTrainingInfo.filter(e => e.daysLeft !== null && e.daysLeft <= 0).length;
-  const criticalCount = employeesWithTrainingInfo.filter(e => e.daysLeft !== null && e.daysLeft > 0 && e.daysLeft <= 30).length;
-  const activeCount = totalTraining - expiredCount - criticalCount;
+  const expiredCount = employeesWithTrainingInfo.filter(isExpired).length;
+  const criticalCount = employeesWithTrainingInfo.filter(isCritical).length;
+  const activeCount = employeesWithTrainingInfo.filter(isActive).length;
+  const unknownCount = employeesWithTrainingInfo.filter(isUnknown).length;
 
   // Filter logic
   const filtered = employeesWithTrainingInfo.filter(emp => {
@@ -86,13 +94,10 @@ const EmployeeTraining = ({ isReadOnly = false }) => {
     const matchesDept = !deptFilter || emp.dept === deptFilter;
     
     let matchesStatus = true;
-    if (statusFilter === 'expired') {
-      matchesStatus = emp.daysLeft !== null && emp.daysLeft <= 0;
-    } else if (statusFilter === 'critical') {
-      matchesStatus = emp.daysLeft !== null && emp.daysLeft > 0 && emp.daysLeft <= 30;
-    } else if (statusFilter === 'active') {
-      matchesStatus = emp.daysLeft !== null && emp.daysLeft > 30;
-    }
+    if (statusFilter === 'expired') matchesStatus = isExpired(emp);
+    else if (statusFilter === 'critical') matchesStatus = isCritical(emp);
+    else if (statusFilter === 'active') matchesStatus = isActive(emp);
+    else if (statusFilter === 'unknown') matchesStatus = isUnknown(emp);
 
     return matchesSearch && matchesDept && matchesStatus;
   });
@@ -103,8 +108,13 @@ const EmployeeTraining = ({ isReadOnly = false }) => {
   const startIndex = (page - 1) * PAGE_SIZE;
   const paginatedEmployees = filtered.slice(startIndex, startIndex + PAGE_SIZE);
 
+  // Clamp halaman bila filter mengecilkan hasil agar tidak menampilkan halaman kosong.
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [totalPages, page]);
+
   const handleNavigateToEdit = (employeeCode) => {
-    navigate('/admin/employees', { state: { editEmployeeCode: employeeCode } });
+    navigate('/admin/employees', { state: { editEmployeeCode: employeeCode, cameFrom: '/admin/training' } });
   };
 
   const getAlertBadgeStyles = (level) => {
@@ -216,7 +226,7 @@ const EmployeeTraining = ({ isReadOnly = false }) => {
             <div className={`w-12 h-12 rounded-xl flex items-center justify-center border transition-all shadow-sm ${
               statusFilter === 'active'
                 ? 'bg-emerald-600 text-white border-emerald-600'
-                : 'bg-emerald-50 text-emerald-650 border-emerald-105 group-hover:bg-emerald-600 group-hover:text-white'
+                : 'bg-emerald-50 text-emerald-600 border-emerald-100 group-hover:bg-emerald-600 group-hover:text-white'
             }`}>
               <GraduationCap className="w-5 h-5" />
             </div>
@@ -243,7 +253,7 @@ const EmployeeTraining = ({ isReadOnly = false }) => {
             <div className={`w-12 h-12 rounded-xl flex items-center justify-center border transition-all shadow-sm ${
               statusFilter === 'critical'
                 ? 'bg-orange-600 text-white border-orange-600'
-                : 'bg-orange-50 text-orange-650 border-orange-105 group-hover:bg-orange-600 group-hover:text-white'
+                : 'bg-orange-50 text-orange-600 border-orange-100 group-hover:bg-orange-600 group-hover:text-white'
             }`}>
               <Clock className="w-5 h-5" />
             </div>
@@ -270,7 +280,7 @@ const EmployeeTraining = ({ isReadOnly = false }) => {
             <div className={`w-12 h-12 rounded-xl flex items-center justify-center border transition-all shadow-sm ${
               statusFilter === 'expired'
                 ? 'bg-rose-600 text-white border-rose-600'
-                : 'bg-rose-50 text-rose-655 border-rose-105 group-hover:bg-rose-600 group-hover:text-white'
+                : 'bg-rose-50 text-rose-600 border-rose-100 group-hover:bg-rose-600 group-hover:text-white'
             }`}>
               <AlertCircle className="w-5 h-5" />
             </div>
@@ -323,6 +333,7 @@ const EmployeeTraining = ({ isReadOnly = false }) => {
                   <option value="active">{t('training.statusActive')} (&gt; 30 {t('training.days')})</option>
                   <option value="critical">{t('training.expiringSoon')} (&lt;= 30 {t('training.days')})</option>
                   <option value="expired">{t('training.statusExpired')}</option>
+                  {unknownCount > 0 && <option value="unknown">{t('training.noEndDate', 'Tanpa tanggal selesai')} ({unknownCount})</option>}
                 </select>
                 <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
                   <Filter className="w-4 h-4 text-slate-400" />
@@ -363,7 +374,7 @@ const EmployeeTraining = ({ isReadOnly = false }) => {
                 ) : filtered.length === 0 ? (
                   <tr>
                     <td colSpan="10" className="text-center py-20 text-slate-400 font-medium">
-                      {t('announcements.noAnnouncements')}
+                      {t('training.noData', 'Tidak ada data training yang cocok dengan filter.')}
                     </td>
                   </tr>
                 ) : (
@@ -415,8 +426,8 @@ const EmployeeTraining = ({ isReadOnly = false }) => {
                         {emp.contractEnd ? new Date(emp.contractEnd).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'}
                       </td>
                       <td className="px-6 py-3 text-center">
-                        <span className={`px-2 py-0.5 rounded font-mono font-bold text-[10px] ${emp.daysLeft !== null && emp.daysLeft <= 0 ? 'text-rose-600 bg-rose-50' : emp.daysLeft !== null && emp.daysLeft <= 30 ? 'text-amber-600 bg-amber-50' : 'text-slate-600 bg-slate-50'}`}>
-                          {emp.daysLeft !== null ? (emp.daysLeft <= 0 ? t('training.statusExpired') : `${emp.daysLeft} ${t('training.days')}`) : '-'}
+                        <span className={`px-2 py-0.5 rounded font-mono font-bold text-[10px] ${emp.daysLeft === null ? 'text-slate-400 bg-slate-50' : emp.daysLeft <= 0 ? 'text-rose-600 bg-rose-50' : emp.daysLeft <= 30 ? 'text-amber-600 bg-amber-50' : 'text-slate-600 bg-slate-50'}`}>
+                          {emp.daysLeft !== null ? (emp.daysLeft <= 0 ? t('training.statusExpired') : `${emp.daysLeft} ${t('training.days')}`) : t('training.noEndDate', 'Tanpa tanggal')}
                         </span>
                       </td>
                       <td className="px-6 py-3">

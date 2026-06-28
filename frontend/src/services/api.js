@@ -161,6 +161,9 @@ export const employeeAPI = {
     return apiFetch(`/employees${q ? `?${q}` : ''}`);
   },
   getById: (id) => apiFetch(`/employees/${id}`),
+  getContractsSummary: () => apiFetch('/employees/contracts-summary'),
+  getTrainingSummary: () => apiFetch('/employees/training-summary'),
+  getContractHistory: (id) => apiFetch(`/employees/${id}/contract-history`),
   create: (data) => apiFetch('/employees', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => apiFetch(`/employees/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   remove: (id) => apiFetch(`/employees/${id}`, { method: 'DELETE' }),
@@ -273,6 +276,17 @@ export const attendanceAPI = {
   getOvertimeSummary: (month) => apiFetch(`/attendance/overtime-summary?month=${month}`),
   getBhlSummary: (month) => apiFetch(`/attendance/bhl-summary?month=${month}`),
   getCorrectionHistory: (month) => apiFetch(`/attendance/correction-history?month=${month}`),
+};
+
+// ─── BHL Payroll API ──────────────────────────────
+export const bhlPayrollAPI = {
+  preview: (month) => apiFetch(`/bhl-payroll/preview?month=${month}`),
+  list: () => apiFetch('/bhl-payroll/list'),
+  generate: (data) => apiFetch('/bhl-payroll/generate', { method: 'POST', body: JSON.stringify(data) }),
+  getById: (id) => apiFetch(`/bhl-payroll/${id}`),
+  finalize: (id) => apiFetch(`/bhl-payroll/${id}/finalize`, { method: 'PUT' }),
+  remove: (id) => apiFetch(`/bhl-payroll/${id}`, { method: 'DELETE' }),
+  getSlip: (id, empId) => apiFetch(`/bhl-payroll/${id}/slip/${empId}`),
 };
 
 // ─── Device API ────────────────────────────────────
@@ -409,6 +423,20 @@ export const leaveAPI = {
 export const backupAPI = {
   export: () => apiFetch('/backup/export'),
   restore: (backup) => apiFetch('/backup/restore', { method: 'POST', body: JSON.stringify({ backup }) }),
+  getSchedule: () => apiFetch('/backup/schedule'),
+  updateSchedule: (cfg) => apiFetch('/backup/schedule', { method: 'PUT', body: JSON.stringify(cfg) }),
+  runNow: () => apiFetch('/backup/run-now', { method: 'POST' }),
+  deleteFile: (name) => apiFetch(`/backup/files/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+  browse: (p) => apiFetch(`/backup/browse${p ? `?path=${encodeURIComponent(p)}` : ''}`),
+  createFolder: (parent, name) => apiFetch('/backup/browse-create', { method: 'POST', body: JSON.stringify({ parent, name }) }),
+  downloadFile: async (name) => {
+    const token = getAccessToken();
+    const res = await fetch(`${API_BASE}/backup/files/${encodeURIComponent(name)}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error('Gagal mengunduh file backup');
+    return res.blob();
+  },
 };
 
 // ─── Manager API ─────────────────────────────────

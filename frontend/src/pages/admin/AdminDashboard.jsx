@@ -40,19 +40,56 @@ import { useQuery } from '@tanstack/react-query';
 import api, { dashboardAPI, employeeAPI, attendanceAPI, deviceAPI } from '../../services/api';
 
 
-const StatCard = ({ title, value, change, icon: Icon, color, delay, onClick }) => (
-  <div 
+// Static color maps — Tailwind purges interpolated class names (`from-${color}-100`),
+// so every variant must appear as a complete literal string here.
+const STAT_STYLES = {
+  blue: {
+    card: 'hover:border-blue-300 hover:shadow-blue-500/10',
+    glow1: 'from-blue-100/80 to-blue-50/10',
+    glow2: 'from-blue-50/80',
+    icon: 'from-white to-blue-50 border-blue-100 text-blue-600 shadow-blue-500/10',
+  },
+  emerald: {
+    card: 'hover:border-emerald-300 hover:shadow-emerald-500/10',
+    glow1: 'from-emerald-100/80 to-emerald-50/10',
+    glow2: 'from-emerald-50/80',
+    icon: 'from-white to-emerald-50 border-emerald-100 text-emerald-600 shadow-emerald-500/10',
+  },
+  rose: {
+    card: 'hover:border-rose-300 hover:shadow-rose-500/10',
+    glow1: 'from-rose-100/80 to-rose-50/10',
+    glow2: 'from-rose-50/80',
+    icon: 'from-white to-rose-50 border-rose-100 text-rose-600 shadow-rose-500/10',
+  },
+  indigo: {
+    card: 'hover:border-indigo-300 hover:shadow-indigo-500/10',
+    glow1: 'from-indigo-100/80 to-indigo-50/10',
+    glow2: 'from-indigo-50/80',
+    icon: 'from-white to-indigo-50 border-indigo-100 text-indigo-600 shadow-indigo-500/10',
+  },
+};
+
+const INSIGHT_STYLES = {
+  orange:  { iconWrap: 'bg-orange-100 text-orange-600 border-orange-200', title: 'text-orange-600', mark: 'bg-orange-100 text-orange-700' },
+  emerald: { iconWrap: 'bg-emerald-100 text-emerald-600 border-emerald-200', title: 'text-emerald-600', mark: 'bg-emerald-100 text-emerald-700' },
+  blue:    { iconWrap: 'bg-blue-100 text-blue-600 border-blue-200', title: 'text-blue-600', mark: 'bg-blue-100 text-blue-700' },
+};
+
+const StatCard = ({ title, value, change, icon: Icon, color, delay, onClick }) => {
+  const s = STAT_STYLES[color] || STAT_STYLES.blue;
+  return (
+  <div
     onClick={onClick}
-    className={`relative overflow-hidden group p-7 bg-white/70 backdrop-blur-xl border border-slate-200/60 hover:border-${color}-300 transition-all duration-700 hover:-translate-y-2 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-2xl hover:shadow-${color}-500/10 animate-in slide-in-from-bottom-4 fade-in ${
+    className={`relative overflow-hidden group p-7 bg-white/70 backdrop-blur-xl border border-slate-200/60 ${s.card} transition-all duration-500 hover:-translate-y-1.5 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-2xl animate-in slide-in-from-bottom-4 fade-in ${
       onClick ? 'cursor-pointer' : ''
     }`}
     style={{ animationFillMode: 'both', animationDelay: `${delay}ms` }}
   >
-    <div className={`absolute -right-16 -top-16 w-56 h-56 bg-gradient-to-br from-${color}-100/80 to-${color}-50/10 rounded-full blur-[40px] group-hover:scale-150 transition-all duration-1000 ease-out`}></div>
-    <div className={`absolute -left-16 -bottom-16 w-48 h-48 bg-gradient-to-tr from-${color}-50/80 to-transparent rounded-full blur-[40px] group-hover:scale-125 transition-all duration-700 ease-out`}></div>
-    
+    <div className={`absolute -right-16 -top-16 w-56 h-56 bg-gradient-to-br ${s.glow1} rounded-full blur-[40px] group-hover:scale-150 transition-all duration-1000 ease-out`}></div>
+    <div className={`absolute -left-16 -bottom-16 w-48 h-48 bg-gradient-to-tr ${s.glow2} to-transparent rounded-full blur-[40px] group-hover:scale-125 transition-all duration-700 ease-out`}></div>
+
     <div className="flex justify-between items-start mb-8 relative z-10">
-      <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br from-white to-${color}-50 border border-${color}-100 flex items-center justify-center text-${color}-600 shadow-md shadow-${color}-500/10 group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 ease-out`}>
+      <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${s.icon} border flex items-center justify-center shadow-md group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 ease-out`}>
         <Icon className="w-6 h-6" />
       </div>
       <div className={`flex items-center px-3 py-1.5 rounded-xl text-[11px] font-bold tracking-widest uppercase shadow-sm transition-all duration-500 group-hover:-translate-y-1 ${change.startsWith('+') ? 'bg-gradient-to-r from-emerald-50 to-emerald-100/50 text-emerald-600 border border-emerald-200/50' : 'bg-gradient-to-r from-rose-50 to-rose-100/50 text-rose-600 border border-rose-200/50'}`}>
@@ -62,10 +99,11 @@ const StatCard = ({ title, value, change, icon: Icon, color, delay, onClick }) =
     </div>
     <div className="relative z-10 space-y-2">
       <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{title}</p>
-      <h3 className="text-4xl font-extrabold text-slate-800 tracking-tight group-hover:bg-clip-text group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-slate-800 group-hover:to-slate-500 transition-all duration-300">{value}</h3>
+      <h3 className="text-4xl font-extrabold text-slate-800 tracking-tight">{value}</h3>
     </div>
   </div>
-);
+  );
+};
 
 const AdminDashboard = () => {
   const { t, i18n } = useTranslation();
@@ -322,56 +360,56 @@ const AdminDashboard = () => {
   return (
     <div className="space-y-8 pb-12 animate-in fade-in duration-700 min-h-screen">
       {/* 1. Page Header with Glassmorphism */}
-      <div className="relative rounded-3xl bg-gradient-to-r from-blue-900 to-slate-900 p-8 xl:p-10 overflow-hidden shadow-2xl shadow-blue-900/20">
-        {/* Animated Background Mesh */}
-        <div className="absolute top-0 right-0 -translate-y-12 translate-x-1/3 w-[600px] h-[600px] bg-blue-500/20 rounded-full blur-[80px] pointer-events-none animate-pulse"></div>
-        <div className="absolute bottom-0 left-0 translate-y-1/2 -translate-x-1/4 w-[400px] h-[400px] bg-indigo-500/20 rounded-full blur-[60px] pointer-events-none"></div>
+      <div className="relative rounded-3xl bg-[#FBF7F0] border border-[#EADFce]/70 p-8 xl:p-10 overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+        {/* Soft warm glow accents */}
+        <div className="absolute top-0 right-0 -translate-y-12 translate-x-1/3 w-[600px] h-[600px] bg-[#C0532B]/10 rounded-full blur-[80px] pointer-events-none animate-pulse"></div>
+        <div className="absolute bottom-0 left-0 translate-y-1/2 -translate-x-1/4 w-[400px] h-[400px] bg-[#E8A87C]/15 rounded-full blur-[60px] pointer-events-none"></div>
 
         <div className="relative z-10 flex flex-col xl:flex-row xl:items-center justify-between gap-8">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-3">
-              <div className="px-3 py-1 rounded-full bg-white/10 border border-white/20 backdrop-blur-md text-[10px] font-bold text-blue-200 uppercase tracking-widest flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${aiStatus?.status === 'ok' ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-rose-500'}`} />
+              <div className="px-3 py-1 rounded-full bg-white border border-stone-200/80 text-[10px] font-bold text-stone-600 uppercase tracking-widest flex items-center gap-2 shadow-sm">
+                <div className={`w-2 h-2 rounded-full ${aiStatus?.status === 'ok' ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-rose-500'}`} />
                 {t('dashboard.header.aiEngine')}: {aiStatus?.status === 'ok' ? t('common.online') : t('common.offline')}
               </div>
-              <div className="px-3 py-1 rounded-full bg-white/10 border border-white/20 backdrop-blur-md text-[10px] font-bold text-blue-200 uppercase tracking-widest flex items-center gap-2">
-                <Video className="w-3.5 h-3.5 text-blue-300" />
+              <div className="px-3 py-1 rounded-full bg-white border border-stone-200/80 text-[10px] font-bold text-stone-600 uppercase tracking-widest flex items-center gap-2 shadow-sm">
+                <Video className="w-3.5 h-3.5 text-[#C0532B]" />
                 {t('dashboard.header.cctv')}: {cameras.filter(c => c.active).length}/{cameras.length} {t('common.online')}
               </div>
-              <div className="px-3 py-1 rounded-full bg-white/10 border border-white/20 backdrop-blur-md text-[10px] font-bold text-blue-200 uppercase tracking-widest flex items-center gap-2">
-                <Clock className="w-3.5 h-3.5 text-blue-300" />
+              <div className="px-3 py-1 rounded-full bg-white border border-stone-200/80 text-[10px] font-bold text-stone-600 uppercase tracking-widest flex items-center gap-2 shadow-sm">
+                <Clock className="w-3.5 h-3.5 text-[#C0532B]" />
                 {t('dashboard.header.fingerprint')}: {devices.length} {t('dashboard.header.devices')}
               </div>
-              <div className="px-3 py-1 rounded-full bg-white/5 border border-white/10 backdrop-blur-md text-[10px] font-bold text-slate-300 uppercase tracking-widest">
+              <div className="px-3 py-1 rounded-full bg-stone-100/70 border border-stone-200/60 text-[10px] font-bold text-stone-500 uppercase tracking-widest">
                 {time.toLocaleDateString(i18n.language || 'en-US', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}
               </div>
             </div>
-            
+
             <div className="flex items-baseline gap-4">
-              <h1 className="text-4xl xl:text-5xl font-extrabold text-white tracking-tight">
+              <h1 className="text-4xl xl:text-5xl font-extrabold text-[#A8421F] tracking-tight">
                 {t('dashboard.title')}
               </h1>
-              <span className="text-2xl font-light text-blue-200/80">
+              <span className="text-2xl font-light text-stone-400">
                 {time.toLocaleTimeString(i18n.language || 'en-US', { hour12: false })}
               </span>
             </div>
-            <p className="text-blue-100/60 font-medium max-w-xl">
+            <p className="text-stone-500 font-medium max-w-xl">
               {t('common.dashboardDesc')}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <button 
+            <button
               onClick={() => navigate('/admin/cameras')}
-              className="flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 text-white px-5 py-3 rounded-2xl text-sm font-semibold transition-all shadow-lg active:scale-95 group cursor-pointer"
+              className="flex items-center justify-center gap-2 bg-white hover:bg-stone-50 border border-stone-200 text-stone-700 px-5 py-3 rounded-2xl text-sm font-semibold transition-all shadow-sm active:scale-95 group cursor-pointer"
             >
-              <Video className="w-5 h-5 group-hover:text-blue-300 transition-colors" /> {t('common.liveCctv')}
+              <Video className="w-5 h-5 text-[#C0532B] transition-colors" /> {t('common.liveCctv')}
             </button>
-            <button 
+            <button
               onClick={handleDownloadReport}
-              className="flex items-center justify-center gap-2 bg-white text-slate-900 hover:bg-blue-50 px-5 py-3 rounded-2xl text-sm font-bold transition-all shadow-xl shadow-white/10 active:scale-95 group cursor-pointer"
+              className="flex items-center justify-center gap-2 bg-[#C0532B] hover:bg-[#A8421F] text-white px-5 py-3 rounded-2xl text-sm font-bold transition-all shadow-lg shadow-[#C0532B]/20 active:scale-95 group cursor-pointer"
             >
-              <FileText className="w-5 h-5 text-blue-600 group-hover:scale-110 transition-transform" />
+              <FileText className="w-5 h-5 text-white group-hover:scale-110 transition-transform" />
               {t('common.generateReport')}
             </button>
           </div>
@@ -381,29 +419,30 @@ const AdminDashboard = () => {
 
       {/* Contract Expiration Alert Banner */}
       {contractAlertsData?.data?.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-3xl p-6 flex flex-col md:flex-row items-start md:items-center gap-4 shadow-sm animate-in slide-in-from-top-4 duration-500">
+        <div className="bg-amber-50/80 border border-amber-200/70 rounded-3xl p-6 flex flex-col md:flex-row items-start md:items-center gap-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] animate-in slide-in-from-top-4 duration-500">
           <div className="w-12 h-12 bg-amber-100 rounded-2xl flex items-center justify-center text-amber-700 shrink-0 border border-amber-200">
             <AlertCircle className="w-6 h-6 animate-pulse" />
           </div>
-          <div className="flex-1 space-y-1">
+          <div className="flex-1 space-y-2 min-w-0">
             <h4 className="font-extrabold text-amber-900 text-sm uppercase tracking-wider">Perhatian: Kontrak Kerja (PKWT) Segera Berakhir</h4>
-            <p className="text-xs text-amber-700 font-semibold leading-relaxed">
+            <p className="text-xs text-amber-800 font-semibold leading-relaxed">
               Ada <span className="font-bold text-amber-900">{contractAlertsData.data.length} karyawan</span> yang kontrak kerjanya akan berakhir dalam waktu kurang dari 30 hari. Harap segera lakukan evaluasi perpanjangan kontrak.
             </p>
-            <div className="pt-2">
+            <div className="pt-1">
               <div className={`flex flex-wrap gap-2 transition-all duration-300 ${showAllAlerts ? 'max-h-48 overflow-y-auto pr-2' : ''}`}>
                 {(showAllAlerts ? contractAlertsData.data : contractAlertsData.data.slice(0, 10)).map(alert => (
-                  <div key={alert.id} className="bg-white/70 border border-amber-200/50 px-3 py-1 rounded-lg text-[10px] font-bold text-amber-900 flex items-center gap-1.5 shadow-sm hover:bg-white transition-all">
-                    <span className="uppercase">{alert.name}</span> ({alert.department})
-                    <span className="bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded text-[9px] font-extrabold">H-{alert.daysRemaining} hari</span>
+                  <div key={alert.id} className="bg-white/80 border border-amber-200/60 pl-3 pr-1.5 py-1 rounded-lg text-[10px] font-bold text-amber-900 flex items-center gap-1.5 shadow-sm hover:bg-white hover:border-amber-300 transition-all">
+                    <span className="uppercase truncate max-w-[130px]">{alert.name}</span>
+                    <span className="text-amber-400 font-normal normal-case truncate max-w-[80px]">{alert.department}</span>
+                    <span className="bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded text-[9px] font-extrabold shrink-0">H-{alert.daysRemaining}</span>
                   </div>
                 ))}
-                
+
                 {contractAlertsData.data.length > 10 && (
                   <button
                     type="button"
                     onClick={() => setShowAllAlerts(!showAllAlerts)}
-                    className="bg-amber-200/60 hover:bg-amber-200 text-amber-900 border border-amber-300/50 px-3 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition-all active:scale-95 shadow-sm cursor-pointer"
+                    className="bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300/50 px-3 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition-all active:scale-95 shadow-sm cursor-pointer"
                   >
                     {showAllAlerts ? 'Sembunyikan' : `+ ${contractAlertsData.data.length - 10} Lainnya`}
                   </button>
@@ -411,10 +450,10 @@ const AdminDashboard = () => {
               </div>
             </div>
           </div>
-          <button 
+          <button
             type="button"
             onClick={() => navigate('/admin/employees')}
-            className="bg-amber-600 hover:bg-amber-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all active:scale-95 shrink-0 shadow-sm cursor-pointer"
+            className="bg-[#C0532B] hover:bg-[#A8421F] text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all active:scale-95 shrink-0 shadow-lg shadow-[#C0532B]/20 cursor-pointer"
           >
             Kelola Karyawan
           </button>
@@ -441,7 +480,7 @@ const AdminDashboard = () => {
             </div>
             <div className="flex gap-2">
               <span className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-600 bg-white shadow-sm px-3 py-1.5 rounded-lg border border-slate-200">
-                <div className="w-2 h-2 rounded-full bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.6)] animate-pulse"></div> {t('dashboard.charts.present')}
+                <div className="w-2 h-2 rounded-full bg-blue-600 shadow-[0_0_8px_rgba(192,83,43,0.6)] animate-pulse"></div> {t('dashboard.charts.present')}
               </span>
               <span className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-600 bg-white shadow-sm px-3 py-1.5 rounded-lg border border-slate-200">
                 <div className="w-2 h-2 rounded-full bg-slate-300"></div> {t('dashboard.charts.late')}
@@ -459,8 +498,8 @@ const AdminDashboard = () => {
                 <AreaChart data={weeklyTrends} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorPresent" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#2563eb" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#2563eb" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="#C0532B" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#C0532B" stopOpacity={0}/>
                   </linearGradient>
                   <linearGradient id="colorLate" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#94a3b8" stopOpacity={0.2}/>
@@ -472,9 +511,9 @@ const AdminDashboard = () => {
                 <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11, fontWeight: 700}} dx={-10} />
                 <Tooltip 
                   contentStyle={{backgroundColor: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(8px)', color: '#1e293b', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', padding: '12px 20px'}}
-                  itemStyle={{color: '#2563eb', fontSize: '13px', fontWeight: '800'}}
+                  itemStyle={{color: '#C0532B', fontSize: '13px', fontWeight: '800'}}
                 />
-                <Area type="monotone" dataKey="present" stroke="#2563eb" strokeWidth={4} fillOpacity={1} fill="url(#colorPresent)" activeDot={{ r: 6, strokeWidth: 0, fill: '#2563eb', shadow: '0 0 10px rgba(37,99,235,0.5)' }} animationDuration={1500} />
+                <Area type="monotone" dataKey="present" stroke="#C0532B" strokeWidth={4} fillOpacity={1} fill="url(#colorPresent)" activeDot={{ r: 6, strokeWidth: 0, fill: '#C0532B', shadow: '0 0 10px rgba(192,83,43,0.5)' }} animationDuration={1500} />
                 <Area type="monotone" dataKey="late" stroke="#94a3b8" strokeWidth={3} fillOpacity={1} fill="url(#colorLate)" activeDot={{ r: 5, strokeWidth: 0, fill: '#94a3b8' }} animationDuration={1500} />
               </AreaChart>
             </ResponsiveContainer>
@@ -554,7 +593,7 @@ const AdminDashboard = () => {
                   <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center">
                     <Video className="w-6 h-6 text-slate-300" />
                   </div>
-                  <p className="text-slate-405 font-bold text-xs tracking-wide">{t('dashboard.alerts.waitingCamera')}<br/>{t('dashboard.alerts.cameraTestDesc')}</p>
+                  <p className="text-slate-400 font-bold text-xs tracking-wide">{t('dashboard.alerts.waitingCamera')}<br/>{t('dashboard.alerts.cameraTestDesc')}</p>
                 </div>
               ) : (
                 liveEvents.map((row, i) => (
@@ -572,10 +611,10 @@ const AdminDashboard = () => {
                     </div>
                     <div className="text-right flex flex-col items-end shrink-0">
                       <span className={`px-1.5 py-0.5 rounded text-[8px] font-black border uppercase tracking-wider ${
-                        row.status === 'SPOOF' ? 'bg-red-50 text-red-600 border-red-150' :
-                        row.status === 'UNKNOWN' ? 'bg-amber-50 text-amber-600 border-amber-155' :
-                        row.status === 'LATE' ? 'bg-rose-50 text-rose-600 border-rose-150' :
-                        'bg-emerald-50 text-emerald-600 border-emerald-150'
+                        row.status === 'SPOOF' ? 'bg-red-50 text-red-600 border-red-200' :
+                        row.status === 'UNKNOWN' ? 'bg-amber-50 text-amber-600 border-amber-200' :
+                        row.status === 'LATE' ? 'bg-rose-50 text-rose-600 border-rose-200' :
+                        'bg-emerald-50 text-emerald-600 border-emerald-200'
                       }`}>
                         {row.status}
                       </span>
@@ -630,7 +669,7 @@ const AdminDashboard = () => {
                   />
                   <Bar dataKey="minutes" radius={[0, 6, 6, 0]} barSize={18} name="Mulai Terlambat (Menit)" animationDuration={1500}>
                     {chartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color || (index === 0 ? '#4f46e5' : '#cbd5e1')} className="transition-all duration-300 hover:opacity-80" />
+                      <Cell key={`cell-${index}`} fill={entry.color || (index === 0 ? '#C0532B' : '#E8C4B0')} className="transition-all duration-300 hover:opacity-80" />
                     ))}
                   </Bar>
                 </BarChart>
@@ -659,25 +698,25 @@ const AdminDashboard = () => {
             ) : notifications.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center space-y-4 py-8">
                 <div className="w-14 h-14 rounded-full bg-slate-50 flex items-center justify-center">
-                  <CheckSquare className="w-6 h-6 text-slate-350" />
+                  <CheckSquare className="w-6 h-6 text-slate-300" />
                 </div>
                 <p className="text-slate-400 font-bold text-xs tracking-wide">{t('dashboard.actions.allDone')}<br/>{t('dashboard.actions.noPending')}</p>
               </div>
             ) : (
               notifications.map((n) => {
-                let badgeClass = "bg-blue-55 text-blue-600 border-blue-150";
+                let badgeClass = "bg-blue-50 text-blue-600 border-blue-200";
                 let path = "/admin/settings/users";
                 if (n.title.toLowerCase().includes("face") || n.title.toLowerCase().includes("wajah")) {
-                  badgeClass = "bg-amber-50 text-amber-600 border-amber-150";
+                  badgeClass = "bg-amber-50 text-amber-600 border-amber-200";
                   path = "/admin/face-enrollment";
                 } else if (n.title.toLowerCase().includes("leave") || n.title.toLowerCase().includes("izin") || n.title.toLowerCase().includes("cuti")) {
-                  badgeClass = "bg-purple-50 text-purple-600 border-purple-150";
+                  badgeClass = "bg-purple-50 text-purple-600 border-purple-200";
                   path = "/admin/leave-requests";
                 } else if (n.title.toLowerCase().includes("correction") || n.title.toLowerCase().includes("koreksi")) {
-                  badgeClass = "bg-pink-50 text-pink-600 border-pink-150";
+                  badgeClass = "bg-pink-50 text-pink-600 border-pink-200";
                   path = "/admin/corrections";
                 } else if (n.title.toLowerCase().includes("kontrak") || n.title.toLowerCase().includes("pkwt")) {
-                  badgeClass = "bg-rose-50 text-rose-600 border-rose-150 font-bold";
+                  badgeClass = "bg-rose-50 text-rose-600 border-rose-200 font-bold";
                   path = "/admin/employees";
                 }
 
@@ -692,7 +731,7 @@ const AdminDashboard = () => {
                         <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border ${badgeClass}`}>
                           {n.title.toLowerCase().includes("face") ? "Wajah" : n.title.toLowerCase().includes("leave") ? "Izin" : n.title.toLowerCase().includes("kontrak") || n.title.toLowerCase().includes("pkwt") ? "PKWT" : "Koreksi"}
                         </span>
-                        <p className="text-xs font-bold text-slate-700 truncate group-hover/item:text-blue-650 transition-colors">
+                        <p className="text-xs font-bold text-slate-700 truncate group-hover/item:text-blue-600 transition-colors">
                           {n.desc}
                         </p>
                       </div>
@@ -709,29 +748,30 @@ const AdminDashboard = () => {
         </div>
 
         {/* AI Insights */}
-        <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-6 xl:p-8 rounded-3xl border border-slate-700 shadow-2xl shadow-slate-900/50 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-[60px] pointer-events-none"></div>
-          
-          <h3 className="font-extrabold text-xl text-white mb-8 tracking-tight flex items-center gap-3 relative z-10">
-            <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse shadow-[0_0_12px_rgba(59,130,246,0.8)]"></div>
+        <div className="bg-white/80 backdrop-blur-xl p-6 xl:p-8 rounded-3xl border border-slate-200/60 shadow-lg shadow-slate-200/40 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-blue-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-1000 pointer-events-none"></div>
+
+          <h3 className="font-extrabold text-xl text-slate-800 mb-8 tracking-tight flex items-center gap-3 relative z-10">
+            <div className="w-3 h-3 rounded-full bg-blue-600 animate-pulse shadow-[0_0_12px_rgba(192,83,43,0.7)]"></div>
             SMART Intelligence
           </h3>
-          
+
           <div className="space-y-4 relative z-10">
             {dynamicInsights.map((insight, idx) => {
               const IconComp = insight.icon;
+              const ins = INSIGHT_STYLES[insight.color] || INSIGHT_STYLES.blue;
               return (
-                <div key={idx} className="p-6 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 flex gap-5 group hover:bg-white/10 transition-all duration-500 hover:-translate-y-1">
-                  <div className={`w-12 h-12 rounded-xl bg-${insight.color}-500/20 text-${insight.color}-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform shadow-inner border border-${insight.color}-500/20`}>
+                <div key={idx} className="p-6 bg-slate-50/80 rounded-2xl border border-slate-100 flex gap-5 group/insight hover:bg-slate-100/70 hover:border-slate-200 transition-all duration-500 hover:-translate-y-1">
+                  <div className={`w-12 h-12 rounded-xl ${ins.iconWrap} flex items-center justify-center shrink-0 group-hover/insight:scale-110 transition-transform border`}>
                     <IconComp className="w-6 h-6" />
                   </div>
                   <div>
-                    <p className={`text-[11px] font-bold text-${insight.color}-300 uppercase tracking-widest`}>{insight.title}</p>
-                    <p className="text-sm text-slate-300 mt-2 leading-relaxed font-medium">
+                    <p className={`text-[11px] font-bold ${ins.title} uppercase tracking-widest`}>{insight.title}</p>
+                    <p className="text-sm text-slate-600 mt-2 leading-relaxed font-medium">
                       {insight.desc}
-                      <span className={`text-white font-bold bg-${insight.color}-500/20 px-1 rounded`}>{insight.bold1}</span>
+                      <span className={`font-bold ${ins.mark} px-1 rounded`}>{insight.bold1}</span>
                       {insight.desc2}
-                      <span className={`text-white font-bold bg-${insight.color}-500/20 px-1 rounded`}>{insight.bold2}</span>
+                      <span className={`font-bold ${ins.mark} px-1 rounded`}>{insight.bold2}</span>
                       {insight.desc3}
                     </p>
                   </div>

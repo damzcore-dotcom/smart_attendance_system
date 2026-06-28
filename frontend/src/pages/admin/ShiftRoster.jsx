@@ -122,9 +122,9 @@ const ShiftRoster = () => {
   const handleSelectAll = (e) => {
     const next = new Set(selectedEmployees);
     if (e.target.checked) {
-      filteredEmployees.forEach(emp => next.add(emp.id.toString()));
+      filteredEmployees.forEach(emp => next.add(emp.dbId.toString()));
     } else {
-      filteredEmployees.forEach(emp => next.delete(emp.id.toString()));
+      filteredEmployees.forEach(emp => next.delete(emp.dbId.toString()));
     }
     setSelectedEmployees(next);
   };
@@ -256,33 +256,34 @@ const ShiftRoster = () => {
     const matchedRegu3 = new Set();
 
     employees.forEach(emp => {
-      const name = emp.name.toLowerCase();
-      const id = emp.id;
-      if (id === 2844 || name === 'husen' || name.includes('muhamad husen')) matchedRegu1.add(id);
-      else if (id === 2854 || name.includes('elan wahyudin')) matchedRegu1.add(id);
-      else if (id === 2855 || name.includes('fian robiana')) matchedRegu2.add(id);
-      else if (id === 2856 || name.includes('yeyep hardian')) matchedRegu2.add(id);
-      else if (id === 3006 || name.includes('zainal arifin')) matchedRegu3.add(id);
-      else if (id === 3046 || name.includes('lutfi hidayat')) matchedRegu3.add(id);
+      const name = (emp.name || '').toLowerCase();
+      const id = emp.dbId; // pakai ID database (bukan NIK) agar override tertaut ke karyawan yang benar
+      if (name === 'husen' || name.includes('muhamad husen')) matchedRegu1.add(id);
+      else if (name.includes('elan wahyudin')) matchedRegu1.add(id);
+      else if (name.includes('fian robiana')) matchedRegu2.add(id);
+      else if (name.includes('yeyep hardian')) matchedRegu2.add(id);
+      else if (name.includes('zainal arifin')) matchedRegu3.add(id);
+      else if (name.includes('lutfi hidayat')) matchedRegu3.add(id);
     });
 
+    // Fallback dikosongkan (bukan ID hardcoded yang bisa tak valid) — admin pilih anggota manual.
     const presetGroups = [
       {
         id: 'regu-1',
         name: 'Regu 1',
-        employeeIds: matchedRegu1.size > 0 ? matchedRegu1 : new Set([2844, 2854]),
+        employeeIds: matchedRegu1,
         pattern: [shift1, shift1, shift2, shift2, null, null]
       },
       {
         id: 'regu-2',
         name: 'Regu 2',
-        employeeIds: matchedRegu2.size > 0 ? matchedRegu2 : new Set([2855, 2856]),
+        employeeIds: matchedRegu2,
         pattern: [shift2, shift2, null, null, shift1, shift1]
       },
       {
         id: 'regu-3',
         name: 'Regu 3',
-        employeeIds: matchedRegu3.size > 0 ? matchedRegu3 : new Set([3006, 3046]),
+        employeeIds: matchedRegu3,
         pattern: [null, null, shift1, shift1, shift2, shift2]
       }
     ];
@@ -418,7 +419,7 @@ const ShiftRoster = () => {
                       <input 
                         type="checkbox" 
                         onChange={handleSelectAll} 
-                        checked={filteredEmployees.length > 0 && filteredEmployees.every(emp => selectedEmployees.has(emp.id.toString()))} 
+                        checked={filteredEmployees.length > 0 && filteredEmployees.every(emp => selectedEmployees.has(emp.dbId.toString()))} 
                       />
                     </th>
                     <th className="p-3 uppercase text-xs font-bold text-slate-500">{t('shiftRoster.nameHeader')}</th>
@@ -444,12 +445,12 @@ const ShiftRoster = () => {
                     </tr>
                   ) : (
                     filteredEmployees.map(emp => (
-                      <tr key={emp.id} className="border-t hover:bg-slate-50 transition-colors">
+                      <tr key={emp.dbId} className="border-t hover:bg-slate-50 transition-colors">
                         <td className="p-3 text-center">
                           <input 
                             type="checkbox" 
-                            checked={selectedEmployees.has(emp.id.toString())} 
-                            onChange={() => handleSelectEmp(emp.id)} 
+                            checked={selectedEmployees.has(emp.dbId.toString())} 
+                            onChange={() => handleSelectEmp(emp.dbId)} 
                           />
                         </td>
                         <td className="p-3 font-semibold">{emp.name}</td>
@@ -571,7 +572,7 @@ const ShiftRoster = () => {
 
                   <div className="flex flex-wrap gap-2 mb-3">
                     {Array.from(group.employeeIds).map(id => {
-                      const emp = employees.find(e => e.id.toString() === id.toString());
+                      const emp = employees.find(e => e.dbId.toString() === id.toString());
                       return emp ? (
                         <span key={id} className="inline-flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-700 px-2.5 py-1 rounded-full text-xs font-bold">
                            {emp.name} ({emp.employeeCode})
@@ -624,17 +625,17 @@ const ShiftRoster = () => {
                             return matchDept && matchSearch;
                           })
                           .map(emp => {
-                            const isSelected = group.employeeIds.has(emp.id);
-                            const belongsToOtherGroup = autoGroups.some(g => g.id !== group.id && g.employeeIds.has(emp.id));
+                            const isSelected = group.employeeIds.has(emp.dbId);
+                            const belongsToOtherGroup = autoGroups.some(g => g.id !== group.id && g.employeeIds.has(emp.dbId));
                             
                             return (
-                              <div key={emp.id} className={`p-2 flex items-center justify-between hover:bg-slate-50 ${belongsToOtherGroup ? 'opacity-50' : ''}`}>
+                              <div key={emp.dbId} className={`p-2 flex items-center justify-between hover:bg-slate-50 ${belongsToOtherGroup ? 'opacity-50' : ''}`}>
                                 <label className="flex items-center gap-2 font-medium w-full cursor-pointer">
                                   <input
                                     type="checkbox"
                                     checked={isSelected}
                                     disabled={belongsToOtherGroup}
-                                    onChange={() => handleToggleEmployeeInGroup(group.id, emp.id)}
+                                    onChange={() => handleToggleEmployeeInGroup(group.id, emp.dbId)}
                                     className="rounded text-blue-600 focus:ring-blue-500"
                                   />
                                   <div>

@@ -1,18 +1,50 @@
 /**
  * Late Calculator Utility
  * Automatically calculates lateness based on shift schedule
+ *
+ * PENTING (timezone): semua perhitungan jam/menit/hari diambil EKSPLISIT di Asia/Jakarta
+ * lewat getJakartaTimeParts(), bukan Date.getHours() yang bergantung pada TZ proses.
+ * Dengan begitu akurasi keterlambatan tidak bergantung pada setelan host/kontainer/skrip.
+ * (WIB = UTC+7 tetap, tanpa DST.)
  */
+
+const ATT_TZ = 'Asia/Jakarta';
+const _jakartaFmt = new Intl.DateTimeFormat('en-US', {
+  timeZone: ATT_TZ, hour12: false,
+  year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', second: '2-digit', weekday: 'short'
+});
+const _weekdayIdx = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+
+/**
+ * Ekstrak komponen waktu (tahun/bulan/hari/jam/menit/detik/hari-pekan) dari sebuah instan,
+ * selalu dalam zona Asia/Jakarta — lepas dari timezone proses Node.
+ */
+function getJakartaTimeParts(date) {
+  const d = (date instanceof Date) ? date : new Date(date);
+  const map = {};
+  for (const p of _jakartaFmt.formatToParts(d)) map[p.type] = p.value;
+  let hour = parseInt(map.hour, 10);
+  if (hour === 24) hour = 0; // sebagian engine memunculkan "24" untuk tengah malam
+  return {
+    year: parseInt(map.year, 10),
+    month: parseInt(map.month, 10),
+    day: parseInt(map.day, 10),
+    hour,
+    minute: parseInt(map.minute, 10),
+    second: parseInt(map.second, 10),
+    weekday: _weekdayIdx[map.weekday] ?? d.getUTCDay(),
+  };
+}
 
 /**
  * Check if checkOut is before the shift end time (Early Departure)
  */
 function isEarlyDeparture(checkOutTime, shiftEndTime, shiftStartTime = '08:00') {
   if (!checkOutTime || !shiftEndTime) return false;
-  
-  const checkOut = new Date(checkOutTime);
+
   const [endHour, endMinute] = shiftEndTime.split(':').map(Number);
-  const checkOutHour = checkOut.getHours();
-  const checkOutMinute = checkOut.getMinutes();
+  const { hour: checkOutHour, minute: checkOutMinute } = getJakartaTimeParts(checkOutTime);
   
   let shiftEndMins = endHour * 60 + endMinute;
   let checkOutMins = checkOutHour * 60 + checkOutMinute;
@@ -40,23 +72,23 @@ function isEarlyDeparture(checkOutTime, shiftEndTime, shiftStartTime = '08:00') 
  */
 function isShiftStillActive(date, shiftEndTime, shiftStartTime = '08:00') {
   if (!date || !shiftEndTime) return false;
-  
-  // Get date strings to compare in local time
-  const today = new Date();
-  const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
-  
-  const attDate = new Date(date);
-  const attDateStr = attDate.getFullYear() + '-' + String(attDate.getMonth() + 1).padStart(2, '0') + '-' + String(attDate.getDate()).padStart(2, '0');
-  
+
+  // Bandingkan tanggal dalam WIB (lepas dari TZ proses)
+  const todayP = getJakartaTimeParts(new Date());
+  const todayStr = `${todayP.year}-${String(todayP.month).padStart(2, '0')}-${String(todayP.day).padStart(2, '0')}`;
+
+  const attP = getJakartaTimeParts(date);
+  const attDateStr = `${attP.year}-${String(attP.month).padStart(2, '0')}-${String(attP.day).padStart(2, '0')}`;
+
   if (todayStr !== attDateStr) {
     // If it's a past date, the shift has already ended
     return false;
   }
-  
+
   // If it's today, check if current time is before the shift end time
   const [endHour, endMinute] = shiftEndTime.split(':').map(Number);
-  const nowHour = today.getHours();
-  const nowMinute = today.getMinutes();
+  const nowHour = todayP.hour;
+  const nowMinute = todayP.minute;
   
   let shiftEndMins = endHour * 60 + endMinute;
   let nowMins = nowHour * 60 + nowMinute;
@@ -92,14 +124,11 @@ function calculateLateness(
   shiftEndTime = null,
   roundingConfig = { enabled: true, interval: 30 }
 ) {
-  const checkIn = new Date(checkInTime);
-  
   // Parse shift start time (e.g. "08:00")
   const [shiftHour, shiftMinute] = shiftStartTime.split(':').map(Number);
-  
-  // Extract checkIn hour and minute in local system time
-  const checkInHour = checkIn.getHours();
-  const checkInMinute = checkIn.getMinutes();
+
+  // Extract checkIn hour and minute EXPLICITLY in Asia/Jakarta (lepas dari TZ proses)
+  const { hour: checkInHour, minute: checkInMinute } = getJakartaTimeParts(checkInTime);
 
   // Convert both into absolute minutes from midnight for safe comparison
   let shiftMins = shiftHour * 60 + shiftMinute;
@@ -231,5 +260,5 @@ function parsePenaltySettings(settingsList) {
   };
 }
 
-module.exports = { calculateLateness, resolveStatus, isEarlyDeparture, isShiftStillActive, parsePenaltySettings };
+module.exports = { calculateLateness, resolveStatus, isEarlyDeparture, isShiftStillActive, parsePenaltySettings, getJakartaTimeParts };
 

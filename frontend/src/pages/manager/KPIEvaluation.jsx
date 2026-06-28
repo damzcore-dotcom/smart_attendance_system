@@ -23,9 +23,9 @@ const KPIEvaluation = () => {
   
   // KPI items state
   const [kpiRows, setKpiRows] = useState([
-    { kpiName: 'Kehadiran & Kedisiplinan', weight: 30, target: '100%', actual: '98%', score: 95 },
-    { kpiName: 'Pencapaian Target Kerja', weight: 40, target: '100%', actual: '95%', score: 90 },
-    { kpiName: 'Kerjasama Tim & Komunikasi', weight: 30, target: '100%', actual: '90%', score: 85 }
+    { kpiName: 'Kehadiran & Kedisiplinan', weight: 30, target: '100%', actual: '98%', score: 98, mode: 'manual' },
+    { kpiName: 'Pencapaian Target Kerja', weight: 40, target: '100%', actual: '95%', score: 95, mode: 'higher' },
+    { kpiName: 'Kerjasama Tim & Komunikasi', weight: 30, target: '100%', actual: '90%', score: 85, mode: 'manual' }
   ]);
   const [evalReviewNote, setEvalReviewNote] = useState('');
   
@@ -82,6 +82,14 @@ const KPIEvaluation = () => {
       .then(res => {
         if (res.success && res.data) {
           setAttendanceData(res.data);
+          // Auto-isi skor "Kehadiran & Kedisiplinan" dari % kehadiran NYATA (bila ada data absensi)
+          if (res.data.hasData && res.data.attendanceRate !== null) {
+            setKpiRows(prev => prev.map(row => (
+              /kehadiran|absen|attendance|presence|disiplin/i.test(row.kpiName || '')
+                ? { ...row, actual: `${res.data.attendanceRate}%`, score: Math.round(res.data.attendanceRate) }
+                : row
+            )));
+          }
         } else {
           setAttendanceData(null);
         }
@@ -168,7 +176,7 @@ const KPIEvaluation = () => {
   });
 
   const handleAddRow = () => {
-    setKpiRows([...kpiRows, { kpiName: '', weight: 10, target: '', actual: '', score: 80 }]);
+    setKpiRows([...kpiRows, { kpiName: '', weight: 10, target: '', actual: '', score: 80, mode: 'manual' }]);
   };
 
   const handleRemoveRow = (index) => {
@@ -176,9 +184,38 @@ const KPIEvaluation = () => {
     setKpiRows(kpiRows.filter((_, i) => i !== index));
   };
 
+  // Ambil angka dari teks target/actual (mis. "98%", "1.200", "95 unit" → 98 / 1200 / 95)
+  const parseKpiNumber = (s) => {
+    if (s === null || s === undefined) return null;
+    const cleaned = String(s).replace(/[^0-9.,-]/g, '').replace(/,/g, '');
+    const n = parseFloat(cleaned);
+    return isNaN(n) ? null : n;
+  };
+  // Skor otomatis dari pencapaian: 'higher' (tinggi=baik) atau 'lower' (rendah=baik). 'manual' = isi tangan.
+  const computeAutoScore = (target, actual, mode) => {
+    if (mode !== 'higher' && mode !== 'lower') return null;
+    const t = parseKpiNumber(target);
+    const a = parseKpiNumber(actual);
+    if (t === null || a === null) return null;
+    let s;
+    if (mode === 'higher') {
+      if (t === 0) return null;
+      s = (a / t) * 100;
+    } else {
+      s = a <= 0 ? 100 : (t / a) * 100;
+    }
+    return Math.max(0, Math.min(100, Math.round(s * 100) / 100));
+  };
+
   const handleRowChange = (index, field, value) => {
     const updated = [...kpiRows];
-    updated[index][field] = value;
+    updated[index] = { ...updated[index], [field]: value };
+    const row = updated[index];
+    // Bila mode otomatis & target/actual/mode berubah → hitung ulang skor dari pencapaian.
+    if ((row.mode === 'higher' || row.mode === 'lower') && ['target', 'actual', 'mode'].includes(field)) {
+      const auto = computeAutoScore(row.target, row.actual, row.mode);
+      if (auto !== null) row.score = auto;
+    }
     setKpiRows(updated);
   };
 
@@ -434,6 +471,9 @@ const KPIEvaluation = () => {
                 <div>
                   <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{t('kpi.stats.totalEvaluated')}</p>
                   <p className="text-xl font-extrabold text-slate-800">{stats.totalEvaluated} {t('kpi.stats.staf')}</p>
+                  {kpis.filter(k => k.status === 'PENDING').length > 0 && (
+                    <p className="text-[10px] font-bold text-amber-600 mt-0.5">{kpis.filter(k => k.status === 'PENDING').length} menunggu persetujuan</p>
+                  )}
                 </div>
               </div>
               <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
@@ -716,10 +756,13 @@ const KPIEvaluation = () => {
                 </div>
               </div>
 
-              {!isFetchingAttendance && attendanceData && (
+              {!isFetchingAttendance && attendanceData && !attendanceData.hasData && (
+                <div className="text-xs text-amber-600 font-semibold shrink-0">Tidak ada data absensi pada periode ini — skor kehadiran diisi manual.</div>
+              )}
+              {!isFetchingAttendance && attendanceData && attendanceData.hasData && (
                 <div className="flex items-center gap-4 shrink-0">
                   <div className="text-right">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Persentase Kehadiran</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Persentase Kehadiran (otomatis)</span>
                     <span className="text-lg font-black text-blue-600">{attendanceData.attendanceRate}%</span>
                   </div>
                   <button
@@ -741,11 +784,10 @@ const KPIEvaluation = () => {
                         return row;
                       });
                       setKpiRows(updated);
-                      alert("Persentase kehadiran berhasil di-apply ke item 'Kehadiran & Kedisiplinan'!");
                     }}
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-blue-500/20"
                   >
-                    Gunakan Nilai Ini
+                    Terapkan ulang
                   </button>
                 </div>
               )}
@@ -818,11 +860,22 @@ const KPIEvaluation = () => {
                         />
                       </td>
                       <td className="py-2.5 px-4">
+                        <select
+                          value={row.mode || 'manual'}
+                          onChange={e => handleRowChange(index, 'mode', e.target.value)}
+                          title="Cara penilaian skor"
+                          className="w-full mb-1 bg-white border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-semibold text-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                        >
+                          <option value="manual">Manual</option>
+                          <option value="higher">Auto ↑ (tinggi=baik)</option>
+                          <option value="lower">Auto ↓ (rendah=baik)</option>
+                        </select>
                         <input
                           type="number"
                           value={row.score}
-                          onChange={e => handleRowChange(index, 'score', parseFloat(e.target.value) || 0)}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 font-bold text-blue-600"
+                          onChange={e => handleRowChange(index, 'score', Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))}
+                          readOnly={row.mode === 'higher' || row.mode === 'lower'}
+                          className={`w-full border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 font-bold text-blue-600 ${(row.mode === 'higher' || row.mode === 'lower') ? 'bg-slate-100 cursor-not-allowed' : 'bg-slate-50'}`}
                           min="0"
                           max="100"
                           required
