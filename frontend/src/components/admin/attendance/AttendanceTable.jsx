@@ -222,7 +222,8 @@ const AttendanceTable = ({
                       <td 
                         className="px-6 py-4 cursor-pointer group/name"
                         onClick={() => {
-                          setAppliedFilters(prev => ({ ...prev, search: row.name, page: 1 }));
+                          // Filter pakai NIK (unik & persis) agar tidak salah-cocok nama yang jadi sub-string nama lain
+                          setAppliedFilters(prev => ({ ...prev, search: row.employeeCode || row.name, page: 1 }));
                         }}
                       >
                         <div className="flex flex-col">

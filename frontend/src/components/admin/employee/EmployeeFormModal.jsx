@@ -249,9 +249,11 @@ const EmployeeFormModal = ({
         </div>
         
         <div className="flex border-b border-slate-100 bg-white px-2 overflow-x-auto hide-scrollbar">
-          {(newEmployee.dbId 
-            ? ['basic', 'biometric', 'cctv', 'finger', 'hr', 'personal', 'family', 'documents'] 
-            : ['basic', 'biometric', 'cctv', 'finger', 'hr', 'personal', 'family']
+          {(newEmployee.dbId
+            // Edit: alur logis — identitas → kerja → pribadi → keluarga → biometrik (dikelompokkan) → dokumen
+            ? ['basic', 'hr', 'personal', 'family', 'bpjs', 'biometric', 'finger', 'cctv', 'documents']
+            // Create: hanya tab yang fungsional sebelum disimpan (Sidik Jari/CCTV/Dokumen butuh karyawan tersimpan dulu)
+            : ['basic', 'hr', 'personal', 'family', 'bpjs', 'biometric']
           ).map(tab => (
             <button 
               key={tab} 
@@ -259,7 +261,7 @@ const EmployeeFormModal = ({
               onClick={() => setActiveTab(tab)} 
               className={`px-4 xl:px-6 py-4 text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === tab ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
             >
-              {tab === 'basic' ? 'Info Utama' : tab === 'biometric' ? 'Registrasi Wajah' : tab === 'cctv' ? 'Wajah CCTV' : tab === 'finger' ? 'Sidik Jari' : tab === 'hr' ? 'Informasi Kerja' : tab === 'personal' ? 'Data Pribadi' : tab === 'family' ? 'Data Keluarga' : 'Dokumen'}
+              {tab === 'basic' ? 'Info Utama' : tab === 'biometric' ? 'Registrasi Wajah' : tab === 'cctv' ? 'Wajah CCTV' : tab === 'finger' ? 'Sidik Jari' : tab === 'hr' ? 'Informasi Kerja' : tab === 'personal' ? 'Data Pribadi' : tab === 'family' ? 'Data Keluarga' : tab === 'bpjs' ? 'BPJS' : 'Dokumen'}
               {activeTab === tab && (
                 <div className="absolute bottom-0 left-4 right-4 h-0.5 bg-blue-600 rounded-t-full"></div>
               )}
@@ -270,7 +272,66 @@ const EmployeeFormModal = ({
         <div className="p-8 overflow-y-auto flex-1 min-h-0 hide-scrollbar bg-slate-50/50">
           <form id="add-emp-form" onSubmit={onSubmit} className="space-y-6">
             {activeTab === 'basic' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="flex flex-col lg:flex-row gap-6">
+                {/* Kartu foto - kiri */}
+                <div className="lg:w-52 shrink-0">
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">Pas Foto (Foto Profil)</label>
+                  <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col items-center gap-3 shadow-sm">
+                    <div className="relative w-32 h-40 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center">
+                      {newEmployee.profilePhoto ? (
+                        <img src={getFileUrl(newEmployee.profilePhoto)} alt="Pratinjau" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="flex flex-col items-center gap-1.5 text-slate-300">
+                          <Camera className="w-8 h-8" />
+                          <span className="text-[10px] font-semibold uppercase tracking-wider">Belum ada foto</span>
+                        </div>
+                      )}
+                      {newEmployee.profilePhoto && (
+                        <button
+                          type="button"
+                          onClick={() => setNewEmployee({...newEmployee, profilePhoto: ''})}
+                          className="absolute top-1.5 right-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-full p-1 transition-all shadow-md"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                    <label className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-600 rounded-xl cursor-pointer transition-all text-[10px] font-bold uppercase tracking-wider">
+                      <Camera className="w-4 h-4" />
+                      {newEmployee.profilePhoto ? 'Ganti Foto' : 'Unggah Foto'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            const img = new Image();
+                            img.onload = () => {
+                              const canvas = document.createElement('canvas');
+                              const MAX_WIDTH = 600;
+                              const scaleSize = MAX_WIDTH / img.width;
+                              canvas.width = MAX_WIDTH;
+                              canvas.height = img.height * scaleSize;
+                              const ctx = canvas.getContext('2d');
+                              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                              const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+                              setNewEmployee({...newEmployee, profilePhoto: dataUrl});
+                            };
+                            img.src = event.target.result;
+                          };
+                          reader.readAsDataURL(file);
+                        }}
+                      />
+                    </label>
+                    <span className="text-[10px] text-slate-400">Maks 600px · JPG/PNG</span>
+                  </div>
+                </div>
+
+                {/* Kolom kanan - field */}
+                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
                   <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">NIK (ID Karyawan)</label>
                   <div className="flex gap-2">
@@ -312,15 +373,22 @@ const EmployeeFormModal = ({
                       <AlertCircle className="w-3.5 h-3.5" /> {nikError}
                     </p>
                   )}
-                  <div className="mt-3">
-                    <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">ID Sidik Jari (No. AC)</label>
-                    <div className="flex gap-2">
-                      <input
-                        value={newEmployee.fingerPrintId || ''}
-                        onChange={e => setNewEmployee({...newEmployee, fingerPrintId: e.target.value})}
-                        placeholder="ID Perangkat"
-                        className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 transition-all text-slate-800 placeholder:text-slate-400"
-                      />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">ID Sidik Jari (No. AC)</label>
+                  <div className="flex gap-2">
+                    <input
+                      value={newEmployee.fingerPrintId || ''}
+                      onChange={e => setNewEmployee({...newEmployee, fingerPrintId: e.target.value})}
+                      readOnly={!!newEmployee.dbId}
+                      placeholder={newEmployee.dbId ? '' : 'ID Perangkat'}
+                      className={`flex-1 border rounded-xl px-4 py-3 text-sm focus:outline-none transition-all ${
+                        newEmployee.dbId
+                          ? 'bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200'
+                          : 'bg-white border-slate-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 text-slate-800 placeholder:text-slate-400'
+                      }`}
+                    />
+                    {!newEmployee.dbId && (
                       <button
                         type="button"
                         onClick={async () => {
@@ -337,7 +405,7 @@ const EmployeeFormModal = ({
                       >
                         Oto
                       </button>
-                    </div>
+                    )}
                   </div>
                 </div>
                 <div>
@@ -387,54 +455,13 @@ const EmployeeFormModal = ({
                     {(masterOptions.sections || []).map(opt => <option key={opt} value={opt} />)}
                   </datalist>
                 </div>
-                <div>
-                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block ml-1">Pas Foto (Foto Profil)</label>
-                  <div className="flex items-center gap-3">
-                    {newEmployee.profilePhoto ? (
-                      <div className="relative group/pic">
-                        <img src={getFileUrl(newEmployee.profilePhoto)} alt="Profile" className="w-24 h-32 rounded-xl object-cover border-2 border-blue-200 shadow-sm" />
-                        <button 
-                          type="button"
-                          onClick={() => setNewEmployee({...newEmployee, profilePhoto: ''})}
-                          className="absolute -top-1 -right-1 bg-rose-500 text-white rounded-full p-0.5 opacity-0 group-hover/pic:opacity-100 transition-opacity shadow-md"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ) : (
-                      <label className="w-full flex items-center justify-center p-3 border-2 border-dashed border-blue-300 rounded-xl text-blue-500 hover:bg-blue-50 cursor-pointer transition-all">
-                        <span className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-2">
-                          <Camera className="w-4 h-4" /> Unggah Foto (Maks 600px)
-                        </span>
-                        <input 
-                          type="file" 
-                          accept="image/*" 
-                          className="hidden" 
-                          onChange={(e) => {
-                            const file = e.target.files[0];
-                            if (!file) return;
-                            const reader = new FileReader();
-                            reader.onload = (event) => {
-                              const img = new Image();
-                              img.onload = () => {
-                                const canvas = document.createElement('canvas');
-                                const MAX_WIDTH = 600;
-                                const scaleSize = MAX_WIDTH / img.width;
-                                canvas.width = MAX_WIDTH;
-                                canvas.height = img.height * scaleSize;
-                                const ctx = canvas.getContext('2d');
-                                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                                const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
-                                setNewEmployee({...newEmployee, profilePhoto: dataUrl});
-                              };
-                              img.src = event.target.result;
-                            };
-                            reader.readAsDataURL(file);
-                          }} 
-                        />
-                      </label>
-                    )}
+                {newEmployee.dbId && (
+                  <div className="md:col-span-2">
+                    <p className="text-[10px] text-slate-400 flex items-center gap-1 ml-1">
+                      <AlertCircle className="w-3 h-3 shrink-0" /> NIK &amp; ID sidik jari terkunci saat edit agar tidak mengganggu pencocokan absensi.
+                    </p>
                   </div>
+                )}
                 </div>
               </div>
             )}
@@ -686,10 +713,121 @@ const EmployeeFormModal = ({
             )}
             {activeTab === 'hr' && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* — Blok status & periode kerja: satu baris penuh agar status + tanggal mengelompok rapi — */}
+                <div className="md:col-span-2 lg:col-span-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">
+                    Status Karyawan <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={newEmployee.employmentStatus || ''}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const up = val.toUpperCase();
+                      const wasKeluar = /KELUAR|OUT/.test((newEmployee.employmentStatus || '').toUpperCase());
+                      const patch = { ...newEmployee, employmentStatus: val };
+                      const isContractType = up.includes('PKWT') || up.includes('KONTRAK') || up.includes('TRAINING');
+                      if (up.includes('KELUAR') || up.includes('OUT')) {
+                        patch.status = 'Terminated'; // pilih Keluar → karyawan menjadi keluar
+                      } else if (wasKeluar) {
+                        patch.status = 'Active'; // beralih dari Keluar → aktifkan lagi
+                        patch.terminationDate = '';
+                        patch.terminationReason = '';
+                      }
+                      if (up.includes('HARIAN') || up.includes('BHL')) {
+                        patch.salaryCategory = 'HARIAN';
+                      } else if (isContractType || up === 'TETAP') {
+                        if ((newEmployee.salaryCategory || '').toUpperCase() === 'HARIAN') patch.salaryCategory = 'UMK/UMR';
+                      }
+                      if (!isContractType) {
+                        // Bukan kontrak/training → kosongkan tanggal akhir & durasi agar tak salah simpan
+                        patch.contractEnd = '';
+                        patch.contractDuration = '';
+                      }
+                      setNewEmployee(patch);
+                    }}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all appearance-none cursor-pointer"
+                  >
+                    <option value="">Pilih status karyawan...</option>
+                    <option value="TETAP">Karyawan Tetap</option>
+                    <option value="PKWT">Karyawan Kontrak (PKWT)</option>
+                    <option value="Training">Karyawan Training</option>
+                    <option value="HARIAN">Karyawan Harian (BHL)</option>
+                    {newEmployee.dbId && <option value="Keluar">Karyawan Keluar (Out)</option>}
+                    {newEmployee.employmentStatus && !['TETAP', 'PKWT', 'Training', 'HARIAN', 'Keluar'].includes(newEmployee.employmentStatus) && (
+                      <option value={newEmployee.employmentStatus}>{newEmployee.employmentStatus} (lama)</option>
+                    )}
+                  </select>
+                </div>
+                {/* — Tanggal Masuk (selalu) — */}
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Tanggal Masuk <span className="text-rose-500">*</span></label>
+                  <input type="date" required value={newEmployee.joinDate} onChange={e => {
+                    const newJoinDate = e.target.value;
+                    let newEnd = newEmployee.contractEnd;
+                    const statusUpper = (newEmployee.employmentStatus || '').toUpperCase();
+                    const isPkwtStatus = statusUpper.includes('PKWT') || statusUpper.includes('KONTRAK') || statusUpper.includes('TRAINING');
+                    if (newJoinDate && newEmployee.contractDuration && isPkwtStatus) {
+                      const start = new Date(newJoinDate);
+                      if (!isNaN(start.getTime())) {
+                        const match = newEmployee.contractDuration.match(/(\d+)\s*(Bulan|Month|Tahun|Year)/i);
+                        if (match) {
+                          const num = parseInt(match[1]);
+                          const unit = match[2].toLowerCase();
+                          let end = new Date(start);
+                          if (unit === 'bulan' || unit === 'month') end.setMonth(end.getMonth() + num);
+                          else if (unit === 'tahun' || unit === 'year') end.setFullYear(end.getFullYear() + num);
+                          newEnd = end.toISOString().split('T')[0];
+                        }
+                      }
+                    }
+                    setNewEmployee({...newEmployee, joinDate: newJoinDate, contractEnd: newEnd});
+                  }} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
+                </div>
+                {/* — Durasi + Tanggal Selesai (hanya Kontrak/Training) — */}
+                {((newEmployee.employmentStatus || '').toUpperCase().includes('PKWT') || (newEmployee.employmentStatus || '').toUpperCase().includes('KONTRAK') || (newEmployee.employmentStatus || '').toUpperCase().includes('TRAINING')) && (
+                  <>
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">
+                        {(newEmployee.employmentStatus || '').toUpperCase().includes('TRAINING') ? 'Durasi Training' : 'Durasi Kontrak'}
+                      </label>
+                      <CreatableSelect menuPortalTarget={document.body} styles={customSelectStyles} isClearable options={toSelectOptions(masterOptions.contractDurations)} value={newEmployee.contractDuration ? {label: newEmployee.contractDuration, value: newEmployee.contractDuration} : null} onChange={(val) => {
+                        const duration = val ? val.value : '';
+                        let newEnd = newEmployee.contractEnd;
+                        if (duration && newEmployee.joinDate) {
+                          const start = new Date(newEmployee.joinDate);
+                          if (!isNaN(start.getTime())) {
+                            const match = duration.match(/(\d+)\s*(Bulan|Month|Tahun|Year)/i);
+                            if (match) {
+                              const num = parseInt(match[1]);
+                              const unit = match[2].toLowerCase();
+                              let end = new Date(start);
+                              if (unit === 'bulan' || unit === 'month') end.setMonth(end.getMonth() + num);
+                              else if (unit === 'tahun' || unit === 'year') end.setFullYear(end.getFullYear() + num);
+                              newEnd = end.toISOString().split('T')[0];
+                            }
+                          }
+                        }
+                        setNewEmployee({...newEmployee, contractDuration: duration, contractEnd: newEnd});
+                      }} />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">
+                        {(newEmployee.employmentStatus || '').toUpperCase().includes('TRAINING') ? 'Tanggal Selesai Training' : 'Tanggal Selesai Kontrak'} <span className="text-rose-500">*</span>
+                      </label>
+                      <input type="date" required value={newEmployee.contractEnd} onChange={e => setNewEmployee({...newEmployee, contractEnd: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
+                    </div>
+                  </>
+                )}
+                  </div>
+                </div>
+                {/* — Status keaktifan & lainnya — */}
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 block">Status Keaktifan</label>
-                  <select 
-                    value={newEmployee.status || 'Active'} 
+                  <select
+                    value={newEmployee.status || 'Active'}
                     onChange={e => setNewEmployee({...newEmployee, status: e.target.value})}
                     className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all appearance-none cursor-pointer"
                   >
@@ -754,19 +892,6 @@ const EmployeeFormModal = ({
                   </datalist>
                 </div>
                 <div>
-                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Status Hubungan Kerja</label>
-                  <input 
-                    list="empstatus-options"
-                    value={newEmployee.employmentStatus || ''} 
-                    onChange={(e) => setNewEmployee({...newEmployee, employmentStatus: e.target.value})}
-                    placeholder="Pilih atau ketik..."
-                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
-                  />
-                  <datalist id="empstatus-options">
-                    {(masterOptions.employmentStatuses || []).map(opt => <option key={opt} value={opt} />)}
-                  </datalist>
-                </div>
-                <div>
                   <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Tipe Gaji</label>
                   <select 
                     value={newEmployee.salaryCategory || 'UMK/UMR'} 
@@ -778,15 +903,22 @@ const EmployeeFormModal = ({
                     <option value="HARIAN">HARIAN</option>
                   </select>
                 </div>
-                <div className="space-y-1.5 md:col-span-2">
+                <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">NPWP</label><input value={newEmployee.npwp} onChange={e => setNewEmployee({...newEmployee, npwp: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Kuota Cuti</label><input type="number" value={newEmployee.leaveQuota} onChange={e => setNewEmployee({...newEmployee, leaveQuota: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-slate-800" /></div>
+                  {!!newEmployee.dbId && (
+                    <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Sisa Cuti</label><input type="number" value={newEmployee.remainingLeave} onChange={e => setNewEmployee({...newEmployee, remainingLeave: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-slate-800" /></div>
+                  )}
+                </div>
+                <div className="space-y-1.5 md:col-span-2 lg:col-span-3">
                   <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 block">Cabang / Lokasi Absensi (Multi-select)</label>
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-40 overflow-y-auto">
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-40 overflow-y-auto">
                     {locations.map(loc => {
                       const assignedIds = (newEmployee.locationId || '').split(',').filter(Boolean);
                       const isChecked = assignedIds.includes(String(loc.id));
                       return (
                         <label key={loc.id} className="flex items-center gap-2.5 p-2 bg-white rounded-lg border border-slate-100 hover:border-blue-300 transition-all cursor-pointer select-none">
-                          <input 
+                          <input
                             type="checkbox"
                             checked={isChecked}
                             onChange={(e) => {
@@ -810,73 +942,6 @@ const EmployeeFormModal = ({
                       <span className="text-xs text-slate-400 italic">Belum ada lokasi kantor yang dikonfigurasi.</span>
                     )}
                   </div>
-                </div>
-                <div>
-                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Tanggal Mulai Kerja</label>
-                  <input type="date" value={newEmployee.joinDate} onChange={e => {
-                    const newJoinDate = e.target.value;
-                    let newEnd = newEmployee.contractEnd;
-                    const statusUpper = (newEmployee.employmentStatus || '').toUpperCase();
-                    const isPkwtStatus = statusUpper.includes('PKWT') || statusUpper.includes('KONTRAK') || statusUpper.includes('TRAINING');
-                    if (newJoinDate && newEmployee.contractDuration && isPkwtStatus) {
-                      const start = new Date(newJoinDate);
-                      if (!isNaN(start.getTime())) {
-                        const match = newEmployee.contractDuration.match(/(\d+)\s*(Bulan|Month|Tahun|Year)/i);
-                        if (match) {
-                          const num = parseInt(match[1]);
-                          const unit = match[2].toLowerCase();
-                          let end = new Date(start);
-                          if (unit === 'bulan' || unit === 'month') end.setMonth(end.getMonth() + num);
-                          else if (unit === 'tahun' || unit === 'year') end.setFullYear(end.getFullYear() + num);
-                          newEnd = end.toISOString().split('T')[0];
-                        }
-                      }
-                    }
-                    setNewEmployee({...newEmployee, joinDate: newJoinDate, contractEnd: newEnd});
-                  }} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
-                </div>
-                {((newEmployee.employmentStatus || '').toUpperCase().includes('PKWT') || (newEmployee.employmentStatus || '').toUpperCase().includes('KONTRAK') || (newEmployee.employmentStatus || '').toUpperCase().includes('TRAINING')) && (
-                  <>
-                    <div>
-                      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">
-                        {(newEmployee.employmentStatus || '').toUpperCase().includes('TRAINING') ? 'Durasi Training' : 'Durasi Kontrak'}
-                      </label>
-                      <CreatableSelect menuPortalTarget={document.body} styles={customSelectStyles} isClearable options={toSelectOptions(masterOptions.contractDurations)} value={newEmployee.contractDuration ? {label: newEmployee.contractDuration, value: newEmployee.contractDuration} : null} onChange={(val) => {
-                        const duration = val ? val.value : '';
-                        let newEnd = newEmployee.contractEnd;
-                        if (duration && newEmployee.joinDate) {
-                          const start = new Date(newEmployee.joinDate);
-                          if (!isNaN(start.getTime())) {
-                            const match = duration.match(/(\d+)\s*(Bulan|Month|Tahun|Year)/i);
-                            if (match) {
-                              const num = parseInt(match[1]);
-                              const unit = match[2].toLowerCase();
-                              let end = new Date(start);
-                              if (unit === 'bulan' || unit === 'month') end.setMonth(end.getMonth() + num);
-                              else if (unit === 'tahun' || unit === 'year') end.setFullYear(end.getFullYear() + num);
-                              newEnd = end.toISOString().split('T')[0];
-                            }
-                          }
-                        }
-                        setNewEmployee({...newEmployee, contractDuration: duration, contractEnd: newEnd});
-                      }} />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">
-                        {(newEmployee.employmentStatus || '').toUpperCase().includes('TRAINING') ? 'Tanggal Akhir Training' : 'Tanggal Akhir Kontrak'}
-                      </label>
-                      <input type="date" value={newEmployee.contractEnd} onChange={e => setNewEmployee({...newEmployee, contractEnd: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
-                    </div>
-                  </>
-                )}
-                <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">BPJS Ketenagakerjaan</label><input value={newEmployee.bpjsTk} onChange={e => setNewEmployee({...newEmployee, bpjsTk: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
-                <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">BPJS Kesehatan</label><input value={newEmployee.bpjsKesehatan} onChange={e => setNewEmployee({...newEmployee, bpjsKesehatan: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
-                <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">NPWP</label><input value={newEmployee.npwp} onChange={e => setNewEmployee({...newEmployee, npwp: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Kuota Cuti</label><input type="number" value={newEmployee.leaveQuota} onChange={e => setNewEmployee({...newEmployee, leaveQuota: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-slate-800" /></div>
-                  {!!newEmployee.dbId && (
-                    <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Sisa Cuti</label><input type="number" value={newEmployee.remainingLeave} onChange={e => setNewEmployee({...newEmployee, remainingLeave: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-slate-800" /></div>
-                  )}
                 </div>
               </div>
             )}
@@ -912,7 +977,15 @@ const EmployeeFormModal = ({
                     ))}
                   </select>
                 </div>
-                <div className="lg:col-span-2"><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Alamat Tinggal</label><input value={newEmployee.address} onChange={e => setNewEmployee({...newEmployee, address: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
+                <div className="lg:col-span-2 lg:row-span-2 flex flex-col">
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Alamat Tinggal</label>
+                  <textarea
+                    value={newEmployee.address}
+                    onChange={e => setNewEmployee({...newEmployee, address: e.target.value})}
+                    rows={4}
+                    className="w-full flex-1 min-h-[120px] resize-y bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                  />
+                </div>
                 <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Jurusan</label><input value={newEmployee.major} onChange={e => setNewEmployee({...newEmployee, major: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
                 <div>
                   <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Jenis Kelamin</label>
@@ -963,6 +1036,39 @@ const EmployeeFormModal = ({
                   </select>
                 </div>
                 <div><label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Nomor Rekening</label><input value={newEmployee.bankAccountNumber || ''} onChange={e => setNewEmployee({...newEmployee, bankAccountNumber: e.target.value})} placeholder="Contoh: 1234567890" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" /></div>
+              </div>
+            )}
+            {activeTab === 'bpjs' && (
+              <div className="space-y-6">
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                  <div className="flex items-center gap-2 mb-4">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-widest">BPJS Kesehatan</h4>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Nomor Kartu BPJS Kesehatan</label>
+                      <input value={newEmployee.bpjsKesehatan || ''} onChange={e => setNewEmployee({...newEmployee, bpjsKesehatan: e.target.value})} placeholder="Contoh: 0001234567890" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Faskes / Klinik Tujuan</label>
+                      <input value={newEmployee.bpjsKesehatanFaskes || ''} onChange={e => setNewEmployee({...newEmployee, bpjsKesehatanFaskes: e.target.value})} placeholder="Contoh: Klinik Sehat Sentosa" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
+                      <p className="text-[10px] text-slate-400 mt-1.5 ml-1">Nama klinik / faskes tingkat 1 yang terdaftar di kartu BPJS Kesehatan.</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                  <div className="flex items-center gap-2 mb-4">
+                    <ShieldCheck className="w-4 h-4 text-blue-600" />
+                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-widest">BPJS Ketenagakerjaan</h4>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1 mb-1.5 block">Nomor Kartu BPJS Ketenagakerjaan</label>
+                      <input value={newEmployee.bpjsTk || ''} onChange={e => setNewEmployee({...newEmployee, bpjsTk: e.target.value})} placeholder="Contoh: 1234567890" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
             {activeTab === 'documents' && (

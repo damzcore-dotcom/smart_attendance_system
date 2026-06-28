@@ -145,6 +145,7 @@ const getAll = async (req, res) => {
           facePhoto: emp.facePhoto,
           bpjsTk: emp.bpjsTk,
           bpjsKesehatan: emp.bpjsKesehatan,
+          bpjsKesehatanFaskes: emp.bpjsKesehatanFaskes,
           npwp: emp.npwp,
           ptkpStatus: emp.ptkpStatus,
           maritalStatus: emp.maritalStatus,
@@ -295,7 +296,7 @@ const create = async (req, res) => {
       division: rest.division, locationId: rest.locationId, idNumber: rest.idNumber, cardNo: rest.cardNo,
       contractDuration: rest.contractDuration, faceId: rest.faceId, facePhoto: rest.facePhoto, faceDescriptor: rest.faceDescriptor ? [JSON.parse(rest.faceDescriptor)] : null,
       faceStatus: rest.faceDescriptor ? 'ENROLLED' : 'PENDING',
-      bpjsTk: rest.bpjsTk, bpjsKesehatan: rest.bpjsKesehatan,
+      bpjsTk: rest.bpjsTk, bpjsKesehatan: rest.bpjsKesehatan, bpjsKesehatanFaskes: rest.bpjsKesehatanFaskes,
       npwp: rest.npwp, ptkpStatus: rest.ptkpStatus, maritalStatus: rest.maritalStatus, kkNumber: rest.kkNumber, birthPlace: rest.birthPlace,
       address: rest.address, education: rest.education, major: rest.major, religion: rest.religion,
       numberOfChildren: rest.numberOfChildren ? parseInt(rest.numberOfChildren) : null,
@@ -357,17 +358,17 @@ const update = async (req, res) => {
     const { name, email, dept, phone, position, status, faceStatus, faceDescriptor, ...rest } = req.body;
     const empId = parseInt(req.params.id);
 
-    const fingerId = rest.fingerPrintId ? String(rest.fingerPrintId).trim() : '';
-    if (fingerId) {
-      const existingFinger = await prisma.employee.findFirst({ where: { fingerPrintId: fingerId, NOT: { id: empId } } });
-      if (existingFinger) {
-        return res.status(400).json({ success: false, message: `ID Sidik Jari ${fingerId} sudah digunakan oleh karyawan lain.` });
-      }
-    }
+    // Snapshot kontrak SEBELUM update (untuk mencatat riwayat perpanjangan kontrak).
+    const prevContract = await prisma.employee.findUnique({
+      where: { id: empId },
+      select: { contractEnd: true, contractDuration: true, joinDate: true }
+    });
 
     const data = { ...rest };
-    // Simpan No. AC yang sudah dinormalisasi; kosong → null (hindari bentrok antar string kosong)
-    if ('fingerPrintId' in data) data.fingerPrintId = fingerId || null;
+    // Lindungi kunci pencocokan absensi: NIK & ID sidik jari TIDAK boleh diubah lewat edit karyawan.
+    // (Penautan No. AC hanya via Sync Karyawan; pembuatan awal via Tambah Karyawan.)
+    delete data.employeeCode;
+    delete data.fingerPrintId;
     if (name) data.name = name;
     if (email) data.email = email;
     if (phone !== undefined) data.phone = phone;
@@ -442,6 +443,26 @@ const update = async (req, res) => {
     }
 
     res.json({ success: true, message: 'Employee updated', data: employee });
+
+    // Catat riwayat kontrak bila tanggal akhir kontrak berubah (fire-and-forget).
+    if ('contractEnd' in data) {
+      const prevEnd = prevContract?.contractEnd ? new Date(prevContract.contractEnd).getTime() : null;
+      const newEnd = data.contractEnd ? new Date(data.contractEnd).getTime() : null;
+      if (prevEnd !== newEnd && newEnd) {
+        prisma.contractHistory.create({
+          data: {
+            employeeId: empId,
+            action: prevEnd ? 'RENEW' : 'NEW',
+            contractNumber: rest.contractNumber || null,
+            duration: ('contractDuration' in data ? data.contractDuration : prevContract?.contractDuration) || null,
+            startDate: ('joinDate' in data ? data.joinDate : prevContract?.joinDate) || null,
+            previousEndDate: prevContract?.contractEnd || null,
+            endDate: data.contractEnd,
+            createdBy: req.user?.username || null,
+          }
+        }).catch(e => console.error('Failed to record contract history:', e.message));
+      }
+    }
 
     // Update face cache if face is enrolled or removed
     if (employee.faceStatus === 'ENROLLED' && employee.faceDescriptor) {
@@ -887,4 +908,132 @@ const batchUpdateSalaryCategory = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, create, update, remove, importExcel, getProgress, getMasterOptions, batchUpdateShift, batchUpdateSalaryCategory, checkDuplicate, getNextFingerId, getNextNik };
+/**
+ * GET /api/employees/contracts-summary
+ * Daftar karyawan KONTRAK/PKWT (non-terminated) + statistik kontrak, dihitung di server.
+ */
+const getContractsSummary = async (req, res) => {
+  try {
+    const emps = await prisma.employee.findMany({
+      where: {
+        status: { not: 'TERMINATED' },
+        OR: [
+          { employmentStatus: { contains: 'PKWT', mode: 'insensitive' } },
+          { employmentStatus: { contains: 'KONTRAK', mode: 'insensitive' } },
+        ],
+      },
+      include: { department: true },
+      orderBy: { contractEnd: 'asc' },
+    });
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const data = emps.map(e => {
+      let daysLeft = null;
+      if (e.contractEnd) {
+        const end = new Date(e.contractEnd);
+        end.setHours(0, 0, 0, 0);
+        daysLeft = Math.ceil((end - today) / (1000 * 60 * 60 * 24));
+      }
+      return {
+        dbId: e.id,
+        employeeCode: e.employeeCode,
+        name: e.name,
+        email: e.email,
+        dept: e.department?.name || null,
+        position: e.position,
+        employmentStatus: e.employmentStatus,
+        contractDuration: e.contractDuration,
+        joinDate: e.joinDate,
+        contractEnd: e.contractEnd,
+        daysLeft,
+      };
+    });
+
+    const stats = {
+      total: data.length,
+      expired: data.filter(d => d.daysLeft !== null && d.daysLeft <= 0).length,
+      critical: data.filter(d => d.daysLeft !== null && d.daysLeft > 0 && d.daysLeft <= 30).length,
+      active: data.filter(d => d.daysLeft !== null && d.daysLeft > 30).length,
+      unknown: data.filter(d => d.daysLeft === null).length,
+    };
+
+    res.json({ success: true, data, stats });
+  } catch (err) {
+    handleControllerError(res, err, 'employeeController.getContractsSummary');
+  }
+};
+
+/**
+ * GET /api/employees/training-summary
+ * Daftar karyawan TRAINING (non-terminated) + statistik, dihitung di server.
+ */
+const getTrainingSummary = async (req, res) => {
+  try {
+    const emps = await prisma.employee.findMany({
+      where: {
+        status: { not: 'TERMINATED' },
+        employmentStatus: { contains: 'TRAINING', mode: 'insensitive' },
+      },
+      include: { department: true },
+      orderBy: { contractEnd: 'asc' },
+    });
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const data = emps.map(e => {
+      let daysLeft = null;
+      if (e.contractEnd) {
+        const end = new Date(e.contractEnd);
+        end.setHours(0, 0, 0, 0);
+        daysLeft = Math.ceil((end - today) / (1000 * 60 * 60 * 24));
+      }
+      return {
+        dbId: e.id,
+        employeeCode: e.employeeCode,
+        name: e.name,
+        email: e.email,
+        dept: e.department?.name || null,
+        position: e.position,
+        employmentStatus: e.employmentStatus,
+        contractDuration: e.contractDuration,
+        joinDate: e.joinDate,
+        contractEnd: e.contractEnd,
+        daysLeft,
+      };
+    });
+
+    const stats = {
+      total: data.length,
+      expired: data.filter(d => d.daysLeft !== null && d.daysLeft <= 0).length,
+      critical: data.filter(d => d.daysLeft !== null && d.daysLeft > 0 && d.daysLeft <= 30).length,
+      active: data.filter(d => d.daysLeft !== null && d.daysLeft > 30).length,
+      unknown: data.filter(d => d.daysLeft === null).length,
+    };
+
+    res.json({ success: true, data, stats });
+  } catch (err) {
+    handleControllerError(res, err, 'employeeController.getTrainingSummary');
+  }
+};
+
+/**
+ * GET /api/employees/:id/contract-history
+ * Riwayat perpanjangan kontrak seorang karyawan.
+ */
+const getContractHistory = async (req, res) => {
+  try {
+    const employeeId = parseInt(req.params.id);
+    const history = await prisma.contractHistory.findMany({
+      where: { employeeId },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json({ success: true, data: history });
+  } catch (err) {
+    handleControllerError(res, err, 'employeeController.getContractHistory');
+  }
+};
+
+module.exports = { getAll, getById, create, update, remove, importExcel, getProgress, getMasterOptions, batchUpdateShift, batchUpdateSalaryCategory, checkDuplicate, getNextFingerId, getNextNik, getContractsSummary, getContractHistory, getTrainingSummary };

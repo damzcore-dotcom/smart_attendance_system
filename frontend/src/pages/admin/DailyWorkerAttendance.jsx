@@ -4,9 +4,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { employeeAPI, attendanceAPI } from '../../services/api';
 import MasterDataBhl from './MasterDataBhl';
 import BhlSettings from './BhlSettings';
-import { 
+import BhlPayrollTab from './BhlPayrollTab';
+import {
   Users, Save, Calendar, Search, Filter, Loader2, AlertCircle, HardHat, History, FileDown,
-  CheckCircle2, XCircle, Clock, Stethoscope, Briefcase, Database, Settings as SettingsIcon
+  CheckCircle2, XCircle, Clock, Stethoscope, Briefcase, Database, Settings as SettingsIcon, Lock
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -274,7 +275,16 @@ const DailyWorkerAttendance = () => {
               <History className="w-3.5 h-3.5" />
               {t('dailyWorker.tabs.payroll')}
             </button>
-            <button 
+            <button
+              onClick={() => setActiveTab('PAYROLL')}
+              className={`px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${
+                activeTab === 'PAYROLL' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Lock className="w-3.5 h-3.5" />
+              Penggajian Final
+            </button>
+            <button
               onClick={() => setActiveTab('SETTINGS')}
               className={`px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${
                 activeTab === 'SETTINGS' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
@@ -289,6 +299,10 @@ const DailyWorkerAttendance = () => {
 
       {activeTab === 'SETTINGS' && (
         <BhlSettings />
+      )}
+
+      {activeTab === 'PAYROLL' && (
+        <BhlPayrollTab />
       )}
 
       {activeTab === 'MASTER' && (

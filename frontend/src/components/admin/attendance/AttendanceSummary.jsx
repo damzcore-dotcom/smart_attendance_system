@@ -52,6 +52,11 @@ const AttendanceSummary = ({
 
   const calculatedAnomalyCount = anomalyCount ?? dataList.filter(isAnomaly).length;
 
+  // Tingkat kehadiran — null bila tidak ada hari kerja (jangan tampilkan 100% palsu saat 0 data).
+  const totalHadir = (displaySummary.hadir || 0) + (displaySummary.telat || 0);
+  const totalExcludeOff = (displaySummary.total || 0) - ((displaySummary.holiday || 0) + (displaySummary.cuti || 0) + (displaySummary.sakit || 0) + (displaySummary.izin || 0));
+  const attendanceRatePct = totalExcludeOff > 0 ? Math.round((totalHadir / totalExcludeOff) * 100) : null;
+
   return (
     <div className="space-y-6">
       {/* Visual Analytics Widget Grid */}
@@ -63,14 +68,10 @@ const AttendanceSummary = ({
               {t('attendancePage.attendanceRate')}
             </span>
             <p className="text-3xl font-black text-slate-800 tracking-tight mt-1">
-              {(() => {
-                const totalHadir = (displaySummary.hadir || 0) + (displaySummary.telat || 0);
-                const totalExcludeOff = (displaySummary.total || 0) - ((displaySummary.holiday || 0) + (displaySummary.cuti || 0) + (displaySummary.sakit || 0) + (displaySummary.izin || 0));
-                return totalExcludeOff > 0 ? Math.round((totalHadir / totalExcludeOff) * 100) : 100;
-              })()}%
+              {attendanceRatePct === null ? '—' : `${attendanceRatePct}%`}
             </p>
             <span className="text-[9px] font-bold text-emerald-600 uppercase flex items-center gap-1.5 mt-1">
-              <ShieldCheck className="w-3.5 h-3.5" /> {t('attendancePage.presentOnTime')}
+              <ShieldCheck className="w-3.5 h-3.5" /> {attendanceRatePct === null ? t('attendancePage.semua') : t('attendancePage.presentOnTime')}
             </span>
           </div>
           
@@ -85,11 +86,7 @@ const AttendanceSummary = ({
               />
               <path
                 className="text-emerald-500 transition-all duration-1000 ease-out"
-                strokeDasharray={`${(() => {
-                  const totalHadir = (displaySummary.hadir || 0) + (displaySummary.telat || 0);
-                  const totalExcludeOff = (displaySummary.total || 0) - ((displaySummary.holiday || 0) + (displaySummary.cuti || 0) + (displaySummary.sakit || 0) + (displaySummary.izin || 0));
-                  return totalExcludeOff > 0 ? Math.round((totalHadir / totalExcludeOff) * 100) : 100;
-                })()}, 100`}
+                strokeDasharray={`${attendanceRatePct ?? 0}, 100`}
                 strokeWidth="3.5"
                 strokeLinecap="round"
                 stroke="currentColor"

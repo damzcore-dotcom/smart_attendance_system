@@ -63,6 +63,7 @@ const PayrollSettings = () => {
     { id: 'matrix', label: t('payrollSettings.tabs.matrix'), icon: LayoutGrid },
     { id: 'overtime', label: t('payrollSettings.tabs.overtime'), icon: Clock },
     { id: 'assign', label: t('payrollSettings.tabs.assign'), icon: Settings2 },
+    { id: 'tax', label: 'Pajak & Iuran', icon: FileText },
     { id: 'umk', label: t('payrollSettings.tabs.umk'), icon: FileText },
   ];
 
@@ -109,6 +110,7 @@ const PayrollSettings = () => {
             {activeTab === 'matrix' && <AllowanceMatrixTab data={matrixData} onRefresh={() => fetchData('matrix')} />}
             {activeTab === 'overtime' && <OvertimeTab data={overtimeRules} onRefresh={() => fetchData('overtime')} config={config} globalSettings={globalSettings} />}
             {activeTab === 'assign' && <AssignSalaryTab data={employees} components={components} onRefresh={() => fetchData('assign')} config={config} />}
+            {activeTab === 'tax' && <TaxBpjsTab config={config} onRefresh={() => fetchData('tax')} />}
             {activeTab === 'umk' && <UmkSettingsTab config={config} onRefresh={() => fetchData('umk')} />}
           </>
         )}
@@ -321,6 +323,61 @@ const ComponentsTab = ({ data, onRefresh }) => {
   );
 };
 
+const TaxBpjsTab = ({ config, onRefresh }) => {
+  const save = async (patch) => {
+    try { await payrollAPI.updateConfig(patch); onRefresh(); }
+    catch { alert('Gagal menyimpan pengaturan.'); }
+  };
+  const NumField = ({ label, k, def, hint }) => (
+    <div>
+      <label className="block text-[11px] font-semibold text-slate-500 mb-1">{label}</label>
+      <input type="number" defaultValue={config[k] ?? def} onBlur={e => save({ [k]: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white" />
+      {hint && <p className="text-[10px] text-slate-400 mt-1">{hint}</p>}
+    </div>
+  );
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold text-gray-800">Pajak (PPh 21) & Iuran BPJS</h3>
+        <p className="text-sm text-gray-500">Nilai regulasi bisa berubah tiap tahun — sesuaikan di sini agar perhitungan tetap akurat.</p>
+      </div>
+
+      <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">PPh 21</p>
+          <button
+            onClick={() => save({ pph21Enabled: config.pph21Enabled === 'false' ? 'true' : 'false' })}
+            className={`px-3 py-1.5 rounded-md text-xs font-bold ${config.pph21Enabled !== 'false' ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+          >
+            {config.pph21Enabled !== 'false' ? 'Aktif (dipotong)' : 'Nonaktif'}
+          </button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <NumField label="Tarif biaya jabatan (0.05 = 5%)" k="biayaJabatanRate" def="0.05" />
+          <NumField label="Maks. biaya jabatan / bulan (Rp)" k="biayaJabatanMaxMonthly" def="500000" />
+        </div>
+        <p className="text-[10px] text-slate-400 mt-2">Metode saat ini: progresif disetahunkan (PTKP & tarif UU HPP 2022). Metode TER bulanan (2024) dapat ditambahkan terpisah bila diperlukan.</p>
+      </div>
+
+      <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Iuran BPJS</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-500 mb-1">Penerapan BPJS</label>
+            <select value={config.bpjsApplyMode || 'BY_NUMBER'} onChange={e => save({ bpjsApplyMode: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
+              <option value="BY_NUMBER">Hanya yang punya nomor kartu</option>
+              <option value="ALL">Semua karyawan</option>
+            </select>
+          </div>
+          <NumField label="Batas gaji BPJS Kesehatan (Rp)" k="bpjsKesMaxSalary" def="12000000" />
+          <NumField label="Batas gaji JP (Rp)" k="jpMaxSalary" def="10022900" />
+        </div>
+        <p className="text-[10px] text-slate-400 mt-2">Tarif: Kes 1%/4%, JHT 2%/3,7%, JP 1%/2%, JKK 0,24%, JKM 0,3%.</p>
+      </div>
+    </div>
+  );
+};
+
 const OvertimeTab = ({ data, onRefresh, config, globalSettings }) => {
   const { t } = useTranslation();
   const [modalOpen, setModalOpen] = useState(false);
@@ -373,8 +430,45 @@ const OvertimeTab = ({ data, onRefresh, config, globalSettings }) => {
     }
   };
 
+  const saveConfig = async (patch) => {
+    try { await payrollAPI.updateConfig(patch); onRefresh(); }
+    catch { alert('Gagal menyimpan pengaturan.'); }
+  };
+
   return (
     <div>
+      {/* Pengaturan cara perhitungan lembur */}
+      <div className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Cara Perhitungan Lembur</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-500 mb-1">Mode</label>
+            <select value={config.overtimeMode || 'AUTO'} onChange={e => saveConfig({ overtimeMode: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
+              <option value="AUTO">Otomatis (dari jam pulang)</option>
+              <option value="MANUAL">Manual (input SPL)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-500 mb-1">Tarif per jenis hari</label>
+            <select value={config.overtimeFlatMode === 'true' ? 'FLAT' : 'DAYTYPE'} onChange={e => saveConfig({ overtimeFlatMode: e.target.value === 'FLAT' ? 'true' : 'false' })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
+              <option value="DAYTYPE">Beda per jenis hari (ikut aturan di bawah)</option>
+              <option value="FLAT">Samaratakan (satu multiplier)</option>
+            </select>
+          </div>
+          {config.overtimeFlatMode === 'true' && (
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-500 mb-1">Multiplier samarata</label>
+              <input type="number" step="0.1" defaultValue={config.overtimeFlatMultiplier || '1.5'} onBlur={e => saveConfig({ overtimeFlatMultiplier: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white" />
+            </div>
+          )}
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-500 mb-1">Pembagi jam (default 173)</label>
+            <input type="number" defaultValue={config.overtimeHourlyDivisor || '173'} onBlur={e => saveConfig({ overtimeHourlyDivisor: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white" />
+          </div>
+        </div>
+        <p className="text-[10px] text-slate-400 mt-2">Mode "Beda per jenis hari" memakai aturan tarif (WORKDAY/WEEKEND/HOLIDAY) di tabel bawah — bisa diisi sesuai aturan pemerintah atau regulasi perusahaan Anda.</p>
+      </div>
+
       <div className="flex justify-between items-center mb-6">
         <div>
           <h3 className="text-lg font-semibold text-gray-800">{t('payrollSettings.overtimeTab.title')}</h3>

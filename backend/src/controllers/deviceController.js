@@ -9,6 +9,20 @@ const deviceSync = require('../utils/deviceSync');
 const attendanceSyncCache = new Map();
 const CACHE_TIMEOUT = 15 * 60 * 1000; // 15 minutes
 
+// Progres tarik absensi per-device (dipantau UI via GET /:id/sync-progress)
+global.deviceSyncProgress = global.deviceSyncProgress || {};
+const setSyncProgress = (id, percent, phase, message = '') => {
+  global.deviceSyncProgress[id] = {
+    percent: Math.max(0, Math.min(100, Math.round(percent))),
+    phase,
+    message,
+    ts: Date.now(),
+  };
+};
+const clearSyncProgress = (id, delay = 5000) => {
+  setTimeout(() => { delete global.deviceSyncProgress[id]; }, delay);
+};
+
 
 /**
  * Get all devices
@@ -462,7 +476,7 @@ const syncUsers = async (req, res) => {
     // ──────────────────────────────────────────────
     // PREVIEW MODE: Scan machine, classify, return data
     // ──────────────────────────────────────────────
-    zkInstance = new ZKLib(device.ipAddress, device.port, 60000, 30000);
+    zkInstance = new ZKLib(device.ipAddress, device.port, 180000, 90000);
     await zkInstance.createSocket();
     const users = await zkInstance.getUsers();
     
@@ -657,28 +671,52 @@ const syncUsers = async (req, res) => {
  * node-zklib uses UDP which is unreliable for large data transfers.
  * This function retries multiple times and picks the best (largest) result.
  */
-async function fetchAttendancesWithRetry(ipAddress, port, maxRetries = 3) {
+async function fetchAttendancesWithRetry(ipAddress, port, maxRetries = 5, onProgress = null) {
   let bestResult = null;
   let bestCount = 0;
   const allAttemptCounts = [];
+  let deviceReportedCount = null;
+
+  // Pengaman kalibrasi jam: default AKTIF, tapi bisa dimatikan via setting agar jam mesin
+  // tak ditimpa secara senyap (mencegah korupsi jam bila waktu server keliru).
+  let calibrate = true;
+  try {
+    const s = await prisma.settings.findUnique({ where: { key: 'deviceTimeAutoCalibrate' } });
+    if (s && s.value === 'false') calibrate = false;
+  } catch (e) { /* default aktif */ }
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     let zk = null;
     try {
-      // Use longer timeouts: 60s connect, 30s intra-packet for large data
-      zk = new ZKLib(ipAddress, port, 60000, 30000);
+      // Timeout besar untuk log banyak: 180s koneksi, 90s antar-paket
+      zk = new ZKLib(ipAddress, port, 180000, 90000);
       await zk.createSocket();
-      
-      // Auto-Calibrate Device Time to Server Time
-      try {
-        await zk.setTime(new Date());
-        console.log(`[Sync] Device time calibrated successfully.`);
-      } catch (err) {
-        console.warn(`[Sync] Failed to calibrate device time: ${err.message}`);
+
+      // Auto-Calibrate Device Time to Server Time (hanya bila diizinkan)
+      if (calibrate) {
+        try {
+          await zk.setTime(new Date());
+          console.log(`[Sync] Device time calibrated successfully.`);
+        } catch (err) {
+          console.warn(`[Sync] Failed to calibrate device time: ${err.message}`);
+        }
+      } else {
+        console.log(`[Sync] Auto-kalibrasi jam mesin dinonaktifkan (deviceTimeAutoCalibrate=false).`);
       }
-      
+
+      // Jumlah record yang DILAPORKAN mesin → untuk mendeteksi tarikan terpotong.
+      try {
+        const info = await zk.getInfo();
+        if (info && typeof info.logCounts === 'number') {
+          deviceReportedCount = info.logCounts;
+        }
+      } catch (e) { /* sebagian firmware tak mendukung getInfo */ }
+
       console.log(`[Sync] Attempt ${attempt}/${maxRetries}: Fetching attendance logs...`);
-      const logs = await zk.getAttendances();
+      // Callback progres unduh (received/total dalam byte) → laporkan ke UI
+      const logs = await zk.getAttendances((received, total) => {
+        if (onProgress && total) onProgress(received / total, attempt, maxRetries);
+      });
       const count = logs?.data?.length || 0;
       allAttemptCounts.push(count);
       console.log(`[Sync] Attempt ${attempt}/${maxRetries}: Got ${count} logs.`);
@@ -711,7 +749,11 @@ async function fetchAttendancesWithRetry(ipAddress, port, maxRetries = 3) {
   }
 
   console.log(`[Sync] All attempt results: [${allAttemptCounts.join(', ')}] logs. Best: ${bestCount}`);
-  return { logs: bestResult, bestCount, allAttemptCounts };
+  const truncated = deviceReportedCount != null && bestCount < deviceReportedCount;
+  if (truncated) {
+    console.warn(`[Sync] ⚠️ Tarikan mungkin TERPOTONG: terbaca ${bestCount} dari ${deviceReportedCount} record yang dilaporkan mesin.`);
+  }
+  return { logs: bestResult, bestCount, allAttemptCounts, deviceReportedCount, truncated };
 }
 
 /**
@@ -719,27 +761,36 @@ async function fetchAttendancesWithRetry(ipAddress, port, maxRetries = 3) {
  */
 const syncAttendance = async (req, res) => {
   const { id } = req.params;
+  const devId = parseInt(id);
   console.log(`[Sync] Starting attendance sync for device ID: ${id}`);
-  
+
   try {
-    const device = await prisma.device.findUnique({ where: { id: parseInt(id) } });
+    const device = await prisma.device.findUnique({ where: { id: devId } });
     if (!device) {
       console.error(`[Sync] Device with ID ${id} not found`);
       return res.status(404).json({ success: false, message: 'Device not found' });
     }
 
     console.log(`[Sync] Connecting to device at ${device.ipAddress}:${device.port} with retry logic...`);
-    
+    setSyncProgress(devId, 3, 'connecting', 'Menghubungkan ke mesin...');
+
     // Fetch logs with retry — picks the best result from multiple attempts
-    const { logs, bestCount, allAttemptCounts } = await fetchAttendancesWithRetry(
-      device.ipAddress, device.port, 3
+    const { logs, bestCount, allAttemptCounts, deviceReportedCount, truncated } = await fetchAttendancesWithRetry(
+      device.ipAddress, device.port, 5,
+      (frac, attempt, max) => setSyncProgress(devId, 5 + frac * 60, 'fetching', `Mengunduh log (percobaan ${attempt}/${max})`)
     );
-    
+    const truncationWarning = truncated
+      ? ` ⚠️ PERINGATAN: hanya ${bestCount} dari ${deviceReportedCount} record di mesin yang berhasil ditarik — kemungkinan terpotong, coba tarik ulang.`
+      : '';
+
     console.log(`[Sync] Best fetch result: ${bestCount} logs from ${allAttemptCounts.length} attempt(s).`);
+    setSyncProgress(devId, 70, 'processing', 'Memproses & memasangkan data...');
 
     if (!logs || !logs.data || logs.data.length === 0) {
-      return res.json({ 
-        success: true, 
+      setSyncProgress(devId, 100, 'done', 'Tidak ada data log di mesin');
+      clearSyncProgress(devId);
+      return res.json({
+        success: true,
         message: `Tidak ada data log di mesin. (${allAttemptCounts.length}x percobaan, hasil: [${allAttemptCounts.join(', ')}])`, 
         rawRecords: 0, 
         savedCount: 0,
@@ -748,7 +799,9 @@ const syncAttendance = async (req, res) => {
           totalLogsFromDevice: 0, logsInRange: 0, logsMatchedEmployee: 0, 
           unmatchedPinCount: 0, unmatchedPins: [], linkedEmployeeCount: 0, 
           totalEmployees: 0, deviceDateRange: null,
-          fetchAttempts: allAttemptCounts
+          fetchAttempts: allAttemptCounts,
+          deviceReportedCount,
+          truncated
         } 
       });
     }
@@ -786,18 +839,9 @@ const syncAttendance = async (req, res) => {
       },
       include: { shift: true }
     });
-    const empByFingerPrint = {};
-    const empByCode = {};
-    const empById = {};
-    employees.forEach(e => {
-      empById[e.id] = e;
-      if (e.fingerPrintId) empByFingerPrint[e.fingerPrintId.trim()] = e;
-      if (e.employeeCode) empByCode[e.employeeCode.trim()] = e;
-      if (e.idNumber) empByCode[e.idNumber.trim()] = e;
-    });
+    const index = deviceSync.buildEmployeeIndex(employees);
+    const { empByFingerPrint, empById } = index;
 
-    const { calculateLateness, resolveStatus, parsePenaltySettings } = require('../utils/lateCalculator');
-    
     // Parse query params for date filtering
     const startDateQuery = req.query.start;
     const endDateQuery = req.query.end;
@@ -819,194 +863,33 @@ const syncAttendance = async (req, res) => {
 
     console.log(`[Sync] Date filter: ${filterStart.toLocaleString()} → ${filterEnd.toLocaleString()}`);
 
-    // Group logs by User + Date — collect ALL timestamps
-    // Diagnostic counters
-    let totalLogsFromDevice = logs.data.length;
-    let logsInRange = 0;
-    let logsMatchedEmployee = 0;
-    const unmatchedPins = new Map(); // PIN → machine user name
+    // Bangun record via LOGIKA BERSAMA (deviceSync.buildAttendanceRecords) — sama persis dengan
+    // jalur cron & "Hapus Log": klasifikasi masuk/pulang berbasis shift + penyimpanan WIB→UTC
+    // env-independent + diagnostik. Menghapus duplikasi yang dulu rawan menyimpang.
+    const settingsList = await prisma.settings.findMany();
+    const syncSettings = deviceSync.loadSyncSettings(settingsList);
+    const { penaltyRules, roundingConfig } = syncSettings;
 
-    const grouped = {};
-    for (const log of logs.data) {
-      const pinStr = String(log.deviceUserId).trim();
-      const recordTime = new Date(log.recordTime);
-      
-      // Skip records outside of filter range
-      if (recordTime < filterStart || recordTime > filterEnd) continue;
-      logsInRange++;
+    const allOverrides = await prisma.employeeShiftOverride.findMany({
+      where: { startDate: { lte: filterEnd }, endDate: { gte: filterStart } },
+      include: { shift: true }
+    });
+    const overrideMap = deviceSync.buildOverrideMap(allOverrides);
 
-      // FIX TIMEZONE BUG:
-      // toISOString() uses UTC. In WIB (UTC+7), 06:58 AM on May 1st becomes 23:58 PM on April 30th!
-      // This caused morning scans to be grouped into the PREVIOUS day, causing flipped check-ins.
-      // We must construct the date string using LOCAL TIME instead.
-      const year = recordTime.getFullYear();
-      const month = String(recordTime.getMonth() + 1).padStart(2, '0');
-      const day = String(recordTime.getDate()).padStart(2, '0');
-      const dateKey = `${year}-${month}-${day}`;
-      
-      const emp = empByFingerPrint[pinStr] || empByCode[pinStr];
-      if (!emp) {
-        // Track unmatched PINs for diagnostics
-        if (!unmatchedPins.has(pinStr)) {
-          unmatchedPins.set(pinStr, log.userName || log.name || `User PIN ${pinStr}`);
-        }
-        continue;
-      }
-      logsMatchedEmployee++;
-
-      const key = `${emp.id}|${dateKey}`;
-      if (!grouped[key]) {
-        const [gy, gm, gd] = dateKey.split('-').map(Number);
-        grouped[key] = { employeeId: emp.id, employee: emp, date: new Date(Date.UTC(gy, gm - 1, gd, 0, 0, 0, 0)), scans: [] };
-      }
-      const verifyMode = log.verifyMode !== undefined ? log.verifyMode : 1;
-      grouped[key].scans.push({ time: recordTime, verifyMode });
-    }
+    const { records: recordsToCreate, diagnostics } = deviceSync.buildAttendanceRecords({
+      logs, index, overrideMap, settings: syncSettings, filterStart, filterEnd
+    });
+    const totalLogsFromDevice = diagnostics.totalLogs;
+    const logsInRange = diagnostics.logsInRange;
+    const logsMatchedEmployee = diagnostics.logsMatched;
+    const unmatchedPins = diagnostics.unmatchedPins;
 
     console.log(`[Sync] Diagnostics: ${totalLogsFromDevice} total logs, ${logsInRange} in range, ${logsMatchedEmployee} matched, ${unmatchedPins.size} unmatched PINs`);
     if (unmatchedPins.size > 0) {
       console.log(`[Sync] ⚠️ Unmatched PINs (first 10):`, Array.from(unmatchedPins.entries()).slice(0, 10).map(([pin, name]) => `${pin}:${name}`).join(', '));
     }
 
-    // Process grouped records
-    const recordsToCreate = [];
-    const entries = Object.values(grouped);
-    
-    // Fetch Saturday Half-Day settings
-    const settingsList = await prisma.settings.findMany();
-    const { penaltyRules, roundingConfig } = parsePenaltySettings(settingsList);
-    const isSaturdayHalfDay = settingsList.find(s => s.key === 'saturdayHalfDay')?.value === 'true';
-    const satCheckoutTime = settingsList.find(s => s.key === 'saturdayCheckoutTime')?.value || '13:00';
-    const globalGracePeriod = parseInt(settingsList.find(s => s.key === 'gracePeriod')?.value || '15', 10);
-    
-    // Fetch Overrides for all active employees within this sync date range
-    const allOverrides = await prisma.employeeShiftOverride.findMany({
-      where: {
-        startDate: { lte: filterEnd },
-        endDate: { gte: filterStart }
-      },
-      include: { shift: true }
-    });
-
-    // Create a fast lookup map: employeeId_YYYY-MM-DD -> shift
-    const overrideMap = new Map();
-    for (const ov of allOverrides) {
-      let d = new Date(ov.startDate);
-      const endD = new Date(ov.endDate);
-      while (d <= endD) {
-        const dStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
-        overrideMap.set(`${ov.employeeId}_${dStr}`, ov.shift);
-        d.setUTCDate(d.getUTCDate() + 1);
-      }
-    }
-
-    for (const entry of entries) {
-      const emp = entry.employee;
-      const dStr = `${entry.date.getUTCFullYear()}-${String(entry.date.getUTCMonth()+1).padStart(2,'0')}-${String(entry.date.getUTCDate()).padStart(2,'0')}`;
-      
-      // Determine effective shift
-      const overrideShift = overrideMap.get(`${emp.id}_${dStr}`);
-      const effectiveShift = overrideShift || emp.shift || null;
-
-      const shiftStart = effectiveShift?.startTime || '08:00';
-      let shiftEnd = effectiveShift?.endTime || '17:00';
-      const gracePeriod = effectiveShift ? effectiveShift.gracePeriod : globalGracePeriod;
-      
-      // Override shiftEnd untuk hari Sabtu sesuai shift protocol
-      const dayOfWeek = entry.date.getUTCDay(); // 0=Sun, 6=Sat
-      if (dayOfWeek === 6) {
-        const satType = effectiveShift?.saturdayType || (isSaturdayHalfDay ? 'HALF_DAY' : 'FULL_DAY');
-        if (satType === 'HALF_DAY') {
-          shiftEnd = effectiveShift?.saturdayEndTime || satCheckoutTime;
-        }
-      }
-      
-      // Sort all scans chronologically
-      entry.scans.sort((a, b) => a.time - b.time);
-      
-      const earliestScan = entry.scans[0];
-      const latestScan = entry.scans[entry.scans.length - 1];
-      const earliest = earliestScan.time;
-      const latest = latestScan.time;
-      const earliestVerifyMode = earliestScan.verifyMode;
-      
-      let checkIn = null;
-      let checkOut = null;
-      
-      // Treat multiple scans within 60 minutes of each other as a single scan day
-      // to handle duplicate/double-tap scans when arriving or leaving.
-      const timeDiffMinutes = (latest - earliest) / (1000 * 60);
-      const isSingleScan = entry.scans.length === 1 || timeDiffMinutes < 60;
-      
-      if (isSingleScan) {
-        // === SMART SINGLE-SCAN DETECTION ===
-        // Calculate shift midpoint to determine if scan is check-in or check-out
-        const [startH, startM] = shiftStart.split(':').map(Number);
-        const [endH, endM] = shiftEnd.split(':').map(Number);
-        const shiftStartMinutes = startH * 60 + startM;
-        let shiftEndMinutes = endH * 60 + endM;
-        
-        if (shiftEndMinutes < shiftStartMinutes) {
-          shiftEndMinutes += 24 * 60; // Handle night shift crossing midnight
-        }
-        
-        const midpointMinutes = Math.floor((shiftStartMinutes + shiftEndMinutes) / 2);
-        
-        const scanHour = earliest.getHours();
-        const scanMinute = earliest.getMinutes();
-        let scanMinutes = scanHour * 60 + scanMinute;
-        
-        // If it's a night shift and the scan is in the morning (after midnight)
-        if (shiftEndMinutes > 1440 && scanMinutes < shiftStartMinutes - 6 * 60) {
-          scanMinutes += 24 * 60;
-        }
-        
-        if (scanMinutes <= midpointMinutes) {
-          // Scan sebelum/saat tengah shift → ini MASUK (checkIn)
-          checkIn = earliest;
-          checkOut = null;
-        } else {
-          // Scan setelah tengah shift → ini PULANG (checkOut)
-          checkIn = null;
-          checkOut = earliest;
-        }
-      } else {
-        // Multiple scans — paling awal = checkIn, paling akhir = checkOut
-        checkIn = earliest;
-        checkOut = latest;
-      }
-      
-      // Calculate Lateness (only if checkIn exists)
-      const calc = checkIn 
-        ? calculateLateness(checkIn, shiftStart, gracePeriod, shiftEnd, roundingConfig)
-        : { lateMinutes: 0, status: 'Mangkir' };
-      
-      // Resolve status using updated logic
-      const status = resolveStatus(checkIn, checkOut, calc.status, entry.date, penaltyRules, shiftEnd, shiftStart);
-      
-      // Determine verification mode (label seragam: 'Fingerprint' selaras cron & commit)
-      let finalMode = deviceSync.MACHINE_MODE;
-      if (earliestVerifyMode === 0 || earliestVerifyMode === 3 || earliestVerifyMode === 4) {
-        finalMode = 'Pinned';
-      } else if (earliestVerifyMode === 2) {
-        finalMode = 'Carded';
-      } else if (earliestVerifyMode === 15) {
-        finalMode = 'Face Machine';
-      }
-      
-      recordsToCreate.push({
-        employeeId: entry.employeeId,
-        date: entry.date,
-        checkIn: checkIn,
-        checkOut: checkOut,
-        status: status,
-        lateMinutes: calc.lateMinutes,
-        mode: finalMode,
-        shiftStart,
-        shiftEnd,
-        gracePeriod
-      });
-    }
+    setSyncProgress(devId, 90, 'finalizing', 'Menyiapkan hasil...');
 
     // Check if it's just a preview request
     const isPreview = req.query.preview === 'true';
@@ -1043,7 +926,7 @@ const syncAttendance = async (req, res) => {
       // Build diagnostic message
       let message;
       if (recordsToCreate.length > 0) {
-        message = `Ditemukan ${recordsToCreate.length} record absen baru. (Terbaik dari ${allAttemptCounts.length}x percobaan: [${allAttemptCounts.join(', ')}] log)`;
+        message = `Ditemukan ${recordsToCreate.length} record absen baru. (Terbaik dari ${allAttemptCounts.length}x percobaan: [${allAttemptCounts.join(', ')}] log)${truncationWarning}`;
       } else if (totalLogsFromDevice === 0) {
         message = 'Tidak ada data log di mesin.';
       } else if (logsInRange === 0) {
@@ -1052,8 +935,10 @@ const syncAttendance = async (req, res) => {
         message = `Ditemukan ${totalLogsFromDevice} log di mesin (${logsInRange} dalam range tanggal), tapi ${unmatchedPins.size} PIN tidak cocok dengan karyawan manapun. Jalankan "Sync Personnel" terlebih dahulu untuk menghubungkan data mesin dengan database karyawan.`;
       }
 
-      return res.json({ 
-        success: true, 
+      setSyncProgress(devId, 100, 'done', `${recordsToCreate.length} record siap ditinjau`);
+      clearSyncProgress(devId);
+      return res.json({
+        success: true,
         message,
         syncToken, // <-- Secure session sync token
         data: previewData,
@@ -1070,15 +955,20 @@ const syncAttendance = async (req, res) => {
             earliest: earliestDeviceLog.toISOString(),
             latest: latestDeviceLog.toISOString()
           } : null,
-          fetchAttempts: allAttemptCounts
+          fetchAttempts: allAttemptCounts,
+          deviceReportedCount,
+          truncated
         }
       });
     }
 
     // Simpan via logika bersama: merge (masuk paling awal/pulang paling akhir) + proteksi HRD/cuti + label seragam
+    setSyncProgress(devId, 80, 'saving', 'Menyimpan ke database...');
     const persistResult = await deviceSync.persistAttendanceRecords(recordsToCreate, { penaltyRules, roundingConfig });
     const saved = persistResult.saved;
     const savedEmployees = { size: persistResult.employeeCount };
+    setSyncProgress(devId, 100, 'done', `${saved} record tersimpan`);
+    clearSyncProgress(devId);
 
     // Update last sync time
     await prisma.device.update({
@@ -1103,15 +993,17 @@ const syncAttendance = async (req, res) => {
 
     res.json({ 
       success: true, 
-      message: `Sinkronisasi Absen berhasil. ${saved} record absen diperbarui. (Terbaik dari ${allAttemptCounts.length}x percobaan: [${allAttemptCounts.join(', ')}] log)`,
+      message: `Sinkronisasi Absen berhasil. ${saved} record absen diperbarui. (Terbaik dari ${allAttemptCounts.length}x percobaan: [${allAttemptCounts.join(', ')}] log)${truncationWarning}`,
       savedCount: saved,
       employeeCount: savedEmployees.size
     });
   } catch (err) {
+    setSyncProgress(devId, 100, 'error', err.message || 'Gagal menarik data');
+    clearSyncProgress(devId);
     // Tandai offline jika gagal
     try {
       await prisma.device.update({
-        where: { id: parseInt(id) },
+        where: { id: devId },
         data: { status: 'OFFLINE' }
       });
     } catch (e) {}
@@ -1313,7 +1205,7 @@ const clearDeviceLogs = async (req, res) => {
 
     console.log(`[Device] Clearing attendance logs for device ${device.name}...`);
 
-    zkInstance = new ZKLib(device.ipAddress, device.port, 60000, 30000);
+    zkInstance = new ZKLib(device.ipAddress, device.port, 180000, 90000);
     await zkInstance.createSocket();
 
     // SAFETY: tarik & simpan SELURUH log dulu sebelum dihapus agar tidak ada data yang hilang.
@@ -1405,6 +1297,13 @@ const getDeviceSyncLogs = async (req, res) => {
   }
 };
 
+// GET /:id/sync-progress — progres tarik absensi terkini (dipanggil polling oleh UI)
+const getSyncProgress = (req, res) => {
+  const id = parseInt(req.params.id);
+  const progress = global.deviceSyncProgress[id] || { percent: 0, phase: 'idle', message: '' };
+  res.json({ success: true, progress });
+};
+
 module.exports = {
   getDevices,
   addDevice,
@@ -1416,5 +1315,6 @@ module.exports = {
   commitAttendance,
   getDeviceStats,
   clearDeviceLogs,
-  getDeviceSyncLogs
+  getDeviceSyncLogs,
+  getSyncProgress
 };

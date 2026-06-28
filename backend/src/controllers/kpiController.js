@@ -13,19 +13,33 @@ const submitEvaluation = async (req, res) => {
       return res.status(400).json({ success: false, message: 'ID karyawan, periode, dan target KPI (array) harus diisi.' });
     }
 
+    // Validasi format periode: YYYY-Q1..Q4 atau YYYY-Annual
+    if (!/^\d{4}-(Q[1-4]|Annual)$/.test(period)) {
+      return res.status(400).json({ success: false, message: 'Format periode tidak valid (contoh: 2026-Q1 atau 2026-Annual).' });
+    }
+
     const employee = await prisma.employee.findUnique({ where: { id: parseInt(employeeId) } });
     if (!employee) {
       return res.status(404).json({ success: false, message: 'Karyawan tidak ditemukan.' });
     }
 
+    // Sanitasi: clamp skor 0–100 & bobot tak negatif (cegah nilai di luar rentang).
+    const clamp = (v) => {
+      const n = parseFloat(v);
+      return Math.max(0, Math.min(100, isNaN(n) ? 0 : n));
+    };
+    const sanitizedKPI = targetKPI.map(k => ({
+      ...k,
+      score: clamp(k.score),
+      weight: Math.max(0, parseFloat(k.weight) || 0),
+    }));
+
     // Calculate weighted final score
     let finalScore = 0;
     let totalWeight = 0;
-    targetKPI.forEach(k => {
-      const weight = parseFloat(k.weight) || 0;
-      const score = parseFloat(k.score) || 0;
-      finalScore += (score * weight) / 100;
-      totalWeight += weight;
+    sanitizedKPI.forEach(k => {
+      finalScore += (k.score * k.weight) / 100;
+      totalWeight += k.weight;
     });
 
     // Normalize final score if total weight is not exactly 100%
@@ -33,7 +47,7 @@ const submitEvaluation = async (req, res) => {
       finalScore = (finalScore / totalWeight) * 100;
     }
 
-    const roundedScore = Math.round(finalScore * 100) / 100;
+    const roundedScore = clamp(Math.round(finalScore * 100) / 100);
 
     const kpi = await prisma.employeeKPI.upsert({
       where: {
@@ -43,7 +57,7 @@ const submitEvaluation = async (req, res) => {
         }
       },
       update: {
-        targetKPI,
+        targetKPI: sanitizedKPI,
         finalScore: roundedScore,
         reviewNote: reviewNote || null,
         evaluatedBy: req.user.username,
@@ -52,7 +66,7 @@ const submitEvaluation = async (req, res) => {
       create: {
         employeeId: parseInt(employeeId),
         period,
-        targetKPI,
+        targetKPI: sanitizedKPI,
         finalScore: roundedScore,
         reviewNote: reviewNote || null,
         evaluatedBy: req.user.username,
@@ -367,9 +381,12 @@ const getKpiAttendancePercentage = async (req, res) => {
     const leaveCount = records.filter(r => ['CUTI', 'SAKIT', 'IZIN'].includes(r.status)).length;
     const absentCount = records.filter(r => ['ABSENT', 'MANGKIR'].includes(r.status)).length;
     const holidayCount = records.filter(r => r.status === 'HOLIDAY').length;
-    const totalDays = presentCount + leaveCount + absentCount;
 
-    const attendanceRate = totalDays > 0 ? Math.round((presentCount / totalDays) * 10000) / 100 : 100;
+    // Cuti/izin/sakit (disetujui) bersifat NETRAL — tidak masuk penyebut agar tak menghukum kehadiran.
+    const totalDays = presentCount + absentCount;
+    const hasData = totalDays > 0;
+    // Jangan default 100% saat tak ada data (menyesatkan) — kirim null + hasData=false.
+    const attendanceRate = hasData ? Math.round((presentCount / totalDays) * 10000) / 100 : null;
 
     res.json({
       success: true,
@@ -383,6 +400,7 @@ const getKpiAttendancePercentage = async (req, res) => {
         absent: absentCount,
         holiday: holidayCount,
         totalWorkingDays: totalDays,
+        hasData,
         attendanceRate
       }
     });

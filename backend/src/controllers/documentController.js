@@ -5,14 +5,23 @@ const multer = require('multer');
 const { recordAuditLog } = require('./auditLogController');
 const { validateSafePath, handleControllerError } = require('../middleware/validate');
 
-// Configure disk storage for Multer
+// Configure disk storage for Multer — dokumen dikategorikan ke FOLDER PER-KARYAWAN berdasarkan NIK.
+// Struktur: public/uploads/documents/{NIK}/doc-{id}-{timestamp}-{acak}.{ext}
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    const dest = path.join(process.cwd(), 'public', 'uploads', 'documents');
-    if (!fs.existsSync(dest)) {
-      fs.mkdirSync(dest, { recursive: true });
-    }
-    cb(null, dest);
+    prisma.employee
+      .findUnique({ where: { id: parseInt(req.params.id) }, select: { employeeCode: true } })
+      .then(emp => {
+        const rawNik = emp?.employeeCode ? String(emp.employeeCode).trim() : '';
+        // Sanitasi agar aman jadi nama folder (NIK biasanya angka / BHL-xxxx / TEMP_PIN_xxxx)
+        const folder = (rawNik || `id-${req.params.id}`).replace(/[^a-zA-Z0-9_-]/g, '_');
+        const dest = path.join(process.cwd(), 'public', 'uploads', 'documents', folder);
+        if (!fs.existsSync(dest)) {
+          fs.mkdirSync(dest, { recursive: true });
+        }
+        cb(null, dest);
+      })
+      .catch(err => cb(err));
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -63,7 +72,9 @@ const uploadDocument = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Karyawan tidak ditemukan.' });
     }
 
-    const fileUrl = `/uploads/documents/${req.file.filename}`;
+    // Bangun URL dari path aktual (mengikuti folder NIK) relatif terhadap /public
+    const relPath = path.relative(path.join(process.cwd(), 'public'), req.file.path).split(path.sep).join('/');
+    const fileUrl = '/' + relPath;
 
     const document = await prisma.employeeDocument.create({
       data: {
@@ -184,7 +195,13 @@ const getContractAlerts = async (req, res) => {
           not: null,
           gte: today,
           lte: limitDate
-        }
+        },
+        // Hanya karyawan kontrak (PKWT/KONTRAK) agar konsisten dengan halaman Manajemen Kontrak.
+        // Karyawan Training punya halaman & alert sendiri, jangan dihitung sebagai "PKWT".
+        OR: [
+          { employmentStatus: { contains: 'PKWT', mode: 'insensitive' } },
+          { employmentStatus: { contains: 'KONTRAK', mode: 'insensitive' } }
+        ]
       },
       include: { department: true },
       orderBy: { contractEnd: 'asc' }

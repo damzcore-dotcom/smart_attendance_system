@@ -1,5 +1,5 @@
 const prisma = require('../prismaClient');
-const { calculateLateness, resolveStatus, parsePenaltySettings } = require('../utils/lateCalculator');
+const { calculateLateness, resolveStatus, parsePenaltySettings, getJakartaTimeParts } = require('../utils/lateCalculator');
 const { toUTCMidnight, parseUTCDate, getUTCToday, getUTCYesterday, getUTCStartOfWeek, getUTCStartOfMonth, getUTCEndOfDay, VALID_STATUSES, MANGKIR_PENALTY_MINUTES } = require('../utils/dateHelper');
 const { getDistance } = require('../utils/geo');
 const XLSX = require('xlsx');
@@ -71,13 +71,19 @@ const getAll = async (req, res) => {
     const where = {};
 
     if (locationId && locationId !== 'All' && locationId !== '') {
+      // Dibungkus AND agar tidak menimpa OR filter lain (mis. onlyBhl) di where.employee.
       where.employee = {
         ...where.employee,
-        OR: [
-          { locationId: { equals: locationId } },
-          { locationId: { startsWith: `${locationId},` } },
-          { locationId: { endsWith: `,${locationId}` } },
-          { locationId: { contains: `,${locationId},` } }
+        AND: [
+          ...(where.employee?.AND || []),
+          {
+            OR: [
+              { locationId: { equals: locationId } },
+              { locationId: { startsWith: `${locationId},` } },
+              { locationId: { endsWith: `,${locationId}` } },
+              { locationId: { contains: `,${locationId},` } }
+            ]
+          }
         ]
       };
     }
@@ -118,11 +124,19 @@ const getAll = async (req, res) => {
       where.employee = { ...where.employee, position: position };
     }
 
-    // Search
+    // Search: cocokkan nama (contains) ATAU NIK/employeeCode (persis) — agar klik nama
+    // memakai NIK unik (tidak salah-cocok nama yang jadi sub-string nama lain, mis. "ADAM" ⊂ "MADAMIN").
+    // Di-nest dalam AND supaya tidak menimpa OR locationId di atas.
     if (search) {
+      const searchCond = {
+        OR: [
+          { name: { contains: search, mode: 'insensitive' } },
+          { employeeCode: { equals: String(search).trim() } },
+        ],
+      };
       where.employee = {
         ...where.employee,
-        name: { contains: search, mode: 'insensitive' },
+        AND: [...(where.employee?.AND || []), searchCond],
       };
     }
     if (status && status !== 'All') {
@@ -144,11 +158,17 @@ const getAll = async (req, res) => {
     }
 
     if (req.query.onlyBhl === 'true') {
+      // Dibungkus AND agar tidak bentrok dengan OR locationId di atas.
       where.employee = {
         ...where.employee,
-        OR: [
-          { employmentStatus: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } },
-          { salaryCategory: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } }
+        AND: [
+          ...(where.employee?.AND || []),
+          {
+            OR: [
+              { employmentStatus: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } },
+              { salaryCategory: { in: ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'] } }
+            ]
+          }
         ]
       };
     }
@@ -193,10 +213,15 @@ const getAll = async (req, res) => {
         select: { employeeId: true }
       }),
       prisma.attendance.findMany({
-        where: { ...where, status: 'ABSENT' },
-        select: { 
+        // Kandidat reklasifikasi hari libur: ABSENT maupun MANGKIR (sebelumnya hanya ABSENT,
+        // sehingga MANGKIR di hari Minggu/libur tetap terhitung Mangkir di KPI padahal tabel menampilkannya "Libur").
+        where: { ...where, status: { in: ['ABSENT', 'MANGKIR'] } },
+        select: {
           date: true,
           employeeId: true,
+          status: true,
+          checkIn: true,
+          lateMinutes: true,
           employee: {
             select: {
               shift: {
@@ -307,9 +332,21 @@ const getAll = async (req, res) => {
 
       if (isLibur) {
         holidayCount++;
-        absenCount--;
+        if (r.status === 'MANGKIR') {
+          // Batalkan hitungan Mangkir + penalti yang sudah ditambahkan untuk record ini.
+          mangkirCount--;
+          if ((r.lateMinutes || 0) > 0) {
+            totalLate -= r.lateMinutes;
+          } else {
+            totalLate -= (r.checkIn ? penaltyRules.rule3Minutes : penaltyRules.rule1Minutes);
+          }
+        } else {
+          absenCount--;
+        }
       }
     });
+
+    totalLate = Math.max(0, totalLate);
 
     const summary = {
       total: total,
@@ -533,8 +570,8 @@ const checkIn = async (req, res) => {
     let shiftEnd = effectiveShift?.endTime || '17:00';
     const gracePeriod = effectiveShift ? effectiveShift.gracePeriod : globalGracePeriod;
 
-    // Apply Saturday Shift rules
-    if (now.getDay() === 6) {
+    // Apply Saturday Shift rules (hari pekan dihitung di WIB, lepas dari TZ proses)
+    if (getJakartaTimeParts(now).weekday === 6) {
       const satType = effectiveShift?.saturdayType || (isSaturdayHalfDay ? 'HALF_DAY' : 'FULL_DAY');
       if (satType === 'HALF_DAY') {
         shiftEnd = effectiveShift?.saturdayEndTime || satCheckoutTime;
@@ -614,7 +651,7 @@ const checkOut = async (req, res) => {
     });
 
     // C1 FIX: Night shift — if no record today, check yesterday (for employees who checked in last night)
-    if ((!attendance || !attendance.checkIn) && now.getHours() < 12) {
+    if ((!attendance || !attendance.checkIn) && getJakartaTimeParts(now).hour < 12) {
       const yesterday = getUTCYesterday();
       const yesterdayRecord = await prisma.attendance.findUnique({
         where: { employeeId_date: { employeeId, date: yesterday } },
@@ -1007,21 +1044,24 @@ const importFromExcel = async (req, res) => {
       let rawDateTime = row[colMap.dateTime] !== undefined ? row[colMap.dateTime] : row[2];
       if (rawDateTime === undefined || rawDateTime === null) continue;
 
+      // Mesin ZKTeco mengekspor WALL-CLOCK lokal (WIB). Bangun instan UTC secara EKSPLISIT
+      // (WIB=UTC+7 tetap) agar penyimpanan & bucket tanggal tidak bergantung pada TZ proses.
+      const WIB_OFFSET_H = 7;
       let eventTime;
       // Handle Excel Date Serial Number vs String
       if (typeof rawDateTime === 'number') {
-        eventTime = new Date(Math.round((rawDateTime - 25569) * 86400 * 1000));
-        // Normalize UTC back to Local Offset because Javascript serial parsing drops it
-        eventTime = new Date(eventTime.getTime() + (eventTime.getTimezoneOffset() * 60000));
+        const wibMs = Math.round((rawDateTime - 25569) * 86400 * 1000);
+        const w = new Date(wibMs); // komponen UTC dari w = wall-clock WIB
+        eventTime = new Date(Date.UTC(w.getUTCFullYear(), w.getUTCMonth(), w.getUTCDate(), w.getUTCHours() - WIB_OFFSET_H, w.getUTCMinutes(), w.getUTCSeconds()));
       } else {
         rawDateTime = rawDateTime.toString().trim();
         if (rawDateTime.includes('/')) {
            const parts = rawDateTime.split(' ');
            const dateParts = parts[0].split('/');
-           const m = parseInt(dateParts[0]); 
-           const d = parseInt(dateParts[1]); 
+           const m = parseInt(dateParts[0]);
+           const d = parseInt(dateParts[1]);
            const y = parseInt(dateParts[2]) < 100 ? parseInt(dateParts[2]) + 2000 : parseInt(dateParts[2]);
-           
+
            let hours = 0, minutes = 0, seconds = 0;
            if (parts[1]) {
              const timeParts = parts[1].split(':');
@@ -1032,7 +1072,7 @@ const importFromExcel = async (req, res) => {
              if (ampm === 'PM' && hours < 12) hours += 12;
              if (ampm === 'AM' && hours === 12) hours = 0;
            }
-           eventTime = new Date(y, m - 1, d, hours, minutes, seconds);
+           eventTime = new Date(Date.UTC(y, m - 1, d, hours - WIB_OFFSET_H, minutes, seconds));
         } else {
            eventTime = new Date(rawDateTime);
         }
@@ -1044,10 +1084,12 @@ const importFromExcel = async (req, res) => {
       if (eventTime.getTime() < minDateMs) minDateMs = eventTime.getTime();
       if (eventTime.getTime() > maxDateMs) maxDateMs = eventTime.getTime();
 
-      const y = eventTime.getFullYear();
-      const m = eventTime.getMonth() + 1;
-      const d = eventTime.getDate();
-      const hours = eventTime.getHours();
+      // Komponen wall-clock WIB (lepas dari TZ proses) untuk bucket tanggal & klasifikasi masuk/pulang.
+      const wp = getJakartaTimeParts(eventTime);
+      const y = wp.year;
+      const m = wp.month;
+      const d = wp.day;
+      const hours = wp.hour;
 
       let emp = empByCode[rawId] || empByName[rawName.toLowerCase()];
       if (!emp) {
@@ -1071,7 +1113,7 @@ const importFromExcel = async (req, res) => {
       const empShiftStart = effectiveShift?.startTime || '08:00';
       let empShiftEnd = effectiveShift?.endTime || '17:00';
       
-      const dayOfWeek = eventTime.getDay(); // 0 = Sunday, 6 = Saturday
+      const dayOfWeek = wp.weekday; // 0 = Sunday, 6 = Saturday (WIB)
       if (dayOfWeek === 6) {
         const satType = effectiveShift?.saturdayType || (isSaturdayHalfDay ? 'HALF_DAY' : 'FULL_DAY');
         if (satType === 'HALF_DAY') {
@@ -1083,14 +1125,14 @@ const importFromExcel = async (req, res) => {
       const [eH, eM] = empShiftEnd.split(':').map(Number);
       const shiftStartMinutes = sH * 60 + sM;
       let shiftEndMinutes = eH * 60 + eM;
-      
+
       if (shiftEndMinutes < shiftStartMinutes) {
         shiftEndMinutes += 24 * 60; // Handle night shift crossing midnight
       }
-      
+
       const midpointMinutes = Math.floor((shiftStartMinutes + shiftEndMinutes) / 2);
-      const scanHour = eventTime.getHours();
-      const scanMinute = eventTime.getMinutes();
+      const scanHour = wp.hour;
+      const scanMinute = wp.minute;
       let scanMinutes = scanHour * 60 + scanMinute;
       
       if (shiftEndMinutes > 1440 && scanMinutes < shiftStartMinutes - 6 * 60) {
@@ -2503,6 +2545,34 @@ const getCorrectionHistory = async (req, res) => {
   }
 };
 
+/**
+ * POST /api/attendance/materialize-absences
+ * Backfill baris ABSENT untuk rentang tanggal kerja. Default dryRun=true (hanya menghitung,
+ * tidak menulis). Kirim { startDate, endDate, dryRun:false } untuk benar-benar menulis.
+ */
+const materializeAbsences = async (req, res) => {
+  try {
+    const { startDate, endDate, dryRun, minExisting } = req.body || {};
+    if (!startDate || !endDate) {
+      return res.status(400).json({ success: false, message: 'startDate dan endDate (YYYY-MM-DD) wajib diisi.' });
+    }
+    const { backfillAbsences } = require('../utils/attendanceMaintenance');
+    const result = await backfillAbsences(String(startDate).slice(0, 10), String(endDate).slice(0, 10), {
+      dryRun: dryRun !== false,
+      minExisting: Number.isInteger(minExisting) ? minExisting : 1,
+    });
+    res.json({
+      success: true,
+      message: result.dryRun
+        ? `Pratinjau: akan membuat ${result.totalWillCreate} baris ABSENT pada ${result.workdays} hari kerja.`
+        : `Selesai: ${result.totalCreated} baris ABSENT dibuat pada ${result.workdays} hari kerja.`,
+      data: result,
+    });
+  } catch (err) {
+    handleControllerError(res, err, 'attendanceController.materializeAbsences');
+  }
+};
+
 module.exports = {
   getAll,
   checkIn,
@@ -2522,5 +2592,6 @@ module.exports = {
   manualCorrectionHRD,
   getOvertimeSummary,
   getBhlSummary,
-  getCorrectionHistory
+  getCorrectionHistory,
+  materializeAbsences
 };

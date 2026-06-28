@@ -291,6 +291,27 @@ const Employees = ({ isReadOnly = false }) => {
 
   const handleAddEmployee = (e) => {
     e.preventDefault();
+
+    // Validasi prioritas: status karyawan WAJIB dipilih, dan tanggal sesuai status agar
+    // tidak ada kesalahan input. (Field tab "Informasi Kerja" tak selalu ter-render,
+    // jadi divalidasi di sini, bukan hanya lewat 'required' bawaan browser.)
+    const es = (newEmployee.employmentStatus || '').toString().trim();
+    const up = es.toUpperCase();
+    const isContract = up.includes('PKWT') || up.includes('KONTRAK');
+    const isTraining = up.includes('TRAINING');
+    const isKeluar = up.includes('KELUAR') || up.includes('OUT');
+
+    const fail = (msg) => { alert(msg); setActiveTab('hr'); };
+
+    if (!es) { return fail('Silakan pilih Status Karyawan terlebih dahulu (tab Informasi Kerja).'); }
+    if (!newEmployee.joinDate) { return fail('Tanggal Masuk wajib diisi.'); }
+    if ((isContract || isTraining) && !newEmployee.contractEnd) {
+      return fail(`Tanggal Selesai ${isTraining ? 'Training' : 'Kontrak'} wajib diisi untuk status ${isTraining ? 'Training' : 'Kontrak (PKWT)'}.`);
+    }
+    if (isKeluar && !newEmployee.terminationDate) {
+      return fail('Tanggal Keluar wajib diisi untuk status Keluar.');
+    }
+
     if (newEmployee.dbId) {
       updateMutation.mutate({ id: newEmployee.dbId, data: newEmployee });
     } else {

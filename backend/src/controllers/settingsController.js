@@ -18,6 +18,21 @@ const getPublicInfo = async (req, res) => {
     });
     const obj = {};
     settings.forEach(s => { obj[s.key] = s.value; });
+
+    // Demo mode detection (no effect when DEMO_MODE env not set)
+    if (process.env.DEMO_MODE === 'true') {
+      obj.demoMode = true;
+      obj.demoContact = '082124130065';
+      try {
+        const licSetting = await prisma.settings.findUnique({ where: { key: 'licenseKey' } });
+        if (licSetting?.value) {
+          const [payloadB64] = licSetting.value.split('.');
+          const payload = JSON.parse(Buffer.from(payloadB64, 'base64').toString('utf8'));
+          obj.demoExpiry = payload.expiry;
+        }
+      } catch (e) { /* ignore */ }
+    }
+
     res.json({ success: true, data: obj });
   } catch (err) {
     handleControllerError(res, err, 'settingsController');

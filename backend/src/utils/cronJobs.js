@@ -3,9 +3,59 @@ const prisma = require('../prismaClient');
 const ZKLib = require('node-zklib');
 const { calculateLateness, resolveStatus, parsePenaltySettings } = require('./lateCalculator');
 const deviceSync = require('./deviceSync');
+const backupService = require('./backupService');
 
 // Runs every minute to check if any device needs auto-sync (agar jam non-kelipatan-5, mis. 08:09, tetap terpicu)
+const { materializeYesterday } = require('./attendanceMaintenance');
+
+// Recalc status absensi untuk satu rentang tanggal (reuse handler recalculate via stub req/res),
+// agar PRESENT-tanpa-pulang otomatis menjadi MANGKIR (rule-3) setelah shift berakhir.
+const recalcRange = async (startDate, endDate) => {
+  const { recalculate } = require('../controllers/attendanceController');
+  return new Promise((resolve) => {
+    const req = { body: { startDate, endDate } };
+    const res = {
+      json: (payload) => resolve(payload),
+      status: () => ({ json: (payload) => resolve(payload) }),
+    };
+    recalculate(req, res).catch((e) => resolve({ success: false, message: e.message }));
+  });
+};
+
 const startCronJobs = () => {
+  // Backup otomatis terjadwal — diperiksa tiap menit, menulis file saat jam cocok.
+  cron.schedule('* * * * *', async () => {
+    try {
+      await backupService.runScheduledBackupIfDue(new Date());
+    } catch (err) {
+      console.error('[Cron] Scheduled backup check failed:', err.message);
+    }
+  });
+
+  // Materialisasi absen kemarin — sekali sehari pukul 01:05 (WIB).
+  cron.schedule('5 1 * * *', async () => {
+    try {
+      const r = await materializeYesterday();
+      console.log(`[Cron] Materialisasi absen ${r.date}: dibuat ${r.created} ABSENT (libur=${!r.isWorkday}, cuti=${r.leaves}).`);
+    } catch (err) {
+      console.error('[Cron] Materialisasi absen gagal:', err.message);
+    }
+  });
+
+  // Recalc status harian pukul 23:30 (WIB) — finalkan PRESENT-tanpa-pulang → MANGKIR setelah shift,
+  // dan menit-telat mengikuti shift terbaru. Mencakup hari ini + kemarin (jaga-jaga shift malam).
+  cron.schedule('30 23 * * *', async () => {
+    try {
+      const today = new Date();
+      const yest = new Date(today); yest.setDate(yest.getDate() - 1);
+      const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const r = await recalcRange(fmt(yest), fmt(today));
+      console.log(`[Cron] Recalc status harian: ${r?.message || 'selesai'}`);
+    } catch (err) {
+      console.error('[Cron] Recalc harian gagal:', err.message);
+    }
+  });
+
   cron.schedule('* * * * *', async () => {
     try {
       const now = new Date();

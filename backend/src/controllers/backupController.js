@@ -1,54 +1,12 @@
+const fs = require('fs');
+const path = require('path');
 const prisma = require('../prismaClient');
 const { recordAuditLog } = require('./auditLogController');
 
 const { handleControllerError } = require('../middleware/validate');
-// Unified list of models in order of dependency resolution (independents first, children later)
-const models = [
-  // Independent tables
-  'settings',
-  'department',
-  'shift',
-  'location',
-  'announcement',
-  'massLeave',
-  'device',
-  'camera',
-  'chatLog',
-  'nlpKeywordConfig',
-  'companyCalendar',
-  'overtimeRule',
-  'salaryComponent',
-  'payrollConfig',
-  'auditLog',
-  'payroll',
-
-  // Tables depending on independent tables
-  'employee',
-  'positionAllowance',
-  'unknownFaceAlert',
-
-  // Tables depending on employee / user / payroll
-  'user',
-  'employeeShiftOverride',
-  'employeeDocument',
-  'attendance',
-  'correctionRequest',
-  'notification',
-  'leaveRequest',
-  'fingerTemplate',
-  'deviceUser',
-  'employeeSalary',
-  'payrollDetail',
-  'faceEvent',
-  'reimbursementClaim',
-  'profileUpdateRequest',
-  'employeeKPI',
-  'pushToken',
-
-  // Tables depending on user
-  'managerAccess',
-  'menuPermission'
-];
+const backupService = require('../utils/backupService');
+// Daftar model (terurut dependensi) dipusatkan di backupService agar export, restore, dan jadwal konsisten.
+const { models } = backupService;
 
 /**
  * GET /api/backup/export
@@ -56,17 +14,15 @@ const models = [
  */
 const exportData = async (req, res) => {
   try {
-    const backup = {
-      timestamp: new Date().toISOString(),
-      version: '1.0',
-      data: {}
-    };
-
-    for (const model of models) {
-      if (prisma[model]) {
-        backup.data[model] = await prisma[model].findMany();
-      }
+    // Block in demo mode
+    if (process.env.DEMO_MODE === 'true') {
+      return res.status(403).json({
+        success: false,
+        message: '⚠️ Fitur Backup tidak tersedia di versi Demo. Hubungi 082124130065 untuk lisensi penuh.',
+        code: 'DEMO_RESTRICTED'
+      });
     }
+    const backup = await backupService.createBackupObject();
 
     // Record Audit Log
     if (req.user) {
@@ -94,6 +50,14 @@ const exportData = async (req, res) => {
  */
 const restoreData = async (req, res) => {
   try {
+    // Block in demo mode
+    if (process.env.DEMO_MODE === 'true') {
+      return res.status(403).json({
+        success: false,
+        message: '⚠️ Fitur Restore tidak tersedia di versi Demo. Hubungi 082124130065 untuk lisensi penuh.',
+        code: 'DEMO_RESTRICTED'
+      });
+    }
     const { backup } = req.body;
 
     if (!backup || !backup.data) {
@@ -204,5 +168,147 @@ const restoreData = async (req, res) => {
   }
 };
 
-module.exports = { exportData, restoreData };
+/**
+ * GET /api/backup/schedule
+ * Konfigurasi jadwal + lokasi + daftar file backup di server
+ */
+const getSchedule = async (req, res) => {
+  try {
+    const config = await backupService.getBackupConfig();
+    const location = await backupService.getBackupDir();
+    const files = backupService.listBackupFiles(location);
+    res.json({
+      success: true,
+      data: { config, location, files }
+    });
+  } catch (err) {
+    handleControllerError(res, err, 'backupController.getSchedule');
+  }
+};
+
+/**
+ * PUT /api/backup/schedule
+ * Simpan konfigurasi jadwal backup otomatis
+ */
+const updateSchedule = async (req, res) => {
+  try {
+    if (process.env.DEMO_MODE === 'true') {
+      return res.status(403).json({ success: false, message: '⚠️ Tidak tersedia di versi Demo.', code: 'DEMO_RESTRICTED' });
+    }
+    let config;
+    try {
+      config = await backupService.saveBackupConfig(req.body || {});
+    } catch (e) {
+      // Validasi lokasi gagal (mis. path tidak bisa ditulis) → bad request, bukan 500.
+      return res.status(400).json({ success: false, message: e.message });
+    }
+    if (req.user) {
+      await recordAuditLog({
+        userId: req.user.id, username: req.user.username, role: req.user.role,
+        action: 'UPDATE', entity: 'BackupSchedule',
+        details: `Jadwal backup: ${config.enabled ? 'AKTIF' : 'NONAKTIF'}, ${config.frequency} @ ${config.time}, retensi ${config.retention}`
+      });
+    }
+    res.json({ success: true, message: 'Jadwal backup tersimpan.', data: config });
+  } catch (err) {
+    handleControllerError(res, err, 'backupController.updateSchedule');
+  }
+};
+
+/**
+ * POST /api/backup/run-now
+ * Buat backup ke server (disk) sekarang juga
+ */
+const runBackupNow = async (req, res) => {
+  try {
+    if (process.env.DEMO_MODE === 'true') {
+      return res.status(403).json({ success: false, message: '⚠️ Tidak tersedia di versi Demo.', code: 'DEMO_RESTRICTED' });
+    }
+    const result = await backupService.writeBackupToDisk('manual');
+    if (req.user) {
+      await recordAuditLog({
+        userId: req.user.id, username: req.user.username, role: req.user.role,
+        action: 'EXPORT', entity: 'Database',
+        details: `Backup manual ke server: ${result.fileName}`
+      });
+    }
+    res.json({ success: true, message: 'Backup berhasil dibuat di server.', data: result });
+  } catch (err) {
+    handleControllerError(res, err, 'backupController.runBackupNow');
+  }
+};
+
+/**
+ * GET /api/backup/files/:name
+ * Unduh file backup yang tersimpan di server
+ */
+const downloadBackupFile = async (req, res) => {
+  try {
+    const dir = await backupService.getBackupDir();
+    const full = backupService.resolveBackupFile(dir, req.params.name);
+    if (!full) return res.status(404).json({ success: false, message: 'File backup tidak ditemukan.' });
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename=${path.basename(full)}`);
+    fs.createReadStream(full).pipe(res);
+  } catch (err) {
+    handleControllerError(res, err, 'backupController.downloadBackupFile');
+  }
+};
+
+/**
+ * DELETE /api/backup/files/:name
+ * Hapus file backup di server
+ */
+const deleteBackupFile = async (req, res) => {
+  try {
+    if (process.env.DEMO_MODE === 'true') {
+      return res.status(403).json({ success: false, message: '⚠️ Tidak tersedia di versi Demo.', code: 'DEMO_RESTRICTED' });
+    }
+    const dir = await backupService.getBackupDir();
+    const full = backupService.resolveBackupFile(dir, req.params.name);
+    if (!full) return res.status(404).json({ success: false, message: 'File backup tidak ditemukan.' });
+    fs.unlinkSync(full);
+    if (req.user) {
+      await recordAuditLog({
+        userId: req.user.id, username: req.user.username, role: req.user.role,
+        action: 'DELETE', entity: 'Database', details: `Hapus file backup: ${path.basename(full)}`
+      });
+    }
+    res.json({ success: true, message: 'File backup dihapus.' });
+  } catch (err) {
+    handleControllerError(res, err, 'backupController.deleteBackupFile');
+  }
+};
+
+/**
+ * GET /api/backup/browse?path=...
+ * Menjelajah folder di server untuk folder picker
+ */
+const browseDirectories = async (req, res) => {
+  try {
+    const data = backupService.listDirectories(req.query.path);
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(400).json({ success: false, message: `Tidak dapat membuka folder: ${err.message}` });
+  }
+};
+
+/**
+ * POST /api/backup/browse-create
+ * Membuat folder baru di server (dari dalam folder picker)
+ */
+const createFolder = async (req, res) => {
+  try {
+    if (process.env.DEMO_MODE === 'true') {
+      return res.status(403).json({ success: false, message: '⚠️ Tidak tersedia di versi Demo.', code: 'DEMO_RESTRICTED' });
+    }
+    const { parent, name } = req.body || {};
+    const full = backupService.createDirectory(parent, name);
+    res.json({ success: true, data: { path: full } });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { exportData, restoreData, getSchedule, updateSchedule, runBackupNow, downloadBackupFile, deleteBackupFile, browseDirectories, createFolder };
 

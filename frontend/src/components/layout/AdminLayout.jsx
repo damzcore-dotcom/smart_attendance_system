@@ -32,9 +32,9 @@ import {
   GraduationCap,
   UserMinus
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { authAPI, dashboardAPI } from '../../services/api';
+import { authAPI, dashboardAPI, employeeAPI } from '../../services/api';
 import { AppLogo } from '../AppLogo';
 import LicenseFooter from '../LicenseFooter';
 import AiAssistantChat from '../chat/AiAssistantChat';
@@ -44,8 +44,24 @@ const AdminLayout = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [isNotificationsOpen, setNotificationsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Debounce the search box so we don't query the API on every keystroke
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 250);
+    return () => clearTimeout(id);
+  }, [searchQuery]);
+
+  // Scroll the content area back to the top on every route change so a new page
+  // never opens mid-scroll. Also close the search dropdown after navigating.
+  const mainRef = useRef(null);
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    setSearchOpen(false);
+  }, [location.pathname]);
 
   // Collapsible menus state
   const [expandedMenus, setExpandedMenus] = useState({
@@ -59,9 +75,18 @@ const AdminLayout = () => {
     }));
   };
 
+  // Collapsible top-level groups (grup aktif terbuka secara default, lainnya tertutup)
+  const [openGroups, setOpenGroups] = useState({});
+  const isGroupActive = (group) => group.items.some(it =>
+    location.pathname === it.path || (it.subItems && it.subItems.some(s => location.pathname === s.path))
+  );
+  const isGroupOpen = (group, idx) => (openGroups[idx] !== undefined ? openGroups[idx] : isGroupActive(group));
+  const toggleGroup = (group, idx) => setOpenGroups(prev => ({ ...prev, [idx]: !isGroupOpen(group, idx) }));
+
   const menuGroups = [
     {
       title: t('navigation.groups.main'),
+      icon: LayoutDashboard,
       items: [
         { name: t('navigation.dashboard'), path: '/admin', icon: LayoutDashboard, key: 'dashboard' },
         { name: t('navigation.announcements'), path: '/admin/announcements', icon: Megaphone, key: 'announcements' },
@@ -69,6 +94,7 @@ const AdminLayout = () => {
     },
     {
       title: t('navigation.groups.workforce'),
+      icon: Users,
       items: [
         { name: t('navigation.employees'), path: '/admin/employees', icon: Users, key: 'employees' },
         { name: t('navigation.contracts'), path: '/admin/contracts', icon: FileText, key: 'contracts' },
@@ -82,6 +108,7 @@ const AdminLayout = () => {
     },
     {
       title: t('navigation.groups.attendance'),
+      icon: CalendarCheck,
       items: [
         { name: t('navigation.attendanceData'), path: '/admin/attendance', icon: CalendarCheck, key: 'attendance' },
         { name: t('navigation.overtimeSpl'), path: '/admin/overtime-spl', icon: Clock, key: 'overtime-spl' },
@@ -92,6 +119,7 @@ const AdminLayout = () => {
     },
     {
       title: t('navigation.groups.payroll'),
+      icon: Banknote,
       items: [
         { name: t('navigation.payrollProcess'), path: '/admin/payroll', icon: Banknote, key: 'payroll' },
         { name: t('navigation.payrollSettings'), path: '/admin/payroll-settings', icon: Receipt, key: 'payroll-settings' },
@@ -99,8 +127,11 @@ const AdminLayout = () => {
       ]
     },
     {
-      title: t('navigation.groups.cctv'),
+      title: t('navigation.groups.devicesBiometric', 'Perangkat & biometrik'),
+      icon: Fingerprint,
       items: [
+        { name: t('navigation.devices'), path: '/admin/devices', icon: Fingerprint, key: 'devices' },
+        { name: t('navigation.fingerprintData'), path: '/admin/fingerprint', icon: Fingerprint, key: 'fingerprint' },
         { name: t('navigation.faceCheck'), path: '/admin/face-check', icon: ScanFace, key: 'face-check' },
         { name: t('navigation.faceEnrollment'), path: '/admin/face-enrollment', icon: Camera, key: 'face-check' },
         { name: t('navigation.cameras'), path: '/admin/cameras', icon: Video, key: 'face-check' },
@@ -108,38 +139,26 @@ const AdminLayout = () => {
       ]
     },
     {
-      title: t('navigation.groups.fingerprint'),
-      items: [
-        { name: t('navigation.devices'), path: '/admin/devices', icon: Fingerprint, key: 'devices' },
-        { name: t('navigation.fingerprintData'), path: '/admin/fingerprint', icon: Fingerprint, key: 'fingerprint' }
-      ]
-    },
-    {
       title: t('navigation.groups.system'),
+      icon: Settings,
       items: [
         { name: t('navigation.users'), path: '/admin/users', icon: UserCircle, key: 'users' },
         { name: t('navigation.backup'), path: '/admin/backup', icon: Database, key: 'backup' },
-        { 
-          name: t('navigation.settings'), 
-          path: '/admin/settings', 
-          icon: Settings, 
+        {
+          name: t('navigation.settings'),
+          path: '/admin/settings',
+          icon: Settings,
           key: 'settings',
           subItems: [
             { name: t('navigation.generalSettings'), path: '/admin/settings', tab: 'General' },
             { name: t('navigation.adminPermissions'), path: '/admin/settings', tab: 'Permissions', superAdminOnly: true },
             { name: t('navigation.systemLicense'), path: '/admin/settings', tab: 'License', superAdminOnly: true }
           ]
-        }
+        },
+        { name: t('navigation.auditLog'), path: '/admin/audit-log', icon: Shield, key: 'audit-log', superAdminOnly: true }
       ]
     }
   ];
-
-  const superAdminGroup = {
-    title: t('navigation.groups.superAdmin'),
-    items: [
-      { name: t('navigation.auditLog'), path: '/admin/audit-log', icon: Shield, key: 'audit-log' }
-    ]
-  };
 
 
   const { data: userData } = useQuery({
@@ -153,6 +172,14 @@ const AdminLayout = () => {
     refetchInterval: 60000,
   });
 
+  const { data: empSearchData, isFetching: empSearching } = useQuery({
+    queryKey: ['global-employee-search', debouncedSearch],
+    queryFn: () => employeeAPI.getAll({ search: debouncedSearch, limit: 6, light: 'true' }),
+    enabled: searchOpen && debouncedSearch.length >= 2,
+    staleTime: 30000,
+  });
+  const employeeResults = (debouncedSearch.length >= 2 && empSearchData?.data) ? empSearchData.data : [];
+
   const notifications = notificationsData?.data || [];
   const unreadCount = notifications.length;
 
@@ -163,9 +190,10 @@ const AdminLayout = () => {
     return {
       ...group,
       items: group.items.filter(item => {
+        if (item.superAdminOnly) return user.role === 'SUPER_ADMIN';
         if (user.role === 'SUPER_ADMIN' || user.permissions === 'ALL') return true;
         if (!user.permissions || !Array.isArray(user.permissions)) return false;
-        
+
         // Settings menu visibility check
         if (item.key === 'settings') {
           const hasMaster = user.permissions.some(p => p.menuKey === 'settings' && p.canRead);
@@ -179,9 +207,39 @@ const AdminLayout = () => {
     };
   }).filter(group => group.items.length > 0);
 
-  if (user.role === 'SUPER_ADMIN') {
-    visibleGroups.push(superAdminGroup);
-  }
+  // Menu/page shortcuts matching the query (respects the same permission filtering as the sidebar)
+  const pageResults = debouncedSearch.length >= 1
+    ? visibleGroups.flatMap(g => g.items.flatMap(it => {
+        const q = debouncedSearch.toLowerCase();
+        const matches = [];
+        if ((it.name || '').toLowerCase().includes(q)) matches.push({ name: it.name, path: it.path, icon: it.icon, group: g.title });
+        if (it.subItems) it.subItems.forEach(s => {
+          if ((s.name || '').toLowerCase().includes(q)) matches.push({ name: s.name, path: s.path, icon: it.icon, group: g.title, tab: s.tab });
+        });
+        return matches;
+      })).slice(0, 6)
+    : [];
+
+  const hasResults = employeeResults.length > 0 || pageResults.length > 0;
+  const showSearchDropdown = searchOpen && debouncedSearch.length >= 1;
+
+  const closeSearch = () => { setSearchOpen(false); setSearchQuery(''); };
+  const goToEmployee = (emp) => {
+    closeSearch();
+    navigate('/admin/employees', { state: { editEmployeeCode: emp.employeeCode, cameFrom: location.pathname } });
+  };
+  const goToPage = (pg) => {
+    closeSearch();
+    navigate(pg.path, pg.tab ? { state: { tab: pg.tab } } : undefined);
+  };
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'Escape') { setSearchOpen(false); e.currentTarget.blur(); }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (employeeResults[0]) goToEmployee(employeeResults[0]);
+      else if (pageResults[0]) goToPage(pageResults[0]);
+    }
+  };
 
   const handleLogout = () => {
     authAPI.logout();
@@ -189,134 +247,122 @@ const AdminLayout = () => {
   };
 
   return (
-    <div className={`flex h-screen print:h-auto relative overflow-hidden print:overflow-visible font-sans bg-[#f7f8fc] print:bg-white ${isSidebarOpen ? 'sidebar-open' : 'sidebar-collapsed'}`}>
+    <div className={`flex h-screen print:h-auto relative overflow-hidden print:overflow-visible font-sans bg-[#F6F3EC] print:bg-white ${isSidebarOpen ? 'sidebar-open' : 'sidebar-collapsed'}`}>
 
       {/* Sidebar */}
-      <aside 
+      <aside
         className={`${
-          isSidebarOpen ? 'w-72' : 'w-20'
-        } bg-white border-r border-slate-200 transition-all duration-500 flex flex-col z-30 shrink-0 print:hidden`}
+          isSidebarOpen ? 'w-64' : 'w-20'
+        } bg-white border-r border-[#ECE6DA] transition-all duration-500 flex flex-col z-30 shrink-0 print:hidden`}
       >
-        <div className="p-6 flex items-center justify-center border-b border-slate-100 min-h-[88px]">
+        <div className="p-6 flex items-center justify-center border-b border-[#ECE6DA] min-h-[88px]">
           {isSidebarOpen ? (
             <div className="flex flex-col items-center animate-in fade-in slide-in-from-left-2 duration-700 w-full px-4 pt-1 group relative">
               <div className="w-full max-w-[180px] flex justify-center transition-transform duration-500 group-hover:scale-105">
-                <AppLogo className="w-full h-auto object-contain drop-shadow-sm text-slate-800" />
+                <AppLogo className="w-full h-auto object-contain text-[#1B1A17]" />
               </div>
-              <span className="text-xs font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-slate-500 tracking-wider uppercase text-center mt-1 drop-shadow-sm">Smart HRIS Platform</span>
+              <span className="text-[11px] font-medium text-[#8A3A18] tracking-wide text-center mt-1">Smart HRIS Platform</span>
             </div>
           ) : (
-            <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center shrink-0 shadow-md">
-              <span className="text-white font-black text-lg">I</span>
+            <div className="w-10 h-10 bg-[#C0532B] rounded-xl flex items-center justify-center shrink-0">
+              <span className="text-white font-medium text-lg">I</span>
             </div>
           )}
         </div>
 
-        <nav className="flex-1 px-4 space-y-4 mt-6 overflow-y-auto custom-scrollbar">
-          {visibleGroups.map((group, idx) => (
-            <div key={idx} className="space-y-1">
-              {isSidebarOpen ? (
-                <div className="px-3 mb-2">
-                  <span className="text-[10px] font-bold text-slate-400 tracking-wider uppercase">{group.title}</span>
-                </div>
-              ) : (
-                <div className="w-full h-px bg-slate-100 my-2" />
-              )}
-              {group.items.map((item) => {
-                const Icon = item.icon;
-                const hasSubItems = item.subItems && item.subItems.length > 0;
-                
-                // Filter subItems based on role
-                const visibleSubItems = hasSubItems 
-                  ? item.subItems.filter(sub => !sub.superAdminOnly || user.role === 'SUPER_ADMIN')
-                  : [];
-                
-                const isExpanded = expandedMenus[item.key];
-                
-                if (isSidebarOpen && visibleSubItems.length > 0) {
-                  const isAnySubActive = visibleSubItems.some(sub => 
-                    location.pathname === sub.path && 
-                    (location.state?.tab === sub.tab || (!location.state?.tab && sub.tab === 'General'))
-                  );
-                  
-                  return (
-                    <div key={item.name} className="space-y-1">
-                      {/* Parent Menu Header */}
-                      <button
-                        onClick={() => toggleMenu(item.key)}
-                        className={`w-[calc(100%-12px)] flex items-center gap-3 ml-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative text-left cursor-pointer ${
-                          isAnySubActive 
-                            ? 'bg-blue-50/40 text-blue-700 font-semibold' 
-                            : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-                        }`}
-                      >
-                        <Icon className={`w-5 h-5 shrink-0 transition-all duration-200 ${isAnySubActive ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-600'}`} />
-                        <span className="text-sm tracking-wide flex-1">{item.name}</span>
-                        {isExpanded ? (
-                          <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
-                        ) : (
-                          <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                        )}
-                      </button>
-                      
-                      {/* Expanded Sub-items */}
-                      {isExpanded && (
-                        <div className="space-y-1 pl-7 animate-in slide-in-from-top-1 duration-200">
-                          {visibleSubItems.map(sub => {
-                            const isActive = location.pathname === sub.path && 
-                              (location.state?.tab === sub.tab || (!location.state?.tab && sub.tab === 'General'));
-                            
-                            return (
-                              <Link
-                                key={sub.name}
-                                to={sub.path}
-                                state={{ tab: sub.tab }}
-                                className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all duration-200 border border-transparent ${
-                                  isActive
-                                    ? 'bg-blue-50/70 text-blue-700 border-blue-100/30 font-bold'
-                                    : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50/50'
-                                }`}
-                              >
-                                <span className={`w-1.5 h-1.5 rounded-full transition-all ${isActive ? 'bg-blue-500 scale-110 shadow-[0_0_4px_rgba(59,130,246,0.5)]' : 'bg-slate-300'}`} />
-                                {sub.name}
-                              </Link>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                }
-
-                // Normal Flat Link
-                const isActive = location.pathname === item.path;
-                return (
-                  <Link
-                    key={item.name}
-                    to={item.path}
-                    className={`flex items-center gap-3 ml-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative ${
-                      isActive 
-                        ? 'bg-blue-50 text-blue-700 font-semibold shadow-sm border border-blue-100/50' 
-                        : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-                    }`}
-                    title={!isSidebarOpen ? item.name : undefined}
+        <nav className="flex-1 px-3 space-y-1 mt-4 overflow-y-auto custom-scrollbar">
+          {visibleGroups.map((group, idx) => {
+            const GroupIcon = group.icon || LayoutDashboard;
+            const open = isSidebarOpen ? isGroupOpen(group, idx) : true;
+            return (
+              <div key={idx} className="space-y-0.5">
+                {isSidebarOpen ? (
+                  <button
+                    onClick={() => toggleGroup(group, idx)}
+                    aria-expanded={open}
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left hover:bg-[#FBF8F2] transition-colors cursor-pointer"
                   >
-                    {isActive && (
-                       <div className="absolute -left-3 top-2 bottom-2 w-1 bg-blue-600 rounded-r-full shadow-sm" />
-                    )}
-                    <Icon className={`w-5 h-5 shrink-0 transition-all duration-200 ${isActive ? 'text-blue-600' : 'text-slate-400 group-hover:text-blue-600'}`} />
-                    {isSidebarOpen && <span className="text-sm tracking-wide">{item.name}</span>}
-                  </Link>
-                );
-              })}
-            </div>
-          ))}
+                    <GroupIcon className="w-[18px] h-[18px] shrink-0 text-[#C0532B]" />
+                    <span className="flex-1 text-[13px] font-medium text-[#1B1A17] truncate">{group.title}</span>
+                    <ChevronDown className={`w-4 h-4 text-[#9A9488] transition-transform duration-200 ${open ? '' : '-rotate-90'}`} />
+                  </button>
+                ) : (
+                  <div className="w-full h-px bg-[#ECE6DA] my-2" />
+                )}
+
+                {open && group.items.map((item) => {
+                  const Icon = item.icon;
+                  const hasSubItems = item.subItems && item.subItems.length > 0;
+                  const visibleSubItems = hasSubItems
+                    ? item.subItems.filter(sub => !sub.superAdminOnly || user.role === 'SUPER_ADMIN')
+                    : [];
+                  const isExpanded = expandedMenus[item.key];
+
+                  if (isSidebarOpen && visibleSubItems.length > 0) {
+                    const isAnySubActive = visibleSubItems.some(sub =>
+                      location.pathname === sub.path &&
+                      (location.state?.tab === sub.tab || (!location.state?.tab && sub.tab === 'General'))
+                    );
+                    return (
+                      <div key={item.name} className="space-y-0.5">
+                        <button
+                          onClick={() => toggleMenu(item.key)}
+                          className={`w-full flex items-center gap-2.5 pl-9 pr-2.5 py-2 rounded-lg text-left transition-colors cursor-pointer ${
+                            isAnySubActive ? 'bg-[#F4E4DB] text-[#8A3A18] font-medium' : 'text-[#6E6A60] hover:text-[#1B1A17] hover:bg-[#FBF8F2]'
+                          }`}
+                        >
+                          <span className="flex-1 text-[13px] truncate">{item.name}</span>
+                          {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-[#9A9488]" /> : <ChevronDown className="w-3.5 h-3.5 text-[#9A9488]" />}
+                        </button>
+                        {isExpanded && (
+                          <div className="space-y-0.5 pl-12 animate-in slide-in-from-top-1 duration-200">
+                            {visibleSubItems.map(sub => {
+                              const isActive = location.pathname === sub.path &&
+                                (location.state?.tab === sub.tab || (!location.state?.tab && sub.tab === 'General'));
+                              return (
+                                <Link
+                                  key={sub.name}
+                                  to={sub.path}
+                                  state={{ tab: sub.tab }}
+                                  className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[12px] transition-colors ${
+                                    isActive ? 'bg-[#F4E4DB] text-[#8A3A18] font-medium' : 'text-[#6E6A60] hover:text-[#1B1A17] hover:bg-[#FBF8F2]'
+                                  }`}
+                                >
+                                  <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-[#C0532B]' : 'bg-[#CFC8BA]'}`} />
+                                  {sub.name}
+                                </Link>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  const isActive = location.pathname === item.path;
+                  return (
+                    <Link
+                      key={item.name}
+                      to={item.path}
+                      title={!isSidebarOpen ? item.name : undefined}
+                      className={`flex items-center ${isSidebarOpen ? 'gap-2.5 pl-9 pr-2.5' : 'justify-center'} py-2 rounded-lg transition-colors ${
+                        isActive ? 'bg-[#F4E4DB] text-[#8A3A18] font-medium' : 'text-[#6E6A60] hover:text-[#1B1A17] hover:bg-[#FBF8F2]'
+                      }`}
+                    >
+                      {!isSidebarOpen && <Icon className={`w-[18px] h-[18px] shrink-0 ${isActive ? 'text-[#C0532B]' : 'text-[#9A9488]'}`} />}
+                      {isSidebarOpen && <span className="text-[13px] truncate">{item.name}</span>}
+                    </Link>
+                  );
+                })}
+              </div>
+            );
+          })}
         </nav>
 
-        <div className="p-4 mt-auto border-t border-slate-100">
+        <div className="p-4 mt-auto border-t border-[#ECE6DA]">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all duration-200 group cursor-pointer"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[#6E6A60] hover:text-red-600 hover:bg-red-50 transition-all duration-200 group cursor-pointer"
           >
             <LogOut className="w-5 h-5 shrink-0 group-hover:-translate-x-0.5 transition-transform" />
             {isSidebarOpen && <span className="text-sm font-medium">{t('common.logout')}</span>}
@@ -327,7 +373,7 @@ const AdminLayout = () => {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0 print:overflow-visible">
         {/* Top Navbar */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 z-20 shrink-0 shadow-sm print:hidden">
+        <header className="h-16 bg-white border-b border-[#ECE6DA] flex items-center justify-between px-6 z-20 shrink-0 shadow-sm print:hidden">
           <div className="flex items-center gap-4">
             <button 
               onClick={() => setSidebarOpen(!isSidebarOpen)}
@@ -336,15 +382,80 @@ const AdminLayout = () => {
               {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
             
-            <div className="relative hidden lg:block group">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
-              <input 
-                type="text" 
-                placeholder={t('common.search')} 
-                className="bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 w-64 focus:w-96 transition-all text-slate-700 placeholder:text-slate-400"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+            <div className="relative hidden lg:block">
+              <div className="relative group">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#C0532B] transition-colors z-10" />
+                <input
+                  type="text"
+                  placeholder={t('common.search')}
+                  className="bg-[#FBF8F2] border border-[#ECE6DA] rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C0532B]/20 focus:border-[#E0B9A6] w-64 focus:w-96 transition-all text-slate-700 placeholder:text-slate-400"
+                  value={searchQuery}
+                  onChange={(e) => { setSearchQuery(e.target.value); setSearchOpen(true); }}
+                  onFocus={() => setSearchOpen(true)}
+                  onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
+                  onKeyDown={handleSearchKeyDown}
+                />
+              </div>
+
+              {showSearchDropdown && (
+                <div className="absolute left-0 mt-2 w-96 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150 origin-top-left">
+                  <div className="max-h-[420px] overflow-y-auto py-1">
+                    {pageResults.length > 0 && (
+                      <div className="px-2 pt-1">
+                        <p className="px-2 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('navigation.menu', 'Halaman')}</p>
+                        {pageResults.map((pg, i) => {
+                          const Ic = pg.icon || LayoutDashboard;
+                          return (
+                            <button
+                              key={`pg-${i}`}
+                              type="button"
+                              onMouseDown={(e) => { e.preventDefault(); goToPage(pg); }}
+                              className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-[#FBF8F2] text-left transition-colors cursor-pointer"
+                            >
+                              <span className="w-8 h-8 rounded-lg bg-[#F4E4DB] text-[#C0532B] flex items-center justify-center shrink-0"><Ic className="w-4 h-4" /></span>
+                              <span className="flex-1 min-w-0">
+                                <span className="block text-sm font-medium text-slate-700 truncate">{pg.name}</span>
+                                <span className="block text-[10px] text-slate-400 truncate">{pg.group}</span>
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <div className={`px-2 pt-1 ${pageResults.length > 0 ? 'border-t border-slate-100 mt-1' : ''}`}>
+                      <p className="px-2 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                        {t('navigation.employees')}
+                        {empSearching && <Loader2 className="w-3 h-3 animate-spin text-slate-400" />}
+                      </p>
+                      {debouncedSearch.length < 2 ? (
+                        <p className="px-2 py-2 text-xs text-slate-400">Ketik minimal 2 huruf untuk mencari karyawan…</p>
+                      ) : employeeResults.length === 0 ? (
+                        !empSearching && <p className="px-2 py-2 text-xs text-slate-400">Tidak ada karyawan yang cocok.</p>
+                      ) : (
+                        employeeResults.map(emp => (
+                          <button
+                            key={emp.dbId}
+                            type="button"
+                            onMouseDown={(e) => { e.preventDefault(); goToEmployee(emp); }}
+                            className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-[#FBF8F2] text-left transition-colors cursor-pointer"
+                          >
+                            <span className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center shrink-0 text-xs font-bold uppercase">{emp.name?.charAt(0) || '?'}</span>
+                            <span className="flex-1 min-w-0">
+                              <span className="block text-sm font-medium text-slate-700 truncate">{emp.name}</span>
+                              <span className="block text-[10px] text-slate-400 truncate">{emp.employeeCode} · {emp.dept}</span>
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+
+                    {!hasResults && debouncedSearch.length >= 2 && !empSearching && (
+                      <div className="px-4 py-6 text-center text-xs text-slate-400">Tidak ada hasil untuk “{debouncedSearch}”.</div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -353,7 +464,7 @@ const AdminLayout = () => {
             <div className="relative">
               <button 
                 onClick={() => setNotificationsOpen(!isNotificationsOpen)}
-                className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all relative cursor-pointer ${isNotificationsOpen ? 'bg-blue-50 text-blue-600' : 'hover:bg-slate-50 text-slate-400'}`}
+                className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all relative cursor-pointer ${isNotificationsOpen ? 'bg-[#F4E4DB] text-[#8A3A18]' : 'hover:bg-slate-50 text-slate-400'}`}
               >
                 <Bell className="w-5 h-5" />
                 {unreadCount > 0 && (
@@ -371,7 +482,7 @@ const AdminLayout = () => {
                         <span className="text-xs text-slate-500 mt-0.5">{t('common.realtimeAlerts')}</span>
                       </div>
                       {unreadCount > 0 && (
-                        <span className="text-xs bg-blue-600 text-white px-2.5 py-1 rounded-lg font-semibold">{unreadCount} {t('common.new')}</span>
+                        <span className="text-xs bg-[#C0532B] text-white px-2.5 py-1 rounded-lg font-semibold">{unreadCount} {t('common.new')}</span>
                       )}
                     </div>
                     <div className="max-h-96 overflow-y-auto p-2 space-y-1">
@@ -406,9 +517,9 @@ const AdminLayout = () => {
             <div className="flex items-center gap-3 group cursor-pointer px-3 py-2 hover:bg-slate-50 rounded-xl transition-all">
               <div className="text-right hidden sm:block">
                 <p className="text-sm font-semibold text-slate-800">{user.name}</p>
-                <p className="text-[10px] text-blue-600 font-semibold uppercase tracking-wide">{user.role}</p>
+                <p className="text-[10px] text-[#8A3A18] font-semibold uppercase tracking-wide">{user.role}</p>
               </div>
-              <div className="w-10 h-10 rounded-xl border border-slate-200 shadow-sm overflow-hidden group-hover:border-blue-300 transition-all">
+              <div className="w-10 h-10 rounded-xl border border-[#ECE6DA] shadow-sm overflow-hidden group-hover:border-[#E0B9A6] transition-all">
                 <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user.name}`} alt="avatar" className="w-full h-full object-cover" />
               </div>
             </div>
@@ -416,7 +527,7 @@ const AdminLayout = () => {
         </header>
 
         {/* Page Container */}
-        <main className="flex-1 overflow-y-auto p-6 print:p-0 print:overflow-visible">
+        <main ref={mainRef} className="flex-1 overflow-y-auto p-6 print:p-0 print:overflow-visible">
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 print:animate-none">
             <Outlet />
           </div>

@@ -13,6 +13,7 @@ const DeviceSettings = () => {
   const [selectedDeviceIds, setSelectedDeviceIds] = useState([]);
   const [bulkProgress, setBulkProgress] = useState(null);
   const [syncing, setSyncing] = useState(null);
+  const [syncProgress, setSyncProgress] = useState(null);
   const [previewData, setPreviewData] = useState(null);
   const [activeDeviceId, setActiveDeviceId] = useState(null);
   const [syncToken, setSyncToken] = useState(null);
@@ -345,11 +346,20 @@ const DeviceSettings = () => {
   };
 
   const syncAttendance = async (id) => {
+    let pollTimer = null;
     try {
       setSyncing('attend-' + id);
+      setSyncProgress({ percent: 0, phase: 'connecting', message: 'Menghubungkan ke mesin...' });
+      // Polling progres unduhan dari mesin
+      pollTimer = setInterval(async () => {
+        try {
+          const { data: p } = await api.get(`/devices/${id}/sync-progress`);
+          if (p?.progress) setSyncProgress(p.progress);
+        } catch (e) { /* abaikan polling error */ }
+      }, 800);
       // Fetch preview first with date filters
       const { data } = await api.post(`/devices/${id}/sync-attendance?preview=true&start=${syncDates.startDate}&end=${syncDates.endDate}`);
-      
+
       if (data.rawRecords === 0) {
         const diag = data.diagnostics;
         if (diag) {
@@ -370,6 +380,8 @@ const DeviceSettings = () => {
     } catch (err) {
       alert(err.response?.data?.message || t('deviceSettings.alerts.fetchPreviewFail'));
     } finally {
+      if (pollTimer) clearInterval(pollTimer);
+      setSyncProgress(null);
       setSyncing(null);
     }
   };
@@ -999,6 +1011,34 @@ const DeviceSettings = () => {
           </div>
         </div>
       </div>
+      {/* Progress Tarik Absensi */}
+      {syncProgress && (
+        <div className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 mb-5">
+              <div className={`w-11 h-11 rounded-2xl flex items-center justify-center ${syncProgress.phase === 'error' ? 'bg-rose-100 text-rose-600' : 'bg-blue-100 text-blue-600'}`}>
+                <Download className={`w-6 h-6 ${syncProgress.phase !== 'error' && syncProgress.phase !== 'done' ? 'animate-bounce' : ''}`} />
+              </div>
+              <div>
+                <p className="font-bold text-slate-800">{syncProgress.phase === 'error' ? 'Gagal Menarik Data' : 'Menarik Data Absensi'}</p>
+                <p className="text-xs text-slate-500 mt-0.5">{syncProgress.message || 'Memproses...'}</p>
+              </div>
+            </div>
+            <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${syncProgress.phase === 'error' ? 'bg-rose-500' : 'bg-blue-600'}`}
+                style={{ width: `${syncProgress.percent || 0}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between mt-2">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">{syncProgress.phase}</span>
+              <span className="text-sm font-bold text-slate-700">{syncProgress.percent || 0}%</span>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-4 text-center">Untuk log sangat besar, proses bisa memakan beberapa menit. Jangan tutup halaman ini.</p>
+          </div>
+        </div>
+      )}
+
       {previewData && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">

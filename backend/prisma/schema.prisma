@@ -119,6 +119,7 @@ model Employee {
   faceDescriptor    Json?
   bpjsTk            String?
   bpjsKesehatan     String?
+  bpjsKesehatanFaskes String?
   npwp              String?
   ptkpStatus        String?
   maritalStatus     String?
@@ -168,6 +169,10 @@ model Employee {
   profileRequests ProfileUpdateRequest[]
   kpis          EmployeeKPI[]
   pushTokens    PushToken[]
+  paklaring     Paklaring?
+  warningLetters WarningLetter[]
+  contractHistory ContractHistory[]
+  bhlPayrollDetails BhlPayrollDetail[]
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
@@ -515,6 +520,47 @@ model PayrollDetail {
   createdAt        DateTime @default(now())
 }
 
+// ─── Penggajian BHL (harian) — tersimpan & terkunci (snapshot) ───
+model BhlPayroll {
+  id             Int       @id @default(autoincrement())
+  period         String    @unique // "2026-05"
+  periodName     String
+  status         String    @default("DRAFT") // DRAFT | FINALIZED
+  totalEmployees Int       @default(0)
+  totalWage      Float     @default(0)
+  totalDays      Int       @default(0)
+  generatedBy    String?
+  finalizedBy    String?
+  finalizedAt    DateTime?
+  notes          String?
+  details        BhlPayrollDetail[]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model BhlPayrollDetail {
+  id            Int        @id @default(autoincrement())
+  bhlPayrollId  Int
+  bhlPayroll    BhlPayroll @relation(fields: [bhlPayrollId], references: [id], onDelete: Cascade)
+  employeeId    Int
+  employee      Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeName  String
+  employeeCode  String
+  department    String
+  dailyRate     Float      @default(0)
+  workingDays   Int        @default(0)
+  halfDays      Float      @default(0)
+  sickDays      Int        @default(0)
+  leaveDays     Int        @default(0)
+  absentDays    Int        @default(0)
+  effectiveDays Float      @default(0)
+  totalWage     Float      @default(0)
+  createdAt     DateTime   @default(now())
+
+  @@index([bhlPayrollId])
+  @@index([employeeId])
+}
+
 model CompanyCalendar {
   id          Int      @id @default(autoincrement())
   date        DateTime @db.Date @unique
@@ -685,6 +731,66 @@ model PushToken {
   platform    String   // "web" | "android" | "ios"
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([employeeId])
+}
+
+model Paklaring {
+  id                Int      @id @default(autoincrement())
+  employeeId        Int      @unique
+  employee          Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  certificateNumber String   @unique
+  issuedDate        DateTime
+  issuedBy          String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([employeeId])
+}
+
+model Translation {
+  id        Int      @id @default(autoincrement())
+  lang      String
+  key       String
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([lang, key])
+}
+
+model ContractHistory {
+  id              Int      @id @default(autoincrement())
+  employeeId      Int
+  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  action          String   @default("RENEW") // NEW | RENEW | UPDATE
+  contractNumber  String?
+  duration        String?
+  startDate       DateTime?
+  previousEndDate DateTime?
+  endDate         DateTime?
+  notes           String?
+  createdBy       String?  // username admin yang mengubah
+  createdAt       DateTime @default(now())
+
+  @@index([employeeId])
+}
+
+model WarningLetter {
+  id           Int      @id @default(autoincrement())
+  employeeId   Int
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  spNumber     String   @unique
+  spLevel      String
+  issuedDate   DateTime
+  validUntil   DateTime
+  reason       String
+  description  String?
+  issuedBy     String
+  status       String   @default("ACTIVE")
+  documentPath String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@index([employeeId])
 }

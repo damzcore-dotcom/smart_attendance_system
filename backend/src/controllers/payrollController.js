@@ -1,7 +1,8 @@
 const prisma = require('../prismaClient');
 const XLSX = require('xlsx');
 const { recordAuditLog } = require('./auditLogController');
-const { parsePenaltySettings } = require('../utils/lateCalculator');
+const { parsePenaltySettings, getJakartaTimeParts } = require('../utils/lateCalculator');
+const WIB_OFFSET_H = 7;
 
 
 const { handleControllerError } = require('../middleware/validate');
@@ -11,14 +12,26 @@ const calculateOvertimeHours = (checkIn, checkOut, shiftEndTime) => {
   if (!checkIn || !checkOut) return 0;
 
   const [endH, endM] = (shiftEndTime || '17:00').split(':').map(Number);
-  const shiftEnd = new Date(checkOut);
-  shiftEnd.setHours(endH, endM, 0, 0);
+  // Jam selesai shift dibangun EKSPLISIT di WIB (lepas dari TZ proses) pada tanggal checkout.
+  const p = getJakartaTimeParts(checkOut);
+  const shiftEnd = new Date(Date.UTC(p.year, p.month - 1, p.day, endH - WIB_OFFSET_H, endM, 0, 0));
+  const co = new Date(checkOut);
 
-  if (checkOut <= shiftEnd) return 0;
+  if (co <= shiftEnd) return 0;
 
-  const diffMs = checkOut - shiftEnd;
-  const hours = diffMs / (1000 * 60 * 60);
+  const hours = (co - shiftEnd) / (1000 * 60 * 60);
   return Math.round(hours * 100) / 100; // Round to 2 decimal
+};
+
+// Tentukan jenis hari untuk lembur: WORKDAY | WEEKEND | HOLIDAY.
+// HOLIDAY = override kalender HOLIDAY; WORKDAY = hari kerja (atau override WORKDAY); selain itu WEEKEND.
+const resolveDayType = (dateObj, workingDaysOfWeek, calendarMap) => {
+  const dateStr = new Date(dateObj).toISOString().split('T')[0];
+  const ov = calendarMap[dateStr];
+  if (ov === 'HOLIDAY') return 'HOLIDAY';
+  if (ov === 'WORKDAY') return 'WORKDAY';
+  const dow = new Date(dateObj).getUTCDay();
+  return workingDaysOfWeek.includes(dow) ? 'WORKDAY' : 'WEEKEND';
 };
 
 // ─── Helper: Format Currency ─────────────────────
@@ -30,12 +43,13 @@ const formatRupiah = (num) => {
 
 // ─── Helper: Calculate BPJS and PPh 21 ─────────────
 
-const calculateBPJS = (baseSalary, emp) => {
-  const maxBpjsKesSalary = 12000000;
-  const maxJpSalary = 10022900;
+const calculateBPJS = (baseSalary, emp, opts = {}) => {
+  const maxBpjsKesSalary = opts.bpjsKesMax || 12000000;
+  const maxJpSalary = opts.jpMax || 10022900;
 
-  const hasBPJSKes = !!(emp.bpjsKesehatan && emp.bpjsKesehatan.trim());
-  const hasBPJSTk = !!(emp.bpjsTk && emp.bpjsTk.trim());
+  // applyAll = hitung BPJS untuk semua karyawan walau nomor kartu belum diisi (mode 'ALL').
+  const hasBPJSKes = opts.applyAll || !!(emp.bpjsKesehatan && emp.bpjsKesehatan.trim());
+  const hasBPJSTk = opts.applyAll || !!(emp.bpjsTk && emp.bpjsTk.trim());
 
   const bpjsKesSalaryBase = Math.min(baseSalary, maxBpjsKesSalary);
   const jpSalaryBase = Math.min(baseSalary, maxJpSalary);
@@ -64,7 +78,9 @@ const calculateBPJS = (baseSalary, emp) => {
   };
 };
 
-const calculatePPh21 = (baseSalary, proRatedSalary, totalAllowances, overtimePay, bpjsResults, emp) => {
+const calculatePPh21 = (baseSalary, proRatedSalary, totalAllowances, overtimePay, bpjsResults, emp, opts = {}) => {
+  const bjRate = opts.biayaJabatanRate != null ? opts.biayaJabatanRate : 0.05;
+  const bjMax = opts.biayaJabatanMax != null ? opts.biayaJabatanMax : 500000;
   const ptkpMap = {
     'TK/0': 54000000,
     'TK/1': 58500000,
@@ -82,7 +98,7 @@ const calculatePPh21 = (baseSalary, proRatedSalary, totalAllowances, overtimePay
   const grossIncome = proRatedSalary + totalAllowances + overtimePay +
     bpjsResults.bpjsKesEmployer + bpjsResults.jkkEmployer + bpjsResults.jkmEmployer;
 
-  const biayaJabatan = Math.min(grossIncome * 0.05, 500000);
+  const biayaJabatan = Math.min(grossIncome * bjRate, bjMax);
   const totalDeductions = biayaJabatan + bpjsResults.jhtEmployee + bpjsResults.jpEmployee;
 
   const netMonthlyIncome = Math.max(0, grossIncome - totalDeductions);
@@ -221,14 +237,22 @@ const generate = async (req, res) => {
 
     // Calculate total working days in period
     let totalWorkingDays = 0;
-    for (let d = new Date(startDate); d <= endDate; d.setUTCDate(d.getUTCDate() + 1)) {
-      if (workingDaysOfWeek.includes(d.getUTCDay())) totalWorkingDays++;
-    }
-
     // Get payroll config
     const payrollConfigs = await prisma.payrollConfig.findMany();
     const configObj = {};
     payrollConfigs.forEach(c => { configObj[c.key] = c.value; });
+    const cfgNum = (k, def) => { const v = parseFloat(configObj[k]); return isNaN(v) ? def : v; };
+
+    // Kalender perusahaan (libur / hari kerja khusus) untuk periode ini → peta tanggal.
+    const calendarEntries = await prisma.companyCalendar.findMany({ where: { date: { gte: startDate, lte: endDate } } });
+    const calendarMap = {};
+    calendarEntries.forEach(c => { calendarMap[new Date(c.date).toISOString().split('T')[0]] = c.type; });
+
+    // Hari kerja: hitung WORKDAY (sesuai workingDays + override WORKDAY), KECUALIKAN libur.
+    // → Sabtu ikut terhitung bila workingDays menyertakannya (#4); hari libur tidak dihitung (#4/#6).
+    for (let d = new Date(startDate); d <= endDate; d.setUTCDate(d.getUTCDate() + 1)) {
+      if (resolveDayType(new Date(d), workingDaysOfWeek, calendarMap) === 'WORKDAY') totalWorkingDays++;
+    }
 
     // Get global settings to respect "Auto-Calculate Overtime" toggle
     const globalSettings = await prisma.settings.findMany();
@@ -237,12 +261,46 @@ const generate = async (req, res) => {
     const overtimeEnabled = configObj.overtimeEnabled === 'true';
     const attendancePenaltyEnabled = configObj.attendancePenaltyEnabled !== 'false'; // default true
     const penaltyPerMinute = parseFloat(configObj.penaltyPerMinute) || 0;
-    
+
     // If globally disabled, force MANUAL mode so it solely relies on SPL inputs
     const overtimeMode = (!isGlobalAutoOtEnabled) ? 'MANUAL' : (configObj.overtimeMode || 'AUTO'); // AUTO or MANUAL
 
-    // Get overtime rules
+    // ── Konfigurasi lembur ──
+    const overtimeFlatMode = configObj.overtimeFlatMode === 'true'; // true = satu multiplier utk semua hari (samaratakan)
+    const overtimeFlatMultiplier = cfgNum('overtimeFlatMultiplier', 1.5);
+    const otDivisor = cfgNum('overtimeHourlyDivisor', 173) || 173;
+
+    // ── Konfigurasi pajak & iuran (configurable, #6/#2/#9) ──
+    const pph21Enabled = configObj.pph21Enabled !== 'false';
+    const bpjsOpts = { bpjsKesMax: cfgNum('bpjsKesMaxSalary', 12000000), jpMax: cfgNum('jpMaxSalary', 10022900), applyAll: configObj.bpjsApplyMode === 'ALL' };
+    const pphOpts = { biayaJabatanRate: cfgNum('biayaJabatanRate', 0.05), biayaJabatanMax: cfgNum('biayaJabatanMaxMonthly', 500000) };
+
+    // Get overtime rules grouped by day type (WORKDAY/WEEKEND/HOLIDAY)
     const overtimeRules = overtimeEnabled ? await prisma.overtimeRule.findMany({ where: { isActive: true }, orderBy: { hourFrom: 'asc' } }) : [];
+    const rulesByType = { WORKDAY: [], WEEKEND: [], HOLIDAY: [] };
+    overtimeRules.forEach(r => { const t = (r.dayType || 'WORKDAY').toUpperCase(); if (rulesByType[t]) rulesByType[t].push(r); });
+
+    // Harga lembur 1 hari sesuai JENIS HARI (tiered per jam). Bila flat-mode → satu multiplier untuk semua.
+    const priceOvertimeDay = (hours, dayType, baseSalary) => {
+      if (hours <= 0 || baseSalary <= 0) return 0;
+      const hourlyRate = baseSalary / otDivisor;
+      if (overtimeFlatMode) return hours * hourlyRate * overtimeFlatMultiplier;
+      const rules = rulesByType[dayType] && rulesByType[dayType].length ? rulesByType[dayType] : null;
+      if (!rules) {
+        const m = dayType === 'WORKDAY' ? 1.5 : 2; // fallback wajar bila rule jenis hari belum diisi
+        return hours * hourlyRate * m;
+      }
+      let remaining = hours, pay = 0;
+      for (const rule of rules) {
+        const tier = Math.max(0, rule.hourTo - rule.hourFrom);
+        if (tier === 0) continue;
+        const applic = Math.min(remaining, tier);
+        if (applic > 0) { pay += applic * hourlyRate * rule.multiplier; remaining -= applic; }
+        if (remaining <= 0) break;
+      }
+      if (remaining > 0) pay += remaining * hourlyRate * rules[rules.length - 1].multiplier; // sisa pakai tier terakhir
+      return pay;
+    };
 
     // Get employees: ACTIVE + TERMINATED (who have attendance in this period for pending salary)
     const employees = await prisma.employee.findMany({
@@ -313,10 +371,11 @@ const generate = async (req, res) => {
       // Calculate attendance stats
       let daysPresent = 0, daysAbsent = 0, daysLate = 0, totalLateMinutes = 0;
       let overtimeHoursTotal = 0;
+      let overtimePay = 0; // dihargai PER HARI sesuai jenis hari (#1)
 
       attendanceRecords.forEach(a => {
-        const dayOfWeek = new Date(a.date).getUTCDay();
-        const isWorkingDay = workingDaysOfWeek.includes(dayOfWeek);
+        const dayType = resolveDayType(a.date, workingDaysOfWeek, calendarMap);
+        const isWorkingDay = dayType === 'WORKDAY';
 
         if (['PRESENT', 'LATE'].includes(a.status)) {
           daysPresent++;
@@ -325,26 +384,29 @@ const generate = async (req, res) => {
             totalLateMinutes += a.lateMinutes || 0;
           }
         } else if (a.status === 'MANGKIR') {
-          // Mangkir adds configured penalty minutes (Rule 1 vs Rule 3)
+          // Mangkir → potong sesuai setting keterlambatan (Rule 1: tanpa finger masuk, Rule 3: tanpa pulang)
           const penaltyMinutes = !a.checkIn ? penaltyRules.rule1Minutes : penaltyRules.rule3Minutes;
           totalLateMinutes += penaltyMinutes;
           daysLate++;
         } else if (['ABSENT'].includes(a.status) && isWorkingDay) {
           daysAbsent++;
         }
-        
-        // Calculate overtime regardless of status (e.g. they came on HOLIDAY)
+
+        // Lembur dihitung & DIHARGAI PER HARI menurut jenis hari (kerja/akhir pekan/libur).
         if (overtimeEnabled && emp.shift) {
           let otHours = 0;
           const isAllIn = emp.salaryCategory && emp.salaryCategory.replace(/\s+/g, '').toUpperCase() === 'ALLIN';
-          
+
           if (overtimeMode === 'MANUAL' || a.overtimeHours > 0) {
             otHours = a.overtimeHours || 0;
           } else if (a.checkOut && !isAllIn && ['PRESENT', 'LATE'].includes(a.status)) {
             // ALL IN category does not get automatic overtime
             otHours = calculateOvertimeHours(a.checkIn, a.checkOut, emp.shift.endTime);
           }
-          if (otHours > 0) overtimeHoursTotal += otHours;
+          if (otHours > 0) {
+            overtimeHoursTotal += otHours;
+            overtimePay += priceOvertimeDay(otHours, dayType, salary.baseSalary || 0);
+          }
         }
         // SAKIT, IZIN, CUTI, HOLIDAY are not penalized
       });
@@ -414,31 +476,14 @@ const generate = async (req, res) => {
         });
       }
 
-      // 2. Pre-calculate Overtime Pay (needed for tax calculation)
-      let overtimePay = 0;
-      if (overtimeEnabled && overtimeHoursTotal > 0 && baseSalary > 0) {
-        const hourlyRate = baseSalary / 173;
-        if (overtimeRules.length > 0) {
-          let remainingHours = overtimeHoursTotal;
-          for (const rule of overtimeRules) {
-            const tierHours = Math.max(0, rule.hourTo - rule.hourFrom);
-            if (tierHours === 0) continue;
-            const applicableHours = Math.min(remainingHours, tierHours);
-            if (applicableHours > 0) {
-              overtimePay += applicableHours * hourlyRate * rule.multiplier;
-              remainingHours -= applicableHours;
-            }
-            if (remainingHours <= 0) break;
-          }
-        } else {
-          overtimePay = overtimeHoursTotal * hourlyRate * 1.5;
-        }
-      }
+      // 2. Lembur (overtimePay) sudah dihitung PER HARI di loop absensi di atas (sesuai jenis hari).
 
-      // 3. Calculate BPJS and PPh 21
-      const bpjsResults = calculateBPJS(baseSalary, emp);
+      // 3. Calculate BPJS and PPh 21 (configurable)
+      const bpjsResults = calculateBPJS(baseSalary, emp, bpjsOpts);
       const totalAllowancesExcludingReimbursement = allowanceList.reduce((sum, a) => sum + a.value, 0);
-      const pph21Value = calculatePPh21(baseSalary, proRatedSalary, totalAllowancesExcludingReimbursement, overtimePay, bpjsResults, emp);
+      const pph21Value = pph21Enabled
+        ? calculatePPh21(baseSalary, proRatedSalary, totalAllowancesExcludingReimbursement, overtimePay, bpjsResults, emp, pphOpts)
+        : 0;
 
       // 4. Calculate Deductions
       if (empComponents.length > 0) {
@@ -500,12 +545,18 @@ const generate = async (req, res) => {
 
       const grossPay = proRatedSalary + totalAllowances + overtimePay;
       const totalDeductionAmount = totalDeductionComponents + attendancePenalty;
-      const netPay = grossPay - totalDeductionAmount;
+      const netPay = Math.max(0, grossPay - totalDeductionAmount); // #7: netto tidak boleh negatif
 
-      totalGross += grossPay;
-      totalDeductions += totalDeductionAmount;
-      totalNet += netPay;
-      totalOvertimePay += overtimePay;
+      // Bulatkan sekali; total diakumulasi dari nilai yang SUDAH dibulatkan (#8: konsisten dgn rincian).
+      const rGross = Math.round(grossPay);
+      const rDeduction = Math.round(totalDeductionAmount);
+      const rNet = Math.round(netPay);
+      const rOvertime = Math.round(overtimePay);
+
+      totalGross += rGross;
+      totalDeductions += rDeduction;
+      totalNet += rNet;
+      totalOvertimePay += rOvertime;
 
       details.push({
         employeeId: emp.id,
@@ -525,10 +576,10 @@ const generate = async (req, res) => {
         deductions: deductionList,
         attendancePenalty: Math.round(attendancePenalty),
         overtimeHours: overtimeHoursTotal,
-        overtimePay: Math.round(overtimePay),
-        grossPay: Math.round(grossPay),
-        totalDeduction: Math.round(totalDeductionAmount),
-        netPay: Math.round(netPay),
+        overtimePay: rOvertime,
+        grossPay: rGross,
+        totalDeduction: rDeduction,
+        netPay: rNet,
       });
     }
 
@@ -716,11 +767,15 @@ const exportExcel = async (req, res) => {
     const isKo = lang.startsWith('ko');
     const isZh = lang.startsWith('zh');
 
+    const isDemo = process.env.DEMO_MODE === 'true';
+    const watermarkRow = isDemo ? ['⚠️ DEMO VERSION — SMART ATTENDANCE PRO | Hubungi: 082124130065'] : [];
+
     const wb = XLSX.utils.book_new();
 
     // Summary sheet
     const summaryTitle = isIndo ? 'REKAP PAYROLL' : isKo ? '급여 요약 보고서' : isZh ? '薪资汇总表' : 'PAYROLL SUMMARY';
     const summaryData = [
+      ...(isDemo ? [watermarkRow, []] : []),
       [summaryTitle, '', '', '', '', ''],
       [isIndo ? 'Periode' : isKo ? '귀속연월' : isZh ? '期间' : 'Period', payroll.periodName],
       [isIndo ? 'Status' : isKo ? '상태' : isZh ? '状态' : 'Status', payroll.status],
@@ -772,7 +827,12 @@ const exportExcel = async (req, res) => {
       ];
     });
 
-    const detailSheet = XLSX.utils.aoa_to_sheet([headerRow, ...rows]);
+    const detailRows = [
+      ...(isDemo ? [watermarkRow, []] : []),
+      headerRow,
+      ...rows
+    ];
+    const detailSheet = XLSX.utils.aoa_to_sheet(detailRows);
 
     // Set column widths
     detailSheet['!cols'] = [

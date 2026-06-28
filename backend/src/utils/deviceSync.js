@@ -15,6 +15,10 @@ const { calculateLateness, resolveStatus, parsePenaltySettings } = require('./la
 
 const MACHINE_MODE = 'Fingerprint';
 const MACHINE_SOURCE = 'fingerprint';
+// Asia/Jakarta = UTC+7 tetap (tanpa DST). node-zklib mengembalikan recordTime sebagai
+// Date wall-clock di TZ proses; kita ubah ke instan UTC sejati secara EKSPLISIT agar
+// penyimpanan & perhitungan tidak bergantung pada TZ proses (selaras importer Excel).
+const WIB_OFFSET_H = 7;
 const BHL_TOKENS = ['HARIAN', 'Harian', 'BHL', 'DAILY', 'harian', 'bhl', 'daily'];
 const LEAVE_STATUSES = ['CUTI', 'IZIN', 'SAKIT', 'HOLIDAY', 'HALF_DAY'];
 
@@ -91,11 +95,16 @@ function buildAttendanceRecords({ logs, index, overrideMap, settings, filterStar
     logsInRange++;
 
     const pinStr = String(log.deviceUserId).trim();
-    // Pakai komponen tanggal LOKAL agar scan pagi tak tergeser ke hari sebelumnya (bug UTC).
-    const year = recordTime.getFullYear();
-    const month = String(recordTime.getMonth() + 1).padStart(2, '0');
-    const day = String(recordTime.getDate()).padStart(2, '0');
-    const dateKey = `${year}-${month}-${day}`;
+    // Komponen WALL-CLOCK WIB dari mesin (round-trip getFullYear/getHours → lepas dari TZ proses).
+    const wy = recordTime.getFullYear();
+    const wmo = recordTime.getMonth();
+    const wd = recordTime.getDate();
+    const wh = recordTime.getHours();
+    const wmi = recordTime.getMinutes();
+    const ws = recordTime.getSeconds();
+    const dateKey = `${wy}-${String(wmo + 1).padStart(2, '0')}-${String(wd).padStart(2, '0')}`;
+    // Instan UTC sejati dari wall-clock WIB (env-independent) untuk disimpan & dihitung.
+    const instant = new Date(Date.UTC(wy, wmo, wd, wh - WIB_OFFSET_H, wmi, ws));
 
     const emp = empByFingerPrint[pinStr] || empByCode[pinStr];
     if (!emp) {
@@ -110,7 +119,8 @@ function buildAttendanceRecords({ logs, index, overrideMap, settings, filterStar
       grouped[key] = { employeeId: emp.id, employee: emp, date: new Date(Date.UTC(gy, gm - 1, gd, 0, 0, 0, 0)), scans: [] };
     }
     const verifyMode = log.verifyMode !== undefined ? log.verifyMode : 1;
-    grouped[key].scans.push({ time: recordTime, verifyMode });
+    // wallMin = menit-dalam-hari (WIB) untuk klasifikasi masuk/pulang, lepas dari TZ.
+    grouped[key].scans.push({ time: instant, wallMin: wh * 60 + wmi, verifyMode });
   }
 
   const records = [];
@@ -147,7 +157,7 @@ function buildAttendanceRecords({ logs, index, overrideMap, settings, filterStar
       let endMin = eH * 60 + eM;
       if (endMin < startMin) endMin += 24 * 60; // shift malam lintas tengah malam
       const midpoint = Math.floor((startMin + endMin) / 2);
-      let scanMin = earliest.getHours() * 60 + earliest.getMinutes();
+      let scanMin = earliestScan.wallMin; // menit WIB, lepas dari TZ proses
       if (endMin > 1440 && scanMin < startMin - 6 * 60) scanMin += 24 * 60;
       if (scanMin <= midpoint) checkIn = earliest; else checkOut = earliest;
     } else {
